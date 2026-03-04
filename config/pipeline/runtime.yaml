@@ -1,0 +1,54 @@
+runtime:
+  browser_keep_alive_ms: 60000
+  page_set_content_wait_until: "networkidle0"
+  asset_cache_control: "public, max-age=31536000, immutable"
+  ghost_error_preview_chars: 300
+
+features:
+  enable_template_preview: true
+  enable_stock_image_search: true
+  enable_ai_image_generation: true
+  prefer_feature_image: true
+  enable_notifications: true
+
+security:
+  api_auth:
+    enabled: true
+    header_name: "x-api-key"
+    require_for_preview: true
+    require_for_generate: true
+    require_for_direct_content: true
+    require_for_webhook: false
+  cors:
+    enabled: true
+    allowed_origins:
+      - "*"
+    allowed_headers:
+      - "content-type"
+      - "authorization"
+      - "x-api-key"
+      - "x-webhook-token"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "OPTIONS"
+    allow_credentials: false
+    max_age_seconds: 86400
+  request_limits:
+    max_json_body_bytes: 256000
+    slot_overrides_max_keys: 40
+    template_ids_max_keys: 5
+  rate_limit:
+    enabled: true
+    window_seconds: 60
+    max_requests_per_window: 30
+  outbound:
+    allow_private_network_targets: false
+    allowed_notify_hosts: []
+    allowed_image_hosts: []
+
+storage:
+  default_key_prefix: "social-assets"
+  default_mode: "overwrite"
+  versioned_include_date: true
+

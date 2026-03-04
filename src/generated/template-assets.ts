@@ -2,7 +2,6 @@
 // Do not edit manually.
 
 export const PIPELINE_CONFIG = {
-  "schema_version": 1,
   "brand": {
     "default_name": "Tasbir Blog",
     "default_color": "#1f7a8c"
@@ -45,7 +44,9 @@ export const PIPELINE_CONFIG = {
         "illustration": "modern-sans",
         "minimal": "modern-sans",
         "bold": "bold-campaign",
-        "data": "data-mono"
+        "data": "data-mono",
+        "monochrome-swiss": "data-mono",
+        "brutal": "bold-campaign"
       },
       "by_archetype": {
         "insight": "editorial-serif",
@@ -138,7 +139,9 @@ export const PIPELINE_CONFIG = {
       "illustration": "illustration",
       "minimal": "clean",
       "bold": "bold",
-      "data": "clean"
+      "data": "clean",
+      "monochrome-swiss": "swiss-mono",
+      "brutal": "brutal"
     },
     "preset_styles": {
       "minimal": {
@@ -152,7 +155,9 @@ export const PIPELINE_CONFIG = {
         "titleShadow": "0 10px 24px rgba(0, 0, 0, 0.18)",
         "captionShadow": "0 6px 18px rgba(0, 0, 0, 0.14)",
         "grainOpacity": 0.05,
-        "imageOpacity": 0.48
+        "imageOpacity": 0.48,
+        "typeScale": 0.96,
+        "spaceScale": 0.94
       },
       "illustration": {
         "containerBackground": "radial-gradient(circle at 16% 14%, color-mix(in srgb, var(--color-brand-glow) 48%, transparent) 0%, transparent 46%), linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 18%, var(--color-surface-base)), color-mix(in srgb, var(--color-surface-base) 86%, #0b1524))",
@@ -165,7 +170,9 @@ export const PIPELINE_CONFIG = {
         "titleShadow": "0 8px 22px rgba(0, 0, 0, 0.12)",
         "captionShadow": "0 4px 16px rgba(0, 0, 0, 0.1)",
         "grainOpacity": 0.03,
-        "imageOpacity": 0.54
+        "imageOpacity": 0.54,
+        "typeScale": 1.02,
+        "spaceScale": 1
       },
       "editorial": {
         "containerBackground": "radial-gradient(circle at 13% 12%, color-mix(in srgb, var(--color-brand-glow) 54%, transparent) 0%, transparent 50%), linear-gradient(162deg, color-mix(in srgb, var(--color-brand-accent) 24%, var(--color-surface-base)), var(--color-surface-base))",
@@ -178,7 +185,9 @@ export const PIPELINE_CONFIG = {
         "titleShadow": "0 16px 34px rgba(0, 0, 0, 0.24)",
         "captionShadow": "0 8px 24px rgba(0, 0, 0, 0.18)",
         "grainOpacity": 0.07,
-        "imageOpacity": 0.5
+        "imageOpacity": 0.5,
+        "typeScale": 1,
+        "spaceScale": 1
       },
       "spotlight": {
         "containerBackground": "radial-gradient(circle at 72% 10%, color-mix(in srgb, var(--color-brand-accent) 54%, transparent) 0%, transparent 42%), linear-gradient(150deg, color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-base)), var(--color-surface-base))",
@@ -191,7 +200,9 @@ export const PIPELINE_CONFIG = {
         "titleShadow": "0 18px 38px rgba(0, 0, 0, 0.24)",
         "captionShadow": "0 10px 26px rgba(0, 0, 0, 0.2)",
         "grainOpacity": 0.08,
-        "imageOpacity": 0.52
+        "imageOpacity": 0.52,
+        "typeScale": 1.08,
+        "spaceScale": 1.08
       },
       "bold": {
         "containerBackground": "linear-gradient(145deg, color-mix(in srgb, var(--color-brand-accent) 44%, #050812), var(--color-surface-base))",
@@ -204,7 +215,9 @@ export const PIPELINE_CONFIG = {
         "titleShadow": "0 16px 32px rgba(0, 0, 0, 0.24)",
         "captionShadow": "0 8px 22px rgba(0, 0, 0, 0.18)",
         "grainOpacity": 0.06,
-        "imageOpacity": 0.46
+        "imageOpacity": 0.46,
+        "typeScale": 1.04,
+        "spaceScale": 1.02
       },
       "clean": {
         "containerBackground": "linear-gradient(160deg, color-mix(in srgb, var(--color-brand-accent) 16%, #0a1320), #0a1320 50%, color-mix(in srgb, var(--color-brand-accent) 8%, #0b1119))",
@@ -217,7 +230,39 @@ export const PIPELINE_CONFIG = {
         "titleShadow": "0 10px 20px rgba(0, 0, 0, 0.12)",
         "captionShadow": "0 4px 14px rgba(0, 0, 0, 0.1)",
         "grainOpacity": 0.04,
-        "imageOpacity": 0.52
+        "imageOpacity": 0.52,
+        "typeScale": 0.95,
+        "spaceScale": 0.92
+      },
+      "swiss-mono": {
+        "containerBackground": "linear-gradient(180deg, color-mix(in srgb, var(--color-surface-base) 88%, #020509), color-mix(in srgb, var(--color-surface-base) 70%, #0f1a2b))",
+        "overlayTop": "linear-gradient(180deg, color-mix(in srgb, #ffffff 3%, transparent), color-mix(in srgb, var(--color-overlay-strong) 24%, transparent) 72%)",
+        "overlayBottom": "linear-gradient(0deg, color-mix(in srgb, #ffffff 5%, transparent) 0%, transparent 64%)",
+        "vignette": "radial-gradient(circle at 50% 78%, transparent 44%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%)",
+        "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 40%, transparent)",
+        "brandPillBorder": "color-mix(in srgb, #ffffff 48%, transparent)",
+        "brandPillText": "var(--color-text-primary)",
+        "titleShadow": "0 6px 14px rgba(0, 0, 0, 0.1)",
+        "captionShadow": "0 2px 10px rgba(0, 0, 0, 0.08)",
+        "grainOpacity": 0.02,
+        "imageOpacity": 0.44,
+        "typeScale": 0.9,
+        "spaceScale": 0.86
+      },
+      "brutal": {
+        "containerBackground": "linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 54%, #05070c), #05070c 58%, color-mix(in srgb, var(--color-brand-accent) 42%, #111827))",
+        "overlayTop": "linear-gradient(165deg, rgba(0, 0, 0, 0.06), color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 76%)",
+        "overlayBottom": "linear-gradient(10deg, color-mix(in srgb, var(--color-brand-accent) 62%, transparent) 0%, transparent 48%)",
+        "vignette": "radial-gradient(circle at 84% 84%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 38%), radial-gradient(circle at 20% 18%, color-mix(in srgb, #ffffff 14%, transparent) 0%, transparent 30%), radial-gradient(circle at 50% 74%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 99%)",
+        "brandPillBackground": "color-mix(in srgb, var(--color-brand-accent) 46%, var(--color-surface-elevated))",
+        "brandPillBorder": "color-mix(in srgb, #ffffff 72%, transparent)",
+        "brandPillText": "var(--color-brand-accent-foreground)",
+        "titleShadow": "0 18px 34px rgba(0, 0, 0, 0.24)",
+        "captionShadow": "0 8px 22px rgba(0, 0, 0, 0.18)",
+        "grainOpacity": 0.07,
+        "imageOpacity": 0.5,
+        "typeScale": 1.14,
+        "spaceScale": 1.1
       }
     },
     "caption_width_rules": {
@@ -263,68 +308,265 @@ export const PIPELINE_CONFIG = {
       "grain_bg_size_px": 3
     }
   },
-  "runtime": {
-    "browser_keep_alive_ms": 60000,
-    "page_set_content_wait_until": "networkidle0",
-    "asset_cache_control": "public, max-age=31536000, immutable",
-    "ghost_error_preview_chars": 300
-  },
-  "features": {
-    "enable_template_preview": true,
-    "enable_stock_image_search": true,
-    "enable_ai_image_generation": true,
-    "prefer_feature_image": true,
-    "enable_notifications": true
-  },
-  "security": {
-    "api_auth": {
-      "enabled": true,
-      "header_name": "x-api-key",
-      "require_for_preview": true,
-      "require_for_generate": true,
-      "require_for_direct_content": true,
-      "require_for_webhook": false
-    },
-    "cors": {
-      "enabled": true,
-      "allowed_origins": [
-        "*"
-      ],
-      "allowed_headers": [
-        "content-type",
-        "authorization",
-        "x-api-key",
-        "x-webhook-token"
-      ],
-      "allowed_methods": [
-        "GET",
-        "POST",
-        "OPTIONS"
-      ],
-      "allow_credentials": false,
-      "max_age_seconds": 86400
-    },
-    "request_limits": {
-      "max_json_body_bytes": 256000,
-      "slot_overrides_max_keys": 40,
-      "template_ids_max_keys": 5
-    },
-    "rate_limit": {
-      "enabled": true,
-      "window_seconds": 60,
-      "max_requests_per_window": 30
-    },
-    "outbound": {
-      "allow_private_network_targets": false,
-      "allowed_notify_hosts": [],
-      "allowed_image_hosts": []
+  "template_styles": {
+    "default_style": "editorial",
+    "styles": {
+      "editorial": {
+        "label": "Editorial",
+        "description": "Magazine-like layouts with clean typography and elevated contrast.",
+        "llm_hint": "Best for thoughtful, narrative, and opinion posts."
+      },
+      "illustration": {
+        "label": "Illustration",
+        "description": "Abstract shapes, soft gradients, and illustrative decorative elements.",
+        "llm_hint": "Best for conceptual explainers and creative storytelling."
+      },
+      "minimal": {
+        "label": "Minimal",
+        "description": "Calm whitespace, low ornamentation, and direct readability.",
+        "llm_hint": "Best for tutorials, checklists, and straightforward instructions."
+      },
+      "bold": {
+        "label": "Bold",
+        "description": "Strong color blocks and high-impact hierarchy for short statements.",
+        "llm_hint": "Best for announcements and strong takes."
+      },
+      "data": {
+        "label": "Data",
+        "description": "Structured accents that resemble charts, grids, and insight strips.",
+        "llm_hint": "Best for metrics, benchmarks, and evidence-heavy posts."
+      },
+      "monochrome-swiss": {
+        "label": "Monochrome Swiss",
+        "description": "High-contrast monochrome hierarchy with restrained geometry and grid discipline.",
+        "llm_hint": "Best for minimalist thought leadership and typographic clarity."
+      },
+      "brutal": {
+        "label": "Brutal",
+        "description": "Aggressive composition, loud contrast, and campaign-grade visual impact.",
+        "llm_hint": "Best for bold announcements, manifestos, and sharp opinions."
+      }
     }
   },
-  "storage": {
-    "default_key_prefix": "social-assets",
-    "default_mode": "overwrite",
-    "versioned_include_date": true
+  "formats": {
+    "instagram-post": {
+      "width": 1080,
+      "height": 1080,
+      "caption_source": "instagram_caption",
+      "hashtag_count": 3,
+      "default_template_id": "core/editorial-base"
+    },
+    "instagram-story": {
+      "width": 1080,
+      "height": 1920,
+      "caption_source": "instagram_caption",
+      "hashtag_count": 2,
+      "default_template_id": "core/editorial-base"
+    },
+    "carousel-slide": {
+      "width": 1080,
+      "height": 1080,
+      "caption_source": "carousel_slides",
+      "hashtag_count": 0,
+      "default_template_id": "core/editorial-base"
+    },
+    "twitter-card": {
+      "width": 1200,
+      "height": 630,
+      "caption_source": "twitter_caption",
+      "hashtag_count": 0,
+      "default_template_id": "core/bold-base"
+    },
+    "linkedin-post": {
+      "width": 1200,
+      "height": 627,
+      "caption_source": "linkedin_caption",
+      "hashtag_count": 0,
+      "default_template_id": "core/editorial-base"
+    }
   },
+  "preview_defaults": {
+    "title": "Sample Blog Post Title",
+    "caption": "Sample caption for a social media image preview.",
+    "heading": "Key idea goes here",
+    "body": "One concise sentence that explains the idea for this slide.",
+    "slide_number": 1,
+    "total_slides": 5
+  },
+  "templates": [
+    {
+      "id": "core/editorial-base",
+      "styles": [
+        "editorial",
+        "minimal",
+        "monochrome-swiss"
+      ],
+      "label": "Core Editorial Base",
+      "default_for_style": true,
+      "file": "templates/editorial-base.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    },
+    {
+      "id": "core/illustration-base",
+      "styles": [
+        "illustration"
+      ],
+      "label": "Core Illustration Base",
+      "default_for_style": true,
+      "file": "templates/illustration-base.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "illustration"
+    },
+    {
+      "id": "core/bold-base",
+      "styles": [
+        "bold",
+        "brutal"
+      ],
+      "label": "Core Bold Base",
+      "default_for_style": true,
+      "file": "templates/bold-base.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "bold"
+    },
+    {
+      "id": "core/data-base",
+      "styles": [
+        "data"
+      ],
+      "label": "Core Data Base",
+      "default_for_style": true,
+      "file": "templates/data-base.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "data"
+    },
+    {
+      "id": "core/quote-focus",
+      "styles": [
+        "editorial",
+        "illustration",
+        "minimal",
+        "bold",
+        "data",
+        "monochrome-swiss",
+        "brutal"
+      ],
+      "label": "Core Quote Focus",
+      "archetypes": [
+        "quote"
+      ],
+      "file": "templates/quote-focus.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    },
+    {
+      "id": "core/checklist-stack",
+      "styles": [
+        "editorial",
+        "illustration",
+        "minimal",
+        "bold",
+        "data",
+        "monochrome-swiss",
+        "brutal"
+      ],
+      "label": "Core Checklist Stack",
+      "archetypes": [
+        "checklist",
+        "timeline"
+      ],
+      "file": "templates/checklist-stack.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    },
+    {
+      "id": "core/metric-split",
+      "styles": [
+        "editorial",
+        "illustration",
+        "minimal",
+        "bold",
+        "data",
+        "monochrome-swiss",
+        "brutal"
+      ],
+      "label": "Core Metric Split",
+      "archetypes": [
+        "metric"
+      ],
+      "file": "templates/metric-split.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    },
+    {
+      "id": "core/promo-pill",
+      "styles": [
+        "editorial",
+        "illustration",
+        "minimal",
+        "bold",
+        "data",
+        "monochrome-swiss",
+        "brutal"
+      ],
+      "label": "Core Promo Pill",
+      "archetypes": [
+        "promo"
+      ],
+      "file": "templates/promo-pill.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    }
+  ],
   "post_archetypes": {
     "default_archetype": "insight",
     "archetypes": {
@@ -499,7 +741,9 @@ export const PIPELINE_CONFIG = {
         "illustration": "stylized but realistic environment, softer tones, creative shapes, playful but polished composition",
         "minimal": "clean modern scene with simple geometry, fewer objects, calm neutral palette, high readability space",
         "bold": "high-contrast campaign scene with strong directional light and decisive composition",
-        "data": "analytical modern environment with structured visual rhythm, subtle grid-like cues, precise composition"
+        "data": "analytical modern environment with structured visual rhythm, subtle grid-like cues, precise composition",
+        "monochrome-swiss": "precise monochrome environment, disciplined composition, generous negative space, typographic poster sensibility",
+        "brutal": "high-contrast graphic environment with sharp geometry, punchy framing, and poster-like visual tension"
       },
       "archetype_guidance": {
         "insight": "focus on clarity and thoughtful discovery",
@@ -518,364 +762,80 @@ export const PIPELINE_CONFIG = {
       ]
     }
   },
-  "template_styles": {
-    "default_style": "editorial",
-    "styles": {
-      "editorial": {
-        "label": "Editorial",
-        "description": "Magazine-like layouts with clean typography and elevated contrast.",
-        "llm_hint": "Best for thoughtful, narrative, and opinion posts."
-      },
-      "illustration": {
-        "label": "Illustration",
-        "description": "Abstract shapes, soft gradients, and illustrative decorative elements.",
-        "llm_hint": "Best for conceptual explainers and creative storytelling."
-      },
-      "minimal": {
-        "label": "Minimal",
-        "description": "Calm whitespace, low ornamentation, and direct readability.",
-        "llm_hint": "Best for tutorials, checklists, and straightforward instructions."
-      },
-      "bold": {
-        "label": "Bold",
-        "description": "Strong color blocks and high-impact hierarchy for short statements.",
-        "llm_hint": "Best for announcements and strong takes."
-      },
-      "data": {
-        "label": "Data",
-        "description": "Structured accents that resemble charts, grids, and insight strips.",
-        "llm_hint": "Best for metrics, benchmarks, and evidence-heavy posts."
-      }
+  "runtime": {
+    "browser_keep_alive_ms": 60000,
+    "page_set_content_wait_until": "networkidle0",
+    "asset_cache_control": "public, max-age=31536000, immutable",
+    "ghost_error_preview_chars": 300
+  },
+  "features": {
+    "enable_template_preview": true,
+    "enable_stock_image_search": true,
+    "enable_ai_image_generation": true,
+    "prefer_feature_image": true,
+    "enable_notifications": true
+  },
+  "security": {
+    "api_auth": {
+      "enabled": true,
+      "header_name": "x-api-key",
+      "require_for_preview": true,
+      "require_for_generate": true,
+      "require_for_direct_content": true,
+      "require_for_webhook": false
+    },
+    "cors": {
+      "enabled": true,
+      "allowed_origins": [
+        "*"
+      ],
+      "allowed_headers": [
+        "content-type",
+        "authorization",
+        "x-api-key",
+        "x-webhook-token"
+      ],
+      "allowed_methods": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ],
+      "allow_credentials": false,
+      "max_age_seconds": 86400
+    },
+    "request_limits": {
+      "max_json_body_bytes": 256000,
+      "slot_overrides_max_keys": 40,
+      "template_ids_max_keys": 5
+    },
+    "rate_limit": {
+      "enabled": true,
+      "window_seconds": 60,
+      "max_requests_per_window": 30
+    },
+    "outbound": {
+      "allow_private_network_targets": false,
+      "allowed_notify_hosts": [],
+      "allowed_image_hosts": []
     }
   },
-  "formats": {
-    "instagram-post": {
-      "width": 1080,
-      "height": 1080,
-      "caption_source": "instagram_caption",
-      "hashtag_count": 3,
-      "default_template_id": "instagram-post/editorial"
-    },
-    "instagram-story": {
-      "width": 1080,
-      "height": 1920,
-      "caption_source": "instagram_caption",
-      "hashtag_count": 2,
-      "default_template_id": "instagram-story/spotlight"
-    },
-    "carousel-slide": {
-      "width": 1080,
-      "height": 1080,
-      "caption_source": "carousel_slides",
-      "hashtag_count": 0,
-      "default_template_id": "carousel-slide/minimal"
-    },
-    "twitter-card": {
-      "width": 1200,
-      "height": 630,
-      "caption_source": "twitter_caption",
-      "hashtag_count": 0,
-      "default_template_id": "twitter-card/bold"
-    },
-    "linkedin-post": {
-      "width": 1200,
-      "height": 627,
-      "caption_source": "linkedin_caption",
-      "hashtag_count": 0,
-      "default_template_id": "linkedin-post/clean"
-    }
+  "storage": {
+    "default_key_prefix": "social-assets",
+    "default_mode": "overwrite",
+    "versioned_include_date": true
   },
-  "preview_defaults": {
-    "title": "Sample Blog Post Title",
-    "caption": "Sample caption for a social media image preview.",
-    "heading": "Key idea goes here",
-    "body": "One concise sentence that explains the idea for this slide.",
-    "slide_number": 1,
-    "total_slides": 5
-  },
-  "templates": [
-    {
-      "id": "instagram-post/editorial",
-      "format": "instagram-post",
-      "style": "editorial",
-      "label": "Editorial Cover",
-      "default_for_style": true,
-      "file": "templates/instagram-post/editorial.html"
-    },
-    {
-      "id": "instagram-post/illustration",
-      "format": "instagram-post",
-      "style": "illustration",
-      "label": "Illustrated Burst",
-      "default_for_style": true,
-      "archetypes": [
-        "insight",
-        "promo"
-      ],
-      "file": "templates/instagram-post/illustration.html"
-    },
-    {
-      "id": "instagram-post/grid",
-      "format": "instagram-post",
-      "style": "data",
-      "label": "Data Grid",
-      "default_for_style": true,
-      "archetypes": [
-        "metric"
-      ],
-      "file": "templates/instagram-post/grid.html"
-    },
-    {
-      "id": "instagram-post/stat-split",
-      "format": "instagram-post",
-      "style": "data",
-      "label": "Stat Split",
-      "archetypes": [
-        "metric"
-      ],
-      "file": "templates/instagram-post/stat-split.html"
-    },
-    {
-      "id": "instagram-post/quote-focus",
-      "format": "instagram-post",
-      "style": "editorial",
-      "label": "Quote Focus",
-      "archetypes": [
-        "quote"
-      ],
-      "file": "templates/instagram-post/quote-focus.html"
-    },
-    {
-      "id": "instagram-post/checklist",
-      "format": "instagram-post",
-      "style": "minimal",
-      "label": "Checklist Panel",
-      "archetypes": [
-        "checklist",
-        "timeline"
-      ],
-      "file": "templates/instagram-post/checklist.html"
-    },
-    {
-      "id": "instagram-story/spotlight",
-      "format": "instagram-story",
-      "style": "editorial",
-      "label": "Story Spotlight",
-      "default_for_style": true,
-      "file": "templates/instagram-story/spotlight.html"
-    },
-    {
-      "id": "instagram-story/illustration",
-      "format": "instagram-story",
-      "style": "illustration",
-      "label": "Story Illustration",
-      "default_for_style": true,
-      "archetypes": [
-        "insight",
-        "quote"
-      ],
-      "file": "templates/instagram-story/illustration.html"
-    },
-    {
-      "id": "instagram-story/timeline",
-      "format": "instagram-story",
-      "style": "minimal",
-      "label": "Story Timeline",
-      "default_for_style": true,
-      "archetypes": [
-        "timeline",
-        "checklist"
-      ],
-      "file": "templates/instagram-story/timeline.html"
-    },
-    {
-      "id": "instagram-story/promo-banner",
-      "format": "instagram-story",
-      "style": "bold",
-      "label": "Story Promo Banner",
-      "default_for_style": true,
-      "archetypes": [
-        "promo"
-      ],
-      "file": "templates/instagram-story/promo-banner.html"
-    },
-    {
-      "id": "carousel-slide/minimal",
-      "format": "carousel-slide",
-      "style": "minimal",
-      "label": "Carousel Minimal",
-      "default_for_style": true,
-      "file": "templates/carousel-slide/minimal.html"
-    },
-    {
-      "id": "carousel-slide/illustration",
-      "format": "carousel-slide",
-      "style": "illustration",
-      "label": "Carousel Illustration",
-      "default_for_style": true,
-      "archetypes": [
-        "insight"
-      ],
-      "file": "templates/carousel-slide/illustration.html"
-    },
-    {
-      "id": "carousel-slide/quote",
-      "format": "carousel-slide",
-      "style": "editorial",
-      "label": "Carousel Quote",
-      "default_for_style": true,
-      "archetypes": [
-        "quote"
-      ],
-      "file": "templates/carousel-slide/quote.html"
-    },
-    {
-      "id": "carousel-slide/step-card",
-      "format": "carousel-slide",
-      "style": "minimal",
-      "label": "Carousel Step Card",
-      "archetypes": [
-        "checklist",
-        "timeline"
-      ],
-      "file": "templates/carousel-slide/step-card.html"
-    },
-    {
-      "id": "carousel-slide/stat-card",
-      "format": "carousel-slide",
-      "style": "data",
-      "label": "Carousel Stat Card",
-      "default_for_style": true,
-      "archetypes": [
-        "metric"
-      ],
-      "file": "templates/carousel-slide/stat-card.html"
-    },
-    {
-      "id": "twitter-card/bold",
-      "format": "twitter-card",
-      "style": "bold",
-      "label": "Twitter Bold",
-      "default_for_style": true,
-      "file": "templates/twitter-card/bold.html"
-    },
-    {
-      "id": "twitter-card/data-strip",
-      "format": "twitter-card",
-      "style": "data",
-      "label": "Twitter Data Strip",
-      "default_for_style": true,
-      "archetypes": [
-        "metric"
-      ],
-      "file": "templates/twitter-card/data-strip.html"
-    },
-    {
-      "id": "twitter-card/editorial",
-      "format": "twitter-card",
-      "style": "editorial",
-      "label": "Twitter Editorial",
-      "default_for_style": true,
-      "file": "templates/twitter-card/editorial.html"
-    },
-    {
-      "id": "twitter-card/quote-focus",
-      "format": "twitter-card",
-      "style": "editorial",
-      "label": "Twitter Quote Focus",
-      "archetypes": [
-        "quote"
-      ],
-      "file": "templates/twitter-card/quote-focus.html"
-    },
-    {
-      "id": "twitter-card/promo-pill",
-      "format": "twitter-card",
-      "style": "bold",
-      "label": "Twitter Promo Pill",
-      "archetypes": [
-        "promo"
-      ],
-      "file": "templates/twitter-card/promo-pill.html"
-    },
-    {
-      "id": "linkedin-post/clean",
-      "format": "linkedin-post",
-      "style": "minimal",
-      "label": "LinkedIn Clean",
-      "default_for_style": true,
-      "file": "templates/linkedin-post/clean.html"
-    },
-    {
-      "id": "linkedin-post/editorial",
-      "format": "linkedin-post",
-      "style": "editorial",
-      "label": "LinkedIn Editorial",
-      "default_for_style": true,
-      "file": "templates/linkedin-post/editorial.html"
-    },
-    {
-      "id": "linkedin-post/illustration",
-      "format": "linkedin-post",
-      "style": "illustration",
-      "label": "LinkedIn Illustration",
-      "default_for_style": true,
-      "archetypes": [
-        "insight",
-        "promo"
-      ],
-      "file": "templates/linkedin-post/illustration.html"
-    },
-    {
-      "id": "linkedin-post/checklist",
-      "format": "linkedin-post",
-      "style": "minimal",
-      "label": "LinkedIn Checklist",
-      "archetypes": [
-        "checklist",
-        "timeline"
-      ],
-      "file": "templates/linkedin-post/checklist.html"
-    },
-    {
-      "id": "linkedin-post/quote-insight",
-      "format": "linkedin-post",
-      "style": "editorial",
-      "label": "LinkedIn Quote Insight",
-      "archetypes": [
-        "quote"
-      ],
-      "file": "templates/linkedin-post/quote-insight.html"
-    }
-  ]
+  "schema_version": 1
 } as const;
 
 export const TEMPLATE_FILES = {
-  "instagram-post/editorial": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 42px 46px;\">\n    <h1 class=\"text-balance break-words text-[72px] leading-[1.01] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-3 break-words text-[31px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "instagram-post/illustration": "<div class=\"absolute -right-16 -top-20 h-72 w-72 rounded-full\" style=\"background: color-mix(in srgb, var(--color-brand-accent) 42%, transparent);\"></div>\n<div class=\"absolute -left-20 bottom-36 h-64 w-64 rounded-full\" style=\"background: color-mix(in srgb, var(--color-brand-glow) 44%, transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 40px 44px;\">\n    <h1 class=\"text-balance break-words text-[70px] leading-[1.01] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-3 break-words text-[30px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "instagram-post/grid": "<div class=\"absolute inset-0\" style=\"background-image: linear-gradient(color-mix(in srgb, var(--color-border-subtle) 28%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--color-border-subtle) 24%, transparent) 1px, transparent 1px); background-size: 88px 88px;\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 40px 44px;\">\n    <div class=\"inline-flex w-fit items-center rounded-full border px-5 py-2 text-[14px] font-semibold uppercase tracking-[0.09em]\" style=\"border-color: color-mix(in srgb, var(--color-brand-accent) 72%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);\">{{BRAND_NAME}}</div>\n    <h1 class=\"mt-4 text-balance break-words text-[68px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-3 break-words text-[30px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "instagram-post/stat-split": "<div class=\"absolute inset-y-0 right-0\" style=\"width: 34%; background: linear-gradient(180deg, color-mix(in srgb, var(--color-brand-accent) 46%, transparent), color-mix(in srgb, var(--color-overlay-strong) 64%, transparent));\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 34px 36px;\">\n    <div class=\"inline-flex w-fit items-center rounded-full border px-4 py-2 text-[14px] font-semibold uppercase tracking-[0.09em]\" style=\"border-color: color-mix(in srgb, var(--color-brand-accent) 78%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);\">{{SLOT:kicker}}</div>\n    <div class=\"mt-4 flex items-start justify-between gap-6\">\n      <div style=\"max-width: calc({{CONTENT_MAX_WIDTH}}px - 280px);\">\n        <h1 class=\"text-balance break-words text-[66px] leading-[1.01] tracking-[-0.02em]\" style=\"font-family: var(--font-display); text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n        <p class=\"mt-3 break-words text-[29px] leading-[1.33] text-[var(--color-text-secondary)]\" style=\"max-width: calc({{CAPTION_MAX_WIDTH}}px - 260px); text-shadow: var(--frame-caption-shadow);\">{{SLOT:insight_line}}</p>\n      </div>\n      <div class=\"rounded-2xl border px-5 py-4\" style=\"min-width: 250px; border-color: color-mix(in srgb, var(--color-brand-accent) 80%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);\">\n        <p class=\"tabular-nums text-[74px] leading-none\" style=\"font-family: var(--font-display);\">{{SLOT:metric_value}}</p>\n        <p class=\"mt-1 break-words text-[22px] leading-[1.2] text-[var(--color-text-secondary)]\">{{SLOT:metric_label}}</p>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "instagram-post/quote-focus": "<div class=\"absolute left-12 top-12 text-[160px] leading-none text-[var(--color-brand-accent)]\" style=\"font-family: var(--font-display); opacity: 0.18;\">“</div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 34px 38px;\">\n    <p class=\"break-words text-[19px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]\">{{SLOT:kicker}}</p>\n    <h1 class=\"mt-2 text-balance break-words text-[62px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:quote_text}}</h1>\n    <p class=\"mt-3 break-words text-[24px] leading-[1.22] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">— {{SLOT:quote_author}}</p>\n    <p class=\"mt-2 break-words text-[27px] leading-[1.32] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:insight_line}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "instagram-post/checklist": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 34px 38px;\">\n    <div class=\"inline-flex w-fit items-center rounded-full border px-4 py-2 text-[14px] font-semibold uppercase tracking-[0.1em]\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);\">{{SLOT:kicker}}</div>\n    <h1 class=\"mt-4 text-balance break-words text-[64px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n    <div class=\"mt-4 flex flex-col gap-3\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px;\">\n      <div class=\"rounded-xl border px-4 py-3 text-[23px]\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">1. {{SLOT:step_1}}</div>\n      <div class=\"rounded-xl border px-4 py-3 text-[23px]\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">2. {{SLOT:step_2}}</div>\n      <div class=\"rounded-xl border px-4 py-3 text-[23px]\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">3. {{SLOT:step_3}}</div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "instagram-story/spotlight": "<div class=\"relative z-10 flex h-full w-full flex-col justify-end\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-6\" style=\"padding: 42px 44px;\">\n    <h1 class=\"text-balance break-words text-[78px] leading-[0.99] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-4 break-words text-[35px] leading-[1.3] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "instagram-story/illustration": "<div class=\"absolute -top-16 left-10 h-80 w-80 rounded-full\" style=\"background: color-mix(in srgb, var(--color-brand-accent) 40%, transparent);\"></div>\n<div class=\"absolute right-10 top-44 h-56 w-56 rounded-full\" style=\"background: color-mix(in srgb, var(--color-brand-glow) 50%, transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col justify-end\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-6\" style=\"padding: 40px 42px;\">\n    <h1 class=\"text-balance break-words text-[76px] leading-[0.99] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-4 break-words text-[34px] leading-[1.3] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "instagram-story/timeline": "<div class=\"relative z-10 flex h-full w-full flex-col justify-end\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-6\" style=\"padding: 38px 40px;\">\n    <div class=\"flex items-start gap-6\">\n      <div class=\"relative\" style=\"width: 46px; min-height: 430px;\">\n        <div class=\"absolute left-[22px] top-0 h-full w-[2px]\" style=\"background: linear-gradient(color-mix(in srgb, var(--color-brand-accent) 80%, transparent), transparent);\"></div>\n        <div class=\"absolute left-3 top-10 h-8 w-8 rounded-full border\" style=\"border-color: color-mix(in srgb, var(--color-brand-accent) 80%, transparent); background: color-mix(in srgb, var(--color-brand-accent) 28%, var(--color-surface-base));\"></div>\n        <div class=\"absolute left-3 top-56 h-8 w-8 rounded-full border\" style=\"border-color: color-mix(in srgb, var(--color-brand-accent) 80%, transparent); background: color-mix(in srgb, var(--color-brand-accent) 28%, var(--color-surface-base));\"></div>\n      </div>\n      <div style=\"max-width: calc({{CONTENT_MAX_WIDTH}}px - 120px);\">\n        <h1 class=\"text-balance break-words text-[74px] leading-[0.99] tracking-[-0.02em]\" style=\"font-family: var(--font-display); text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n        <p class=\"mt-4 break-words text-[33px] leading-[1.3] text-[var(--color-text-secondary)]\" style=\"max-width: calc({{CAPTION_MAX_WIDTH}}px - 120px); text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "instagram-story/promo-banner": "<div class=\"relative z-10 flex h-full w-full flex-col justify-end\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-6\" style=\"padding: 40px 42px;\">\n    <div class=\"inline-flex w-fit items-center rounded-full border px-5 py-2 text-[15px] font-semibold uppercase tracking-[0.09em]\" style=\"border-color: color-mix(in srgb, var(--color-brand-accent) 80%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">{{SLOT:kicker}}</div>\n    <h1 class=\"mt-4 text-balance break-words text-[76px] leading-[0.99] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n    <p class=\"mt-3 break-words text-[34px] leading-[1.28] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:supporting_line}}</p>\n    <div class=\"mt-6 inline-flex w-fit items-center rounded-full px-6 py-3 text-[23px] font-semibold\" style=\"background: var(--color-brand-accent); color: var(--color-brand-accent-foreground);\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "carousel-slide/minimal": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 42px 44px;\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words text-[70px] leading-[1.01] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[30px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "carousel-slide/illustration": "<div class=\"absolute -left-24 top-12 h-72 w-72 rounded-full\" style=\"background: color-mix(in srgb, var(--color-brand-glow) 42%, transparent);\"></div>\n<div class=\"absolute right-10 bottom-14 h-56 w-56 rounded-[30%]\" style=\"background: color-mix(in srgb, var(--color-brand-accent) 36%, transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 40px 42px;\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words text-[68px] leading-[1.01] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[29px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "carousel-slide/quote": "<div class=\"absolute left-14 top-16 text-[150px] leading-none text-[var(--color-brand-accent)]\" style=\"font-family: var(--font-display); opacity: 0.2;\">“</div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 40px 42px;\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words text-[66px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[30px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "carousel-slide/step-card": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 38px 40px;\">\n    <div class=\"inline-flex w-fit items-center rounded-full border px-4 py-2 text-[17px] font-semibold uppercase tracking-[0.08em] tabular-nums\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">Step {{SLOT:step_number}}/{{SLOT:step_total}}</div>\n    {{KICKER}}\n    <h1 class=\"mt-3 text-balance break-words text-[68px] leading-[1.01] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n    <p class=\"mt-3 break-words text-[29px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:body}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "carousel-slide/stat-card": "<div class=\"absolute inset-x-0 top-0 h-10\" style=\"background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 22%, transparent) 0 30px, transparent 30px 60px);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; padding-top: calc({{CONTENT_INSET}}px + 14px); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 34px 36px;\">\n    <div class=\"flex items-start justify-between gap-6\">\n      <div style=\"max-width: calc({{CONTENT_MAX_WIDTH}}px - 250px);\">\n        {{KICKER}}\n        <h1 class=\"mt-2 text-balance break-words text-[64px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n        <p class=\"mt-3 break-words text-[28px] leading-[1.33] text-[var(--color-text-secondary)]\" style=\"max-width: calc({{CAPTION_MAX_WIDTH}}px - 220px); text-shadow: var(--frame-caption-shadow);\">{{SLOT:insight_line}}</p>\n      </div>\n      <div class=\"rounded-2xl border px-5 py-4\" style=\"min-width: 230px; border-color: color-mix(in srgb, var(--color-brand-accent) 80%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);\">\n        <p class=\"tabular-nums text-[68px] leading-none\" style=\"font-family: var(--font-display);\">{{SLOT:metric_value}}</p>\n        <p class=\"mt-1 break-words text-[20px] leading-[1.2] text-[var(--color-text-secondary)]\">{{SLOT:metric_label}}</p>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "twitter-card/bold": "<div class=\"absolute inset-y-0 left-0\" style=\"width: 42%; background: linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 34%, transparent), transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 32px 36px;\">\n    <h1 class=\"text-balance break-words text-[54px] leading-[1] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-2 break-words text-[24px] leading-[1.3] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "twitter-card/data-strip": "<div class=\"absolute inset-x-0 top-0 h-12\" style=\"background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0 26px, color-mix(in srgb, var(--color-surface-elevated) 66%, transparent) 26px 52px);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; padding-top: calc({{CONTENT_INSET}}px + 20px); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 30px 34px;\">\n    <p class=\"break-words text-[14px] font-semibold uppercase tracking-[0.09em] text-[var(--color-text-muted)]\">Data-led insight</p>\n    <h1 class=\"mt-1 text-balance break-words text-[50px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-2 break-words text-[23px] leading-[1.3] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    <div class=\"mt-6 inline-flex w-fit items-center rounded-full border px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.08em]\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">{{BRAND_NAME}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "twitter-card/editorial": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 34px 38px;\">\n    <h1 class=\"text-balance break-words text-[52px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-2 break-words text-[24px] leading-[1.32] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "twitter-card/quote-focus": "<div class=\"absolute left-10 top-10 text-[118px] leading-none text-[var(--color-brand-accent)]\" style=\"font-family: var(--font-display); opacity: 0.22;\">“</div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 30px 34px;\">\n    <h1 class=\"text-balance break-words text-[46px] leading-[1.05] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:quote_text}}</h1>\n    <p class=\"mt-3 break-words text-[22px] leading-[1.22] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">— {{SLOT:quote_author}}</p>\n    <p class=\"mt-2 break-words text-[22px] leading-[1.3] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:insight_line}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "twitter-card/promo-pill": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 32px 36px;\">\n    <div class=\"inline-flex w-fit items-center rounded-full border px-4 py-2 text-[14px] font-semibold uppercase tracking-[0.1em]\" style=\"border-color: color-mix(in srgb, var(--color-brand-accent) 78%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">{{SLOT:kicker}}</div>\n    <h1 class=\"mt-4 text-balance break-words text-[52px] leading-[1] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n    <p class=\"mt-2 break-words text-[23px] leading-[1.3] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:supporting_line}}</p>\n    <div class=\"mt-6 inline-flex w-fit items-center rounded-full px-5 py-2 text-[19px] font-semibold\" style=\"background: var(--color-brand-accent); color: var(--color-brand-accent-foreground);\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "linkedin-post/clean": "<div class=\"absolute left-0 top-0 h-full\" style=\"width: 8px; background: color-mix(in srgb, var(--color-brand-accent) 82%, transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; padding-left: calc({{CONTENT_INSET}}px + 20px); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 32px 36px;\">\n    <h1 class=\"text-balance break-words text-[54px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-2 break-words text-[25px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "linkedin-post/editorial": "<div class=\"absolute -right-10 -top-14 h-56 w-56 rounded-full\" style=\"background: color-mix(in srgb, var(--color-brand-accent) 34%, transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 32px 36px;\">\n    <h1 class=\"text-balance break-words text-[52px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-2 break-words text-[24px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "linkedin-post/illustration": "<div class=\"absolute left-16 top-14 h-40 w-40 rounded-[28px]\" style=\"background: color-mix(in srgb, var(--color-brand-glow) 44%, transparent);\"></div>\n<div class=\"absolute right-16 bottom-12 h-32 w-32 rotate-12 rounded-full\" style=\"background: color-mix(in srgb, var(--color-brand-accent) 44%, transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 30px 34px;\">\n    <h1 class=\"text-balance break-words text-[52px] leading-[1.02] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{TITLE}}</h1>\n    <p class=\"mt-2 break-words text-[24px] leading-[1.34] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{CAPTION}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "linkedin-post/checklist": "<div class=\"absolute left-0 top-0 h-full\" style=\"width: 8px; background: color-mix(in srgb, var(--color-brand-accent) 84%, transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; padding-left: calc({{CONTENT_INSET}}px + 20px); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 28px 32px;\">\n    <p class=\"break-words text-[14px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]\">{{SLOT:kicker}}</p>\n    <h1 class=\"mt-1 text-balance break-words text-[48px] leading-[1.04] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n    <div class=\"mt-4 grid grid-cols-2 gap-3\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px;\">\n      <div class=\"rounded-xl border px-4 py-3 text-[19px]\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">1. {{SLOT:step_1}}</div>\n      <div class=\"rounded-xl border px-4 py-3 text-[19px]\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">2. {{SLOT:step_2}}</div>\n      <div class=\"rounded-xl border px-4 py-3 text-[19px]\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">3. {{SLOT:step_3}}</div>\n      <div class=\"rounded-xl border px-4 py-3 text-[19px]\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">4. {{SLOT:step_4}}</div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "linkedin-post/quote-insight": "<div class=\"absolute left-10 top-8 text-[132px] leading-none text-[var(--color-brand-accent)]\" style=\"font-family: var(--font-display); opacity: 0.2;\">“</div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: 30px 34px;\">\n    <h1 class=\"text-balance break-words text-[46px] leading-[1.06] tracking-[-0.02em]\" style=\"font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:quote_text}}</h1>\n    <p class=\"mt-3 break-words text-[21px] leading-[1.22] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">— {{SLOT:quote_author}}</p>\n    <p class=\"mt-2 break-words text-[22px] leading-[1.3] text-[var(--color-text-secondary)]\" style=\"max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:insight_line}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n"
+  "core/editorial-base": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(40px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(66px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.02; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(29px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.34; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/illustration-base": "<div class=\"absolute -left-[6%] top-[6%] rounded-full\" style=\"width: calc(320px * var(--layout-scale)); height: calc(320px * var(--layout-scale)); background: color-mix(in srgb, var(--color-brand-glow) 48%, transparent);\"></div>\n<div class=\"absolute right-[7%] bottom-[9%] rounded-[30%]\" style=\"width: calc(240px * var(--layout-scale)); height: calc(240px * var(--layout-scale)); background: color-mix(in srgb, var(--color-brand-accent) 36%, transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(38px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(68px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.01; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(29px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.34; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/bold-base": "<div class=\"absolute inset-y-0 left-0\" style=\"width: 42%; background: linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 42%, transparent), transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(64px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(27px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.3; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/data-base": "<div class=\"absolute inset-x-0 top-0\" style=\"height: calc(46px * var(--layout-scale)); background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 26%, transparent) 0 30px, color-mix(in srgb, var(--color-surface-elevated) 68%, transparent) 30px 60px);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); padding-top: calc(({{CONTENT_INSET}}px + 18px) * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(61px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.02; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(27px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.32; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/quote-focus": "<div class=\"absolute left-[8%] top-[7%] text-[var(--color-brand-accent)]\" style=\"font-family: var(--font-display); font-size: calc(148px * var(--layout-scale) * var(--frame-type-scale)); line-height: 0.8; opacity: 0.22;\">“</div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(60px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.03; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:quote_text}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.22; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">- {{SLOT:quote_author}}</p>\n    <p class=\"mt-2 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.32; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:insight_line}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/checklist-stack": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(32px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-3 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(58px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.03; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n    <div class=\"mt-4 flex flex-col\" style=\"gap: calc(10px * var(--layout-scale) * var(--frame-space-scale)); max-width: {{CAPTION_MAX_WIDTH}}px;\">\n      <div class=\"rounded-xl border\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">1. {{SLOT:step_1}}</div>\n      <div class=\"rounded-xl border\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">2. {{SLOT:step_2}}</div>\n      <div class=\"rounded-xl border\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">3. {{SLOT:step_3}}</div>\n      <div class=\"rounded-xl border\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">4. {{SLOT:step_4}}</div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/metric-split": "<div class=\"absolute inset-x-0 top-0\" style=\"height: calc(46px * var(--layout-scale)); background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0 30px, transparent 30px 60px);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); padding-top: calc(({{CONTENT_INSET}}px + 14px) * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(30px * var(--layout-scale) * var(--frame-space-scale));\">\n    <div class=\"flex items-start justify-between\" style=\"gap: calc(18px * var(--layout-scale) * var(--frame-space-scale));\">\n      <div style=\"max-width: calc({{CONTENT_MAX_WIDTH}}px - calc(220px * var(--layout-scale)));\">\n        {{KICKER}}\n        <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(58px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.02; letter-spacing: -0.02em; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n        <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(26px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.32; max-width: calc({{CAPTION_MAX_WIDTH}}px - calc(220px * var(--layout-scale))); text-shadow: var(--frame-caption-shadow);\">{{SLOT:insight_line}}</p>\n      </div>\n      <div class=\"rounded-2xl border\" style=\"min-width: calc(220px * var(--layout-scale)); padding: calc(14px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale)); border-color: color-mix(in srgb, var(--color-brand-accent) 80%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);\">\n        <p class=\"tabular-nums\" style=\"font-family: var(--font-display); font-size: calc(66px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1;\">{{SLOT:metric_value}}</p>\n        <p class=\"mt-1 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(20px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.2;\">{{SLOT:metric_label}}</p>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/promo-pill": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-3 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(62px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(26px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.3; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:supporting_line}}</p>\n    <div class=\"mt-6 inline-flex w-fit items-center rounded-full\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(24px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale)); font-weight: 700; background: var(--color-brand-accent); color: var(--color-brand-accent-foreground);\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n"
 } as const;
 
 export type PipelineConfig = typeof PIPELINE_CONFIG;

@@ -1,0 +1,10 @@
+<div class="absolute inset-x-0 top-0" style="height: calc(46px * var(--layout-scale)); background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 26%, transparent) 0 30px, color-mix(in srgb, var(--color-surface-elevated) 68%, transparent) 30px 60px);"></div>
+<div class="relative z-10 flex h-full w-full flex-col" style="padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); padding-top: calc(({{CONTENT_INSET}}px + 18px) * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}">
+  {{HEADER}}
+  <div class="mt-auto" style="padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));">
+    {{KICKER}}
+    <h1 class="mt-2 text-balance break-words" style="font-family: var(--font-display); font-size: calc(61px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.02; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);">{{HEADING}}</h1>
+    <p class="mt-3 break-words text-[var(--color-text-secondary)]" style="font-size: calc(27px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.32; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);">{{BODY}}</p>
+    {{FOOTER}}
+  </div>
+</div>

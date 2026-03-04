@@ -6,13 +6,13 @@ const projectRoot = process.cwd();
 const configPath = resolve(projectRoot, "config/pipeline.config.yaml");
 const outputPath = resolve(projectRoot, "src/generated/template-assets.ts");
 
-const rawConfig = await readFile(configPath, "utf8");
-const parsed = parse(rawConfig);
-const config = assertConfigShape(parsed);
+const loadedConfig = await loadConfigWithExtends(configPath);
+const config = assertConfigShape(loadedConfig);
 
 const configDir = dirname(configPath);
 const templateFiles = {};
 const templateIdSet = new Set();
+const formatKeys = Object.keys(config.formats);
 
 for (const template of config.templates) {
   if (templateIdSet.has(template.id)) {
@@ -20,12 +20,18 @@ for (const template of config.templates) {
   }
   templateIdSet.add(template.id);
 
-  if (!config.formats[template.format]) {
-    throw new Error(`Template ${template.id} references unknown format: ${template.format}`);
+  const templateFormats = resolveTemplateFormats(template, formatKeys);
+  for (const format of templateFormats) {
+    if (!config.formats[format]) {
+      throw new Error(`Template ${template.id} references unknown format: ${format}`);
+    }
   }
 
-  if (!config.template_styles.styles[template.style]) {
-    throw new Error(`Template ${template.id} references unknown style: ${template.style}`);
+  const templateStyles = resolveTemplateStyles(template);
+  for (const style of templateStyles) {
+    if (!config.template_styles.styles[style]) {
+      throw new Error(`Template ${template.id} references unknown style: ${style}`);
+    }
   }
 
   if (Array.isArray(template.archetypes)) {
@@ -42,11 +48,19 @@ for (const template of config.templates) {
 
   // Keep this as a stable, project-relative path for docs/debug output.
   template.file = toPosix(relative(projectRoot, templatePath));
+  template.formats = templateFormats;
+  template.styles = templateStyles;
+  template.style = templateStyles[0];
+  delete template.format;
 }
 
 for (const [formatKey, format] of Object.entries(config.formats)) {
-  if (!templateIdSet.has(format.default_template_id)) {
+  const template = config.templates.find((entry) => entry.id === format.default_template_id);
+  if (!template) {
     throw new Error(`Format ${formatKey} points to missing default_template_id: ${format.default_template_id}`);
+  }
+  if (!templateSupportsFormat(template, formatKey)) {
+    throw new Error(`Format ${formatKey} default_template_id does not support this format: ${format.default_template_id}`);
   }
 }
 
@@ -255,11 +269,33 @@ function assertConfigShape(value) {
     if (!entry || typeof entry !== "object") {
       throw new Error("template entries must be objects");
     }
-    if (typeof entry.id !== "string" || typeof entry.format !== "string" || typeof entry.file !== "string") {
-      throw new Error("template entries require id, format, and file string fields");
+    if (typeof entry.id !== "string" || typeof entry.file !== "string") {
+      throw new Error("template entries require id and file string fields");
     }
-    if (typeof entry.style !== "string") {
-      throw new Error(`template ${entry.id} requires style`);
+    if (entry.format !== undefined && typeof entry.format !== "string") {
+      throw new Error(`template ${entry.id} optional format must be a string`);
+    }
+    if (entry.formats !== undefined) {
+      if (!Array.isArray(entry.formats) || entry.formats.some((value) => typeof value !== "string")) {
+        throw new Error(`template ${entry.id} optional formats must be a string array`);
+      }
+      if (entry.formats.length === 0) {
+        throw new Error(`template ${entry.id} optional formats must not be empty`);
+      }
+    }
+    if (entry.style !== undefined && typeof entry.style !== "string") {
+      throw new Error(`template ${entry.id} optional style must be a string`);
+    }
+    if (entry.styles !== undefined) {
+      if (!Array.isArray(entry.styles) || entry.styles.some((value) => typeof value !== "string")) {
+        throw new Error(`template ${entry.id} optional styles must be a string array`);
+      }
+      if (entry.styles.length === 0) {
+        throw new Error(`template ${entry.id} optional styles must not be empty`);
+      }
+    }
+    if (typeof entry.style !== "string" && !Array.isArray(entry.styles)) {
+      throw new Error(`template ${entry.id} requires style or styles`);
     }
   }
 
@@ -268,4 +304,112 @@ function assertConfigShape(value) {
 
 function toPosix(input) {
   return input.replaceAll("\\\\", "/");
+}
+
+async function loadConfigWithExtends(entryPath, stack = new Set()) {
+  const absolutePath = resolve(entryPath);
+  if (stack.has(absolutePath)) {
+    throw new Error(`Circular config extends detected at ${toPosix(relative(projectRoot, absolutePath))}`);
+  }
+
+  stack.add(absolutePath);
+  const raw = await readFile(absolutePath, "utf8");
+  const parsed = parse(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`Config file must contain a YAML object: ${toPosix(relative(projectRoot, absolutePath))}`);
+  }
+
+  const current = cloneValue(parsed);
+  const baseDir = dirname(absolutePath);
+  const extendsEntries = Array.isArray(current.extends) ? current.extends : [];
+  if (current.extends !== undefined && !Array.isArray(current.extends)) {
+    throw new Error(`extends must be an array in ${toPosix(relative(projectRoot, absolutePath))}`);
+  }
+
+  let merged = {};
+  for (const entry of extendsEntries) {
+    if (typeof entry !== "string" || !entry.trim()) {
+      throw new Error(`extends entries must be non-empty strings in ${toPosix(relative(projectRoot, absolutePath))}`);
+    }
+    const childPath = resolve(baseDir, entry.trim());
+    const childConfig = await loadConfigWithExtends(childPath, stack);
+    merged = deepMerge(merged, childConfig);
+  }
+
+  delete current.extends;
+  merged = deepMerge(merged, current);
+  stack.delete(absolutePath);
+  return merged;
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function cloneValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => cloneValue(item));
+  }
+  if (isPlainObject(value)) {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneValue(item)]));
+  }
+  return value;
+}
+
+function deepMerge(base, override) {
+  if (Array.isArray(override)) {
+    return cloneValue(override);
+  }
+
+  if (isPlainObject(base) && isPlainObject(override)) {
+    const result = { ...cloneValue(base) };
+    for (const [key, value] of Object.entries(override)) {
+      const existing = result[key];
+      if (isPlainObject(existing) && isPlainObject(value)) {
+        result[key] = deepMerge(existing, value);
+        continue;
+      }
+      result[key] = cloneValue(value);
+    }
+    return result;
+  }
+
+  return cloneValue(override);
+}
+
+function resolveTemplateFormats(template, formatKeys) {
+  const fromArray = Array.isArray(template.formats) ? template.formats : [];
+  const fromSingle = typeof template.format === "string" ? [template.format] : [];
+  const normalized = [...fromArray, ...fromSingle]
+    .map((format) => (typeof format === "string" ? format.trim() : ""))
+    .filter(Boolean);
+
+  if (normalized.length > 0) {
+    return [...new Set(normalized)];
+  }
+
+  return [...formatKeys];
+}
+
+function resolveTemplateStyles(template) {
+  const fromArray = Array.isArray(template.styles) ? template.styles : [];
+  const fromSingle = typeof template.style === "string" ? [template.style] : [];
+  const normalized = [...fromArray, ...fromSingle]
+    .map((style) => (typeof style === "string" ? style.trim().toLowerCase() : ""))
+    .filter(Boolean);
+
+  return [...new Set(normalized)];
+}
+
+function templateSupportsFormat(template, formatKey) {
+  const formats = Array.isArray(template.formats) ? template.formats : [];
+  if (formats.length > 0) {
+    return formats.includes(formatKey);
+  }
+
+  if (typeof template.format === "string") {
+    return template.format === formatKey;
+  }
+
+  return false;
 }
