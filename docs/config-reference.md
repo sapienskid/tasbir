@@ -28,6 +28,7 @@ pnpm run build:templates
 - `render`
 - `runtime`
 - `features`
+- `security`
 - `storage`
 - `post_archetypes`
 - `slot_schema`
@@ -96,7 +97,7 @@ Key areas:
 
 - `readable_light_text`, `readable_dark_text`
 - `color_engine` ratios and fallback colors
-- contrast thresholds (`primary_text_min_contrast`, `accent_foreground_min_contrast`)
+- contrast thresholds (`primary_text_min_contrast`, `secondary_text_min_contrast`, `muted_text_min_contrast`, `border_subtle_min_contrast`, `accent_foreground_min_contrast`)
 - radius tokens (`radius.card`, `radius.pill`)
 
 Use this section when you want global visual tone changes without editing templates.
@@ -166,6 +167,46 @@ Feature flags.
 - `enable_ai_image_generation`
 - `prefer_feature_image`
 - `enable_notifications`
+
+## `security`
+
+Security and access-control controls.
+
+### `api_auth`
+
+- `enabled`
+- `header_name`
+- `require_for_preview`
+- `require_for_generate`
+- `require_for_direct_content`
+- `require_for_webhook`
+
+### `cors`
+
+- `enabled`
+- `allowed_origins`
+- `allowed_headers`
+- `allowed_methods`
+- `allow_credentials`
+- `max_age_seconds`
+
+### `request_limits`
+
+- `max_json_body_bytes`
+- `slot_overrides_max_keys`
+- `template_ids_max_keys`
+
+### `rate_limit`
+
+- `enabled`
+- `window_seconds`
+- `max_requests_per_window`
+
+### `outbound`
+
+- `allow_private_network_targets`
+- `allowed_notify_hosts`
+- `allowed_image_hosts`
 
 ## `storage`
 
@@ -345,6 +386,9 @@ Per field precedence:
 - image model: env -> YAML
 - R2 key prefix: env -> YAML
 - notify URL: request -> env
+- notify host allowlist: env + YAML
+- image host allowlist: env + YAML
+- CORS policy: env override (if set) -> YAML
 
 ## Common Edit Recipes
 

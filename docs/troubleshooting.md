@@ -59,6 +59,27 @@ Fix:
 - set `features.enable_template_preview: true`
 - run `pnpm run build:templates`
 
+### Protected routes return 401
+
+Cause:
+
+- missing or invalid API key header
+
+Fix:
+
+- set `API_KEYS` in Worker env
+- send `x-api-key: <key>` or `Authorization: Bearer <key>`
+
+### `/webhook/ghost` returns 500 missing token
+
+Cause:
+
+- `GHOST_WEBHOOK_TOKEN` is not configured
+
+Fix:
+
+- set `GHOST_WEBHOOK_TOKEN` in local and deployed env
+
 ### `/generate-from-content` returns `title is required` or `content is required`
 
 Cause:
@@ -68,6 +89,26 @@ Cause:
 Fix:
 
 - provide both `title` and `content` (or `body`)
+
+### Request returns 413
+
+Cause:
+
+- JSON payload exceeds configured `security.request_limits.max_json_body_bytes`
+
+Fix:
+
+- reduce payload size or raise limit in config and rebuild assets
+
+### Request returns 429
+
+Cause:
+
+- route exceeded configured `security.rate_limit.max_requests_per_window`
+
+Fix:
+
+- throttle caller retries, or tune `security.rate_limit` for your traffic profile
 
 ### Ghost fetch errors
 

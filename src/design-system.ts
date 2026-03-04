@@ -198,15 +198,52 @@ export function createBrandTheme(args: {
     lightText
   );
 
-  const tokens: BrandTokens = {
-    primaryText,
-    secondaryText,
-    mutedText,
+  const secondaryMinContrast =
+    typeof engine.secondary_text_min_contrast === "number" ? engine.secondary_text_min_contrast : 3.8;
+  const mutedMinContrast =
+    typeof engine.muted_text_min_contrast === "number" ? engine.muted_text_min_contrast : 3;
+  const borderMinContrast =
+    typeof engine.border_subtle_min_contrast === "number" ? engine.border_subtle_min_contrast : 1.5;
+
+  const safePrimaryText = ensureReadableColor(surfaceBase, primaryText, engine.primary_text_min_contrast, lightText, darkText);
+  const safeSecondaryText = ensureReadableColor(
     surfaceBase,
-    surfaceElevated,
-    borderSubtle,
+    secondaryText,
+    secondaryMinContrast,
+    safePrimaryText,
+    pickReadableText(surfaceBase, lightText, darkText, secondaryMinContrast)
+  );
+  const safeMutedText = ensureReadableColor(
+    surfaceBase,
+    mutedText,
+    mutedMinContrast,
+    safeSecondaryText,
+    pickReadableText(surfaceBase, lightText, darkText, mutedMinContrast)
+  );
+  const safeAccentForeground = ensureReadableColor(
     accent,
     accentForeground,
+    engine.accent_foreground_min_contrast,
+    lightText,
+    darkText
+  );
+  const safeBorderSubtle = ensureReadableColor(
+    surfaceBase,
+    borderSubtle,
+    borderMinContrast,
+    mixHex(safePrimaryText, surfaceBase, 0.7),
+    mixHex(safePrimaryText, surfaceBase, 0.8)
+  );
+
+  const tokens: BrandTokens = {
+    primaryText: safePrimaryText,
+    secondaryText: safeSecondaryText,
+    mutedText: safeMutedText,
+    surfaceBase,
+    surfaceElevated,
+    borderSubtle: safeBorderSubtle,
+    accent,
+    accentForeground: safeAccentForeground,
     accentGlow: mixHex(accent, engine.accent_glow_mix_target, engine.accent_glow_mix_ratio_from_target),
     overlayStrong: mixHex(surfaceBase, engine.overlay_strong_mix_target, engine.overlay_strong_mix_ratio_from_target),
     shadowColor: mixHex(accent, engine.shadow_color_mix_target, engine.shadow_color_mix_ratio_from_target),
@@ -307,9 +344,22 @@ export function renderTemplateHead(args: {
           font-family: var(--font-body);
           background: var(--color-surface-base);
           color: var(--color-text-primary);
+          text-rendering: optimizeLegibility;
+          -webkit-font-smoothing: antialiased;
         }
         .text-balance {
           text-wrap: balance;
+        }
+        h1,
+        h2,
+        h3,
+        p,
+        li {
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+        .tabular-nums {
+          font-variant-numeric: tabular-nums;
         }
       </style>
     </head>
@@ -469,6 +519,32 @@ function pickReadableText(background: string, light: string, dark: string, minim
     return dark;
   }
   return lightRatio >= darkRatio ? light : dark;
+}
+
+function ensureReadableColor(
+  background: string,
+  candidate: string,
+  minimumRatio: number,
+  fallbackA: string,
+  fallbackB: string
+): string {
+  const candidateRatio = contrastRatio(background, candidate);
+  if (candidateRatio >= minimumRatio) {
+    return candidate;
+  }
+  const aRatio = contrastRatio(background, fallbackA);
+  if (aRatio >= minimumRatio) {
+    return fallbackA;
+  }
+  const bRatio = contrastRatio(background, fallbackB);
+  if (bRatio >= minimumRatio) {
+    return fallbackB;
+  }
+
+  if (candidateRatio >= aRatio && candidateRatio >= bRatio) {
+    return candidate;
+  }
+  return aRatio >= bRatio ? fallbackA : fallbackB;
 }
 
 function contrastRatio(firstHex: string, secondHex: string): number {

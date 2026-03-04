@@ -34,6 +34,36 @@ interface Env {
   IMAGE_MODEL?: string;
   R2_KEY_PREFIX?: string;
   NOTIFY_WEBHOOK_URL?: string;
+  API_KEYS?: string;
+  CORS_ALLOWED_ORIGINS?: string;
+  CORS_ALLOWED_HEADERS?: string;
+  CORS_ALLOW_CREDENTIALS?: string;
+  CORS_MAX_AGE_SECONDS?: string;
+  NOTIFY_HOST_ALLOWLIST?: string;
+  IMAGE_HOST_ALLOWLIST?: string;
+  ALLOW_PRIVATE_NETWORK_TARGETS?: string;
+}
+
+interface LlmPromptOverrides {
+  systemPrompt?: string | string[];
+  userInstructions?: string | string[];
+  userInstructionsAppend?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+interface ImageGenerationOptions {
+  mode?: "auto" | "feature" | "stock" | "ai" | "custom";
+  customUrl?: string;
+  prompt?: string;
+  allowStock?: boolean;
+  allowAi?: boolean;
+  preferFeature?: boolean;
+}
+
+interface OutputOptions {
+  formats?: TemplateKind[];
+  carouselSlides?: number;
 }
 
 interface GenerateRequestBody {
@@ -50,6 +80,9 @@ interface GenerateRequestBody {
   design?: TemplateControlSet;
   storage?: StorageOptions;
   notifyUrl?: string;
+  llm?: LlmPromptOverrides;
+  image?: ImageGenerationOptions;
+  output?: OutputOptions;
 }
 
 interface DirectContentRequestBody {
@@ -73,6 +106,9 @@ interface DirectContentRequestBody {
   design?: TemplateControlSet;
   storage?: StorageOptions;
   notifyUrl?: string;
+  llm?: LlmPromptOverrides;
+  image?: ImageGenerationOptions;
+  output?: OutputOptions;
 }
 
 interface StorageOptions {
@@ -130,7 +166,7 @@ interface LlmOutput {
 }
 
 interface SelectedImage {
-  source: "feature" | "stock" | "ai" | "none";
+  source: "feature" | "stock" | "ai" | "custom" | "none";
   imageUrl: string;
   attribution?: string;
   sourceUrl?: string;
@@ -146,22 +182,117 @@ interface GenerationResult {
   ok: true;
   slug: string;
   post_url: string;
+  requested_formats: TemplateKind[];
   image_source: SelectedImage;
   llm_output: LlmOutput;
   assets: {
-    instagram_post: StoredAsset;
-    instagram_story: StoredAsset;
-    twitter_card: StoredAsset;
-    linkedin_post: StoredAsset;
+    instagram_post: StoredAsset | null;
+    instagram_story: StoredAsset | null;
+    twitter_card: StoredAsset | null;
+    linkedin_post: StoredAsset | null;
     carousel: StoredAsset[];
   };
 }
 
+type ProtectedRoute = "preview" | "generate" | "generate-from-content" | "webhook";
+
+interface SecurityConfig {
+  api_auth: {
+    enabled: boolean;
+    header_name: string;
+    require_for_preview: boolean;
+    require_for_generate: boolean;
+    require_for_direct_content: boolean;
+    require_for_webhook: boolean;
+  };
+  cors: {
+    enabled: boolean;
+    allowed_origins: string[];
+    allowed_headers: string[];
+    allowed_methods: string[];
+    allow_credentials: boolean;
+    max_age_seconds: number;
+  };
+  request_limits: {
+    max_json_body_bytes: number;
+    slot_overrides_max_keys: number;
+    template_ids_max_keys: number;
+  };
+  rate_limit: {
+    enabled: boolean;
+    window_seconds: number;
+    max_requests_per_window: number;
+  };
+  outbound: {
+    allow_private_network_targets: boolean;
+    allowed_notify_hosts: string[];
+    allowed_image_hosts: string[];
+  };
+}
+
+interface ResolvedSecurityConfig extends SecurityConfig {
+  apiKeys: Set<string>;
+}
+
+const SECURITY_DEFAULTS: SecurityConfig = {
+  api_auth: {
+    enabled: true,
+    header_name: "x-api-key",
+    require_for_preview: true,
+    require_for_generate: true,
+    require_for_direct_content: true,
+    require_for_webhook: false
+  },
+  cors: {
+    enabled: true,
+    allowed_origins: ["*"],
+    allowed_headers: ["content-type", "authorization", "x-api-key", "x-webhook-token"],
+    allowed_methods: ["GET", "POST", "OPTIONS"],
+    allow_credentials: false,
+    max_age_seconds: 86400
+  },
+  request_limits: {
+    max_json_body_bytes: 256_000,
+    slot_overrides_max_keys: 40,
+    template_ids_max_keys: 5
+  },
+  rate_limit: {
+    enabled: true,
+    window_seconds: 60,
+    max_requests_per_window: 30
+  },
+  outbound: {
+    allow_private_network_targets: false,
+    allowed_notify_hosts: [],
+    allowed_image_hosts: []
+  }
+};
+
+const RATE_LIMIT_BUCKETS = new Map<string, { count: number; resetAt: number }>();
+const PROTECTED_ROUTE_SET = new Set<ProtectedRoute>(["preview", "generate", "generate-from-content", "webhook"]);
+
 const DEFAULT_LLM_MODEL = PIPELINE_CONFIG.generation.llm.default_model;
 const DEFAULT_IMAGE_MODEL = PIPELINE_CONFIG.generation.image.default_model;
-const REQUIRED_CAROUSEL_SLIDES = PIPELINE_CONFIG.generation.carousel_required_slides;
 const STOCK_TOPIC_PATTERN = createTopicKeywordPattern(PIPELINE_CONFIG.generation.stock_topic_keywords);
-const SOCIAL_COPY_SYSTEM_PROMPT = PIPELINE_CONFIG.generation.llm.system_prompt.join(" ");
+const DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT = PIPELINE_CONFIG.generation.llm.system_prompt.join(" ");
+const DEFAULT_CAROUSEL_SLIDES = PIPELINE_CONFIG.generation.carousel_required_slides;
+const TEMPLATE_KINDS = listTemplateKinds();
+const TEMPLATE_KIND_SET = new Set(TEMPLATE_KINDS);
+const PRESET_SET = new Set(Object.keys(PIPELINE_CONFIG.render.preset_styles));
+const TEMPLATE_IDS_BY_FORMAT: Record<TemplateKind, Set<string>> = TEMPLATE_KINDS.reduce(
+  (acc, format) => {
+    acc[format] = new Set(
+      PIPELINE_CONFIG.templates
+        .filter((template) => template.format === format)
+        .map((template) => template.id)
+    );
+    return acc;
+  },
+  {} as Record<TemplateKind, Set<string>>
+);
+const TEMPLATE_STYLE_SET = new Set(listTemplateStyles().map((style) => style.id));
+const POST_ARCHETYPE_SET = new Set(listPostArchetypes().map((archetype) => archetype.id));
+const FONT_PROFILE_SET = new Set(listFontProfiles().map((profile) => profile.id));
 
 const LLM_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
@@ -223,85 +354,98 @@ const LLM_JSON_SCHEMA: Record<string, unknown> = {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const security = resolveSecurityConfig(env);
 
-    if (request.method === "GET" && url.pathname.startsWith("/template/")) {
-      if (!PIPELINE_CONFIG.features.enable_template_preview) {
-        return json({ error: "Template preview route is disabled by configuration" }, 403);
+    try {
+      if (request.method === "OPTIONS") {
+        return finalizeResponse(request, security, handleCorsPreflight(request, security));
       }
-      return handleTemplatePreview(url);
-    }
 
-    if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true });
-    }
-
-    if (request.method === "POST" && url.pathname === "/generate") {
-      try {
-        const body = await readJsonBody<GenerateRequestBody>(request);
-        const result = await runPipeline(body, env);
-        const notifyUrl = resolveNotifyUrl(body.notifyUrl, env.NOTIFY_WEBHOOK_URL);
-        if (notifyUrl && PIPELINE_CONFIG.features.enable_notifications) {
-          ctx.waitUntil(sendNotification(notifyUrl, result));
+      if (request.method === "GET" && url.pathname.startsWith("/template/")) {
+        enforceRouteSecurity(request, security, "preview");
+        if (!PIPELINE_CONFIG.features.enable_template_preview) {
+          throw new HttpError(403, "Template preview route is disabled by configuration");
         }
-        return json(result);
-      } catch (error) {
-        return handleError(error);
+        return finalizeResponse(request, security, handleTemplatePreview(url));
       }
-    }
 
-    if (request.method === "POST" && url.pathname === "/generate-from-content") {
-      try {
-        const body = await readJsonBody<DirectContentRequestBody>(request);
-        const post = buildPostFromDirectContent(body);
-        const result = await runPipelineFromPost(post, env, body);
-        const notifyUrl = resolveNotifyUrl(body.notifyUrl, env.NOTIFY_WEBHOOK_URL);
+      if (request.method === "GET" && url.pathname === "/health") {
+        return finalizeResponse(request, security, json({ ok: true }));
+      }
+
+      if (request.method === "POST" && url.pathname === "/generate") {
+        enforceRouteSecurity(request, security, "generate");
+        const body = validateGenerateRequestBody(
+          await readJsonBody(request, security.request_limits.max_json_body_bytes),
+          security
+        );
+        const result = await runPipeline(body, env, security);
+        const notifyUrl = resolveNotifyUrl(body.notifyUrl, env.NOTIFY_WEBHOOK_URL, security);
         if (notifyUrl && PIPELINE_CONFIG.features.enable_notifications) {
-          ctx.waitUntil(sendNotification(notifyUrl, result));
+          ctx.waitUntil(sendNotification(notifyUrl, result, security));
         }
-        return json(result);
-      } catch (error) {
-        return handleError(error);
+        return finalizeResponse(request, security, json(result));
       }
-    }
 
-    if (request.method === "POST" && url.pathname === "/webhook/ghost") {
-      try {
+      if (request.method === "POST" && url.pathname === "/generate-from-content") {
+        enforceRouteSecurity(request, security, "generate-from-content");
+        const body = validateDirectContentRequestBody(
+          await readJsonBody(request, security.request_limits.max_json_body_bytes),
+          security
+        );
+        const post = buildPostFromDirectContent(body, security);
+        const result = await runPipelineFromPost(post, env, body, security);
+        const notifyUrl = resolveNotifyUrl(body.notifyUrl, env.NOTIFY_WEBHOOK_URL, security);
+        if (notifyUrl && PIPELINE_CONFIG.features.enable_notifications) {
+          ctx.waitUntil(sendNotification(notifyUrl, result, security));
+        }
+        return finalizeResponse(request, security, json(result));
+      }
+
+      if (request.method === "POST" && url.pathname === "/webhook/ghost") {
+        enforceRouteSecurity(request, security, "webhook");
         const expected = env.GHOST_WEBHOOK_TOKEN?.trim();
-        if (expected) {
-          const provided = request.headers.get("x-webhook-token")?.trim();
-          if (!provided || provided !== expected) {
-            return json({ error: "Unauthorized webhook token" }, 401);
-          }
+        if (!expected) {
+          throw new HttpError(500, "Missing env var GHOST_WEBHOOK_TOKEN");
+        }
+        const provided = request.headers.get("x-webhook-token")?.trim();
+        if (!provided || provided !== expected) {
+          throw new HttpError(401, "Unauthorized webhook token");
         }
 
-        const payload = await readJsonBody<GhostWebhookPayload>(request);
+        const payload = validateWebhookPayload(await readJsonBody(request, security.request_limits.max_json_body_bytes));
         const slug = extractSlugFromWebhook(payload);
         if (!slug) {
-          return json({ error: "Could not resolve slug from Ghost webhook payload" }, 400);
+          throw new HttpError(400, "Could not resolve slug from Ghost webhook payload");
         }
 
-        const result = await runPipeline({ slug }, env);
-        if (env.NOTIFY_WEBHOOK_URL && PIPELINE_CONFIG.features.enable_notifications) {
-          ctx.waitUntil(sendNotification(env.NOTIFY_WEBHOOK_URL, result));
+        const result = await runPipeline({ slug }, env, security);
+        const notifyUrl = resolveNotifyUrl(undefined, env.NOTIFY_WEBHOOK_URL, security);
+        if (notifyUrl && PIPELINE_CONFIG.features.enable_notifications) {
+          ctx.waitUntil(sendNotification(notifyUrl, result, security));
         }
-        return json(result);
-      } catch (error) {
-        return handleError(error);
+        return finalizeResponse(request, security, json(result));
       }
-    }
 
-    return json(
-      {
-        error: "Not found",
-        routes: [
-          "POST /generate",
-          "POST /generate-from-content",
-          "POST /webhook/ghost",
-          ...listTemplateKinds().map((kind) => `GET /template/${kind}?...`)
-        ]
-      },
-      404
-    );
+      return finalizeResponse(
+        request,
+        security,
+        json(
+          {
+            error: "Not found",
+            routes: [
+              "POST /generate",
+              "POST /generate-from-content",
+              "POST /webhook/ghost",
+              ...TEMPLATE_KINDS.map((kind) => `GET /template/${kind}?...`)
+            ]
+          },
+          404
+        )
+      );
+    } catch (error) {
+      return finalizeResponse(request, security, handleError(error));
+    }
   }
 };
 
@@ -326,7 +470,305 @@ function matchTemplateKind(pathname: string): TemplateKind | null {
   return isTemplateKind(candidate) ? candidate : null;
 }
 
-async function runPipeline(input: GenerateRequestBody, env: Env): Promise<GenerationResult> {
+function resolveSecurityConfig(env: Env): ResolvedSecurityConfig {
+  const raw = ((PIPELINE_CONFIG as unknown as { security?: Partial<SecurityConfig> }).security ?? {}) as Partial<SecurityConfig>;
+
+  const merged: SecurityConfig = {
+    api_auth: {
+      enabled: raw.api_auth?.enabled ?? SECURITY_DEFAULTS.api_auth.enabled,
+      header_name: raw.api_auth?.header_name ?? SECURITY_DEFAULTS.api_auth.header_name,
+      require_for_preview: raw.api_auth?.require_for_preview ?? SECURITY_DEFAULTS.api_auth.require_for_preview,
+      require_for_generate: raw.api_auth?.require_for_generate ?? SECURITY_DEFAULTS.api_auth.require_for_generate,
+      require_for_direct_content:
+        raw.api_auth?.require_for_direct_content ?? SECURITY_DEFAULTS.api_auth.require_for_direct_content,
+      require_for_webhook: raw.api_auth?.require_for_webhook ?? SECURITY_DEFAULTS.api_auth.require_for_webhook
+    },
+    cors: {
+      enabled: raw.cors?.enabled ?? SECURITY_DEFAULTS.cors.enabled,
+      allowed_origins: normalizeLowercaseList(raw.cors?.allowed_origins, SECURITY_DEFAULTS.cors.allowed_origins),
+      allowed_headers: normalizeLowercaseList(
+        raw.cors?.allowed_headers,
+        SECURITY_DEFAULTS.cors.allowed_headers
+      ),
+      allowed_methods: normalizeUppercaseList(raw.cors?.allowed_methods, SECURITY_DEFAULTS.cors.allowed_methods),
+      allow_credentials: raw.cors?.allow_credentials ?? SECURITY_DEFAULTS.cors.allow_credentials,
+      max_age_seconds: clampNumber(raw.cors?.max_age_seconds, 0, 86400, SECURITY_DEFAULTS.cors.max_age_seconds)
+    },
+    request_limits: {
+      max_json_body_bytes: Math.round(
+        clampNumber(
+          raw.request_limits?.max_json_body_bytes,
+          4_096,
+          10_485_760,
+          SECURITY_DEFAULTS.request_limits.max_json_body_bytes
+        )
+      ),
+      slot_overrides_max_keys: Math.round(
+        clampNumber(
+          raw.request_limits?.slot_overrides_max_keys,
+          1,
+          200,
+          SECURITY_DEFAULTS.request_limits.slot_overrides_max_keys
+        )
+      ),
+      template_ids_max_keys: Math.round(
+        clampNumber(
+          raw.request_limits?.template_ids_max_keys,
+          1,
+          20,
+          SECURITY_DEFAULTS.request_limits.template_ids_max_keys
+        )
+      )
+    },
+    rate_limit: {
+      enabled: raw.rate_limit?.enabled ?? SECURITY_DEFAULTS.rate_limit.enabled,
+      window_seconds: Math.round(
+        clampNumber(raw.rate_limit?.window_seconds, 1, 3600, SECURITY_DEFAULTS.rate_limit.window_seconds)
+      ),
+      max_requests_per_window: Math.round(
+        clampNumber(
+          raw.rate_limit?.max_requests_per_window,
+          1,
+          10_000,
+          SECURITY_DEFAULTS.rate_limit.max_requests_per_window
+        )
+      )
+    },
+    outbound: {
+      allow_private_network_targets:
+        env.ALLOW_PRIVATE_NETWORK_TARGETS !== undefined
+          ? parseBooleanString(env.ALLOW_PRIVATE_NETWORK_TARGETS, SECURITY_DEFAULTS.outbound.allow_private_network_targets)
+          : raw.outbound?.allow_private_network_targets ?? SECURITY_DEFAULTS.outbound.allow_private_network_targets,
+      allowed_notify_hosts: normalizeLowercaseList(raw.outbound?.allowed_notify_hosts, SECURITY_DEFAULTS.outbound.allowed_notify_hosts),
+      allowed_image_hosts: normalizeLowercaseList(raw.outbound?.allowed_image_hosts, SECURITY_DEFAULTS.outbound.allowed_image_hosts)
+    }
+  };
+
+  const envApiKeys = splitCsv(env.API_KEYS);
+  const envAllowedOrigins = splitCsv(env.CORS_ALLOWED_ORIGINS);
+  if (envAllowedOrigins.length > 0) {
+    merged.cors.allowed_origins = envAllowedOrigins.map((origin) => origin.toLowerCase());
+  }
+
+  const envAllowedHeaders = splitCsv(env.CORS_ALLOWED_HEADERS);
+  if (envAllowedHeaders.length > 0) {
+    merged.cors.allowed_headers = envAllowedHeaders.map((header) => header.toLowerCase());
+  }
+
+  if (env.CORS_ALLOW_CREDENTIALS !== undefined) {
+    merged.cors.allow_credentials = parseBooleanString(env.CORS_ALLOW_CREDENTIALS, merged.cors.allow_credentials);
+  }
+  if (env.CORS_MAX_AGE_SECONDS !== undefined) {
+    merged.cors.max_age_seconds = Math.round(
+      clampNumber(Number(env.CORS_MAX_AGE_SECONDS), 0, 86400, merged.cors.max_age_seconds)
+    );
+  }
+
+  const notifyHostAllowlist = new Set(merged.outbound.allowed_notify_hosts);
+  for (const host of splitCsv(env.NOTIFY_HOST_ALLOWLIST).map((entry) => entry.toLowerCase())) {
+    notifyHostAllowlist.add(host);
+  }
+
+  if (env.NOTIFY_WEBHOOK_URL?.trim()) {
+    try {
+      const parsed = new URL(env.NOTIFY_WEBHOOK_URL.trim());
+      notifyHostAllowlist.add(parsed.hostname.toLowerCase());
+    } catch {
+      // Ignore invalid env URL here; it will fail at request-time when used.
+    }
+  }
+  merged.outbound.allowed_notify_hosts = [...notifyHostAllowlist];
+
+  const imageHostAllowlist = new Set(merged.outbound.allowed_image_hosts);
+  for (const host of splitCsv(env.IMAGE_HOST_ALLOWLIST).map((entry) => entry.toLowerCase())) {
+    imageHostAllowlist.add(host);
+  }
+  merged.outbound.allowed_image_hosts = [...imageHostAllowlist];
+
+  return {
+    ...merged,
+    apiKeys: new Set(envApiKeys)
+  };
+}
+
+function enforceRouteSecurity(request: Request, security: ResolvedSecurityConfig, route: ProtectedRoute): void {
+  if (!PROTECTED_ROUTE_SET.has(route)) {
+    return;
+  }
+  enforceRateLimit(request, security, route);
+  enforceApiAuth(request, security, route);
+}
+
+function enforceApiAuth(request: Request, security: ResolvedSecurityConfig, route: ProtectedRoute): void {
+  if (!security.api_auth.enabled) {
+    return;
+  }
+  const routeNeedsAuth =
+    (route === "preview" && security.api_auth.require_for_preview) ||
+    (route === "generate" && security.api_auth.require_for_generate) ||
+    (route === "generate-from-content" && security.api_auth.require_for_direct_content) ||
+    (route === "webhook" && security.api_auth.require_for_webhook);
+
+  if (!routeNeedsAuth) {
+    return;
+  }
+
+  if (security.apiKeys.size === 0) {
+    throw new HttpError(500, "API auth is enabled but env var API_KEYS is not configured");
+  }
+
+  const apiKey = extractApiKey(request, security.api_auth.header_name);
+  if (!apiKey || !security.apiKeys.has(apiKey)) {
+    throw new HttpError(401, "Unauthorized API key");
+  }
+}
+
+function enforceRateLimit(request: Request, security: ResolvedSecurityConfig, route: ProtectedRoute): void {
+  if (!security.rate_limit.enabled) {
+    return;
+  }
+  const now = Date.now();
+  const windowMs = security.rate_limit.window_seconds * 1000;
+  const clientId = getClientId(request);
+  const key = `${route}:${clientId}`;
+  const existing = RATE_LIMIT_BUCKETS.get(key);
+
+  if (!existing || now >= existing.resetAt) {
+    RATE_LIMIT_BUCKETS.set(key, { count: 1, resetAt: now + windowMs });
+    return;
+  }
+
+  if (existing.count >= security.rate_limit.max_requests_per_window) {
+    const retryAfter = Math.max(1, Math.ceil((existing.resetAt - now) / 1000));
+    throw new HttpError(429, "Rate limit exceeded", { "retry-after": String(retryAfter) });
+  }
+
+  existing.count += 1;
+}
+
+function getClientId(request: Request): string {
+  const cfConnectingIp = request.headers.get("cf-connecting-ip")?.trim();
+  if (cfConnectingIp) {
+    return cfConnectingIp;
+  }
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (forwarded) {
+    return forwarded;
+  }
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  return realIp || "anonymous";
+}
+
+function extractApiKey(request: Request, headerName: string): string | null {
+  const direct = request.headers.get(headerName)?.trim();
+  if (direct) {
+    return direct;
+  }
+  const auth = request.headers.get("authorization")?.trim();
+  if (!auth) {
+    return null;
+  }
+  const bearerMatch = auth.match(/^Bearer\s+(.+)$/i);
+  return bearerMatch?.[1]?.trim() || null;
+}
+
+function handleCorsPreflight(request: Request, security: ResolvedSecurityConfig): Response {
+  if (!security.cors.enabled) {
+    return new Response(null, { status: 204 });
+  }
+  const headers = corsHeadersForRequest(request, security);
+  headers.set("access-control-max-age", String(security.cors.max_age_seconds));
+  return new Response(null, {
+    status: 204,
+    headers
+  });
+}
+
+function finalizeResponse(request: Request, security: ResolvedSecurityConfig, response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("referrer-policy", "no-referrer");
+  headers.set("x-frame-options", "DENY");
+
+  if (security.cors.enabled) {
+    const corsHeaders = corsHeadersForRequest(request, security);
+    for (const [key, value] of corsHeaders.entries()) {
+      headers.set(key, value);
+    }
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    headers
+  });
+}
+
+function corsHeadersForRequest(request: Request, security: ResolvedSecurityConfig): Headers {
+  const headers = new Headers();
+  const origin = request.headers.get("origin")?.trim();
+  const allowedOrigin = resolveCorsOrigin(origin, security.cors);
+  if (allowedOrigin) {
+    headers.set("access-control-allow-origin", allowedOrigin);
+    if (allowedOrigin !== "*") {
+      headers.append("vary", "Origin");
+    }
+    if (security.cors.allow_credentials) {
+      headers.set("access-control-allow-credentials", "true");
+    }
+    headers.set("access-control-allow-methods", security.cors.allowed_methods.join(", "));
+    headers.set("access-control-allow-headers", security.cors.allowed_headers.join(", "));
+  }
+  return headers;
+}
+
+function resolveCorsOrigin(origin: string | undefined, cors: SecurityConfig["cors"]): string | null {
+  if (!origin) {
+    if (cors.allowed_origins.includes("*")) {
+      return cors.allow_credentials ? null : "*";
+    }
+    return null;
+  }
+  const normalized = origin.toLowerCase();
+  if (cors.allowed_origins.includes("*")) {
+    return cors.allow_credentials ? origin : "*";
+  }
+  if (cors.allowed_origins.includes(normalized)) {
+    return origin;
+  }
+  return null;
+}
+
+function normalizeLowercaseList(input: string[] | undefined, fallback: string[]): string[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    return [...fallback];
+  }
+  const values = input
+    .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+    .filter(Boolean);
+  return values.length > 0 ? values : [...fallback];
+}
+
+function normalizeUppercaseList(input: string[] | undefined, fallback: string[]): string[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    return [...fallback];
+  }
+  const values = input
+    .map((value) => (typeof value === "string" ? value.trim().toUpperCase() : ""))
+    .filter(Boolean);
+  return values.length > 0 ? values : [...fallback];
+}
+
+function splitCsv(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+async function runPipeline(input: GenerateRequestBody, env: Env, security: ResolvedSecurityConfig): Promise<GenerationResult> {
   assertRequiredEnv(env);
 
   const slug = resolveSlug(input);
@@ -335,7 +777,7 @@ async function runPipeline(input: GenerateRequestBody, env: Env): Promise<Genera
   }
 
   const post = await fetchGhostPost(env, slug);
-  return runPipelineFromPost(post, env, input);
+  return runPipelineFromPost(post, env, input, security);
 }
 
 async function runPipelineFromPost(
@@ -352,9 +794,17 @@ async function runPipelineFromPost(
     brandTokens?: BrandTokenOverrides;
     design?: TemplateControlSet;
     storage?: StorageOptions;
-  }
+    llm?: LlmPromptOverrides;
+    image?: ImageGenerationOptions;
+    output?: OutputOptions;
+  },
+  security: ResolvedSecurityConfig
 ): Promise<GenerationResult> {
-  const llmOutput = await generateStructuredCopy(env, post);
+  const outputPlan = resolveOutputPlan(brandInput.output);
+  const llmOutput = await generateStructuredCopy(env, post, {
+    requiredCarouselSlides: outputPlan.carouselSlides,
+    llmOverrides: brandInput.llm
+  });
   const selectedTemplateStyle = normalizeTemplateStyle(brandInput.templateStyle ?? llmOutput.template_style);
   const selectedPostArchetype = normalizePostArchetype(brandInput.postArchetype ?? llmOutput.post_archetype);
   const selectedFontProfile = normalizeFontProfileId(brandInput.fontProfile ?? llmOutput.font_profile);
@@ -365,7 +815,7 @@ async function runPipelineFromPost(
       fallbackText: post.custom_excerpt || post.excerpt || post.plaintext || ""
     })
   );
-  const selectedImage = await chooseImageSource(env, post, llmOutput);
+  const selectedImage = await chooseImageSource(env, post, llmOutput, brandInput.image, security);
 
   const brandColor = brandInput.brandingColor ?? env.DEFAULT_BRAND_COLOR ?? PIPELINE_CONFIG.brand.default_color;
   const brandName = brandInput.brandName ?? env.BRAND_NAME ?? PIPELINE_CONFIG.brand.default_name;
@@ -390,13 +840,15 @@ async function runPipelineFromPost(
     slotContent: mergedSlotContent,
     brandTokens: brandInput.brandTokens,
     design: brandInput.design,
-    storage: brandInput.storage
+    storage: brandInput.storage,
+    requestedFormats: outputPlan.formats
   });
 
   return {
     ok: true,
     slug: post.slug,
     post_url: post.url,
+    requested_formats: [...outputPlan.formats],
     image_source: selectedImage,
     llm_output: {
       ...llmOutput,
@@ -409,7 +861,29 @@ async function runPipelineFromPost(
   };
 }
 
-function buildPostFromDirectContent(input: DirectContentRequestBody): GhostPost {
+function resolveOutputPlan(output: OutputOptions | undefined): { formats: Set<TemplateKind>; carouselSlides: number } {
+  const requestedFormats = output?.formats && output.formats.length > 0 ? output.formats : TEMPLATE_KINDS;
+  const normalizedFormats = new Set<TemplateKind>();
+  for (const format of requestedFormats) {
+    if (TEMPLATE_KIND_SET.has(format)) {
+      normalizedFormats.add(format);
+    }
+  }
+
+  if (normalizedFormats.size === 0) {
+    throw new HttpError(400, "output.formats must include at least one supported format");
+  }
+
+  const requestedSlides = Math.round(
+    clampNumber(output?.carouselSlides, 1, 10, DEFAULT_CAROUSEL_SLIDES)
+  );
+  return {
+    formats: normalizedFormats,
+    carouselSlides: requestedSlides
+  };
+}
+
+function buildPostFromDirectContent(input: DirectContentRequestBody, security: ResolvedSecurityConfig): GhostPost {
   const title = (input.title ?? "").trim();
   if (!title) {
     throw new HttpError(400, "title is required for /generate-from-content");
@@ -428,6 +902,17 @@ function buildPostFromDirectContent(input: DirectContentRequestBody): GhostPost 
   const tags = normalizeTags(input.tags);
   const excerpt = (input.excerpt ?? plainContent.slice(0, PIPELINE_CONFIG.generation.limits.direct_excerpt_default_max_chars)).trim();
   const url = input.url?.trim() || `https://local.test/${derivedSlug}/`;
+  const featureImage = input.feature_image
+    ? sanitizeImageUrl(
+        input.feature_image,
+        security,
+        "feature_image",
+        {
+          allowDataUrl: false,
+          requireAllowedHost: false
+        }
+      )
+    : undefined;
 
   return {
     id: crypto.randomUUID(),
@@ -437,7 +922,7 @@ function buildPostFromDirectContent(input: DirectContentRequestBody): GhostPost 
     plaintext: plainContent,
     excerpt,
     custom_excerpt: excerpt,
-    feature_image: input.feature_image?.trim() || undefined,
+    feature_image: featureImage,
     tags: tags.map((name) => ({ name })),
     primary_tag: input.primary_tag ? { name: input.primary_tag } : tags[0] ? { name: tags[0] } : undefined
   };
@@ -450,7 +935,7 @@ function normalizeTags(input: string[] | string | undefined): string[] {
   const rawItems = Array.isArray(input) ? input : input.split(",");
   return rawItems
     .map((item) => item.trim())
-    .map((item) => item.replace(/[^a-zA-Z0-9\s-]/g, ""))
+    .map((item) => item.replace(/[^\p{L}\p{N}\s-]/gu, ""))
     .filter((item) => item.length > 1)
     .slice(0, PIPELINE_CONFIG.generation.limits.input_tags_max_count);
 }
@@ -459,7 +944,7 @@ function slugify(text: string): string {
   return text
     .toLowerCase()
     .trim()
-    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-");
 }
@@ -487,7 +972,7 @@ function sanitizeSlug(value: string): string {
   return value
     .trim()
     .replace(/^\/+|\/+$/g, "")
-    .replace(/[^a-zA-Z0-9\-_/]/g, "")
+    .replace(/[^\p{L}\p{N}\-_/]/gu, "")
     .split("/")
     .filter(Boolean)
     .at(-1)
@@ -534,7 +1019,11 @@ async function fetchGhostPost(env: Env, slug: string): Promise<GhostPost> {
   return post;
 }
 
-async function generateStructuredCopy(env: Env, post: GhostPost): Promise<LlmOutput> {
+async function generateStructuredCopy(
+  env: Env,
+  post: GhostPost,
+  args: { requiredCarouselSlides: number; llmOverrides?: LlmPromptOverrides }
+): Promise<LlmOutput> {
   const textModel = (env.LLM_MODEL || DEFAULT_LLM_MODEL) as keyof AiModels;
   const styleHints = listTemplateStyles()
     .map((style) => `${style.id}: ${style.llmHint}`)
@@ -549,9 +1038,12 @@ async function generateStructuredCopy(env: Env, post: GhostPost): Promise<LlmOut
     .map((slot) => `${slot.id}: ${slot.hint}`)
     .join(" | ");
   const limits = PIPELINE_CONFIG.generation.limits;
-  const userInstructions = PIPELINE_CONFIG.generation.llm.user_instructions
-    .join("\n")
-    .replace("<required_carousel_slides>", String(REQUIRED_CAROUSEL_SLIDES))
+  const userInstructionsTemplate = buildPromptTemplate(
+    args.llmOverrides?.userInstructions,
+    PIPELINE_CONFIG.generation.llm.user_instructions
+  );
+  const userInstructions = userInstructionsTemplate
+    .replace("<required_carousel_slides>", String(args.requiredCarouselSlides))
     .replace("<instagram_caption_max_chars>", String(limits.instagram_caption_max_chars))
     .replace("<twitter_caption_max_chars>", String(limits.twitter_caption_max_chars))
     .replace("<linkedin_caption_max_chars>", String(limits.linkedin_caption_max_chars))
@@ -561,6 +1053,9 @@ async function generateStructuredCopy(env: Env, post: GhostPost): Promise<LlmOut
     .replace("<available_post_archetypes>", archetypeHints)
     .replace("<available_font_profiles>", fontHints)
     .replace("<available_slot_keys>", slotHints);
+  const appendedInstructions = normalizePromptAppend(args.llmOverrides?.userInstructionsAppend);
+  const mergedInstructions = appendedInstructions ? `${userInstructions}\n${appendedInstructions}` : userInstructions;
+  const systemPrompt = buildPromptTemplate(args.llmOverrides?.systemPrompt, PIPELINE_CONFIG.generation.llm.system_prompt);
   const title = post.title.trim();
   const excerpt = (post.custom_excerpt || post.excerpt || "").trim();
   const plainBody = (post.plaintext || stripHtml(post.html || "")).trim();
@@ -575,7 +1070,7 @@ async function generateStructuredCopy(env: Env, post: GhostPost): Promise<LlmOut
     .join(", ");
 
   const prompt = [
-    userInstructions,
+    mergedInstructions,
     "",
     "Blog post source:",
     `<title>${title}</title>`,
@@ -591,7 +1086,7 @@ async function generateStructuredCopy(env: Env, post: GhostPost): Promise<LlmOut
     messages: [
       {
         role: "system",
-        content: SOCIAL_COPY_SYSTEM_PROMPT
+        content: systemPrompt || DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT
       },
       {
         role: "user",
@@ -602,12 +1097,14 @@ async function generateStructuredCopy(env: Env, post: GhostPost): Promise<LlmOut
       type: "json_schema",
       json_schema: LLM_JSON_SCHEMA
     },
-    temperature: PIPELINE_CONFIG.generation.llm.temperature,
-    max_tokens: PIPELINE_CONFIG.generation.llm.max_tokens
+    temperature: clampNumber(args.llmOverrides?.temperature, 0, 2, PIPELINE_CONFIG.generation.llm.temperature),
+    max_tokens: Math.round(
+      clampNumber(args.llmOverrides?.maxTokens, 256, 4096, PIPELINE_CONFIG.generation.llm.max_tokens)
+    )
   });
 
   const parsed = parseModelJson(raw);
-  return normalizeLlmOutput(parsed, Boolean(post.feature_image), title, excerpt || postText);
+  return normalizeLlmOutput(parsed, Boolean(post.feature_image), title, excerpt || postText, args.requiredCarouselSlides);
 }
 
 function parseModelJson(raw: unknown): Record<string, unknown> {
@@ -645,11 +1142,43 @@ function parseJsonLike(input: string): Record<string, unknown> {
   }
 }
 
+function buildPromptTemplate(override: string | string[] | undefined, fallbackLines: readonly string[]): string {
+  const lines = normalizePromptLines(override);
+  if (lines.length === 0) {
+    return fallbackLines.join("\n");
+  }
+  return lines.join("\n");
+}
+
+function normalizePromptAppend(value: string | undefined): string {
+  if (!value) {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return ensureLength(trimmed, 2_000, trimmed);
+}
+
+function normalizePromptLines(input: string | string[] | undefined): string[] {
+  if (!input) {
+    return [];
+  }
+  const rawLines = Array.isArray(input) ? input : [input];
+  return rawLines
+    .map((line) => (typeof line === "string" ? line.trim() : ""))
+    .filter(Boolean)
+    .slice(0, 80)
+    .map((line) => ensureLength(line, 200, line));
+}
+
 function normalizeLlmOutput(
   payload: Record<string, unknown>,
   hasFeatureImage: boolean,
   title: string,
-  fallbackText: string
+  fallbackText: string,
+  requiredCarouselSlides: number
 ): LlmOutput {
   const limits = PIPELINE_CONFIG.generation.limits;
   const fallbacks = PIPELINE_CONFIG.generation.fallbacks;
@@ -672,9 +1201,9 @@ function normalizeLlmOutput(
       return { heading, body };
     })
     .filter((slide): slide is CarouselSlide => slide !== null)
-    .slice(0, REQUIRED_CAROUSEL_SLIDES);
+    .slice(0, requiredCarouselSlides);
 
-  while (normalizedSlides.length < REQUIRED_CAROUSEL_SLIDES) {
+  while (normalizedSlides.length < requiredCarouselSlides) {
     const index = normalizedSlides.length + 1;
     normalizedSlides.push({
       heading: `${fallbacks.carousel_heading_prefix} ${index}`,
@@ -718,11 +1247,11 @@ function normalizeHashtags(rawTags: unknown[], title: string, fallbackText: stri
     ...rawTags.map((tag) => toText(tag)),
     ...title
       .split(/\s+/)
-      .map((word) => word.replace(/[^a-zA-Z0-9]/g, ""))
+      .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
       .filter((word) => word.length >= limits.title_keyword_min_chars),
     ...fallbackText
       .split(/\s+/)
-      .map((word) => word.replace(/[^a-zA-Z0-9]/g, ""))
+      .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
       .filter((word) => word.length >= limits.fallback_keyword_min_chars)
   ];
 
@@ -734,7 +1263,7 @@ function normalizeHashtags(rawTags: unknown[], title: string, fallbackText: stri
     const cleaned = raw
       .toLowerCase()
       .replace(/^#+/, "")
-      .replace(/[^a-z0-9]/g, "");
+      .replace(/[^\p{L}\p{N}]/gu, "");
     if (!cleaned || cleaned.length < limits.hashtag_min_token_chars) {
       continue;
     }
@@ -754,14 +1283,68 @@ function normalizeHashtags(rawTags: unknown[], title: string, fallbackText: stri
   return unique.slice(0, limits.hashtag_max_count);
 }
 
-async function chooseImageSource(env: Env, post: GhostPost, llmOutput: LlmOutput): Promise<SelectedImage> {
-  const featureImage = post.feature_image?.trim() || "";
+async function chooseImageSource(
+  env: Env,
+  post: GhostPost,
+  llmOutput: LlmOutput,
+  options: ImageGenerationOptions | undefined,
+  security: ResolvedSecurityConfig
+): Promise<SelectedImage> {
+  const mode = (options?.mode ?? "auto").trim().toLowerCase() as NonNullable<ImageGenerationOptions["mode"]>;
+  const prompt = ensureLength(options?.prompt ?? llmOutput.image_prompt, PIPELINE_CONFIG.generation.limits.image_prompt_max_chars, llmOutput.image_prompt);
+  const featureImage = post.feature_image
+    ? sanitizeImageUrl(post.feature_image, security, "feature_image", {
+        allowDataUrl: false,
+        requireAllowedHost: false
+      })
+    : "";
+  const preferFeature = options?.preferFeature ?? PIPELINE_CONFIG.features.prefer_feature_image;
+  const allowStock = options?.allowStock ?? PIPELINE_CONFIG.features.enable_stock_image_search;
+  const allowAi = options?.allowAi ?? PIPELINE_CONFIG.features.enable_ai_image_generation;
 
-  if (
-    PIPELINE_CONFIG.features.prefer_feature_image &&
-    llmOutput.use_feature_image &&
-    featureImage.length > 0
-  ) {
+  if (mode === "custom") {
+    if (!options?.customUrl) {
+      throw new HttpError(400, "image.customUrl is required when image.mode is custom");
+    }
+    return {
+      source: "custom",
+      imageUrl: sanitizeImageUrl(options.customUrl, security, "image.customUrl", {
+        allowDataUrl: false,
+        requireAllowedHost: false
+      })
+    };
+  }
+
+  if (mode === "feature") {
+    if (!featureImage) {
+      throw new HttpError(422, "Requested feature image mode, but source post has no valid feature image");
+    }
+    return { source: "feature", imageUrl: featureImage };
+  }
+
+  if (mode === "stock") {
+    if (!allowStock || !env.PEXELS_API_KEY?.trim()) {
+      throw new HttpError(422, "Stock image mode requires enable_stock_image_search and PEXELS_API_KEY");
+    }
+    const stockImage = await searchPexelsImage(post.title, env.PEXELS_API_KEY.trim(), security);
+    if (!stockImage) {
+      throw new HttpError(422, "Stock image mode did not return a usable image");
+    }
+    return stockImage;
+  }
+
+  if (mode === "ai") {
+    if (!allowAi) {
+      throw new HttpError(422, "AI image mode is disabled by configuration or request controls");
+    }
+    const aiImage = await generateAiImage(env, prompt);
+    if (!aiImage) {
+      throw new HttpError(422, "AI image mode did not return a usable image");
+    }
+    return aiImage;
+  }
+
+  if (preferFeature && llmOutput.use_feature_image && featureImage.length > 0) {
     return {
       source: "feature",
       imageUrl: featureImage
@@ -770,19 +1353,19 @@ async function chooseImageSource(env: Env, post: GhostPost, llmOutput: LlmOutput
 
   const topicText = `${post.title} ${(post.primary_tag?.name ?? "")} ${(post.tags ?? [])
     .map((tag) => tag.name ?? "")
-    .join(" ")} ${llmOutput.image_prompt}`.toLowerCase();
+    .join(" ")} ${prompt}`.toLowerCase();
 
   const concreteTopic = STOCK_TOPIC_PATTERN ? STOCK_TOPIC_PATTERN.test(topicText) : false;
 
-  if (PIPELINE_CONFIG.features.enable_stock_image_search && concreteTopic && env.PEXELS_API_KEY?.trim()) {
-    const stockImage = await searchPexelsImage(post.title, env.PEXELS_API_KEY.trim());
+  if (allowStock && concreteTopic && env.PEXELS_API_KEY?.trim()) {
+    const stockImage = await searchPexelsImage(post.title, env.PEXELS_API_KEY.trim(), security);
     if (stockImage) {
       return stockImage;
     }
   }
 
-  if (PIPELINE_CONFIG.features.enable_ai_image_generation) {
-    const aiImage = await generateAiImage(env, llmOutput.image_prompt);
+  if (allowAi) {
+    const aiImage = await generateAiImage(env, prompt);
     if (aiImage) {
       return aiImage;
     }
@@ -801,7 +1384,7 @@ async function chooseImageSource(env: Env, post: GhostPost, llmOutput: LlmOutput
   };
 }
 
-async function searchPexelsImage(title: string, apiKey: string): Promise<SelectedImage | null> {
+async function searchPexelsImage(title: string, apiKey: string, security: ResolvedSecurityConfig): Promise<SelectedImage | null> {
   const query = title
     .replace(/[^a-zA-Z0-9\s]/g, " ")
     .split(/\s+/)
@@ -841,10 +1424,15 @@ async function searchPexelsImage(title: string, apiKey: string): Promise<Selecte
     return null;
   }
 
+  const safeImageUrl = sanitizeImageUrl(imageUrl, security, "Pexels image URL", {
+    allowDataUrl: false,
+    requireAllowedHost: false
+  });
+
   return {
     source: "stock",
-    imageUrl,
-    sourceUrl: photo?.url,
+    imageUrl: safeImageUrl,
+    sourceUrl: photo?.url ? sanitizeHttpUrl(photo.url, security, "Pexels source URL", { requireAllowedHost: false }) : undefined,
     attribution: photo?.photographer ? `Photo by ${photo.photographer} via Pexels` : "Photo via Pexels"
   };
 }
@@ -924,6 +1512,7 @@ async function renderAndStoreAssets(
     brandTokens?: BrandTokenOverrides;
     design?: TemplateControlSet;
     storage?: StorageOptions;
+    requestedFormats: Set<TemplateKind>;
   }
 ): Promise<GenerationResult["assets"]> {
   const keyPrefix = buildR2KeyPrefix(env, args.slug, args.storage);
@@ -946,111 +1535,121 @@ async function renderAndStoreAssets(
   const browser = await puppeteer.launch(env.BROWSER, { keep_alive: PIPELINE_CONFIG.runtime.browser_keep_alive_ms });
 
   try {
-    const instagramPostAsset = await renderStoreSingleAsset(env, browser, {
-      key: `${keyPrefix}/instagram-post.png`,
-      kind: "instagram-post",
-      params: {
-        ...commonTemplateValues,
-        templateId: args.templateIds?.["instagram-post"],
-        slots: {
-          ...sharedSlots,
-          headline: sharedSlots.headline || args.postTitle,
-          subheadline: sharedSlots.subheadline || args.llmOutput.instagram_caption
-        },
-        caption: withHashtags(
-          args.llmOutput.instagram_caption,
-          args.llmOutput.hashtags,
-          PIPELINE_CONFIG.formats["instagram-post"].hashtag_count
-        )
-      },
-      formatLabel: "instagram-post"
-    });
+    const instagramPostAsset = args.requestedFormats.has("instagram-post")
+      ? await renderStoreSingleAsset(env, browser, {
+          key: `${keyPrefix}/instagram-post.png`,
+          kind: "instagram-post",
+          params: {
+            ...commonTemplateValues,
+            templateId: args.templateIds?.["instagram-post"],
+            slots: {
+              ...sharedSlots,
+              headline: sharedSlots.headline || args.postTitle,
+              subheadline: sharedSlots.subheadline || args.llmOutput.instagram_caption
+            },
+            caption: withHashtags(
+              args.llmOutput.instagram_caption,
+              args.llmOutput.hashtags,
+              PIPELINE_CONFIG.formats["instagram-post"].hashtag_count
+            )
+          },
+          formatLabel: "instagram-post"
+        })
+      : null;
 
-    const instagramStoryAsset = await renderStoreSingleAsset(env, browser, {
-      key: `${keyPrefix}/instagram-story.png`,
-      kind: "instagram-story",
-      params: {
-        ...commonTemplateValues,
-        templateId: args.templateIds?.["instagram-story"],
-        slots: {
-          ...sharedSlots,
-          headline: sharedSlots.headline || args.postTitle,
-          supporting_line: sharedSlots.supporting_line || args.llmOutput.instagram_caption
-        },
-        caption: withHashtags(
-          args.llmOutput.instagram_caption,
-          args.llmOutput.hashtags,
-          PIPELINE_CONFIG.formats["instagram-story"].hashtag_count
-        )
-      },
-      formatLabel: "instagram-story"
-    });
+    const instagramStoryAsset = args.requestedFormats.has("instagram-story")
+      ? await renderStoreSingleAsset(env, browser, {
+          key: `${keyPrefix}/instagram-story.png`,
+          kind: "instagram-story",
+          params: {
+            ...commonTemplateValues,
+            templateId: args.templateIds?.["instagram-story"],
+            slots: {
+              ...sharedSlots,
+              headline: sharedSlots.headline || args.postTitle,
+              supporting_line: sharedSlots.supporting_line || args.llmOutput.instagram_caption
+            },
+            caption: withHashtags(
+              args.llmOutput.instagram_caption,
+              args.llmOutput.hashtags,
+              PIPELINE_CONFIG.formats["instagram-story"].hashtag_count
+            )
+          },
+          formatLabel: "instagram-story"
+        })
+      : null;
 
-    const twitterCardAsset = await renderStoreSingleAsset(env, browser, {
-      key: `${keyPrefix}/twitter-card.png`,
-      kind: "twitter-card",
-      params: {
-        ...commonTemplateValues,
-        templateId: args.templateIds?.["twitter-card"],
-        slots: {
-          ...sharedSlots,
-          headline: sharedSlots.headline || args.postTitle,
-          supporting_line: sharedSlots.supporting_line || args.llmOutput.twitter_caption
-        },
-        caption: withHashtags(
-          args.llmOutput.twitter_caption,
-          args.llmOutput.hashtags,
-          PIPELINE_CONFIG.formats["twitter-card"].hashtag_count
-        )
-      },
-      formatLabel: "twitter-card"
-    });
+    const twitterCardAsset = args.requestedFormats.has("twitter-card")
+      ? await renderStoreSingleAsset(env, browser, {
+          key: `${keyPrefix}/twitter-card.png`,
+          kind: "twitter-card",
+          params: {
+            ...commonTemplateValues,
+            templateId: args.templateIds?.["twitter-card"],
+            slots: {
+              ...sharedSlots,
+              headline: sharedSlots.headline || args.postTitle,
+              supporting_line: sharedSlots.supporting_line || args.llmOutput.twitter_caption
+            },
+            caption: withHashtags(
+              args.llmOutput.twitter_caption,
+              args.llmOutput.hashtags,
+              PIPELINE_CONFIG.formats["twitter-card"].hashtag_count
+            )
+          },
+          formatLabel: "twitter-card"
+        })
+      : null;
 
-    const linkedInAsset = await renderStoreSingleAsset(env, browser, {
-      key: `${keyPrefix}/linkedin-post.png`,
-      kind: "linkedin-post",
-      params: {
-        ...commonTemplateValues,
-        templateId: args.templateIds?.["linkedin-post"],
-        slots: {
-          ...sharedSlots,
-          headline: sharedSlots.headline || args.postTitle,
-          supporting_line: sharedSlots.supporting_line || args.llmOutput.linkedin_caption
-        },
-        caption: withHashtags(
-          args.llmOutput.linkedin_caption,
-          args.llmOutput.hashtags,
-          PIPELINE_CONFIG.formats["linkedin-post"].hashtag_count
-        )
-      },
-      formatLabel: "linkedin-post"
-    });
+    const linkedInAsset = args.requestedFormats.has("linkedin-post")
+      ? await renderStoreSingleAsset(env, browser, {
+          key: `${keyPrefix}/linkedin-post.png`,
+          kind: "linkedin-post",
+          params: {
+            ...commonTemplateValues,
+            templateId: args.templateIds?.["linkedin-post"],
+            slots: {
+              ...sharedSlots,
+              headline: sharedSlots.headline || args.postTitle,
+              supporting_line: sharedSlots.supporting_line || args.llmOutput.linkedin_caption
+            },
+            caption: withHashtags(
+              args.llmOutput.linkedin_caption,
+              args.llmOutput.hashtags,
+              PIPELINE_CONFIG.formats["linkedin-post"].hashtag_count
+            )
+          },
+          formatLabel: "linkedin-post"
+        })
+      : null;
 
     const carousel: StoredAsset[] = [];
-    for (const [index, slide] of args.llmOutput.carousel_slides.entries()) {
-      const slideAsset = await renderStoreSingleAsset(env, browser, {
-        key: `${keyPrefix}/carousel-slide-${index + 1}.png`,
-        kind: "carousel-slide",
-        params: {
-          ...commonTemplateValues,
-          templateId: args.templateIds?.["carousel-slide"],
-          slots: {
-            ...sharedSlots,
-            headline: slide.heading,
+    if (args.requestedFormats.has("carousel-slide")) {
+      for (const [index, slide] of args.llmOutput.carousel_slides.entries()) {
+        const slideAsset = await renderStoreSingleAsset(env, browser, {
+          key: `${keyPrefix}/carousel-slide-${index + 1}.png`,
+          kind: "carousel-slide",
+          params: {
+            ...commonTemplateValues,
+            templateId: args.templateIds?.["carousel-slide"],
+            slots: {
+              ...sharedSlots,
+              headline: slide.heading,
+              body: slide.body,
+              short_hook: slide.heading,
+              supporting_line: slide.body,
+              step_number: String(index + 1),
+              step_total: String(args.llmOutput.carousel_slides.length)
+            },
+            heading: slide.heading,
             body: slide.body,
-            short_hook: slide.heading,
-            supporting_line: slide.body,
-            step_number: String(index + 1),
-            step_total: String(args.llmOutput.carousel_slides.length)
+            slideNumber: index + 1,
+            totalSlides: args.llmOutput.carousel_slides.length
           },
-          heading: slide.heading,
-          body: slide.body,
-          slideNumber: index + 1,
-          totalSlides: args.llmOutput.carousel_slides.length
-        },
-        formatLabel: `carousel-slide-${index + 1}`
-      });
-      carousel.push(slideAsset);
+          formatLabel: `carousel-slide-${index + 1}`
+        });
+        carousel.push(slideAsset);
+      }
     }
 
     return {
@@ -1177,9 +1776,12 @@ function buildPublicUrl(env: Env, key: string): string | null {
   return `${normalizedBase}/${encodedPath}`;
 }
 
-async function sendNotification(url: string, payload: GenerationResult): Promise<void> {
+async function sendNotification(url: string, payload: GenerationResult, security: ResolvedSecurityConfig): Promise<void> {
   try {
-    await fetch(url, {
+    const safeUrl = sanitizeHttpUrl(url, security, "Notification URL", {
+      requireAllowedHost: true
+    });
+    await fetch(safeUrl, {
       method: "POST",
       headers: {
         "content-type": "application/json"
@@ -1191,12 +1793,18 @@ async function sendNotification(url: string, payload: GenerationResult): Promise
   }
 }
 
-function resolveNotifyUrl(bodyValue: string | undefined, envValue: string | undefined): string | null {
+function resolveNotifyUrl(
+  bodyValue: string | undefined,
+  envValue: string | undefined,
+  security: ResolvedSecurityConfig
+): string | null {
   const candidate = (bodyValue ?? envValue)?.trim();
   if (!candidate) {
     return null;
   }
-  return candidate;
+  return sanitizeHttpUrl(candidate, security, "Notification URL", {
+    requireAllowedHost: true
+  });
 }
 
 function createTopicKeywordPattern(keywords: readonly string[]): RegExp | null {
@@ -1352,7 +1960,7 @@ function ensureLength(value: string, max: number, fallback: string): string {
   if (source.length <= max) {
     return source;
   }
-  return `${source.slice(0, Math.max(1, max - 1)).trimEnd()}...`;
+  return `${source.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
 }
 
 function stripHtml(html: string): string {
@@ -1382,6 +1990,579 @@ function arrayBufferToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
+function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityConfig): GenerateRequestBody {
+  const body = requireObject(input, "Request body");
+  const templateIds = parseTemplateIds(body.templateIds, security);
+  const slotOverrides = parseSlotOverrides(body.slotOverrides, security);
+  const brandTokens = parseBrandTokens(body.brandTokens);
+  const design = parseDesignOverrides(body.design);
+  const storage = parseStorageOptions(body.storage);
+  const llm = parseLlmOverrides(body.llm);
+  const image = parseImageOptions(body.image);
+  const output = parseOutputOptions(body.output);
+
+  return {
+    slug: optionalString(body.slug, "slug", 200),
+    url: optionalString(body.url, "url", 400),
+    brandingColor: optionalColor(body.brandingColor, "brandingColor"),
+    brandName: optionalString(body.brandName, "brandName", 120),
+    templateStyle: optionalEnumString(body.templateStyle, "templateStyle", TEMPLATE_STYLE_SET),
+    postArchetype: optionalEnumString(body.postArchetype, "postArchetype", POST_ARCHETYPE_SET),
+    fontProfile: optionalEnumString(body.fontProfile, "fontProfile", FONT_PROFILE_SET),
+    templateIds,
+    slotOverrides,
+    brandTokens,
+    design,
+    storage,
+    notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
+    llm,
+    image,
+    output
+  };
+}
+
+function validateDirectContentRequestBody(input: unknown, security: ResolvedSecurityConfig): DirectContentRequestBody {
+  const body = requireObject(input, "Request body");
+  const tags = body.tags;
+  const tagValue =
+    tags === undefined
+      ? undefined
+      : Array.isArray(tags)
+        ? tags.map((item) => optionalString(item, "tags[]", 80)).filter((item): item is string => Boolean(item))
+        : optionalString(tags, "tags", 500);
+
+  const request = {
+    title: optionalString(body.title, "title", 280),
+    excerpt: optionalString(body.excerpt, "excerpt", 1_000),
+    content: optionalString(body.content, "content", 30_000),
+    body: optionalString(body.body, "body", 30_000),
+    slug: optionalString(body.slug, "slug", 200),
+    url: optionalString(body.url, "url", 500),
+    feature_image: optionalString(body.feature_image, "feature_image", 2_000),
+    tags: tagValue,
+    primary_tag: optionalString(body.primary_tag, "primary_tag", 80),
+    brandingColor: optionalColor(body.brandingColor, "brandingColor"),
+    brandName: optionalString(body.brandName, "brandName", 120),
+    templateStyle: optionalEnumString(body.templateStyle, "templateStyle", TEMPLATE_STYLE_SET),
+    postArchetype: optionalEnumString(body.postArchetype, "postArchetype", POST_ARCHETYPE_SET),
+    fontProfile: optionalEnumString(body.fontProfile, "fontProfile", FONT_PROFILE_SET),
+    templateIds: parseTemplateIds(body.templateIds, security),
+    slotOverrides: parseSlotOverrides(body.slotOverrides, security),
+    brandTokens: parseBrandTokens(body.brandTokens),
+    design: parseDesignOverrides(body.design),
+    storage: parseStorageOptions(body.storage),
+    notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
+    llm: parseLlmOverrides(body.llm),
+    image: parseImageOptions(body.image),
+    output: parseOutputOptions(body.output)
+  } satisfies DirectContentRequestBody;
+
+  return request;
+}
+
+function validateWebhookPayload(input: unknown): GhostWebhookPayload {
+  const body = requireObject(input, "Webhook payload");
+  const postRaw = body.post;
+  const post =
+    postRaw && typeof postRaw === "object" && !Array.isArray(postRaw)
+      ? (postRaw as Record<string, unknown>)
+      : undefined;
+  const currentRaw = post?.current;
+  const current =
+    currentRaw && typeof currentRaw === "object" && !Array.isArray(currentRaw)
+      ? (currentRaw as Record<string, unknown>)
+      : undefined;
+
+  return {
+    slug: optionalString(body.slug, "payload.slug", 200),
+    url: optionalString(body.url, "payload.url", 500),
+    post: post
+      ? {
+          slug: optionalString(post.slug, "payload.post.slug", 200),
+          url: optionalString(post.url, "payload.post.url", 500),
+          current: current
+            ? {
+                slug: optionalString(current.slug, "payload.post.current.slug", 200),
+                url: optionalString(current.url, "payload.post.current.url", 500)
+              }
+            : undefined
+        }
+      : undefined
+  };
+}
+
+function parseTemplateIds(input: unknown, security: ResolvedSecurityConfig): Partial<Record<TemplateKind, string>> | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, "templateIds");
+  const entries = Object.entries(object);
+  if (entries.length > security.request_limits.template_ids_max_keys) {
+    throw new HttpError(
+      400,
+      `templateIds supports at most ${security.request_limits.template_ids_max_keys} keys`
+    );
+  }
+  const parsed: Partial<Record<TemplateKind, string>> = {};
+  for (const [key, value] of entries) {
+    if (!isTemplateKind(key)) {
+      throw new HttpError(400, `templateIds contains unsupported format key: ${key}`);
+    }
+    const templateId = optionalString(value, `templateIds.${key}`, 140);
+    if (!templateId) {
+      continue;
+    }
+    if (!TEMPLATE_IDS_BY_FORMAT[key].has(templateId)) {
+      throw new HttpError(400, `templateIds.${key} references unknown template: ${templateId}`);
+    }
+    parsed[key] = templateId;
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
+function parseSlotOverrides(input: unknown, security: ResolvedSecurityConfig): Record<string, string> | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, "slotOverrides");
+  const entries = Object.entries(object);
+  if (entries.length > security.request_limits.slot_overrides_max_keys) {
+    throw new HttpError(
+      400,
+      `slotOverrides supports at most ${security.request_limits.slot_overrides_max_keys} keys`
+    );
+  }
+  const parsed: Record<string, string> = {};
+  for (const [key, value] of entries) {
+    const normalizedKey = normalizeSlotKey(key);
+    if (!normalizedKey) {
+      continue;
+    }
+    const text = optionalString(value, `slotOverrides.${key}`, PIPELINE_CONFIG.generation.limits.slot_text_max_chars);
+    if (!text) {
+      continue;
+    }
+    parsed[normalizedKey] = text;
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
+function parseBrandTokens(input: unknown): BrandTokenOverrides | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, "brandTokens");
+  const parsed: BrandTokenOverrides = {};
+  const tokenKeys: Array<keyof BrandTokenOverrides> = [
+    "primaryText",
+    "secondaryText",
+    "mutedText",
+    "surfaceBase",
+    "surfaceElevated",
+    "borderSubtle",
+    "accent",
+    "accentForeground"
+  ];
+  for (const tokenKey of tokenKeys) {
+    const value = optionalColor(object[tokenKey], `brandTokens.${tokenKey}`);
+    if (value) {
+      parsed[tokenKey] = value;
+    }
+  }
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
+function parseDesignOverrides(input: unknown): TemplateControlSet | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, "design");
+  const parsed: TemplateControlSet = {};
+
+  const preset = optionalString(object.preset, "design.preset", 64);
+  if (preset) {
+    if (!PRESET_SET.has(preset)) {
+      throw new HttpError(400, `design.preset is unknown: ${preset}`);
+    }
+    parsed.preset = preset as TemplateControlSet["preset"];
+  }
+  if (object.showBrandBadge !== undefined) {
+    parsed.showBrandBadge = requiredBoolean(object.showBrandBadge, "design.showBrandBadge");
+  }
+  if (object.showSlideBadge !== undefined) {
+    parsed.showSlideBadge = requiredBoolean(object.showSlideBadge, "design.showSlideBadge");
+  }
+  if (object.showMetaFooter !== undefined) {
+    parsed.showMetaFooter = requiredBoolean(object.showMetaFooter, "design.showMetaFooter");
+  }
+  if (object.showTitleKicker !== undefined) {
+    parsed.showTitleKicker = requiredBoolean(object.showTitleKicker, "design.showTitleKicker");
+  }
+  if (object.textAlign !== undefined) {
+    const textAlign = optionalString(object.textAlign, "design.textAlign", 20);
+    if (textAlign && textAlign !== "left" && textAlign !== "center") {
+      throw new HttpError(400, "design.textAlign must be either left or center");
+    }
+    parsed.textAlign = textAlign as TemplateControlSet["textAlign"];
+  }
+  if (object.imageOpacity !== undefined) {
+    parsed.imageOpacity = clampNumber(
+      requiredNumber(object.imageOpacity, "design.imageOpacity"),
+      0,
+      1,
+      1
+    );
+  }
+  if (object.contentMaxWidth !== undefined) {
+    parsed.contentMaxWidth = Math.round(
+      clampNumber(requiredNumber(object.contentMaxWidth, "design.contentMaxWidth"), 320, 2000, 1020)
+    );
+  }
+  if (object.contentInset !== undefined) {
+    parsed.contentInset = Math.round(
+      clampNumber(requiredNumber(object.contentInset, "design.contentInset"), 0, 220, 48)
+    );
+  }
+  parsed.metaLeftText = optionalString(object.metaLeftText, "design.metaLeftText", 120);
+  parsed.metaRightText = optionalString(object.metaRightText, "design.metaRightText", 120);
+
+  const formatOverridesRaw = object.formatOverrides;
+  if (formatOverridesRaw !== undefined) {
+    const formatOverridesObj = requireObject(formatOverridesRaw, "design.formatOverrides");
+    const formatOverrides: Partial<Record<TemplateKind, TemplateControlSet>> = {};
+    for (const [rawFormat, rawControl] of Object.entries(formatOverridesObj)) {
+      if (!isTemplateKind(rawFormat)) {
+        throw new HttpError(400, `design.formatOverrides contains unsupported format: ${rawFormat}`);
+      }
+      formatOverrides[rawFormat] = parseDesignOverrides(rawControl) ?? {};
+    }
+    parsed.formatOverrides = formatOverrides;
+  }
+
+  return Object.keys(parsed).length > 0 ? parsed : undefined;
+}
+
+function parseStorageOptions(input: unknown): StorageOptions | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, "storage");
+  const mode = optionalString(object.mode, "storage.mode", 20);
+  if (mode && mode !== "overwrite" && mode !== "versioned") {
+    throw new HttpError(400, "storage.mode must be overwrite or versioned");
+  }
+  return {
+    mode: mode as StorageOptions["mode"],
+    includeDate: object.includeDate !== undefined ? requiredBoolean(object.includeDate, "storage.includeDate") : undefined,
+    runId: optionalString(object.runId, "storage.runId", PIPELINE_CONFIG.generation.limits.storage_run_id_max_chars)
+  };
+}
+
+function parseLlmOverrides(input: unknown): LlmPromptOverrides | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, "llm");
+  const systemPrompt = parsePromptField(object.systemPrompt, "llm.systemPrompt");
+  const userInstructions = parsePromptField(object.userInstructions, "llm.userInstructions");
+  const userInstructionsAppend = optionalString(object.userInstructionsAppend, "llm.userInstructionsAppend", 2_000);
+  const temperature =
+    object.temperature !== undefined
+      ? clampNumber(requiredNumber(object.temperature, "llm.temperature"), 0, 2, PIPELINE_CONFIG.generation.llm.temperature)
+      : undefined;
+  const maxTokens =
+    object.maxTokens !== undefined
+      ? Math.round(clampNumber(requiredNumber(object.maxTokens, "llm.maxTokens"), 256, 4096, PIPELINE_CONFIG.generation.llm.max_tokens))
+      : undefined;
+
+  const parsed: LlmPromptOverrides = {
+    systemPrompt,
+    userInstructions,
+    userInstructionsAppend,
+    temperature,
+    maxTokens
+  };
+  return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
+}
+
+function parsePromptField(input: unknown, field: string): string | string[] | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  if (typeof input === "string") {
+    return ensureLength(input.trim(), 2_000, input.trim());
+  }
+  if (Array.isArray(input)) {
+    const lines = input.map((line, index) => optionalString(line, `${field}[${index}]`, 300)).filter((line): line is string => Boolean(line));
+    if (lines.length > 80) {
+      throw new HttpError(400, `${field} accepts up to 80 lines`);
+    }
+    return lines;
+  }
+  throw new HttpError(400, `${field} must be a string or an array of strings`);
+}
+
+function parseImageOptions(input: unknown): ImageGenerationOptions | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, "image");
+  const mode = optionalString(object.mode, "image.mode", 16);
+  if (mode && !["auto", "feature", "stock", "ai", "custom"].includes(mode)) {
+    throw new HttpError(400, "image.mode must be one of auto, feature, stock, ai, custom");
+  }
+  const parsed: ImageGenerationOptions = {
+    mode: mode as ImageGenerationOptions["mode"],
+    customUrl: optionalString(object.customUrl, "image.customUrl", 2_000),
+    prompt: optionalString(object.prompt, "image.prompt", PIPELINE_CONFIG.generation.limits.image_prompt_max_chars),
+    allowStock: object.allowStock !== undefined ? requiredBoolean(object.allowStock, "image.allowStock") : undefined,
+    allowAi: object.allowAi !== undefined ? requiredBoolean(object.allowAi, "image.allowAi") : undefined,
+    preferFeature: object.preferFeature !== undefined ? requiredBoolean(object.preferFeature, "image.preferFeature") : undefined
+  };
+  return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
+}
+
+function parseOutputOptions(input: unknown): OutputOptions | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, "output");
+  const formatsRaw = object.formats;
+  let formats: TemplateKind[] | undefined;
+  if (formatsRaw !== undefined) {
+    if (!Array.isArray(formatsRaw)) {
+      throw new HttpError(400, "output.formats must be an array");
+    }
+    const unique = new Set<TemplateKind>();
+    for (const [index, value] of formatsRaw.entries()) {
+      const item = optionalString(value, `output.formats[${index}]`, 40);
+      if (!item) {
+        continue;
+      }
+      if (!isTemplateKind(item)) {
+        throw new HttpError(400, `Unsupported output format: ${item}`);
+      }
+      unique.add(item);
+    }
+    formats = [...unique];
+    if (formats.length === 0) {
+      throw new HttpError(400, "output.formats cannot be empty");
+    }
+  }
+
+  const carouselSlides =
+    object.carouselSlides !== undefined
+      ? Math.round(clampNumber(requiredNumber(object.carouselSlides, "output.carouselSlides"), 1, 10, DEFAULT_CAROUSEL_SLIDES))
+      : undefined;
+
+  const parsed: OutputOptions = {
+    formats,
+    carouselSlides
+  };
+  return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
+}
+
+function requireObject(input: unknown, field: string): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new HttpError(400, `${field} must be an object`);
+  }
+  return input as Record<string, unknown>;
+}
+
+function optionalString(input: unknown, field: string, maxLength: number): string | undefined {
+  if (input === undefined || input === null) {
+    return undefined;
+  }
+  if (typeof input !== "string") {
+    throw new HttpError(400, `${field} must be a string`);
+  }
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (trimmed.length > maxLength) {
+    throw new HttpError(400, `${field} exceeds maximum length ${maxLength}`);
+  }
+  return trimmed;
+}
+
+function optionalEnumString(input: unknown, field: string, allowed: Set<string>): string | undefined {
+  const value = optionalString(input, field, 120);
+  if (!value) {
+    return undefined;
+  }
+  if (!allowed.has(value)) {
+    throw new HttpError(400, `${field} must be one of: ${[...allowed].join(", ")}`);
+  }
+  return value;
+}
+
+function optionalColor(input: unknown, field: string): string | undefined {
+  const value = optionalString(input, field, 20);
+  if (!value) {
+    return undefined;
+  }
+  if (!/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(value)) {
+    throw new HttpError(400, `${field} must be a valid hex color`);
+  }
+  return value;
+}
+
+function requiredBoolean(input: unknown, field: string): boolean {
+  if (typeof input !== "boolean") {
+    throw new HttpError(400, `${field} must be a boolean`);
+  }
+  return input;
+}
+
+function requiredNumber(input: unknown, field: string): number {
+  if (typeof input !== "number" || !Number.isFinite(input)) {
+    throw new HttpError(400, `${field} must be a finite number`);
+  }
+  return input;
+}
+
+function sanitizeImageUrl(
+  rawValue: string,
+  security: ResolvedSecurityConfig,
+  field: string,
+  options: { allowDataUrl: boolean; requireAllowedHost: boolean }
+): string {
+  const value = rawValue.trim();
+  if (!value) {
+    return "";
+  }
+  if (options.allowDataUrl && value.startsWith("data:image/")) {
+    return value;
+  }
+  return sanitizeHttpUrl(value, security, field, {
+    requireAllowedHost: options.requireAllowedHost,
+    hostAllowlist: security.outbound.allowed_image_hosts
+  });
+}
+
+function sanitizeHttpUrl(
+  rawValue: string,
+  security: ResolvedSecurityConfig,
+  field: string,
+  options?: { requireAllowedHost?: boolean; hostAllowlist?: string[] }
+): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawValue);
+  } catch {
+    throw new HttpError(400, `${field} must be a valid absolute URL`);
+  }
+
+  if (parsed.protocol !== "https:") {
+    throw new HttpError(400, `${field} must use https`);
+  }
+  if (parsed.username || parsed.password) {
+    throw new HttpError(400, `${field} cannot include credentials`);
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  if (!security.outbound.allow_private_network_targets && isPrivateHostname(hostname)) {
+    throw new HttpError(400, `${field} cannot target localhost or private network hosts`);
+  }
+
+  const allowlist = options?.hostAllowlist ?? security.outbound.allowed_notify_hosts;
+  const requireAllowedHost = options?.requireAllowedHost ?? false;
+  const shouldEnforceAllowlist = requireAllowedHost || allowlist.length > 0;
+  if (shouldEnforceAllowlist && !hostMatchesAllowlist(hostname, allowlist)) {
+    throw new HttpError(403, `${field} host is not in the allowed host list`);
+  }
+
+  return parsed.toString();
+}
+
+function isPrivateHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) {
+    return true;
+  }
+  if (isPrivateIpv4(host)) {
+    return true;
+  }
+  return isPrivateIpv6(host);
+}
+
+function isPrivateIpv4(hostname: string): boolean {
+  const match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!match) {
+    return false;
+  }
+  const octets = match.slice(1).map((part) => Number(part));
+  if (octets.some((part) => part < 0 || part > 255)) {
+    return false;
+  }
+  const [a, b] = octets;
+  if (a === 10 || a === 127 || a === 0) {
+    return true;
+  }
+  if (a === 169 && b === 254) {
+    return true;
+  }
+  if (a === 172 && b >= 16 && b <= 31) {
+    return true;
+  }
+  if (a === 192 && b === 168) {
+    return true;
+  }
+  if (a === 100 && b >= 64 && b <= 127) {
+    return true;
+  }
+  return false;
+}
+
+function isPrivateIpv6(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  if (host === "::1" || host === "0:0:0:0:0:0:0:1") {
+    return true;
+  }
+  if (host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) {
+    return true;
+  }
+  if (host.startsWith("::ffff:127.")) {
+    return true;
+  }
+  return false;
+}
+
+function hostMatchesAllowlist(hostname: string, allowlist: string[]): boolean {
+  if (allowlist.length === 0) {
+    return false;
+  }
+  for (const allowed of allowlist) {
+    const normalized = allowed.trim().toLowerCase();
+    if (!normalized) {
+      continue;
+    }
+    if (hostname === normalized || hostname.endsWith(`.${normalized}`)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function parseBooleanString(value: string, fallback: boolean): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+  if (["false", "0", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  return fallback;
+}
+
+function clampNumber(value: number | undefined, min: number, max: number, fallback: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, value));
+}
+
 function assertRequiredEnv(env: Env): void {
   if (!env.GHOST_API_URL?.trim()) {
     throw new HttpError(500, "Missing env var GHOST_API_URL");
@@ -1391,28 +2572,51 @@ function assertRequiredEnv(env: Env): void {
   }
 }
 
-async function readJsonBody<T>(request: Request): Promise<T> {
+async function readJsonBody<T>(request: Request, maxBytes: number): Promise<T> {
+  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new HttpError(415, "Request content-type must be application/json");
+  }
+
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw new HttpError(413, `Request body exceeds limit (${maxBytes} bytes)`);
+  }
+
+  let raw = "";
   let body: unknown;
   try {
-    body = await request.json();
-  } catch {
+    raw = await request.text();
+    const bytes = new TextEncoder().encode(raw).byteLength;
+    if (bytes > maxBytes) {
+      throw new HttpError(413, `Request body exceeds limit (${maxBytes} bytes)`);
+    }
+    body = JSON.parse(raw);
+  } catch (error) {
+    if (error instanceof HttpError) {
+      throw error;
+    }
+    if (!raw) {
+      throw new HttpError(400, "Invalid or empty JSON body");
+    }
     throw new HttpError(400, "Invalid JSON body");
   }
   return body as T;
 }
 
-function json(payload: unknown, status = 200): Response {
+function json(payload: unknown, status = 200, headers?: Record<string, string>): Response {
   return new Response(JSON.stringify(payload, null, 2), {
     status,
     headers: {
-      "content-type": "application/json; charset=utf-8"
+      "content-type": "application/json; charset=utf-8",
+      ...(headers ?? {})
     }
   });
 }
 
 function handleError(error: unknown): Response {
   if (error instanceof HttpError) {
-    return json({ error: error.message }, error.status);
+    return json({ error: error.message }, error.status, error.headers);
   }
 
   const message = error instanceof Error ? error.message : "Unexpected error";
@@ -1421,9 +2625,11 @@ function handleError(error: unknown): Response {
 
 class HttpError extends Error {
   status: number;
+  headers?: Record<string, string>;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, headers?: Record<string, string>) {
     super(message);
     this.status = status;
+    this.headers = headers;
   }
 }

@@ -39,13 +39,16 @@ Required values:
 
 - `GHOST_API_URL`
 - `GHOST_CONTENT_API_KEY`
+- `API_KEYS` (comma-separated accepted API keys)
 
 Optional but common:
 
 - `R2_PUBLIC_BASE_URL` for public URLs in API response
 - `PEXELS_API_KEY` for stock-photo fallback
-- `GHOST_WEBHOOK_TOKEN` to secure `/webhook/ghost`
+- `GHOST_WEBHOOK_TOKEN` (required for `/webhook/ghost`)
 - `NOTIFY_WEBHOOK_URL` for completion callbacks
+- `NOTIFY_HOST_ALLOWLIST` to restrict callback hosts
+- `IMAGE_HOST_ALLOWLIST` to restrict external image hosts
 
 ## 4. Build Generated Assets
 
@@ -88,7 +91,8 @@ Expected response:
 Quick visual check without running full generation:
 
 ```bash
-open "http://127.0.0.1:8787/template/instagram-post?templateStyle=data&archetype=metric&slot.metric_value=84%25&slot.metric_label=Retention&slot.headline=Signal%20over%20noise"
+curl "http://127.0.0.1:8787/template/instagram-post?templateStyle=data&archetype=metric&slot.metric_value=84%25&slot.metric_label=Retention&slot.headline=Signal%20over%20noise" \
+  -H "x-api-key: your-api-key"
 ```
 
 You can pass:
@@ -104,6 +108,7 @@ Use this while developing, so Ghost is not required in every test run:
 
 ```bash
 curl -X POST http://127.0.0.1:8787/generate-from-content \
+  -H 'x-api-key: your-api-key' \
   -H 'content-type: application/json' \
   -d '{
     "title": "Build a Repeatable Content Engine",
@@ -124,6 +129,7 @@ curl -X POST http://127.0.0.1:8787/generate-from-content \
 
 ```bash
 curl -X POST http://127.0.0.1:8787/generate \
+  -H 'x-api-key: your-api-key' \
   -H 'content-type: application/json' \
   -d '{"slug":"your-post-slug"}'
 ```
@@ -139,6 +145,8 @@ By default, assets are written to:
 - `social-assets/<slug>/carousel-slide-1.png` ...
 
 Storage behavior can be changed with request-level `storage` or `config.storage`.
+
+Use request-level `output.formats` to generate only selected formats, for example `["twitter-card"]`.
 
 ## 10. Common Edit Workflows
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const launchMock = vi.fn();
+const TEST_API_KEY = "test-key";
 
 vi.mock("@cloudflare/puppeteer", () => ({
   default: {
@@ -15,10 +16,20 @@ describe("social pipeline worker", () => {
     vi.clearAllMocks();
   });
 
+  it("rejects preview requests without API key", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/template/instagram-post?title=Hello&caption=World"),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(401);
+  });
+
   it("renders template endpoint without CDN script and with token variables", async () => {
     const response = await worker.fetch(
-      new Request("https://worker.test/template/instagram-post?title=Hello&caption=World&brandingColor=%230a8fa5"),
-      {} as never,
+      authorizedRequest("https://worker.test/template/instagram-post?title=Hello&caption=World&brandingColor=%230a8fa5"),
+      { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
 
@@ -32,8 +43,8 @@ describe("social pipeline worker", () => {
 
   it("hides carousel labels by default", async () => {
     const response = await worker.fetch(
-      new Request("https://worker.test/template/carousel-slide?title=T&heading=H&body=B&slide=1&total=5"),
-      {} as never,
+      authorizedRequest("https://worker.test/template/carousel-slide?title=T&heading=H&body=B&slide=1&total=5"),
+      { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
 
@@ -45,10 +56,10 @@ describe("social pipeline worker", () => {
 
   it("resolves preview templates with archetype and slot values", async () => {
     const response = await worker.fetch(
-      new Request(
+      authorizedRequest(
         "https://worker.test/template/instagram-post?templateStyle=data&templateId=instagram-post/stat-split&archetype=metric&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal+that+compounds&slot.insight_line=One+metric+only+works+when+paired+with+context."
       ),
-      {} as never,
+      { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
 
@@ -63,8 +74,8 @@ describe("social pipeline worker", () => {
 
   it("applies requested font profile from preview query", async () => {
     const response = await worker.fetch(
-      new Request("https://worker.test/template/twitter-card?title=Data&caption=Point&fontProfile=data-mono"),
-      {} as never,
+      authorizedRequest("https://worker.test/template/twitter-card?title=Data&caption=Point&fontProfile=data-mono"),
+      { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
 
@@ -117,13 +128,14 @@ describe("social pipeline worker", () => {
       OUTPUT_BUCKET: {
         put: vi.fn(async () => null)
       },
+      API_KEYS: TEST_API_KEY,
       DEFAULT_BRAND_COLOR: "#1f7a8c",
       BRAND_NAME: "Tasbir Blog",
       R2_KEY_PREFIX: "social-assets"
     } as never;
 
     const response = await worker.fetch(
-      new Request("https://worker.test/generate-from-content", {
+      authorizedRequest("https://worker.test/generate-from-content", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -151,14 +163,91 @@ describe("social pipeline worker", () => {
     expect(body.assets.instagram_post.key).toContain("instagram-post.png");
   });
 
+  it("supports selecting specific output formats from API", async () => {
+    launchMock.mockResolvedValue(fakeBrowser());
+
+    const env = {
+      AI: {
+        run: vi.fn(async () => ({
+          response: JSON.stringify({
+            instagram_caption: "Quick practical update for your workflow.",
+            twitter_caption: "Actionable workflow update in one pass.",
+            linkedin_caption: "A clear process to streamline your content pipeline.",
+            carousel_slides: [
+              { heading: "Start", body: "Define your post objective before drafting." },
+              { heading: "Extract", body: "Pull key points from the source article." },
+              { heading: "Design", body: "Map each point into a visual format." },
+              { heading: "Render", body: "Generate every platform dimension automatically." },
+              { heading: "Ship", body: "Publish and review performance outcomes." }
+            ],
+            hashtags: ["#workflow", "#contentops", "#socialmedia", "#cloudflare", "#automation", "#creator", "#pipeline", "#growth"],
+            image_prompt: "A clean workspace with a laptop and notes, editorial style",
+            use_feature_image: true,
+            template_style: "editorial",
+            post_archetype: "insight",
+            font_profile: "editorial-serif",
+            slot_content: {
+              headline: "Build repeatable systems",
+              insight_line: "Consistency compounds when your process is simple."
+            }
+          })
+        }))
+      },
+      BROWSER: {},
+      OUTPUT_BUCKET: {
+        put: vi.fn(async () => null)
+      },
+      API_KEYS: TEST_API_KEY,
+      DEFAULT_BRAND_COLOR: "#1f7a8c",
+      BRAND_NAME: "Tasbir Blog",
+      R2_KEY_PREFIX: "social-assets"
+    } as never;
+
+    const response = await worker.fetch(
+      authorizedRequest("https://worker.test/generate-from-content", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Format Selection Test",
+          content: "Generate only the Twitter card from this content.",
+          feature_image: "https://example.com/feature.jpg",
+          output: {
+            formats: ["twitter-card"]
+          }
+        })
+      }),
+      env,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      requested_formats: string[];
+      assets: {
+        instagram_post: unknown;
+        instagram_story: unknown;
+        twitter_card: { key: string } | null;
+        linkedin_post: unknown;
+        carousel: unknown[];
+      };
+    };
+
+    expect(body.requested_formats).toEqual(["twitter-card"]);
+    expect(body.assets.twitter_card?.key).toContain("twitter-card.png");
+    expect(body.assets.instagram_post).toBeNull();
+    expect(body.assets.instagram_story).toBeNull();
+    expect(body.assets.linkedin_post).toBeNull();
+    expect(body.assets.carousel).toHaveLength(0);
+  });
+
   it("returns 400 when plain-content payload misses required content", async () => {
     const response = await worker.fetch(
-      new Request("https://worker.test/generate-from-content", {
+      authorizedRequest("https://worker.test/generate-from-content", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ title: "Incomplete payload" })
       }),
-      {} as never,
+      { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
 
@@ -167,6 +256,12 @@ describe("social pipeline worker", () => {
     expect(body.error).toContain("content");
   });
 });
+
+function authorizedRequest(input: string, init?: RequestInit): Request {
+  const headers = new Headers(init?.headers ?? {});
+  headers.set("x-api-key", TEST_API_KEY);
+  return new Request(input, { ...init, headers });
+}
 
 function fakeBrowser() {
   const page = {

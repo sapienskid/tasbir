@@ -1,12 +1,12 @@
 <div class="absolute inset-x-0 top-0 h-12" style="background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 38%, transparent) 0 36px, transparent 36px 72px);"></div>
 <div class="absolute right-12 top-20 rounded-2xl border px-5 py-4" style="border-color: color-mix(in srgb, var(--color-brand-accent) 82%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 72%, transparent);">
-  <p class="text-[56px] leading-none" style="font-family: var(--font-display);">{{SLOT:metric_value}}</p>
-  <p class="text-[21px] leading-[1.2] text-[var(--color-text-secondary)]">{{SLOT:metric_label}}</p>
+  <p class="tabular-nums text-[56px] leading-none" style="font-family: var(--font-display);">{{SLOT:metric_value}}</p>
+  <p class="break-words text-[21px] leading-[1.2] text-[var(--color-text-secondary)]">{{SLOT:metric_label}}</p>
 </div>
 <div class="relative z-10 flex h-full w-full flex-col gap-5" style="padding: {{CONTENT_INSET}}px; padding-top: calc({{CONTENT_INSET}}px + 20px); {{ALIGNMENT_STYLE}}">
   {{HEADER}}
   {{KICKER}}
-  <h1 class="text-balance text-[74px] leading-[1] tracking-[-0.02em]" style="font-family: var(--font-display); max-width: calc({{CONTENT_MAX_WIDTH}}px - 200px); text-shadow: var(--frame-title-shadow);">{{SLOT:headline}}</h1>
-  <p class="text-[31px] leading-[1.34] text-[var(--color-text-secondary)]" style="max-width: calc({{CAPTION_MAX_WIDTH}}px - 180px); text-shadow: var(--frame-caption-shadow);">{{SLOT:insight_line}}</p>
+  <h1 class="text-balance break-words text-[74px] leading-[1] tracking-[-0.02em]" style="font-family: var(--font-display); max-width: calc({{CONTENT_MAX_WIDTH}}px - 200px); text-shadow: var(--frame-title-shadow);">{{SLOT:headline}}</h1>
+  <p class="break-words text-[31px] leading-[1.34] text-[var(--color-text-secondary)]" style="max-width: calc({{CAPTION_MAX_WIDTH}}px - 180px); text-shadow: var(--frame-caption-shadow);">{{SLOT:insight_line}}</p>
   {{FOOTER}}
 </div>

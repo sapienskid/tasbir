@@ -72,6 +72,9 @@ theming:
     shadow_color_mix_target: "#000000"
     shadow_color_mix_ratio_from_target: 0.72
     primary_text_min_contrast: 4.5
+    secondary_text_min_contrast: 3.8
+    muted_text_min_contrast: 3
+    border_subtle_min_contrast: 1.5
     accent_foreground_min_contrast: 4
   radius:
     card: "28px"
@@ -217,6 +220,42 @@ features:
   enable_ai_image_generation: true
   prefer_feature_image: true
   enable_notifications: true
+
+security:
+  api_auth:
+    enabled: true
+    header_name: "x-api-key"
+    require_for_preview: true
+    require_for_generate: true
+    require_for_direct_content: true
+    require_for_webhook: false
+  cors:
+    enabled: true
+    allowed_origins:
+      - "*"
+    allowed_headers:
+      - "content-type"
+      - "authorization"
+      - "x-api-key"
+      - "x-webhook-token"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "OPTIONS"
+    allow_credentials: false
+    max_age_seconds: 86400
+  request_limits:
+    max_json_body_bytes: 256000
+    slot_overrides_max_keys: 40
+    template_ids_max_keys: 5
+  rate_limit:
+    enabled: true
+    window_seconds: 60
+    max_requests_per_window: 30
+  outbound:
+    allow_private_network_targets: false
+    allowed_notify_hosts: []
+    allowed_image_hosts: []
 
 storage:
   default_key_prefix: "social-assets"

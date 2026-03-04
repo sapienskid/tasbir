@@ -2,6 +2,19 @@
 
 Base URL in local dev is usually `http://127.0.0.1:8787`.
 
+## Authentication
+
+Protected routes:
+
+- `GET /template/<format>`
+- `POST /generate`
+- `POST /generate-from-content`
+
+Provide one of:
+
+- `x-api-key: <one of API_KEYS>`
+- `Authorization: Bearer <one of API_KEYS>`
+
 ## `GET /health`
 
 Simple health endpoint.
@@ -82,7 +95,8 @@ Brand token overrides:
 ### Example
 
 ```bash
-curl "http://127.0.0.1:8787/template/twitter-card?templateStyle=bold&templateArchetype=promo&fontProfile=bold-campaign&slot.headline=Launch%20Week&slot.supporting_line=Read%20the%20full%20guide&slot.cta_text=Read%20now"
+curl "http://127.0.0.1:8787/template/twitter-card?templateStyle=bold&templateArchetype=promo&fontProfile=bold-campaign&slot.headline=Launch%20Week&slot.supporting_line=Read%20the%20full%20guide&slot.cta_text=Read%20now" \
+  -H 'x-api-key: your-api-key'
 ```
 
 Response content type: `text/html`.
@@ -111,6 +125,9 @@ Optional overrides:
 - `design`
 - `storage`
 - `notifyUrl`
+- `llm`
+- `image`
+- `output`
 
 ### Example
 
@@ -128,6 +145,18 @@ Optional overrides:
     "metric_value": "2.4K",
     "metric_label": "Weekly readers",
     "headline": "Signal that compounds"
+  },
+  "llm": {
+    "userInstructionsAppend": "Prefer practical tone and avoid buzzwords.",
+    "temperature": 0.1
+  },
+  "image": {
+    "mode": "custom",
+    "customUrl": "https://images.example.com/backgrounds/launch.jpg"
+  },
+  "output": {
+    "formats": ["twitter-card", "linkedin-post"],
+    "carouselSlides": 3
   },
   "storage": {
     "mode": "versioned",
@@ -178,7 +207,7 @@ Optional design/storage fields are the same as `/generate`.
 
 Webhook trigger endpoint for Ghost events.
 
-If `GHOST_WEBHOOK_TOKEN` is set, send header:
+`GHOST_WEBHOOK_TOKEN` is required. Send header:
 
 - `x-webhook-token: <token>`
 
@@ -198,8 +227,9 @@ Slug can be extracted from:
   "ok": true,
   "slug": "example-post",
   "post_url": "https://example.com/example-post/",
+  "requested_formats": ["twitter-card", "linkedin-post"],
   "image_source": {
-    "source": "feature",
+    "source": "custom",
     "imageUrl": "https://..."
   },
   "llm_output": {
@@ -218,21 +248,40 @@ Slug can be extracted from:
     }
   },
   "assets": {
-    "instagram_post": { "format": "instagram-post", "key": "...", "url": null },
-    "instagram_story": { "format": "instagram-story", "key": "...", "url": null },
+    "instagram_post": null,
+    "instagram_story": null,
     "twitter_card": { "format": "twitter-card", "key": "...", "url": null },
     "linkedin_post": { "format": "linkedin-post", "key": "...", "url": null },
-    "carousel": [{ "format": "carousel-slide-1", "key": "...", "url": null }]
+    "carousel": []
   }
 }
 ```
+
+`image.mode` supports:
+
+- `auto` (default chain)
+- `feature`
+- `stock`
+- `ai`
+- `custom` (requires `image.customUrl`)
+
+`output.formats` supports:
+
+- `instagram-post`
+- `instagram-story`
+- `carousel-slide`
+- `twitter-card`
+- `linkedin-post`
 
 ## Error Responses
 
 Typical errors:
 
 - `400` invalid JSON, missing required fields
-- `401` invalid webhook token
+- `401` invalid API key or invalid webhook token
+- `413` request body too large
+- `415` unsupported content-type
+- `429` rate limit exceeded
 - `403` template preview disabled
 - `404` route not found or Ghost slug missing
 - `500` missing env vars or unexpected runtime errors

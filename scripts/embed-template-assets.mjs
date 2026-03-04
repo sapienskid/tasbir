@@ -130,6 +130,50 @@ function assertConfigShape(value) {
     throw new Error("pipeline.config.yaml must define runtime");
   }
 
+  if (!config.security || typeof config.security !== "object") {
+    throw new Error("pipeline.config.yaml must define security");
+  }
+
+  if (!config.security.api_auth || typeof config.security.api_auth !== "object") {
+    throw new Error("security.api_auth must be a map");
+  }
+
+  if (!config.security.cors || typeof config.security.cors !== "object") {
+    throw new Error("security.cors must be a map");
+  }
+
+  if (!Array.isArray(config.security.cors.allowed_origins)) {
+    throw new Error("security.cors.allowed_origins must be an array");
+  }
+
+  if (!Array.isArray(config.security.cors.allowed_headers)) {
+    throw new Error("security.cors.allowed_headers must be an array");
+  }
+
+  if (!Array.isArray(config.security.cors.allowed_methods)) {
+    throw new Error("security.cors.allowed_methods must be an array");
+  }
+
+  if (!config.security.request_limits || typeof config.security.request_limits !== "object") {
+    throw new Error("security.request_limits must be a map");
+  }
+
+  if (!config.security.rate_limit || typeof config.security.rate_limit !== "object") {
+    throw new Error("security.rate_limit must be a map");
+  }
+
+  if (!config.security.outbound || typeof config.security.outbound !== "object") {
+    throw new Error("security.outbound must be a map");
+  }
+
+  if (!Array.isArray(config.security.outbound.allowed_notify_hosts)) {
+    throw new Error("security.outbound.allowed_notify_hosts must be an array");
+  }
+
+  if (!Array.isArray(config.security.outbound.allowed_image_hosts)) {
+    throw new Error("security.outbound.allowed_image_hosts must be an array");
+  }
+
   if (!Number.isInteger(config.generation.carousel_required_slides) || config.generation.carousel_required_slides < 1) {
     throw new Error("generation.carousel_required_slides must be a positive integer");
   }

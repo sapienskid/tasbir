@@ -76,6 +76,7 @@ cp .dev.vars.example .dev.vars
 
 - `GHOST_API_URL`
 - `GHOST_CONTENT_API_KEY`
+- `API_KEYS` (comma-separated accepted API keys)
 
 5. Start local dev server:
 
@@ -97,6 +98,7 @@ Generate assets directly from provided content (no Ghost fetch required):
 
 ```bash
 curl -X POST http://127.0.0.1:8787/generate-from-content \
+  -H 'x-api-key: your-api-key' \
   -H 'content-type: application/json' \
   -d '{
     "title": "Ship Social Content Faster",
@@ -116,10 +118,15 @@ You should receive:
 ## API Routes
 
 - `GET /health`
-- `GET /template/<format>` preview renderer
-- `POST /generate` fetches Ghost post by `slug` or `url`
-- `POST /generate-from-content` uses direct title/content payload
-- `POST /webhook/ghost` webhook-triggered generation
+- `GET /template/<format>` preview renderer (API key required)
+- `POST /generate` fetches Ghost post by `slug` or `url` (API key required)
+- `POST /generate-from-content` uses direct title/content payload (API key required)
+- `POST /webhook/ghost` webhook-triggered generation (`x-webhook-token` required)
+
+Authenticated routes accept:
+
+- `x-api-key: <one of API_KEYS>`
+- or `Authorization: Bearer <one of API_KEYS>`
 
 See [API Reference](docs/api-reference.md) for full request/response examples.
 
@@ -152,6 +159,9 @@ You can override generation behavior in request payload:
 - `brandTokens` (fine-grained color token overrides)
 - `design` (preset/alignment/opacity/layout controls)
 - `storage` (overwrite/versioned path behavior)
+- `output` (choose `formats` and `carouselSlides`)
+- `llm` (system prompt/instructions/temperature/maxTokens overrides)
+- `image` (choose `auto|feature|stock|ai|custom`, plus `customUrl` and prompt controls)
 
 ## Environment Variables
 
@@ -159,6 +169,8 @@ Required:
 
 - `GHOST_API_URL`
 - `GHOST_CONTENT_API_KEY`
+- `API_KEYS`
+- `GHOST_WEBHOOK_TOKEN` (required for `/webhook/ghost`)
 
 Optional:
 
@@ -166,11 +178,18 @@ Optional:
 - `PEXELS_API_KEY`
 - `GHOST_WEBHOOK_TOKEN`
 - `NOTIFY_WEBHOOK_URL`
+- `NOTIFY_HOST_ALLOWLIST`
+- `IMAGE_HOST_ALLOWLIST`
+- `ALLOW_PRIVATE_NETWORK_TARGETS`
 - `DEFAULT_BRAND_COLOR`
 - `BRAND_NAME`
 - `LLM_MODEL`
 - `IMAGE_MODEL`
 - `R2_KEY_PREFIX`
+- `CORS_ALLOWED_ORIGINS`
+- `CORS_ALLOWED_HEADERS`
+- `CORS_ALLOW_CREDENTIALS`
+- `CORS_MAX_AGE_SECONDS`
 
 ## Daily Development Commands
 

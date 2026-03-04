@@ -1,8 +1,8 @@
 <div class="absolute inset-y-0 left-0 w-2" style="background: color-mix(in srgb, var(--color-brand-accent) 84%, transparent);"></div>
 <div class="relative z-10 flex h-full w-full flex-col gap-4" style="padding: {{CONTENT_INSET}}px; padding-left: calc({{CONTENT_INSET}}px + 18px); {{ALIGNMENT_STYLE}}">
   {{HEADER}}
-  <p class="text-[14px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">{{SLOT:kicker}}</p>
-  <h1 class="text-balance text-[52px] leading-[1.02] tracking-[-0.02em]" style="font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);">{{SLOT:headline}}</h1>
+  <p class="break-words text-[14px] font-semibold uppercase tracking-[0.1em] text-[var(--color-text-muted)]">{{SLOT:kicker}}</p>
+  <h1 class="text-balance break-words text-[52px] leading-[1.02] tracking-[-0.02em]" style="font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);">{{SLOT:headline}}</h1>
   <div class="mt-1 grid grid-cols-2 gap-3" style="max-width: {{CAPTION_MAX_WIDTH}}px;">
     <div class="rounded-xl border px-4 py-3 text-[20px]" style="border-color: color-mix(in srgb, var(--color-border-subtle) 80%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 72%, transparent);">1. {{SLOT:step_1}}</div>
     <div class="rounded-xl border px-4 py-3 text-[20px]" style="border-color: color-mix(in srgb, var(--color-border-subtle) 80%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 72%, transparent);">2. {{SLOT:step_2}}</div>
