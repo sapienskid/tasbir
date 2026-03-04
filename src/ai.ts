@@ -1,0 +1,701 @@
+import { listFontProfiles, normalizeFontProfileId } from "./design-system";
+import {
+  listPostArchetypes,
+  listSlotHints,
+  listTemplateStyles,
+  normalizePostArchetype,
+  normalizeTemplateStyle
+} from "./templates";
+import { PIPELINE_CONFIG } from "./generated/template-assets";
+
+export interface LlmPromptOverrides {
+  systemPrompt?: string | string[];
+  userInstructions?: string | string[];
+  userInstructionsAppend?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+export interface CarouselSlide {
+  heading: string;
+  body: string;
+}
+
+export interface LlmOutput {
+  instagram_caption: string;
+  twitter_caption: string;
+  linkedin_caption: string;
+  carousel_slides: CarouselSlide[];
+  hashtags: string[];
+  image_prompt: string;
+  use_feature_image: boolean;
+  template_style: string;
+  post_archetype: string;
+  font_profile: string;
+  slot_content: Record<string, string>;
+}
+
+export interface LlmSourcePost {
+  title: string;
+  html?: string;
+  plaintext?: string;
+  excerpt?: string;
+  custom_excerpt?: string;
+  feature_image?: string;
+  tags?: Array<{ name?: string }>;
+}
+
+const DEFAULT_LLM_MODEL = PIPELINE_CONFIG.generation.llm.default_model;
+const DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT = PIPELINE_CONFIG.generation.llm.system_prompt.join(" ");
+
+const LLM_JSON_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    instagram_caption: { type: "string" },
+    twitter_caption: { type: "string" },
+    linkedin_caption: { type: "string" },
+    carousel_slides: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          heading: { type: "string" },
+          body: { type: "string" }
+        },
+        required: ["heading", "body"]
+      }
+    },
+    hashtags: {
+      type: "array",
+      items: { type: "string" }
+    },
+    image_prompt: { type: "string" },
+    use_feature_image: { type: "boolean" },
+    template_style: {
+      type: "string",
+      enum: listTemplateStyles().map((style) => style.id)
+    },
+    post_archetype: {
+      type: "string",
+      enum: listPostArchetypes().map((archetype) => archetype.id)
+    },
+    font_profile: {
+      type: "string",
+      enum: listFontProfiles().map((profile) => profile.id)
+    },
+    slot_content: {
+      type: "object",
+      additionalProperties: {
+        type: "string"
+      }
+    }
+  },
+  required: [
+    "instagram_caption",
+    "twitter_caption",
+    "linkedin_caption",
+    "carousel_slides",
+    "hashtags",
+    "image_prompt",
+    "use_feature_image",
+    "template_style",
+    "post_archetype",
+    "font_profile",
+    "slot_content"
+  ]
+};
+
+export async function generateStructuredCopy(args: {
+  ai: Ai;
+  llmModel?: string;
+  post: LlmSourcePost;
+  requiredCarouselSlides: number;
+  llmOverrides?: LlmPromptOverrides;
+  normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string }) => Record<string, string>;
+}): Promise<LlmOutput> {
+  const textModel = (args.llmModel || DEFAULT_LLM_MODEL) as keyof AiModels;
+  const styleHints = listTemplateStyles()
+    .map((style) => `${style.id}: ${style.llmHint}`)
+    .join(" | ");
+  const archetypeHints = listPostArchetypes()
+    .map((archetype) => `${archetype.id}: ${archetype.llmHint}`)
+    .join(" | ");
+  const fontHints = listFontProfiles()
+    .map((profile) => `${profile.id}: ${profile.llmHint}`)
+    .join(" | ");
+  const slotHints = listSlotHints()
+    .map((slot) => `${slot.id}: ${slot.hint}`)
+    .join(" | ");
+
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const userInstructionsTemplate = buildPromptTemplate(
+    args.llmOverrides?.userInstructions,
+    PIPELINE_CONFIG.generation.llm.user_instructions
+  );
+  const userInstructions = userInstructionsTemplate
+    .replace("<required_carousel_slides>", String(args.requiredCarouselSlides))
+    .replace("<instagram_caption_max_chars>", String(limits.instagram_caption_max_chars))
+    .replace("<twitter_caption_max_chars>", String(limits.twitter_caption_max_chars))
+    .replace("<linkedin_caption_max_chars>", String(limits.linkedin_caption_max_chars))
+    .replace("<carousel_heading_max_chars>", String(limits.carousel_heading_max_chars))
+    .replace("<carousel_body_max_chars>", String(limits.carousel_body_max_chars))
+    .replace("<hashtag_min_count>", String(limits.hashtag_min_count))
+    .replace("<hashtag_max_count>", String(limits.hashtag_max_count))
+    .replace("<available_template_styles>", styleHints)
+    .replace("<available_post_archetypes>", archetypeHints)
+    .replace("<available_font_profiles>", fontHints)
+    .replace("<available_slot_keys>", slotHints);
+  const appendedInstructions = normalizePromptAppend(args.llmOverrides?.userInstructionsAppend);
+  const mergedInstructions = appendedInstructions ? `${userInstructions}\n${appendedInstructions}` : userInstructions;
+  const systemPrompt = buildPromptTemplate(args.llmOverrides?.systemPrompt, PIPELINE_CONFIG.generation.llm.system_prompt);
+  const title = args.post.title.trim();
+  const excerpt = (args.post.custom_excerpt || args.post.excerpt || "").trim();
+  const plainBody = (args.post.plaintext || stripHtml(args.post.html || "")).trim();
+  const postText =
+    plainBody.length > limits.post_text_max_chars
+      ? `${plainBody.slice(0, limits.post_text_max_chars)}...`
+      : plainBody;
+  const topTags = (args.post.tags ?? [])
+    .map((tag) => tag.name ?? "")
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(", ");
+
+  const prompt = [
+    mergedInstructions,
+    "",
+    "Blog post source:",
+    `<title>${title}</title>`,
+    `<excerpt>${excerpt || "(none)"}</excerpt>`,
+    `<tags>${topTags || "(none)"}</tags>`,
+    `<has_feature_image>${Boolean(args.post.feature_image)}</has_feature_image>`,
+    "<body>",
+    postText,
+    "</body>"
+  ].join("\n");
+
+  const raw = await args.ai.run(textModel, {
+    messages: [
+      {
+        role: "system",
+        content: systemPrompt || DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ],
+    response_format: {
+      type: "json_schema",
+      json_schema: LLM_JSON_SCHEMA
+    },
+    temperature: clampNumber(args.llmOverrides?.temperature, 0, 2, PIPELINE_CONFIG.generation.llm.temperature),
+    max_tokens: Math.round(
+      clampNumber(args.llmOverrides?.maxTokens, 256, 4096, PIPELINE_CONFIG.generation.llm.max_tokens)
+    )
+  });
+
+  const parsed = parseModelJson(raw);
+  return normalizeLlmOutput(parsed, {
+    hasFeatureImage: Boolean(args.post.feature_image),
+    title,
+    fallbackText: excerpt || postText,
+    requiredCarouselSlides: args.requiredCarouselSlides,
+    normalizeSlotContent: args.normalizeSlotContent
+  });
+}
+
+function parseModelJson(raw: unknown): Record<string, unknown> {
+  if (typeof raw === "string") {
+    return parseJsonLike(raw);
+  }
+
+  if (raw && typeof raw === "object") {
+    const object = raw as Record<string, unknown>;
+
+    if (object.response && typeof object.response === "object") {
+      return object.response as Record<string, unknown>;
+    }
+
+    if (typeof object.response === "string") {
+      return parseJsonLike(object.response);
+    }
+
+    return object;
+  }
+
+  throw new Error("LLM returned an unexpected payload");
+}
+
+function parseJsonLike(input: string): Record<string, unknown> {
+  const direct = input.trim();
+  try {
+    return JSON.parse(direct) as Record<string, unknown>;
+  } catch {
+    const fencedMatch = direct.match(/```json\s*([\s\S]*?)```/i) ?? direct.match(/```([\s\S]*?)```/);
+    if (fencedMatch?.[1]) {
+      return JSON.parse(fencedMatch[1].trim()) as Record<string, unknown>;
+    }
+    throw new Error("Model output is not valid JSON");
+  }
+}
+
+function buildPromptTemplate(override: string | string[] | undefined, fallbackLines: readonly string[]): string {
+  const lines = normalizePromptLines(override);
+  if (lines.length === 0) {
+    return fallbackLines.join("\n");
+  }
+  return lines.join("\n");
+}
+
+function normalizePromptAppend(value: string | undefined): string {
+  if (!value) {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  return ensureLength(trimmed, 2_000, trimmed);
+}
+
+function normalizePromptLines(input: string | string[] | undefined): string[] {
+  if (!input) {
+    return [];
+  }
+  const rawLines = Array.isArray(input) ? input : [input];
+  return rawLines
+    .map((line) => (typeof line === "string" ? line.trim() : ""))
+    .filter(Boolean)
+    .slice(0, 80)
+    .map((line) => ensureLength(line, 200, line));
+}
+
+function normalizeLlmOutput(
+  payload: Record<string, unknown>,
+  args: {
+    hasFeatureImage: boolean;
+    title: string;
+    fallbackText: string;
+    requiredCarouselSlides: number;
+    normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string }) => Record<string, string>;
+  }
+): LlmOutput {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const cleanedFallbackText = normalizeSourceContent(args.fallbackText) || args.fallbackText;
+  const captions = normalizePlatformCaptions(
+    {
+      instagram: toText(payload.instagram_caption),
+      twitter: toText(payload.twitter_caption),
+      linkedin: toText(payload.linkedin_caption)
+    },
+    {
+      title: args.title,
+      fallbackText: cleanedFallbackText
+    }
+  );
+
+  const rawSlides = Array.isArray(payload.carousel_slides) ? payload.carousel_slides : [];
+  const sourceSentences = sentencePoolFromSource(`${args.title}. ${cleanedFallbackText}`);
+  const normalizedSlides = normalizeCarouselSlides(rawSlides, {
+    title: args.title,
+    fallbackText: cleanedFallbackText,
+    requiredSlides: args.requiredCarouselSlides,
+    sourceSentences
+  });
+
+  const rawHashtags = Array.isArray(payload.hashtags) ? payload.hashtags : [];
+  const hashtags = normalizeHashtags(rawHashtags, args.title, cleanedFallbackText);
+
+  const imagePromptFallback = `${args.title}, modern editorial photo, clean composition, natural lighting, no text overlay`;
+  const imagePrompt = ensureLength(toText(payload.image_prompt), limits.image_prompt_max_chars, imagePromptFallback);
+
+  const useFeatureImage = args.hasFeatureImage && Boolean(payload.use_feature_image);
+  const templateStyle = normalizeTemplateStyle(toText(payload.template_style));
+  const postArchetype = normalizePostArchetype(toText(payload.post_archetype));
+  const fontProfile = normalizeFontProfileId(toText(payload.font_profile));
+  const slotContent = args.normalizeSlotContent(payload.slot_content, {
+    title: args.title,
+    fallbackText: cleanedFallbackText
+  });
+
+  return {
+    instagram_caption: captions.instagram,
+    twitter_caption: captions.twitter,
+    linkedin_caption: captions.linkedin,
+    carousel_slides: normalizedSlides,
+    hashtags,
+    image_prompt: imagePrompt,
+    use_feature_image: useFeatureImage,
+    template_style: templateStyle,
+    post_archetype: postArchetype,
+    font_profile: fontProfile,
+    slot_content: slotContent
+  };
+}
+
+function normalizePlatformCaptions(
+  captions: { instagram: string; twitter: string; linkedin: string },
+  context: { title: string; fallbackText: string }
+): { instagram: string; twitter: string; linkedin: string } {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const fallbackCaption = normalizeSourceContent(context.fallbackText) || context.title;
+
+  return {
+    instagram: normalizeCaptionText(captions.instagram, context.title, limits.instagram_caption_max_chars, fallbackCaption),
+    twitter: normalizeCaptionText(captions.twitter, context.title, limits.twitter_caption_max_chars, fallbackCaption),
+    linkedin: normalizeCaptionText(captions.linkedin, context.title, limits.linkedin_caption_max_chars, fallbackCaption)
+  };
+}
+
+function normalizeCaptionText(rawText: string, title: string, maxChars: number, fallbackText: string): string {
+  const cleaned = removeTitlePrefix(normalizeSourceContent(rawText), title);
+  const fallback = removeTitlePrefix(normalizeSourceContent(fallbackText), title) || normalizeSourceContent(title);
+  const source = cleaned || fallback || title;
+  return ensureLength(source, maxChars, fallback || title);
+}
+
+function normalizeCarouselSlides(
+  rawSlides: unknown[],
+  args: { title: string; fallbackText: string; requiredSlides: number; sourceSentences: string[] }
+): CarouselSlide[] {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const usedSentenceIndexes = new Set<number>();
+  const seenBodyKeys = new Set<string>();
+  const seenHeadingKeys = new Set<string>();
+  const fallbackSentence = toSingleSentence(ensureLength(args.fallbackText, limits.carousel_body_max_chars, args.title));
+
+  const nextSentence = (): string => {
+    for (const [index, sentence] of args.sourceSentences.entries()) {
+      if (!usedSentenceIndexes.has(index)) {
+        usedSentenceIndexes.add(index);
+        return sentence;
+      }
+    }
+    return "";
+  };
+
+  const ensureBody = (rawBody: string): string => {
+    const cleanedBody = normalizeSourceContent(rawBody);
+    const fallbackBody = nextSentence() || fallbackSentence;
+    let body = toSingleSentence(ensureLength(cleanedBody, limits.carousel_body_max_chars, fallbackBody));
+    let bodyKey = canonicalText(body);
+
+    if (!bodyKey || seenBodyKeys.has(bodyKey)) {
+      const alternative = nextSentence();
+      if (alternative) {
+        body = toSingleSentence(ensureLength(alternative, limits.carousel_body_max_chars, fallbackBody));
+        bodyKey = canonicalText(body);
+      }
+    }
+
+    if (bodyKey) {
+      seenBodyKeys.add(bodyKey);
+    }
+    return body;
+  };
+
+  const slides: CarouselSlide[] = [];
+  for (const [index, rawSlide] of rawSlides.entries()) {
+    if (slides.length >= args.requiredSlides) {
+      break;
+    }
+    if (!rawSlide || typeof rawSlide !== "object") {
+      continue;
+    }
+
+    const entry = rawSlide as Record<string, unknown>;
+    const body = ensureBody(toText(entry.body));
+    const heading = ensureCarouselHeading(toText(entry.heading), {
+      body,
+      title: args.title,
+      index,
+      total: args.requiredSlides,
+      usedHeadingKeys: seenHeadingKeys
+    });
+
+    slides.push({ heading, body });
+  }
+
+  while (slides.length < args.requiredSlides) {
+    const index = slides.length;
+    const body = ensureBody("");
+    const heading = ensureCarouselHeading("", {
+      body,
+      title: args.title,
+      index,
+      total: args.requiredSlides,
+      usedHeadingKeys: seenHeadingKeys
+    });
+    slides.push({ heading, body });
+  }
+
+  return slides;
+}
+
+function ensureCarouselHeading(
+  rawHeading: string,
+  args: {
+    body: string;
+    title: string;
+    index: number;
+    total: number;
+    usedHeadingKeys: Set<string>;
+  }
+): string {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const phase = getCarouselPhase(args.index, args.total);
+  const cleanedHeading = normalizeSourceContent(rawHeading);
+
+  let heading = cleanedHeading;
+  if (!heading || isGenericCarouselHeading(heading)) {
+    heading = deriveHeadingFromBody(args.body, args.title, phase);
+  }
+
+  heading = ensureLength(heading, limits.carousel_heading_max_chars, defaultHeadingForPhase(phase, args.index));
+  heading = heading.replace(/[.!?]+$/g, "").trim();
+  if (!heading) {
+    heading = defaultHeadingForPhase(phase, args.index);
+  }
+
+  let key = canonicalText(heading);
+  if (!key || args.usedHeadingKeys.has(key)) {
+    heading = ensureLength(
+      `${defaultHeadingForPhase(phase, args.index)} ${args.index + 1}`,
+      limits.carousel_heading_max_chars,
+      defaultHeadingForPhase(phase, args.index)
+    );
+    key = canonicalText(heading);
+  }
+
+  if (key) {
+    args.usedHeadingKeys.add(key);
+  }
+
+  return heading;
+}
+
+function deriveHeadingFromBody(body: string, title: string, phase: "intro" | "middle" | "conclusion"): string {
+  const source = normalizeSourceContent(body) || normalizeSourceContent(title);
+  const clause = source.split(/[.!?;:]/)[0]?.trim() || "";
+  const words = clause.split(/\s+/).filter(Boolean).slice(0, 6);
+  const candidate = toHeadlineCase(words.join(" "));
+  return candidate || defaultHeadingForPhase(phase, 0);
+}
+
+function defaultHeadingForPhase(phase: "intro" | "middle" | "conclusion", index: number): string {
+  if (phase === "intro") {
+    return "Start Here";
+  }
+  if (phase === "conclusion") {
+    return "What To Do Next";
+  }
+  return index % 2 === 0 ? "Core Insight" : "How It Works";
+}
+
+function getCarouselPhase(index: number, total: number): "intro" | "middle" | "conclusion" {
+  if (index <= 0) {
+    return "intro";
+  }
+  if (index >= total - 1) {
+    return "conclusion";
+  }
+  return "middle";
+}
+
+function isGenericCarouselHeading(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  return /^(insight|slide|point|tip|step|idea|key point)\s*\d*$/i.test(normalized);
+}
+
+function sentencePoolFromSource(value: string): string[] {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const source = normalizeSourceContent(value);
+  if (!source) {
+    return [];
+  }
+
+  const rawSentences = source.split(/(?<=[.!?])\s+/g).map((sentence) => sentence.trim()).filter(Boolean);
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+
+  for (const sentence of rawSentences) {
+    const single = toSingleSentence(ensureLength(sentence, limits.carousel_body_max_chars, sentence));
+    const key = canonicalText(single);
+    if (!key || key.length < 12 || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(single);
+    if (deduped.length >= 24) {
+      break;
+    }
+  }
+
+  return deduped;
+}
+
+export function normalizeSourceContent(input: string): string {
+  if (!input) {
+    return "";
+  }
+
+  return input
+    .replace(/\r\n/g, "\n")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/^[#]+(?=\S)/gm, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function removeTitlePrefix(value: string, title: string): string {
+  if (!value) {
+    return "";
+  }
+  const safeTitle = normalizeSourceContent(title);
+  if (!safeTitle) {
+    return value.trim();
+  }
+
+  const titlePattern = new RegExp(`^${escapeRegExp(safeTitle)}(?:\\s*[:\\-–—|]\\s*|\\s+)`, "i");
+  const stripped = value.replace(titlePattern, "").trim();
+  if (stripped && canonicalText(value).startsWith(canonicalText(safeTitle))) {
+    return stripped;
+  }
+  return value.trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function toHeadlineCase(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function canonicalText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeHashtags(rawTags: unknown[], title: string, fallbackText: string): string[] {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const seeded = [
+    ...rawTags.map((tag) => toText(tag)),
+    ...title
+      .split(/\s+/)
+      .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
+      .filter((word) => word.length >= limits.title_keyword_min_chars),
+    ...fallbackText
+      .split(/\s+/)
+      .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
+      .filter((word) => word.length >= limits.fallback_keyword_min_chars)
+  ];
+
+  const unique: string[] = [];
+  for (const raw of seeded) {
+    if (!raw) {
+      continue;
+    }
+    const cleaned = raw
+      .toLowerCase()
+      .replace(/^#+/, "")
+      .replace(/[^\p{L}\p{N}]/gu, "");
+    if (!cleaned || cleaned.length < limits.hashtag_min_token_chars) {
+      continue;
+    }
+    const tag = `#${cleaned}`;
+    if (!unique.includes(tag)) {
+      unique.push(tag);
+    }
+    if (unique.length >= limits.hashtag_max_count) {
+      break;
+    }
+  }
+
+  while (unique.length < limits.hashtag_min_count) {
+    unique.push(`#insight${unique.length + 1}`);
+  }
+
+  return unique.slice(0, limits.hashtag_max_count);
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
+function toSingleSentence(text: string): string {
+  const maxChars = PIPELINE_CONFIG.generation.limits.single_sentence_max_chars;
+  const normalized = text.replace(/\s+/g, " ").trim();
+  const match = normalized.match(/^(.+?[.!?])(?:\s|$)/);
+  if (match?.[1]) {
+    return ensureLength(match[1].trim(), maxChars, normalized);
+  }
+  return ensureLength(normalized, maxChars, normalized);
+}
+
+function ensureLength(value: string, max: number, fallback: string): string {
+  const source = value.trim() || fallback.trim() || PIPELINE_CONFIG.generation.fallbacks.untitled_text;
+  if (source.length <= max) {
+    return source;
+  }
+
+  const sentenceWindow = source.slice(0, max);
+  const sentenceBoundary = Math.max(
+    sentenceWindow.lastIndexOf("."),
+    sentenceWindow.lastIndexOf("!"),
+    sentenceWindow.lastIndexOf("?")
+  );
+  if (sentenceBoundary >= Math.floor(max * 0.55)) {
+    return source.slice(0, sentenceBoundary + 1).trimEnd();
+  }
+
+  const maxBody = Math.max(1, max - 1);
+  const sliced = source.slice(0, maxBody);
+  const wordBoundary = sliced.lastIndexOf(" ");
+  const cutoff = wordBoundary >= Math.floor(max * 0.55) ? sliced.slice(0, wordBoundary) : sliced;
+  return `${cutoff.trimEnd()}…`;
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return Math.min(max, Math.max(min, numeric));
+}
