@@ -1,6 +1,6 @@
 :root {
-  --token-font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif;
-  --token-font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --token-font-display: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --token-font-body: "Inter", "Helvetica Neue", Helvetica, Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   --token-space-2xs: 8px;
   --token-space-xs: 12px;
@@ -10,7 +10,7 @@
   --token-space-xl: 40px;
   --token-space-2xl: 46px;
 
-  --token-type-kicker: 24px;
+  --token-type-kicker: 22px;
   --token-type-heading: 64px;
   --token-type-body: 28px;
   --token-type-metric-value: 66px;
@@ -39,21 +39,25 @@ body {
   inset: 0;
 }
 
+/* ─────────────────────────────────────────
+   Frame (root canvas)
+   ───────────────────────────────────────── */
+
 .frame {
   position: relative;
   isolation: isolate;
   overflow: hidden;
 
   --frame-bg: var(--color-surface-base);
-  --frame-overlay-top: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 46%, transparent));
+  --frame-overlay-top: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 32%, transparent));
   --frame-overlay-bottom: linear-gradient(0deg, transparent, transparent);
-  --frame-vignette: radial-gradient(circle at 50% 72%, transparent 36%, color-mix(in srgb, var(--color-overlay-strong) 42%, transparent) 100%);
-  --frame-brand-pill-bg: color-mix(in srgb, var(--color-surface-elevated) 52%, transparent);
-  --frame-brand-pill-border: color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+  --frame-vignette: none;
+  --frame-brand-pill-bg: transparent;
+  --frame-brand-pill-border: var(--color-border-subtle);
   --frame-brand-pill-text: var(--color-text-primary);
-  --frame-title-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
-  --frame-caption-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
-  --frame-grain-opacity: 0.05;
+  --frame-title-shadow: none;
+  --frame-caption-shadow: none;
+  --frame-grain-opacity: 0;
   --frame-image-opacity: 0.5;
   --frame-type-scale: 1;
   --frame-space-scale: 1;
@@ -77,58 +81,65 @@ body {
   border: 1px solid transparent;
 }
 
+/* ─────────────────────────────────────────
+   Top Band (structural rule line)
+   ───────────────────────────────────────── */
+
 .top-band {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: calc(46px * var(--layout-scale));
+  height: calc(4px * var(--layout-scale));
 }
 
 .top-band--data {
-  background: repeating-linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--color-brand-accent) 26%, transparent) 0 30px,
-    color-mix(in srgb, var(--color-surface-elevated) 68%, transparent) 30px 60px
-  );
+  background: var(--color-text-primary);
 }
 
 .top-band--metric {
-  background: repeating-linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0 30px,
-    transparent 30px 60px
-  );
+  background: var(--color-text-primary);
 }
+
+/* ─────────────────────────────────────────
+   Decorative Elements (minimal for Swiss)
+   ───────────────────────────────────────── */
 
 .decor-orb-left {
   position: absolute;
-  left: -6%;
-  top: 6%;
-  width: calc(320px * var(--layout-scale));
-  height: calc(320px * var(--layout-scale));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-brand-glow) 48%, transparent);
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  height: 100%;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--color-border-subtle) 30%, transparent);
 }
 
 .decor-blob-right {
   position: absolute;
-  right: 7%;
-  bottom: 9%;
-  width: calc(240px * var(--layout-scale));
-  height: calc(240px * var(--layout-scale));
-  border-radius: 30%;
-  background: color-mix(in srgb, var(--color-brand-accent) 36%, transparent);
+  right: calc(48px * var(--layout-scale));
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  height: 100%;
+  border-radius: 0;
+  background: color-mix(in srgb, var(--color-border-subtle) 30%, transparent);
 }
 
 .decor-wash-left {
   position: absolute;
   top: 0;
-  bottom: 0;
   left: 0;
-  width: 42%;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 42%, transparent), transparent);
+  right: 0;
+  height: calc(4px * var(--layout-scale));
+  width: 100%;
+  background: var(--color-text-primary);
 }
+
+/* ─────────────────────────────────────────
+   Quote mark
+   ───────────────────────────────────────── */
 
 .quote-mark {
   position: absolute;
@@ -137,21 +148,25 @@ body {
   font-family: var(--font-display);
   font-size: calc(148px * var(--layout-scale) * var(--frame-type-scale));
   line-height: 0.8;
-  opacity: 0.22;
-  color: var(--color-brand-accent);
+  opacity: 0.12;
+  color: var(--color-text-primary);
 }
+
+/* ─────────────────────────────────────────
+   Content Shell
+   ───────────────────────────────────────── */
 
 .content-shell {
   --template-panel-padding: 34px;
   --template-heading-size: var(--token-type-heading);
   --template-heading-secondary-size: var(--template-heading-size);
   --template-heading-quote-size: var(--template-heading-size);
-  --template-heading-line-height: 1.03;
+  --template-heading-line-height: 1.06;
   --template-heading-letter-spacing: -0.02em;
   --template-body-size: var(--token-type-body);
   --template-body-secondary-size: var(--template-body-size);
   --template-body-quote-size: var(--template-body-size);
-  --template-body-line-height: 1.32;
+  --template-body-line-height: 1.38;
   --template-body-color: var(--color-text-secondary);
   --template-flow-kicker: var(--token-space-2xs);
   --template-flow-heading: var(--token-space-xs);
@@ -178,30 +193,90 @@ body {
   padding-top: calc((var(--content-inset) + 14px) * var(--layout-scale) * var(--frame-space-scale));
 }
 
+/* ─────────────────────────────────────────
+   Template Variants
+   ───────────────────────────────────────── */
+
 .template-quote {
   --template-panel-padding: 34px;
-  --template-heading-quote-size: 60px;
+  --template-heading-quote-size: 56px;
   --template-body-quote-size: 24px;
   --template-body-secondary-size: 24px;
 }
 
 .template-checklist {
   --template-panel-padding: 32px;
-  --template-heading-secondary-size: 58px;
+  --template-heading-secondary-size: 54px;
   --template-flow-section: var(--token-space-sm);
 }
 
 .template-metric {
   --template-panel-padding: 30px;
-  --template-heading-secondary-size: 58px;
+  --template-heading-secondary-size: 54px;
   --template-body-secondary-size: 26px;
 }
 
 .template-promo {
   --template-panel-padding: 34px;
-  --template-heading-size: 62px;
+  --template-heading-size: 60px;
   --template-body-secondary-size: 26px;
 }
+
+.template-article {
+  --template-panel-padding: 36px;
+  --template-heading-size: 58px;
+  --template-body-size: 26px;
+  --template-body-line-height: 1.42;
+}
+
+.template-series {
+  --template-panel-padding: 36px;
+  --template-heading-size: 52px;
+  --template-body-size: 26px;
+  --template-body-line-height: 1.42;
+}
+
+.template-dark {
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #cccccc;
+  --color-text-muted: #999999;
+  --color-surface-base: #000000;
+  --color-surface-elevated: #1a1a1a;
+  --color-border-subtle: #333333;
+}
+
+.rule-line--inverted {
+  background: #ffffff;
+}
+
+.cta-pill--inverted {
+  background: #ffffff;
+  color: #000000;
+}
+
+.series-index {
+  font-family: var(--font-body);
+  font-size: calc(140px * var(--layout-scale) * var(--frame-type-scale));
+  font-weight: 700;
+  line-height: 1;
+  color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);
+  position: absolute;
+  right: 0;
+  top: -20px;
+  z-index: -1;
+}
+
+.metric-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: calc(var(--token-space-md) * var(--layout-scale));
+}
+
+
+/* ─────────────────────────────────────────
+   Alignment
+   ───────────────────────────────────────── */
 
 .align-left {
   align-items: flex-start;
@@ -212,6 +287,15 @@ body {
   align-items: center;
   text-align: center;
 }
+
+.align-justify {
+  align-items: flex-start;
+  text-align: justify;
+}
+
+/* ─────────────────────────────────────────
+   Content Panel & Limits
+   ───────────────────────────────────────── */
 
 .content-panel {
   padding: calc(var(--template-panel-padding) * var(--layout-scale) * var(--frame-space-scale));
@@ -237,24 +321,35 @@ body {
   max-width: calc(var(--caption-max-width) - (220px * var(--layout-scale)));
 }
 
+/* ─────────────────────────────────────────
+   Kicker
+   ───────────────────────────────────────── */
+
 .kicker {
   margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));
+  font-family: var(--font-body);
   font-size: calc(var(--token-type-kicker) * var(--layout-scale) * var(--frame-type-scale));
-  font-weight: 600;
+  font-weight: 500;
   line-height: 1.1;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--color-text-muted);
   max-width: var(--content-max-width);
 }
 
+/* ─────────────────────────────────────────
+   Headings (serif display)
+   ───────────────────────────────────────── */
+
 .heading-primary,
 .heading-secondary,
 .heading-quote {
   font-family: var(--font-display);
+  font-weight: 700;
   line-height: var(--template-heading-line-height);
   letter-spacing: var(--template-heading-letter-spacing);
   text-shadow: var(--token-shadow-title);
+  color: var(--color-text-primary);
 }
 
 .heading-primary {
@@ -267,11 +362,17 @@ body {
 
 .heading-quote {
   font-size: calc(var(--template-heading-quote-size) * var(--layout-scale) * var(--frame-type-scale));
+  font-style: italic;
 }
+
+/* ─────────────────────────────────────────
+   Body Text
+   ───────────────────────────────────────── */
 
 .body-primary,
 .body-secondary,
 .body-quote-attribution {
+  font-family: var(--font-body);
   line-height: var(--template-body-line-height);
   color: var(--template-body-color);
   text-shadow: var(--token-shadow-caption);
@@ -279,6 +380,7 @@ body {
 
 .body-primary {
   font-size: calc(var(--template-body-size) * var(--layout-scale) * var(--frame-type-scale));
+  font-style: italic;
 }
 
 .body-secondary {
@@ -287,7 +389,12 @@ body {
 
 .body-quote-attribution {
   font-size: calc(var(--template-body-quote-size) * var(--layout-scale) * var(--frame-type-scale));
+  font-weight: 600;
 }
+
+/* ─────────────────────────────────────────
+   Flow (vertical rhythm)
+   ───────────────────────────────────────── */
 
 .flow-after-kicker {
   margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));
@@ -305,6 +412,10 @@ body {
   margin-top: calc(var(--template-flow-section) * var(--layout-scale) * var(--frame-space-scale));
 }
 
+/* ─────────────────────────────────────────
+   Top Bar (brand badge row)
+   ───────────────────────────────────────── */
+
 .top-bar {
   display: flex;
   width: 100%;
@@ -321,18 +432,22 @@ body {
   display: inline-flex;
   width: fit-content;
   align-items: center;
-  border-radius: var(--token-radius-pill);
+  border-radius: 0;
   border: 1px solid var(--frame-brand-pill-border);
   background: var(--frame-brand-pill-bg);
   color: var(--frame-brand-pill-text);
-  padding: calc(8px * var(--layout-scale) * var(--frame-space-scale))
-    calc(16px * var(--layout-scale) * var(--frame-space-scale));
-  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  padding: calc(8px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale));
+  font-family: var(--font-body);
+  font-size: calc(14px * var(--layout-scale) * var(--frame-type-scale));
+  font-weight: 500;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   line-height: 1.1;
 }
+
+/* ─────────────────────────────────────────
+   Meta Footer
+   ───────────────────────────────────────── */
 
 .meta-footer {
   margin-top: auto;
@@ -341,12 +456,78 @@ body {
   align-items: center;
   justify-content: space-between;
   color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));
+  font-weight: 500;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+/* ─────────────────────────────────────────
+   Author Attribution Block
+   ───────────────────────────────────────── */
+
+.author-block {
+  margin-top: calc(var(--token-space-sm) * var(--layout-scale) * var(--frame-space-scale));
+}
+
+.author-byline {
+  font-family: var(--font-body);
   font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--color-text-primary);
   line-height: 1.2;
 }
+
+.author-date {
+  font-family: var(--font-body);
+  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));
+  font-weight: 400;
+  font-style: italic;
+  color: var(--color-text-muted);
+  line-height: 1.3;
+  margin-top: calc(2px * var(--layout-scale));
+}
+
+/* ─────────────────────────────────────────
+   Series Number Badge
+   ───────────────────────────────────────── */
+
+.series-number {
+  font-family: var(--font-body);
+  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  padding-bottom: calc(var(--token-space-xs) * var(--layout-scale));
+  border-bottom: 2px solid var(--color-text-primary);
+  display: inline-block;
+  margin-bottom: calc(var(--token-space-md) * var(--layout-scale));
+}
+
+/* ─────────────────────────────────────────
+   Horizontal Rule
+   ───────────────────────────────────────── */
+
+.rule-line {
+  width: 100%;
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: calc(var(--token-space-sm) * var(--layout-scale) * var(--frame-space-scale)) 0;
+}
+
+.rule-line--thick {
+  height: 2px;
+  background: var(--color-text-primary);
+}
+
+/* ─────────────────────────────────────────
+   Checklist
+   ───────────────────────────────────────── */
 
 .checklist-list {
   display: flex;
@@ -355,15 +536,19 @@ body {
 }
 
 .check-item {
-  border-radius: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 76%, transparent);
-  background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);
-  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale))
-    calc(14px * var(--layout-scale) * var(--frame-space-scale));
+  border-radius: 0;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-elevated);
+  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale));
+  font-family: var(--font-body);
   font-size: calc(var(--template-check-item-size) * var(--layout-scale) * var(--frame-type-scale));
   line-height: 1.25;
   color: var(--color-text-primary);
 }
+
+/* ─────────────────────────────────────────
+   Metric
+   ───────────────────────────────────────── */
 
 .metric-layout {
   display: flex;
@@ -374,11 +559,10 @@ body {
 
 .metric-card {
   min-width: calc(220px * var(--layout-scale));
-  border-radius: 1rem;
-  border: 1px solid color-mix(in srgb, var(--color-brand-accent) 80%, transparent);
-  background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);
-  padding: calc(14px * var(--layout-scale) * var(--frame-space-scale))
-    calc(16px * var(--layout-scale) * var(--frame-space-scale));
+  border-radius: 0;
+  border: 2px solid var(--color-text-primary);
+  background: var(--color-surface-elevated);
+  padding: calc(14px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale));
 }
 
 .metric-value {
@@ -389,24 +573,54 @@ body {
 }
 
 .metric-label {
+  font-family: var(--font-body);
   font-size: calc(var(--template-metric-label-size) * var(--layout-scale) * var(--frame-type-scale));
   line-height: 1.2;
   color: var(--color-text-secondary);
 }
 
+/* ─────────────────────────────────────────
+   CTA Pill
+   ───────────────────────────────────────── */
+
 .cta-pill {
   display: inline-flex;
   width: fit-content;
   align-items: center;
-  border-radius: var(--token-radius-pill);
-  background: var(--color-brand-accent);
-  color: var(--color-brand-accent-foreground);
-  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale))
-    calc(24px * var(--layout-scale) * var(--frame-space-scale));
-  font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale));
-  font-weight: 700;
+  border-radius: 0;
+  background: var(--color-text-primary);
+  color: var(--color-surface-base);
+  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(24px * var(--layout-scale) * var(--frame-space-scale));
+  font-family: var(--font-body);
+  font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale));
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   line-height: 1.1;
 }
+
+/* ─────────────────────────────────────────
+   Article Card Image Area
+   ───────────────────────────────────────── */
+
+.article-image-area {
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 40%;
+  overflow: hidden;
+}
+
+.article-image-area .frame-layer--image {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+}
+
+/* ─────────────────────────────────────────
+   Utilities
+   ───────────────────────────────────────── */
 
 .text-balance {
   text-wrap: balance;

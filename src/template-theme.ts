@@ -19,7 +19,7 @@ export interface TemplateControl {
   showMetaFooter?: boolean;
   showTitleKicker?: boolean;
   showDecorLayers?: boolean;
-  textAlign?: "left" | "center";
+  textAlign?: "left" | "center" | "justify";
   imageOpacity?: number;
   contentMaxWidth?: number;
   contentInset?: number;
@@ -58,7 +58,7 @@ interface ResolvedTemplateControl {
   showMetaFooter: boolean;
   showTitleKicker: boolean;
   showDecorLayers: boolean;
-  textAlign: "left" | "center";
+  textAlign: "left" | "center" | "justify";
   imageOpacity?: number;
   contentMaxWidth: number;
   contentInset: number;
@@ -111,39 +111,39 @@ interface BrandConfig {
 interface LayoutControlDefaults {
   contentMaxWidth: number;
   contentInset: number;
-  textAlign: "left" | "center";
+  textAlign: "left" | "center" | "justify";
 }
 
 const DEFAULT_BRAND: BrandConfig = {
   default_name: "Brand",
-  default_color: "#1f7a8c"
+  default_color: "#000000"
 };
 
 const FALLBACK_THEME: ThemingConfig = {
-  readable_light_text: "#edf4ff",
-  readable_dark_text: "#07101d",
+  readable_light_text: "#ffffff",
+  readable_dark_text: "#000000",
   color_engine: {
-    surface_base_mix_target: "#05080f",
-    surface_base_mix_ratio_from_target: 0.84,
-    surface_base_fallback: "#0a111b",
-    surface_elevated_mix_target: "#0e1a2a",
-    surface_elevated_mix_ratio_from_target: 0.68,
-    surface_elevated_fallback: "#101d2f",
-    border_subtle_mix_target: "#9ec7ff",
-    border_subtle_mix_ratio_from_target: 0.42,
-    border_subtle_fallback: "#5a7da9",
-    secondary_text_mix_target: "#8ea3c0",
-    secondary_text_mix_ratio_from_target: 0.45,
-    secondary_text_fallback: "#c8d8ee",
-    muted_text_mix_target: "#607797",
-    muted_text_mix_ratio_from_target: 0.5,
-    muted_text_fallback: "#9bb1cc",
-    accent_glow_mix_target: "#ffffff",
-    accent_glow_mix_ratio_from_target: 0.34,
-    overlay_strong_mix_target: "#01040a",
-    overlay_strong_mix_ratio_from_target: 0.6,
+    surface_base_mix_target: "#ffffff",
+    surface_base_mix_ratio_from_target: 1.0,
+    surface_base_fallback: "#ffffff",
+    surface_elevated_mix_target: "#f5f5f5",
+    surface_elevated_mix_ratio_from_target: 1.0,
+    surface_elevated_fallback: "#f5f5f5",
+    border_subtle_mix_target: "#000000",
+    border_subtle_mix_ratio_from_target: 1.0,
+    border_subtle_fallback: "#000000",
+    secondary_text_mix_target: "#333333",
+    secondary_text_mix_ratio_from_target: 1.0,
+    secondary_text_fallback: "#333333",
+    muted_text_mix_target: "#888888",
+    muted_text_mix_ratio_from_target: 1.0,
+    muted_text_fallback: "#888888",
+    accent_glow_mix_target: "#000000",
+    accent_glow_mix_ratio_from_target: 1.0,
+    overlay_strong_mix_target: "#000000",
+    overlay_strong_mix_ratio_from_target: 0.4,
     shadow_color_mix_target: "#000000",
-    shadow_color_mix_ratio_from_target: 0.72,
+    shadow_color_mix_ratio_from_target: 0.5,
     primary_text_min_contrast: 4.5,
     secondary_text_min_contrast: 3.8,
     muted_text_min_contrast: 3,
@@ -151,8 +151,8 @@ const FALLBACK_THEME: ThemingConfig = {
     accent_foreground_min_contrast: 4
   },
   radius: {
-    card: "28px",
-    pill: "999px"
+    card: "0px",
+    pill: "0px"
   }
 };
 
@@ -161,35 +161,40 @@ const CONTROL_DEFAULTS = {
   showSlideBadge: false,
   showMetaFooter: false,
   showTitleKicker: true,
-  showDecorLayers: true,
-  textAlign: "left" as const
+  showDecorLayers: false,
+  textAlign: "justify" as const
 };
 
 const FORMAT_LAYOUT_DEFAULTS: Partial<Record<TemplateFormatKey, LayoutControlDefaults>> = {
-  "instagram-post": {
+  "instagram-portrait": {
     contentMaxWidth: 1020,
     contentInset: 68,
-    textAlign: "left"
+    textAlign: "justify"
+  },
+  "instagram-square": {
+    contentMaxWidth: 1020,
+    contentInset: 68,
+    textAlign: "justify"
   },
   "instagram-story": {
     contentMaxWidth: 930,
     contentInset: 82,
-    textAlign: "left"
+    textAlign: "justify"
   },
-  "carousel-slide": {
+  "carousel-post": {
     contentMaxWidth: 1020,
     contentInset: 68,
-    textAlign: "left"
+    textAlign: "justify"
   },
   "twitter-card": {
     contentMaxWidth: 1020,
     contentInset: 48,
-    textAlign: "left"
+    textAlign: "justify"
   },
   "linkedin-post": {
     contentMaxWidth: 1020,
     contentInset: 48,
-    textAlign: "left"
+    textAlign: "justify"
   }
 };
 
@@ -213,7 +218,7 @@ function layoutDefaultsForFormat(kind: TemplateFormatKey): LayoutControlDefaults
     FORMAT_LAYOUT_DEFAULTS[kind] ?? {
       contentMaxWidth: 1020,
       contentInset: 64,
-      textAlign: "left"
+      textAlign: "justify"
     }
   );
 }
@@ -235,17 +240,17 @@ export function createBrandTheme(args: {
   const accent = normalizeHexColor(args.overrides?.accent ?? args.brandColor, brandConfig().default_color);
   const surfaceBase = normalizeHexColor(
     args.overrides?.surfaceBase ??
-      mixHex(accent, engine.surface_base_mix_target, engine.surface_base_mix_ratio_from_target),
+    mixHex(accent, engine.surface_base_mix_target, engine.surface_base_mix_ratio_from_target),
     engine.surface_base_fallback
   );
   const surfaceElevated = normalizeHexColor(
     args.overrides?.surfaceElevated ??
-      mixHex(accent, engine.surface_elevated_mix_target, engine.surface_elevated_mix_ratio_from_target),
+    mixHex(accent, engine.surface_elevated_mix_target, engine.surface_elevated_mix_ratio_from_target),
     engine.surface_elevated_fallback
   );
   const borderSubtle = normalizeHexColor(
     args.overrides?.borderSubtle ??
-      mixHex(accent, engine.border_subtle_mix_target, engine.border_subtle_mix_ratio_from_target),
+    mixHex(accent, engine.border_subtle_mix_target, engine.border_subtle_mix_ratio_from_target),
     engine.border_subtle_fallback
   );
 
@@ -255,7 +260,7 @@ export function createBrandTheme(args: {
   );
   const secondaryText = normalizeHexColor(
     args.overrides?.secondaryText ??
-      mixHex(primaryText, engine.secondary_text_mix_target, engine.secondary_text_mix_ratio_from_target),
+    mixHex(primaryText, engine.secondary_text_mix_target, engine.secondary_text_mix_ratio_from_target),
     engine.secondary_text_fallback
   );
   const mutedText = normalizeHexColor(
@@ -264,7 +269,7 @@ export function createBrandTheme(args: {
   );
   const accentForeground = normalizeHexColor(
     args.overrides?.accentForeground ??
-      pickReadableText(accent, lightText, darkText, engine.accent_foreground_min_contrast),
+    pickReadableText(accent, lightText, darkText, engine.accent_foreground_min_contrast),
     lightText
   );
 
@@ -439,13 +444,13 @@ function mergeControl(base: ResolvedTemplateControl, override?: TemplateControl)
   };
 }
 
-function parseTextAlign(value: string | null | undefined): "left" | "center" | undefined {
+function parseTextAlign(value: string | null | undefined): "left" | "center" | "justify" | undefined {
   if (!value) {
     return undefined;
   }
 
   const normalized = value.trim().toLowerCase();
-  if (normalized === "left" || normalized === "center") {
+  if (normalized === "left" || normalized === "center" || normalized === "justify") {
     return normalized;
   }
   return undefined;

@@ -306,5 +306,49 @@ async function loadSystemTemplateFiles(directoryPath) {
     throw new Error("Missing required system template: templates/system/frame-shell.html");
   }
 
+  assertSystemTemplateTokenSet(loaded["@system/head-shell"], "@system/head-shell", [
+    "SAFE_TITLE",
+    "TEMPLATE_CSS",
+    "CANVAS_WIDTH",
+    "CANVAS_HEIGHT",
+    "TOKEN_PRIMARY_TEXT",
+    "TOKEN_SECONDARY_TEXT",
+    "TOKEN_MUTED_TEXT",
+    "TOKEN_SURFACE_BASE",
+    "TOKEN_SURFACE_ELEVATED",
+    "TOKEN_BORDER_SUBTLE",
+    "TOKEN_ACCENT",
+    "TOKEN_ACCENT_FOREGROUND",
+    "TOKEN_ACCENT_GLOW",
+    "TOKEN_OVERLAY_STRONG",
+    "TOKEN_RADIUS_CARD",
+    "TOKEN_RADIUS_PILL"
+  ]);
+
+  assertSystemTemplateTokenSet(loaded["@system/frame-shell"], "@system/frame-shell", [
+    "HEAD_HTML",
+    "TEMPLATE_ID",
+    "ROOT_STYLE",
+    "IMAGE_VISIBILITY_CLASS",
+    "IMAGE_LAYER_STYLE",
+    "OVERLAY_OPACITY",
+    "OVERLAY_BACKGROUND",
+    "ACCENT_SWEEP_OPACITY",
+    "GRAIN_DOT_COLOR",
+    "GRAIN_DOT_SIZE",
+    "GRAIN_BG_SIZE",
+    "BORDER_ALPHA_PERCENT",
+    "CONTENT"
+  ]);
+
   return loaded;
+}
+
+function assertSystemTemplateTokenSet(template, templateId, requiredTokens) {
+  for (const token of requiredTokens) {
+    const marker = `{{${token}}}`;
+    if (!template.includes(marker)) {
+      throw new Error(`${templateId} is missing required token placeholder ${marker}`);
+    }
+  }
 }

@@ -2,10 +2,53 @@
   "pipeline_config": {
     "brand": {
       "default_name": "Tasbir Blog",
-      "default_color": "#1f7a8c"
+      "default_color": "#000000"
+    },
+    "theming": {
+      "readable_light_text": "#ffffff",
+      "readable_dark_text": "#000000",
+      "color_engine": {
+        "surface_base_mix_target": "#ffffff",
+        "surface_base_mix_ratio_from_target": 1,
+        "surface_base_fallback": "#ffffff",
+        "surface_elevated_mix_target": "#f5f5f5",
+        "surface_elevated_mix_ratio_from_target": 1,
+        "surface_elevated_fallback": "#f5f5f5",
+        "border_subtle_mix_target": "#000000",
+        "border_subtle_mix_ratio_from_target": 1,
+        "border_subtle_fallback": "#000000",
+        "secondary_text_mix_target": "#333333",
+        "secondary_text_mix_ratio_from_target": 1,
+        "secondary_text_fallback": "#333333",
+        "muted_text_mix_target": "#888888",
+        "muted_text_mix_ratio_from_target": 1,
+        "muted_text_fallback": "#888888",
+        "accent_glow_mix_target": "#000000",
+        "accent_glow_mix_ratio_from_target": 1,
+        "overlay_strong_mix_target": "#000000",
+        "overlay_strong_mix_ratio_from_target": 0.4,
+        "shadow_color_mix_target": "#000000",
+        "shadow_color_mix_ratio_from_target": 0.5,
+        "primary_text_min_contrast": 4.5,
+        "secondary_text_min_contrast": 3.8,
+        "muted_text_min_contrast": 3,
+        "border_subtle_min_contrast": 1.5,
+        "accent_foreground_min_contrast": 4
+      },
+      "radius": {
+        "card": "0px",
+        "pill": "0px"
+      }
     },
     "formats": {
-      "instagram-post": {
+      "instagram-portrait": {
+        "width": 1080,
+        "height": 1350,
+        "caption_source": "instagram_caption",
+        "hashtag_count": 3,
+        "default_template_id": "core/editorial-base"
+      },
+      "instagram-square": {
         "width": 1080,
         "height": 1080,
         "caption_source": "instagram_caption",
@@ -19,12 +62,12 @@
         "hashtag_count": 2,
         "default_template_id": "core/editorial-base"
       },
-      "carousel-slide": {
+      "carousel-post": {
         "width": 1080,
-        "height": 1080,
+        "height": 1350,
         "caption_source": "carousel_slides",
         "hashtag_count": 0,
-        "default_template_id": "core/editorial-base"
+        "default_template_id": "core/carousel-cover"
       },
       "twitter-card": {
         "width": 1200,
@@ -42,114 +85,122 @@
       }
     },
     "preview_defaults": {
-      "title": "Sample Blog Post Title",
-      "caption": "Sample caption for a social media image preview.",
-      "heading": "Key idea goes here",
-      "body": "One concise sentence that explains the idea for this slide.",
+      "title": "Swiss Design Trends 2026",
+      "caption": "Exploring the resurgence of monochromatic minimalism in digital media.",
+      "heading": "Minimalism is the new maximalism",
+      "body": "In an age of information overload, clarity becomes our most valuable asset.",
       "slide_number": 1,
       "total_slides": 5
     },
     "templates": [
       {
         "id": "core/editorial-base",
-        "label": "Core Editorial Base",
-        "description": "Clean balanced headline and body layout for general posts.",
+        "label": "Editorial Base",
+        "description": "Clean Swiss editorial layout with bold serif headline and justified body text.",
         "file": "templates/editorial-base.html",
         "formats": [
-          "instagram-post",
+          "instagram-portrait",
+          "instagram-square",
           "instagram-story",
-          "carousel-slide",
-          "twitter-card",
-          "linkedin-post"
-        ]
-      },
-      {
-        "id": "core/illustration-base",
-        "label": "Core Illustration Base",
-        "description": "Decorative abstract layout with playful framing.",
-        "file": "templates/illustration-base.html",
-        "formats": [
-          "instagram-post",
-          "instagram-story",
-          "carousel-slide",
+          "carousel-post",
           "twitter-card",
           "linkedin-post"
         ]
       },
       {
         "id": "core/bold-base",
-        "label": "Core Bold Base",
-        "description": "High-contrast hero layout for strong messaging.",
+        "label": "Bold Base (Light)",
+        "description": "High-contrast statement layout with CTA.",
         "file": "templates/bold-base.html",
         "formats": [
-          "instagram-post",
+          "instagram-portrait",
+          "instagram-square",
           "instagram-story",
-          "carousel-slide",
+          "carousel-post",
           "twitter-card",
           "linkedin-post"
         ]
       },
       {
-        "id": "core/data-base",
-        "label": "Core Data Base",
-        "description": "Data-focused layout with top band and analytic tone.",
-        "file": "templates/data-base.html",
+        "id": "core/statement-dark",
+        "label": "Statement (Dark)",
+        "description": "Inverted monochromatic layout for strong visual contrast.",
+        "file": "templates/statement-dark.html",
         "formats": [
-          "instagram-post",
+          "instagram-portrait",
+          "instagram-square",
           "instagram-story",
-          "carousel-slide",
+          "carousel-post",
           "twitter-card",
           "linkedin-post"
         ]
       },
       {
-        "id": "core/quote-focus",
-        "label": "Core Quote Focus",
-        "description": "Pull-quote centric composition with attribution.",
-        "file": "templates/quote-focus.html",
+        "id": "core/quote-card",
+        "label": "Quote Card",
+        "description": "Elegant pull-quote layout with attribution.",
+        "file": "templates/quote-card.html",
         "formats": [
-          "instagram-post",
+          "instagram-portrait",
+          "instagram-square",
           "instagram-story",
-          "carousel-slide",
+          "carousel-post",
           "twitter-card",
           "linkedin-post"
         ]
       },
       {
-        "id": "core/checklist-stack",
-        "label": "Core Checklist Stack",
-        "description": "Step-by-step checklist stack for actionable posts.",
-        "file": "templates/checklist-stack.html",
+        "id": "core/carousel-cover",
+        "label": "Carousel Cover",
+        "description": "Impactful opening slide for carousel series.",
+        "file": "templates/carousel-cover.html",
         "formats": [
-          "instagram-post",
+          "instagram-portrait",
+          "instagram-square",
           "instagram-story",
-          "carousel-slide",
+          "carousel-post",
           "twitter-card",
           "linkedin-post"
         ]
       },
       {
-        "id": "core/metric-split",
-        "label": "Core Metric Split",
-        "description": "Two-column metric + insight composition.",
-        "file": "templates/metric-split.html",
+        "id": "core/carousel-content",
+        "label": "Carousel Content",
+        "description": "Supporting content slide for carousels with slide index.",
+        "file": "templates/carousel-content.html",
         "formats": [
-          "instagram-post",
+          "instagram-portrait",
+          "instagram-square",
           "instagram-story",
-          "carousel-slide",
+          "carousel-post",
           "twitter-card",
           "linkedin-post"
         ]
       },
       {
-        "id": "core/promo-pill",
-        "label": "Core Promo Pill",
-        "description": "Promotional layout with CTA emphasis.",
-        "file": "templates/promo-pill.html",
+        "id": "core/metric-card",
+        "label": "Metric Card",
+        "description": "Data-driven slide focusing on one key number.",
+        "file": "templates/metric-card.html",
         "formats": [
-          "instagram-post",
+          "instagram-portrait",
+          "instagram-square",
           "instagram-story",
-          "carousel-slide",
+          "carousel-post",
+          "twitter-card",
+          "linkedin-post"
+        ]
+      },
+      {
+        "id": "core/cta-card",
+        "label": "CTA Card",
+        "description": "Closing statement designed intended to drive action.",
+        "file": "templates/cta-card.html",
+        "formats": [
+          "instagram-portrait",
+          "instagram-square",
+          "instagram-story",
+          "carousel-post",
           "twitter-card",
           "linkedin-post"
         ]
@@ -326,19 +377,19 @@
     "schema_version": 1
   },
   "template_files": {
-    "core/editorial-base": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-    "core/illustration-base": "<div class=\"decor-orb-left\"></div>\n<div class=\"decor-blob-right\"></div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-    "core/bold-base": "<div class=\"decor-wash-left\"></div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-    "core/data-base": "<div class=\"top-band top-band--data\"></div>\n<div class=\"content-shell content-shell--data-topband {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-    "core/quote-focus": "<div class=\"quote-mark\">“</div>\n<div class=\"content-shell template-quote {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-quote flow-after-kicker content-limit text-balance word-safe\">{{SLOT:quote_text}}</h1>\n    <p class=\"body-quote-attribution flow-after-heading caption-limit word-safe\">- {{SLOT:quote_author}}</p>\n    <p class=\"body-secondary flow-after-subheading caption-limit word-safe\">{{SLOT:insight_line}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-    "core/checklist-stack": "<div class=\"content-shell template-checklist {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-secondary flow-after-heading content-limit text-balance word-safe\">{{SLOT:headline}}</h1>\n    <div class=\"checklist-list flow-after-section caption-limit\">\n      <div class=\"check-item\">1. {{SLOT:step_1}}</div>\n      <div class=\"check-item\">2. {{SLOT:step_2}}</div>\n      <div class=\"check-item\">3. {{SLOT:step_3}}</div>\n      <div class=\"check-item\">4. {{SLOT:step_4}}</div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-    "core/metric-split": "<div class=\"top-band top-band--metric\"></div>\n<div class=\"content-shell content-shell--metric-topband template-metric {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    <div class=\"metric-layout\">\n      <div class=\"metric-content\">\n        {{KICKER}}\n        <h1 class=\"heading-secondary flow-after-kicker text-balance word-safe\">{{SLOT:headline}}</h1>\n        <p class=\"body-secondary flow-after-heading caption-limit-metric word-safe\">{{SLOT:insight_line}}</p>\n      </div>\n      <div class=\"metric-card\">\n        <p class=\"tabular-nums metric-value\">{{SLOT:metric_value}}</p>\n        <p class=\"metric-label flow-after-kicker word-safe\">{{SLOT:metric_label}}</p>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-    "core/promo-pill": "<div class=\"content-shell template-promo {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-heading content-limit text-balance word-safe\">{{SLOT:headline}}</h1>\n    <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{SLOT:supporting_line}}</p>\n    <div class=\"cta-pill flow-after-section\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "core/editorial-base": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <div class=\"rule-line flow-after-heading\"></div>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>",
+    "core/bold-base": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <div class=\"rule-line flow-after-heading\"></div>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    <div class=\"cta-pill flow-after-section\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>",
+    "core/statement-dark": "<div class=\"content-shell template-dark {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel push-end\">\n        {{KICKER}}\n        <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line rule-line--inverted flow-after-heading\"></div>\n        <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        <div class=\"cta-pill cta-pill--inverted flow-after-section\">{{SLOT:cta_text}}</div>\n        {{FOOTER}}\n    </div>\n</div>",
+    "core/quote-card": "<div class=\"quote-mark\">\"</div>\n<div class=\"content-shell template-quote {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel push-end\">\n        <h1 class=\"heading-quote flow-after-kicker content-limit text-balance word-safe\">{{SLOT:quote_text}}</h1>\n        <div class=\"rule-line flow-after-heading\" style=\"width: 60px;\"></div>\n        <div class=\"author-block\">\n            <p class=\"author-byline\">{{SLOT:quote_author}}</p>\n            <p class=\"author-date\">{{SLOT:author_role}}</p>\n        </div>\n        {{FOOTER}}\n    </div>\n</div>",
+    "core/carousel-cover": "<div class=\"content-shell template-carousel-cover {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel push-end\">\n        <div class=\"series-number\">{{SLOT:series_label}}</div>\n        <h1 class=\"heading-primary content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line rule-line--thick flow-after-heading\" style=\"width: 80px;\"></div>\n        <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        {{FOOTER}}\n    </div>\n</div>",
+    "core/carousel-content": "<div class=\"content-shell template-carousel-content {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel push-end\">\n        <div class=\"series-index\">{{SLOT:slide_index}}</div>\n        <h1 class=\"heading-secondary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line flow-after-heading\"></div>\n        <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        {{FOOTER}}\n    </div>\n</div>",
+    "core/metric-card": "<div class=\"content-shell template-metric {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel push-end\">\n        <div class=\"metric-container\">\n            <div class=\"metric-value tabular-nums\">{{SLOT:metric_value}}</div>\n            <div class=\"metric-label\">{{SLOT:metric_label}}</div>\n        </div>\n        <div class=\"rule-line flow-after-heading\"></div>\n        <h1 class=\"heading-secondary flow-after-heading content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        {{FOOTER}}\n    </div>\n</div>",
+    "core/cta-card": "<div class=\"content-shell template-cta {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel push-end\">\n        <h1 class=\"heading-primary content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line flow-after-heading\"></div>\n        <p class=\"body-primary flow-after-heading caption-limit word-safe\" style=\"font-size: 1.25em;\">{{BODY}}</p>\n        <div class=\"cta-pill flow-after-section\">{{SLOT:cta_text}}</div>\n        {{FOOTER}}\n    </div>\n</div>",
     "@system/frame-shell": "<!doctype html>\n<html>\n  {{HEAD_HTML}}\n  <body>\n    <div class=\"frame\" data-template-id=\"{{TEMPLATE_ID}}\" style=\"{{ROOT_STYLE}}\">\n      <div class=\"frame-layer\" style=\"background: var(--frame-bg);\"></div>\n      <div class=\"frame-layer frame-layer--image {{IMAGE_VISIBILITY_CLASS}}\" style=\"{{IMAGE_LAYER_STYLE}}\"></div>\n      <div class=\"frame-layer\" style=\"opacity: {{OVERLAY_OPACITY}}; background: {{OVERLAY_BACKGROUND}};\"></div>\n      <div class=\"frame-layer\" style=\"background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: {{ACCENT_SWEEP_OPACITY}};\"></div>\n      <div class=\"frame-layer\" style=\"opacity: var(--frame-grain-opacity); background-image: radial-gradient({{GRAIN_DOT_COLOR}} {{GRAIN_DOT_SIZE}}px, transparent {{GRAIN_DOT_SIZE}}px); background-size: {{GRAIN_BG_SIZE}}px {{GRAIN_BG_SIZE}}px;\"></div>\n      <div class=\"frame-layer frame-layer--border\" style=\"border-color: color-mix(in srgb, var(--color-border-subtle) {{BORDER_ALPHA_PERCENT}}%, transparent);\"></div>\n      {{CONTENT}}\n    </div>\n  </body>\n</html>\n",
-    "@system/head-shell": "<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>{{SAFE_TITLE}}</title>\n  <style>{{TEMPLATE_CSS}}</style>\n  <style>\n    :root {\n      --canvas-width: {{CANVAS_WIDTH}}px;\n      --canvas-height: {{CANVAS_HEIGHT}}px;\n\n      --font-display: var(--token-font-display, \"Iowan Old Style\", \"Palatino Linotype\", Palatino, \"Times New Roman\", serif);\n      --font-body: var(--token-font-body, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif);\n      --token-font-heading: var(--font-display);\n      --token-font-body: var(--font-body);\n\n      --color-text-primary: {{TOKEN_PRIMARY_TEXT}};\n      --color-text-secondary: {{TOKEN_SECONDARY_TEXT}};\n      --color-text-muted: {{TOKEN_MUTED_TEXT}};\n      --color-surface-base: {{TOKEN_SURFACE_BASE}};\n      --color-surface-elevated: {{TOKEN_SURFACE_ELEVATED}};\n      --color-border-subtle: {{TOKEN_BORDER_SUBTLE}};\n      --color-brand-accent: {{TOKEN_ACCENT}};\n      --color-brand-accent-foreground: {{TOKEN_ACCENT_FOREGROUND}};\n      --color-brand-glow: {{TOKEN_ACCENT_GLOW}};\n      --color-overlay-strong: {{TOKEN_OVERLAY_STRONG}};\n\n      --token-color-text-primary: {{TOKEN_PRIMARY_TEXT}};\n      --token-color-text-secondary: {{TOKEN_SECONDARY_TEXT}};\n      --token-color-text-muted: {{TOKEN_MUTED_TEXT}};\n      --token-color-surface-base: {{TOKEN_SURFACE_BASE}};\n      --token-color-surface-elevated: {{TOKEN_SURFACE_ELEVATED}};\n      --token-color-border-subtle: {{TOKEN_BORDER_SUBTLE}};\n      --token-color-brand-accent: {{TOKEN_ACCENT}};\n      --token-color-brand-accent-foreground: {{TOKEN_ACCENT_FOREGROUND}};\n\n      --shadow-soft: 0 32px 88px color-mix(in srgb, {{TOKEN_SHADOW_COLOR}} 72%, transparent);\n      --radius-card: {{TOKEN_RADIUS_CARD}};\n      --radius-pill: {{TOKEN_RADIUS_PILL}};\n      --token-radius-card: {{TOKEN_RADIUS_CARD}};\n      --token-radius-pill: {{TOKEN_RADIUS_PILL}};\n    }\n\n    * {\n      box-sizing: border-box;\n    }\n\n    html,\n    body {\n      margin: 0;\n      width: var(--canvas-width);\n      height: var(--canvas-height);\n      overflow: hidden;\n      font-family: var(--font-body);\n      background: var(--color-surface-base);\n      color: var(--color-text-primary);\n      text-rendering: optimizeLegibility;\n      -webkit-font-smoothing: antialiased;\n    }\n  </style>\n</head>\n",
+    "@system/head-shell": "<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>{{SAFE_TITLE}}</title>\n  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\" />\n  <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin />\n  <link\n    href=\"https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Inter:wght@300;400;500;600;700&display=swap\"\n    rel=\"stylesheet\" />\n  <style>{{TEMPLATE_CSS}}</style>\n  <style>\n    :root {\n      --canvas-width: {{CANVAS_WIDTH}}px;\n      --canvas-height: {{CANVAS_HEIGHT}}px;\n\n      --font-display: var(--token-font-display, \"Playfair Display\", Georgia, \"Times New Roman\", serif);\n      --font-body: var(--token-font-body, \"Inter\", \"Helvetica Neue\", Helvetica, Arial, sans-serif);\n      --token-font-heading: var(--font-display);\n      --token-font-body: var(--font-body);\n\n      --color-text-primary: {{TOKEN_PRIMARY_TEXT}};\n      --color-text-secondary: {{TOKEN_SECONDARY_TEXT}};\n      --color-text-muted: {{TOKEN_MUTED_TEXT}};\n      --color-surface-base: {{TOKEN_SURFACE_BASE}};\n      --color-surface-elevated: {{TOKEN_SURFACE_ELEVATED}};\n      --color-border-subtle: {{TOKEN_BORDER_SUBTLE}};\n      --color-brand-accent: {{TOKEN_ACCENT}};\n      --color-brand-accent-foreground: {{TOKEN_ACCENT_FOREGROUND}};\n      --color-brand-glow: {{TOKEN_ACCENT_GLOW}};\n      --color-overlay-strong: {{TOKEN_OVERLAY_STRONG}};\n\n      --token-color-text-primary: {{TOKEN_PRIMARY_TEXT}};\n      --token-color-text-secondary: {{TOKEN_SECONDARY_TEXT}};\n      --token-color-text-muted: {{TOKEN_MUTED_TEXT}};\n      --token-color-surface-base: {{TOKEN_SURFACE_BASE}};\n      --token-color-surface-elevated: {{TOKEN_SURFACE_ELEVATED}};\n      --token-color-border-subtle: {{TOKEN_BORDER_SUBTLE}};\n      --token-color-brand-accent: {{TOKEN_ACCENT}};\n      --token-color-brand-accent-foreground: {{TOKEN_ACCENT_FOREGROUND}};\n\n      --shadow-soft: none;\n      --radius-card: {{TOKEN_RADIUS_CARD}};\n      --radius-pill: {{TOKEN_RADIUS_PILL}};\n      --token-radius-card: {{TOKEN_RADIUS_CARD}};\n      --token-radius-pill: {{TOKEN_RADIUS_PILL}};\n    }\n\n    * {\n      box-sizing: border-box;\n    }\n\n    html,\n    body {\n      margin: 0;\n      width: var(--canvas-width);\n      height: var(--canvas-height);\n      overflow: hidden;\n      font-family: var(--font-body);\n      background: var(--color-surface-base);\n      color: var(--color-text-primary);\n      text-rendering: optimizeLegibility;\n      -webkit-font-smoothing: antialiased;\n    }\n  </style>\n</head>\n",
     "@system/kicker-shell": "<p class=\"kicker content-limit {{KICKER_VISIBILITY_CLASS}}\">{{KICKER_TEXT}}</p>\n",
     "@system/meta-footer-shell": "<div class=\"meta-footer {{META_FOOTER_VISIBILITY_CLASS}}\">\n  <span>{{META_LEFT_LABEL}}</span>\n  <span>{{META_RIGHT_LABEL}}</span>\n</div>\n",
     "@system/top-bar-shell": "<div class=\"top-bar {{TOP_BAR_VISIBILITY_CLASS}}\">\n  <span class=\"brand-pill {{LEFT_PILL_VISIBILITY_CLASS}}\">{{LEFT_LABEL}}</span>\n  <span class=\"top-bar-right\">\n    <span class=\"brand-pill {{RIGHT_PILL_VISIBILITY_CLASS}}\">{{RIGHT_LABEL}}</span>\n  </span>\n</div>\n"
   },
-  "template_css": ":root {\n  --token-font-display: \"Iowan Old Style\", \"Palatino Linotype\", Palatino, \"Times New Roman\", serif;\n  --token-font-body: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif;\n\n  --token-space-2xs: 8px;\n  --token-space-xs: 12px;\n  --token-space-sm: 16px;\n  --token-space-md: 24px;\n  --token-space-lg: 32px;\n  --token-space-xl: 40px;\n  --token-space-2xl: 46px;\n\n  --token-type-kicker: 24px;\n  --token-type-heading: 64px;\n  --token-type-body: 28px;\n  --token-type-metric-value: 66px;\n  --token-type-metric-label: 20px;\n\n  --token-radius-card: var(--radius-card);\n  --token-radius-pill: var(--radius-pill);\n  --token-shadow-title: var(--frame-title-shadow);\n  --token-shadow-caption: var(--frame-caption-shadow);\n}\n\n* {\n  box-sizing: border-box;\n}\n\nhtml,\nbody {\n  margin: 0;\n}\n\n.absolute {\n  position: absolute;\n}\n\n.inset-0 {\n  inset: 0;\n}\n\n.frame {\n  position: relative;\n  isolation: isolate;\n  overflow: hidden;\n\n  --frame-bg: var(--color-surface-base);\n  --frame-overlay-top: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 46%, transparent));\n  --frame-overlay-bottom: linear-gradient(0deg, transparent, transparent);\n  --frame-vignette: radial-gradient(circle at 50% 72%, transparent 36%, color-mix(in srgb, var(--color-overlay-strong) 42%, transparent) 100%);\n  --frame-brand-pill-bg: color-mix(in srgb, var(--color-surface-elevated) 52%, transparent);\n  --frame-brand-pill-border: color-mix(in srgb, var(--color-border-subtle) 72%, transparent);\n  --frame-brand-pill-text: var(--color-text-primary);\n  --frame-title-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);\n  --frame-caption-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);\n  --frame-grain-opacity: 0.05;\n  --frame-image-opacity: 0.5;\n  --frame-type-scale: 1;\n  --frame-space-scale: 1;\n}\n\n.frame-layer {\n  position: absolute;\n  inset: 0;\n}\n\n.frame-layer--image {\n  background-size: cover;\n  background-position: center;\n}\n\n.is-hidden {\n  display: none !important;\n}\n\n.frame-layer--border {\n  border: 1px solid transparent;\n}\n\n.top-band {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: calc(46px * var(--layout-scale));\n}\n\n.top-band--data {\n  background: repeating-linear-gradient(\n    90deg,\n    color-mix(in srgb, var(--color-brand-accent) 26%, transparent) 0 30px,\n    color-mix(in srgb, var(--color-surface-elevated) 68%, transparent) 30px 60px\n  );\n}\n\n.top-band--metric {\n  background: repeating-linear-gradient(\n    90deg,\n    color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0 30px,\n    transparent 30px 60px\n  );\n}\n\n.decor-orb-left {\n  position: absolute;\n  left: -6%;\n  top: 6%;\n  width: calc(320px * var(--layout-scale));\n  height: calc(320px * var(--layout-scale));\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--color-brand-glow) 48%, transparent);\n}\n\n.decor-blob-right {\n  position: absolute;\n  right: 7%;\n  bottom: 9%;\n  width: calc(240px * var(--layout-scale));\n  height: calc(240px * var(--layout-scale));\n  border-radius: 30%;\n  background: color-mix(in srgb, var(--color-brand-accent) 36%, transparent);\n}\n\n.decor-wash-left {\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 0;\n  width: 42%;\n  background: linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 42%, transparent), transparent);\n}\n\n.quote-mark {\n  position: absolute;\n  left: 8%;\n  top: 7%;\n  font-family: var(--font-display);\n  font-size: calc(148px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 0.8;\n  opacity: 0.22;\n  color: var(--color-brand-accent);\n}\n\n.content-shell {\n  --template-panel-padding: 34px;\n  --template-heading-size: var(--token-type-heading);\n  --template-heading-secondary-size: var(--template-heading-size);\n  --template-heading-quote-size: var(--template-heading-size);\n  --template-heading-line-height: 1.03;\n  --template-heading-letter-spacing: -0.02em;\n  --template-body-size: var(--token-type-body);\n  --template-body-secondary-size: var(--template-body-size);\n  --template-body-quote-size: var(--template-body-size);\n  --template-body-line-height: 1.32;\n  --template-body-color: var(--color-text-secondary);\n  --template-flow-kicker: var(--token-space-2xs);\n  --template-flow-heading: var(--token-space-xs);\n  --template-flow-subheading: var(--token-space-2xs);\n  --template-flow-section: var(--token-space-md);\n  --template-check-item-size: 22px;\n  --template-metric-value-size: var(--token-type-metric-value);\n  --template-metric-label-size: var(--token-type-metric-label);\n\n  position: relative;\n  z-index: 10;\n  display: flex;\n  width: 100%;\n  height: 100%;\n  flex-direction: column;\n  padding: calc(var(--content-inset) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--data-topband {\n  padding-top: calc((var(--content-inset) + 18px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--metric-topband {\n  padding-top: calc((var(--content-inset) + 14px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.template-quote {\n  --template-panel-padding: 34px;\n  --template-heading-quote-size: 60px;\n  --template-body-quote-size: 24px;\n  --template-body-secondary-size: 24px;\n}\n\n.template-checklist {\n  --template-panel-padding: 32px;\n  --template-heading-secondary-size: 58px;\n  --template-flow-section: var(--token-space-sm);\n}\n\n.template-metric {\n  --template-panel-padding: 30px;\n  --template-heading-secondary-size: 58px;\n  --template-body-secondary-size: 26px;\n}\n\n.template-promo {\n  --template-panel-padding: 34px;\n  --template-heading-size: 62px;\n  --template-body-secondary-size: 26px;\n}\n\n.align-left {\n  align-items: flex-start;\n  text-align: left;\n}\n\n.align-center {\n  align-items: center;\n  text-align: center;\n}\n\n.content-panel {\n  padding: calc(var(--template-panel-padding) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.push-end {\n  margin-top: auto;\n}\n\n.content-limit {\n  max-width: var(--content-max-width);\n}\n\n.caption-limit {\n  max-width: var(--caption-max-width);\n}\n\n.metric-content {\n  max-width: calc(var(--content-max-width) - (220px * var(--layout-scale)));\n}\n\n.caption-limit-metric {\n  max-width: calc(var(--caption-max-width) - (220px * var(--layout-scale)));\n}\n\n.kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n  font-size: calc(var(--token-type-kicker) * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  line-height: 1.1;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n  max-width: var(--content-max-width);\n}\n\n.heading-primary,\n.heading-secondary,\n.heading-quote {\n  font-family: var(--font-display);\n  line-height: var(--template-heading-line-height);\n  letter-spacing: var(--template-heading-letter-spacing);\n  text-shadow: var(--token-shadow-title);\n}\n\n.heading-primary {\n  font-size: calc(var(--template-heading-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-secondary {\n  font-size: calc(var(--template-heading-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-quote {\n  font-size: calc(var(--template-heading-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.body-primary,\n.body-secondary,\n.body-quote-attribution {\n  line-height: var(--template-body-line-height);\n  color: var(--template-body-color);\n  text-shadow: var(--token-shadow-caption);\n}\n\n.body-primary {\n  font-size: calc(var(--template-body-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.body-secondary {\n  font-size: calc(var(--template-body-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.body-quote-attribution {\n  font-size: calc(var(--template-body-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.flow-after-kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-heading {\n  margin-top: calc(var(--template-flow-heading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-subheading {\n  margin-top: calc(var(--template-flow-subheading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-section {\n  margin-top: calc(var(--template-flow-section) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.top-bar {\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  gap: calc(20px * var(--layout-scale));\n}\n\n.top-bar-right {\n  margin-left: auto;\n}\n\n.brand-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: var(--token-radius-pill);\n  border: 1px solid var(--frame-brand-pill-border);\n  background: var(--frame-brand-pill-bg);\n  color: var(--frame-brand-pill-text);\n  padding: calc(8px * var(--layout-scale) * var(--frame-space-scale))\n    calc(16px * var(--layout-scale) * var(--frame-space-scale));\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  line-height: 1.1;\n}\n\n.meta-footer {\n  margin-top: auto;\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  color: var(--color-text-muted);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  line-height: 1.2;\n}\n\n.checklist-list {\n  display: flex;\n  flex-direction: column;\n  gap: calc(10px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.check-item {\n  border-radius: 0.75rem;\n  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 76%, transparent);\n  background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale))\n    calc(14px * var(--layout-scale) * var(--frame-space-scale));\n  font-size: calc(var(--template-check-item-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.25;\n  color: var(--color-text-primary);\n}\n\n.metric-layout {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  gap: calc(18px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-card {\n  min-width: calc(220px * var(--layout-scale));\n  border-radius: 1rem;\n  border: 1px solid color-mix(in srgb, var(--color-brand-accent) 80%, transparent);\n  background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);\n  padding: calc(14px * var(--layout-scale) * var(--frame-space-scale))\n    calc(16px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-value {\n  font-family: var(--font-display);\n  font-size: calc(var(--template-metric-value-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1;\n  color: var(--color-text-primary);\n}\n\n.metric-label {\n  font-size: calc(var(--template-metric-label-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  color: var(--color-text-secondary);\n}\n\n.cta-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: var(--token-radius-pill);\n  background: var(--color-brand-accent);\n  color: var(--color-brand-accent-foreground);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale))\n    calc(24px * var(--layout-scale) * var(--frame-space-scale));\n  font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 700;\n  line-height: 1.1;\n}\n\n.text-balance {\n  text-wrap: balance;\n}\n\n.word-safe {\n  overflow-wrap: anywhere;\n  word-break: break-word;\n}\n\n.tabular-nums {\n  font-variant-numeric: tabular-nums;\n}\n"
+  "template_css": ":root {\n  --token-font-display: \"Playfair Display\", \"Iowan Old Style\", \"Palatino Linotype\", Palatino, Georgia, \"Times New Roman\", serif;\n  --token-font-body: \"Inter\", \"Helvetica Neue\", Helvetica, Arial, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;\n\n  --token-space-2xs: 8px;\n  --token-space-xs: 12px;\n  --token-space-sm: 16px;\n  --token-space-md: 24px;\n  --token-space-lg: 32px;\n  --token-space-xl: 40px;\n  --token-space-2xl: 46px;\n\n  --token-type-kicker: 22px;\n  --token-type-heading: 64px;\n  --token-type-body: 28px;\n  --token-type-metric-value: 66px;\n  --token-type-metric-label: 20px;\n\n  --token-radius-card: var(--radius-card);\n  --token-radius-pill: var(--radius-pill);\n  --token-shadow-title: var(--frame-title-shadow);\n  --token-shadow-caption: var(--frame-caption-shadow);\n}\n\n* {\n  box-sizing: border-box;\n}\n\nhtml,\nbody {\n  margin: 0;\n}\n\n.absolute {\n  position: absolute;\n}\n\n.inset-0 {\n  inset: 0;\n}\n\n/* ─────────────────────────────────────────\n   Frame (root canvas)\n   ───────────────────────────────────────── */\n\n.frame {\n  position: relative;\n  isolation: isolate;\n  overflow: hidden;\n\n  --frame-bg: var(--color-surface-base);\n  --frame-overlay-top: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 32%, transparent));\n  --frame-overlay-bottom: linear-gradient(0deg, transparent, transparent);\n  --frame-vignette: none;\n  --frame-brand-pill-bg: transparent;\n  --frame-brand-pill-border: var(--color-border-subtle);\n  --frame-brand-pill-text: var(--color-text-primary);\n  --frame-title-shadow: none;\n  --frame-caption-shadow: none;\n  --frame-grain-opacity: 0;\n  --frame-image-opacity: 0.5;\n  --frame-type-scale: 1;\n  --frame-space-scale: 1;\n}\n\n.frame-layer {\n  position: absolute;\n  inset: 0;\n}\n\n.frame-layer--image {\n  background-size: cover;\n  background-position: center;\n}\n\n.is-hidden {\n  display: none !important;\n}\n\n.frame-layer--border {\n  border: 1px solid transparent;\n}\n\n/* ─────────────────────────────────────────\n   Top Band (structural rule line)\n   ───────────────────────────────────────── */\n\n.top-band {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: calc(4px * var(--layout-scale));\n}\n\n.top-band--data {\n  background: var(--color-text-primary);\n}\n\n.top-band--metric {\n  background: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Decorative Elements (minimal for Swiss)\n   ───────────────────────────────────────── */\n\n.decor-orb-left {\n  position: absolute;\n  left: 0;\n  top: 0;\n  bottom: 0;\n  width: 1px;\n  height: 100%;\n  border-radius: 0;\n  background: color-mix(in srgb, var(--color-border-subtle) 30%, transparent);\n}\n\n.decor-blob-right {\n  position: absolute;\n  right: calc(48px * var(--layout-scale));\n  top: 0;\n  bottom: 0;\n  width: 1px;\n  height: 100%;\n  border-radius: 0;\n  background: color-mix(in srgb, var(--color-border-subtle) 30%, transparent);\n}\n\n.decor-wash-left {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: calc(4px * var(--layout-scale));\n  width: 100%;\n  background: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Quote mark\n   ───────────────────────────────────────── */\n\n.quote-mark {\n  position: absolute;\n  left: 8%;\n  top: 7%;\n  font-family: var(--font-display);\n  font-size: calc(148px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 0.8;\n  opacity: 0.12;\n  color: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Content Shell\n   ───────────────────────────────────────── */\n\n.content-shell {\n  --template-panel-padding: 34px;\n  --template-heading-size: var(--token-type-heading);\n  --template-heading-secondary-size: var(--template-heading-size);\n  --template-heading-quote-size: var(--template-heading-size);\n  --template-heading-line-height: 1.06;\n  --template-heading-letter-spacing: -0.02em;\n  --template-body-size: var(--token-type-body);\n  --template-body-secondary-size: var(--template-body-size);\n  --template-body-quote-size: var(--template-body-size);\n  --template-body-line-height: 1.38;\n  --template-body-color: var(--color-text-secondary);\n  --template-flow-kicker: var(--token-space-2xs);\n  --template-flow-heading: var(--token-space-xs);\n  --template-flow-subheading: var(--token-space-2xs);\n  --template-flow-section: var(--token-space-md);\n  --template-check-item-size: 22px;\n  --template-metric-value-size: var(--token-type-metric-value);\n  --template-metric-label-size: var(--token-type-metric-label);\n\n  position: relative;\n  z-index: 10;\n  display: flex;\n  width: 100%;\n  height: 100%;\n  flex-direction: column;\n  padding: calc(var(--content-inset) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--data-topband {\n  padding-top: calc((var(--content-inset) + 18px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--metric-topband {\n  padding-top: calc((var(--content-inset) + 14px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n/* ─────────────────────────────────────────\n   Template Variants\n   ───────────────────────────────────────── */\n\n.template-quote {\n  --template-panel-padding: 34px;\n  --template-heading-quote-size: 56px;\n  --template-body-quote-size: 24px;\n  --template-body-secondary-size: 24px;\n}\n\n.template-checklist {\n  --template-panel-padding: 32px;\n  --template-heading-secondary-size: 54px;\n  --template-flow-section: var(--token-space-sm);\n}\n\n.template-metric {\n  --template-panel-padding: 30px;\n  --template-heading-secondary-size: 54px;\n  --template-body-secondary-size: 26px;\n}\n\n.template-promo {\n  --template-panel-padding: 34px;\n  --template-heading-size: 60px;\n  --template-body-secondary-size: 26px;\n}\n\n.template-article {\n  --template-panel-padding: 36px;\n  --template-heading-size: 58px;\n  --template-body-size: 26px;\n  --template-body-line-height: 1.42;\n}\n\n.template-series {\n  --template-panel-padding: 36px;\n  --template-heading-size: 52px;\n  --template-body-size: 26px;\n  --template-body-line-height: 1.42;\n}\n\n.template-dark {\n  --color-text-primary: #ffffff;\n  --color-text-secondary: #cccccc;\n  --color-text-muted: #999999;\n  --color-surface-base: #000000;\n  --color-surface-elevated: #1a1a1a;\n  --color-border-subtle: #333333;\n}\n\n.rule-line--inverted {\n  background: #ffffff;\n}\n\n.cta-pill--inverted {\n  background: #ffffff;\n  color: #000000;\n}\n\n.series-index {\n  font-family: var(--font-body);\n  font-size: calc(140px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 700;\n  line-height: 1;\n  color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);\n  position: absolute;\n  right: 0;\n  top: -20px;\n  z-index: -1;\n}\n\n.metric-container {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  margin-bottom: calc(var(--token-space-md) * var(--layout-scale));\n}\n\n\n/* ─────────────────────────────────────────\n   Alignment\n   ───────────────────────────────────────── */\n\n.align-left {\n  align-items: flex-start;\n  text-align: left;\n}\n\n.align-center {\n  align-items: center;\n  text-align: center;\n}\n\n.align-justify {\n  align-items: flex-start;\n  text-align: justify;\n}\n\n/* ─────────────────────────────────────────\n   Content Panel & Limits\n   ───────────────────────────────────────── */\n\n.content-panel {\n  padding: calc(var(--template-panel-padding) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.push-end {\n  margin-top: auto;\n}\n\n.content-limit {\n  max-width: var(--content-max-width);\n}\n\n.caption-limit {\n  max-width: var(--caption-max-width);\n}\n\n.metric-content {\n  max-width: calc(var(--content-max-width) - (220px * var(--layout-scale)));\n}\n\n.caption-limit-metric {\n  max-width: calc(var(--caption-max-width) - (220px * var(--layout-scale)));\n}\n\n/* ─────────────────────────────────────────\n   Kicker\n   ───────────────────────────────────────── */\n\n.kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(var(--token-type-kicker) * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 500;\n  line-height: 1.1;\n  letter-spacing: 0.14em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n  max-width: var(--content-max-width);\n}\n\n/* ─────────────────────────────────────────\n   Headings (serif display)\n   ───────────────────────────────────────── */\n\n.heading-primary,\n.heading-secondary,\n.heading-quote {\n  font-family: var(--font-display);\n  font-weight: 700;\n  line-height: var(--template-heading-line-height);\n  letter-spacing: var(--template-heading-letter-spacing);\n  text-shadow: var(--token-shadow-title);\n  color: var(--color-text-primary);\n}\n\n.heading-primary {\n  font-size: calc(var(--template-heading-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-secondary {\n  font-size: calc(var(--template-heading-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-quote {\n  font-size: calc(var(--template-heading-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n  font-style: italic;\n}\n\n/* ─────────────────────────────────────────\n   Body Text\n   ───────────────────────────────────────── */\n\n.body-primary,\n.body-secondary,\n.body-quote-attribution {\n  font-family: var(--font-body);\n  line-height: var(--template-body-line-height);\n  color: var(--template-body-color);\n  text-shadow: var(--token-shadow-caption);\n}\n\n.body-primary {\n  font-size: calc(var(--template-body-size) * var(--layout-scale) * var(--frame-type-scale));\n  font-style: italic;\n}\n\n.body-secondary {\n  font-size: calc(var(--template-body-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.body-quote-attribution {\n  font-size: calc(var(--template-body-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n}\n\n/* ─────────────────────────────────────────\n   Flow (vertical rhythm)\n   ───────────────────────────────────────── */\n\n.flow-after-kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-heading {\n  margin-top: calc(var(--template-flow-heading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-subheading {\n  margin-top: calc(var(--template-flow-subheading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-section {\n  margin-top: calc(var(--template-flow-section) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n/* ─────────────────────────────────────────\n   Top Bar (brand badge row)\n   ───────────────────────────────────────── */\n\n.top-bar {\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  gap: calc(20px * var(--layout-scale));\n}\n\n.top-bar-right {\n  margin-left: auto;\n}\n\n.brand-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: 0;\n  border: 1px solid var(--frame-brand-pill-border);\n  background: var(--frame-brand-pill-bg);\n  color: var(--frame-brand-pill-text);\n  padding: calc(8px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(14px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 500;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  line-height: 1.1;\n}\n\n/* ─────────────────────────────────────────\n   Meta Footer\n   ───────────────────────────────────────── */\n\n.meta-footer {\n  margin-top: auto;\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  color: var(--color-text-muted);\n  font-family: var(--font-body);\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 500;\n  letter-spacing: 0.10em;\n  text-transform: uppercase;\n  line-height: 1.2;\n}\n\n/* ─────────────────────────────────────────\n   Author Attribution Block\n   ───────────────────────────────────────── */\n\n.author-block {\n  margin-top: calc(var(--token-space-sm) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.author-byline {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  color: var(--color-text-primary);\n  line-height: 1.2;\n}\n\n.author-date {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 400;\n  font-style: italic;\n  color: var(--color-text-muted);\n  line-height: 1.3;\n  margin-top: calc(2px * var(--layout-scale));\n}\n\n/* ─────────────────────────────────────────\n   Series Number Badge\n   ───────────────────────────────────────── */\n\n.series-number {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.16em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n  padding-bottom: calc(var(--token-space-xs) * var(--layout-scale));\n  border-bottom: 2px solid var(--color-text-primary);\n  display: inline-block;\n  margin-bottom: calc(var(--token-space-md) * var(--layout-scale));\n}\n\n/* ─────────────────────────────────────────\n   Horizontal Rule\n   ───────────────────────────────────────── */\n\n.rule-line {\n  width: 100%;\n  height: 1px;\n  background: var(--color-border-subtle);\n  margin: calc(var(--token-space-sm) * var(--layout-scale) * var(--frame-space-scale)) 0;\n}\n\n.rule-line--thick {\n  height: 2px;\n  background: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Checklist\n   ───────────────────────────────────────── */\n\n.checklist-list {\n  display: flex;\n  flex-direction: column;\n  gap: calc(10px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.check-item {\n  border-radius: 0;\n  border: 1px solid var(--color-border-subtle);\n  background: var(--color-surface-elevated);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(var(--template-check-item-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.25;\n  color: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Metric\n   ───────────────────────────────────────── */\n\n.metric-layout {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  gap: calc(18px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-card {\n  min-width: calc(220px * var(--layout-scale));\n  border-radius: 0;\n  border: 2px solid var(--color-text-primary);\n  background: var(--color-surface-elevated);\n  padding: calc(14px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-value {\n  font-family: var(--font-display);\n  font-size: calc(var(--template-metric-value-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1;\n  color: var(--color-text-primary);\n}\n\n.metric-label {\n  font-family: var(--font-body);\n  font-size: calc(var(--template-metric-label-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  color: var(--color-text-secondary);\n}\n\n/* ─────────────────────────────────────────\n   CTA Pill\n   ───────────────────────────────────────── */\n\n.cta-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: 0;\n  background: var(--color-text-primary);\n  color: var(--color-surface-base);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(24px * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.06em;\n  text-transform: uppercase;\n  line-height: 1.1;\n}\n\n/* ─────────────────────────────────────────\n   Article Card Image Area\n   ───────────────────────────────────────── */\n\n.article-image-area {\n  position: relative;\n  width: 100%;\n  flex: 1;\n  min-height: 40%;\n  overflow: hidden;\n}\n\n.article-image-area .frame-layer--image {\n  position: absolute;\n  inset: 0;\n  background-size: cover;\n  background-position: center;\n}\n\n/* ─────────────────────────────────────────\n   Utilities\n   ───────────────────────────────────────── */\n\n.text-balance {\n  text-wrap: balance;\n}\n\n.word-safe {\n  overflow-wrap: anywhere;\n  word-break: break-word;\n}\n\n.tabular-nums {\n  font-variant-numeric: tabular-nums;\n}"
 }

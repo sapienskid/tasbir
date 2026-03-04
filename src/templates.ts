@@ -52,19 +52,21 @@ const TEMPLATE_SLOT_KEY_CACHE = new Map<string, string[]>();
 const SLOT_TOKEN_PATTERN = /\{\{\s*SLOT:([A-Za-z0-9_:-]+)\s*\}\}/gi;
 
 const CAPTION_WIDTH_RULES: Partial<Record<TemplateKind, { add: number; max: number }>> = {
-  "instagram-post": { add: 20, max: 960 },
+  "instagram-portrait": { add: 20, max: 960 },
+  "instagram-square": { add: 20, max: 960 },
   "instagram-story": { add: 30, max: 980 },
-  "carousel-slide": { add: 30, max: 980 },
+  "carousel-post": { add: 30, max: 980 },
   "twitter-card": { add: 40, max: 1020 },
   "linkedin-post": { add: 40, max: 1020 }
 };
 
 const META_LEFT_LABELS: Partial<Record<TemplateKind, string>> = {
-  "instagram-post": "Instagram",
+  "instagram-portrait": "Instagram",
+  "instagram-square": "Instagram",
   "instagram-story": "Story",
   "twitter-card": "X / Twitter",
   "linkedin-post": "LinkedIn",
-  "carousel-slide": ""
+  "carousel-post": ""
 };
 
 const META_RIGHT_LABELS: Partial<Record<TemplateKind, string>> = {
@@ -140,7 +142,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     kind,
     control,
     params.brandName,
-    kind === "carousel-slide" ? `${(params as CarouselTemplateParams).slideNumber}/${(params as CarouselTemplateParams).totalSlides}` : undefined
+    kind === "carousel-post" ? `${(params as CarouselTemplateParams).slideNumber}/${(params as CarouselTemplateParams).totalSlides}` : undefined
   );
   const footer = renderMetaFooter(kind, control, defaultMetaLeft(kind), defaultMetaRight(kind));
   const kicker = renderKicker(kind, control, params.title);
@@ -150,8 +152,8 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const tokens: Record<string, string> = {
     TITLE: escapeHtml(params.title),
     CAPTION: escapeHtml(params.caption),
-    HEADING: escapeHtml(kind === "carousel-slide" ? (params as CarouselTemplateParams).heading : params.title),
-    BODY: escapeHtml(kind === "carousel-slide" ? (params as CarouselTemplateParams).body : params.caption),
+    HEADING: escapeHtml(kind === "carousel-post" ? (params as CarouselTemplateParams).heading : params.title),
+    BODY: escapeHtml(kind === "carousel-post" ? (params as CarouselTemplateParams).body : params.caption),
     BRAND_NAME: escapeHtml(params.brandName),
     HEADER: header,
     FOOTER: footer,
@@ -258,7 +260,7 @@ function resolveSlotValues(kind: TemplateKind, params: BaseTemplateParams | Caro
   resolved.heading = resolved.heading || params.title;
   resolved.body = resolved.body || params.caption;
 
-  if (kind === "carousel-slide") {
+  if (kind === "carousel-post") {
     const carouselParams = params as CarouselTemplateParams;
     resolved.headline = carouselParams.heading;
     resolved.body = carouselParams.body;
@@ -492,7 +494,7 @@ function renderKicker(
   control: ReturnType<typeof resolveTemplateControl>,
   title: string
 ): string {
-  const shouldShowKicker = kind === "carousel-slide" && control.showTitleKicker;
+  const shouldShowKicker = kind === "carousel-post" && control.showTitleKicker;
   return renderSystemFragment("@system/kicker-shell", {
     KICKER_VISIBILITY_CLASS: shouldShowKicker ? "" : "is-hidden",
     KICKER_TEXT: escapeHtml(title)
@@ -513,9 +515,12 @@ function defaultMetaRight(_kind: TemplateKind): string {
   return renderConfig?.meta_right_labels?.[_kind] ?? META_RIGHT_LABELS[_kind] ?? "";
 }
 
-function alignmentClassName(alignment: "left" | "center"): string {
+function alignmentClassName(alignment: "left" | "center" | "justify"): string {
   if (alignment === "center") {
     return "align-center";
+  }
+  if (alignment === "justify") {
+    return "align-justify";
   }
   return "align-left";
 }
@@ -553,7 +558,7 @@ export function previewParamsFromUrl(kind: TemplateKind, url: URL): BaseTemplate
     design: templateControlSetFromQuery(url.searchParams)
   };
 
-  if (kind !== "carousel-slide") {
+  if (kind !== "carousel-post") {
     return base;
   }
 
