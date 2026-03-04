@@ -1,6 +1,6 @@
 # API Reference
 
-Base URL in local dev is usually `http://127.0.0.1:8787`.
+Local base URL is usually `http://127.0.0.1:8787`.
 
 ## Authentication
 
@@ -11,14 +11,14 @@ Protected routes:
 - `POST /generate`
 - `POST /generate-from-content`
 
-Provide one of:
+Use either:
 
-- `x-api-key: <one of API_KEYS>`
-- `Authorization: Bearer <one of API_KEYS>`
+- `x-api-key: <one API_KEYS value>`
+- `Authorization: Bearer <one API_KEYS value>`
+
+`POST /webhook/ghost` always requires `x-webhook-token` and may also require API auth depending on `security.api_auth.require_for_webhook`.
 
 ## `GET /health`
-
-Simple health endpoint.
 
 Response:
 
@@ -30,9 +30,9 @@ Response:
 
 ## `GET /template/<format>`
 
-Renders preview HTML for one format without uploading to R2.
+Returns preview HTML for one format.
 
-Supported formats:
+Formats:
 
 - `instagram-post`
 - `instagram-story`
@@ -40,9 +40,7 @@ Supported formats:
 - `twitter-card`
 - `linkedin-post`
 
-This route can be disabled with `features.enable_template_preview = false`.
-
-### Query Parameters
+### Query Params
 
 Core:
 
@@ -51,12 +49,9 @@ Core:
 - `imageUrl`
 - `brandingColor`
 - `brand` or `brandName`
-- `templateStyle`
 - `templateId`
-- `templateArchetype` (or `archetype`)
-- `fontProfile`
 
-Carousel-only:
+Carousel:
 
 - `heading`
 - `body`
@@ -70,13 +65,13 @@ Slot values:
 
 Design controls:
 
-- `preset`
 - `showBrandBadge`
 - `showSlideBadge`
 - `showMetaFooter`
 - `showTitleKicker`
-- `textAlign`
-- `imageOpacity`
+- `showDecorLayers`
+- `textAlign` (`left` or `center`)
+- `imageOpacity` (`0..1`)
 - `contentMaxWidth`
 - `contentInset`
 - `metaLeftText`
@@ -96,30 +91,15 @@ Brand token overrides:
 ### Example
 
 ```bash
-curl "http://127.0.0.1:8787/template/twitter-card?templateStyle=bold&templateArchetype=promo&fontProfile=bold-campaign&slot.headline=Launch%20Week&slot.supporting_line=Read%20the%20full%20guide&slot.cta_text=Read%20now" \
+curl "http://127.0.0.1:8787/template/instagram-post?templateId=core/metric-split&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context" \
   -H 'x-api-key: your-api-key'
 ```
-
-Response content type: `text/html`.
 
 ## `GET /template-catalog`
 
-Returns a testing catalog of styles, formats, archetypes, fonts, templates, and template versions.
+Returns current template registry and format metadata.
 
-Useful for:
-
-- validating available `templateStyle` / `postArchetype` combinations
-- verifying template IDs per format
-- tracking template changes via `catalog_version` and per-template `version`
-
-### Example
-
-```bash
-curl "http://127.0.0.1:8787/template-catalog" \
-  -H 'x-api-key: your-api-key'
-```
-
-### Response (shape)
+### Response Shape
 
 ```json
 {
@@ -127,18 +107,32 @@ curl "http://127.0.0.1:8787/template-catalog" \
   "schema_version": 1,
   "catalog_version": "2f9bc4a1",
   "defaults": {
-    "template_style": "editorial",
-    "post_archetype": "insight",
-    "font_profile": "editorial-serif",
     "carousel_required_slides": 5
   },
-  "styles": [{ "id": "editorial", "label": "Editorial" }],
-  "archetypes": [{ "id": "insight", "label": "Insight" }],
-  "font_profiles": [{ "id": "editorial-serif", "label": "Editorial Serif" }],
-  "formats": [{ "id": "instagram-post", "default_template_id": "core/editorial-base" }],
-  "templates": [{ "id": "core/editorial-base", "version": "8a31f10c" }],
-  "templates_by_format": { "instagram-post": ["core/editorial-base"] },
-  "styles_by_format": { "instagram-post": ["editorial", "data"] }
+  "formats": [
+    {
+      "id": "instagram-post",
+      "width": 1080,
+      "height": 1080,
+      "caption_source": "instagram_caption",
+      "hashtag_count": 3,
+      "default_template_id": "core/editorial-base"
+    }
+  ],
+  "templates": [
+    {
+      "id": "core/editorial-base",
+      "format": "instagram-post",
+      "formats": ["instagram-post", "twitter-card"],
+      "label": "Core Editorial Base",
+      "description": "...",
+      "file": "templates/editorial-base.html",
+      "version": "8a31f10c"
+    }
+  ],
+  "templates_by_format": {
+    "instagram-post": ["core/editorial-base"]
+  }
 }
 ```
 
@@ -148,20 +142,15 @@ Fetches a Ghost post and runs full pipeline.
 
 ### Request Body
 
-Required (one of):
+Required:
 
-- `slug`
-- `url` (slug is parsed from URL)
+- one of `slug` or `url`
 
-Optional overrides:
+Optional:
 
-- `brandingColor`
-- `brandName`
-- `templateStyle`
-- `postArchetype`
-- `fontProfile`
-- `templateIds`
-- `slotOverrides`
+- `brandingColor`, `brandName`, `prompt`
+- `templateIds` (`{ [format]: templateId }`)
+- `slotOverrides` (`{ [slotKey]: value }`)
 - `brandTokens`
 - `design`
 - `storage`
@@ -170,26 +159,36 @@ Optional overrides:
 - `image`
 - `output`
 
-### Example
+### Minimal Example
 
 ```json
 {
-  "slug": "future-of-content-ops",
-  "templateStyle": "data",
-  "postArchetype": "metric",
-  "fontProfile": "data-mono",
+  "slug": "future-of-content-ops"
+}
+```
+
+### Full Example
+
+```json
+{
+  "url": "https://blog.example.com/future-of-content-ops/",
+  "prompt": "Practical tone for technical founders.",
   "templateIds": {
     "instagram-post": "core/metric-split",
     "twitter-card": "core/data-base"
   },
   "slotOverrides": {
     "metric_value": "2.4K",
-    "metric_label": "Weekly readers",
-    "headline": "Signal that compounds"
+    "metric_label": "Weekly readers"
   },
-  "llm": {
-    "userInstructionsAppend": "Prefer practical tone and avoid buzzwords.",
-    "temperature": 0.1
+  "design": {
+    "textAlign": "left",
+    "imageOpacity": 0.55,
+    "formatOverrides": {
+      "twitter-card": {
+        "contentInset": 40
+      }
+    }
   },
   "image": {
     "mode": "custom",
@@ -197,12 +196,8 @@ Optional overrides:
   },
   "output": {
     "formats": ["twitter-card", "linkedin-post"],
-    "carouselSlides": 3
-  },
-  "storage": {
-    "mode": "versioned",
-    "includeDate": true,
-    "runId": "launch-a"
+    "carouselSlides": 4,
+    "postCount": 2
   }
 }
 ```
@@ -216,9 +211,9 @@ Runs full pipeline without Ghost fetch.
 Required:
 
 - `title`
-- `content` (or `body`)
+- one of `content` or `body`
 
-Optional source fields:
+Optional content metadata:
 
 - `excerpt`
 - `slug`
@@ -227,7 +222,7 @@ Optional source fields:
 - `tags` (array or comma-separated string)
 - `primary_tag`
 
-Optional design/storage fields are the same as `/generate`.
+Supports the same optional overrides as `/generate`.
 
 ### Example
 
@@ -235,103 +230,51 @@ Optional design/storage fields are the same as `/generate`.
 {
   "title": "A Better Content Workflow",
   "content": "Start from one source and split into platform-native assets.",
-  "templateStyle": "editorial",
-  "postArchetype": "insight",
-  "slotOverrides": {
-    "headline": "Ship with less friction",
-    "supporting_line": "One source post, many quality outputs"
+  "prompt": "Clear and no-fluff tone.",
+  "output": {
+    "formats": ["instagram-post", "linkedin-post"]
   }
 }
 ```
 
 ## `POST /webhook/ghost`
 
-Webhook trigger endpoint for Ghost events.
+Ghost-triggered generation endpoint.
 
-`GHOST_WEBHOOK_TOKEN` is required. Send header:
+Required header:
 
-- `x-webhook-token: <token>`
+- `x-webhook-token: <GHOST_WEBHOOK_TOKEN>`
 
-Slug can be extracted from:
+Slug can be resolved from:
 
 - `payload.post.current.slug`
 - `payload.post.slug`
 - `payload.slug`
-- URL forms (`payload.post.current.url`, `payload.url`)
+- `payload.post.current.url`
+- `payload.url`
 
-## Successful Response Shape
+## Common Response Fields (`/generate*`)
 
-`/generate`, `/generate-from-content`, `/webhook/ghost` return:
+Top-level response contains:
 
-```json
-{
-  "ok": true,
-  "slug": "example-post",
-  "post_url": "https://example.com/example-post/",
-  "requested_formats": ["twitter-card", "linkedin-post"],
-  "image_source": {
-    "source": "custom",
-    "imageUrl": "https://..."
-  },
-  "llm_output": {
-    "instagram_caption": "...",
-    "twitter_caption": "...",
-    "linkedin_caption": "...",
-    "carousel_slides": [{ "heading": "...", "body": "..." }],
-    "hashtags": ["#..."],
-    "image_prompt": "...",
-    "use_feature_image": true,
-    "template_style": "editorial",
-    "post_archetype": "insight",
-    "font_profile": "editorial-serif",
-    "slot_content": {
-      "headline": "..."
-    }
-  },
-  "assets": {
-    "instagram_post": null,
-    "instagram_story": null,
-    "twitter_card": { "format": "twitter-card", "key": "...", "url": null },
-    "linkedin_post": { "format": "linkedin-post", "key": "...", "url": null },
-    "carousel": []
-  }
-}
-```
+- `ok`
+- `slug`, `post_url`
+- `requested_formats`
+- `image_source`
+- `template_plan`
+- `llm_output`
+- `assets`
+- `variants` (present when `output.postCount > 1`)
 
-`image.mode` supports:
+`template_plan` includes:
 
-- `auto` (default chain)
-- `none` (HTML-only visual layers, no background image)
-- `feature`
-- `stock`
-- `ai`
-- `custom` (requires `image.customUrl`)
+- `required_slot_keys`
+- `template_ids`
 
-`output.formats` supports:
+`assets` includes:
 
-- `instagram-post`
-- `instagram-story`
-- `carousel-slide`
-- `twitter-card`
-- `linkedin-post`
-
-## Error Responses
-
-Typical errors:
-
-- `400` invalid JSON, missing required fields
-- `401` invalid API key or invalid webhook token
-- `413` request body too large
-- `415` unsupported content-type
-- `429` rate limit exceeded
-- `403` template preview disabled
-- `404` route not found or Ghost slug missing
-- `500` missing env vars or unexpected runtime errors
-
-Error shape:
-
-```json
-{
-  "error": "message"
-}
-```
+- `instagram_post`
+- `instagram_story`
+- `twitter_card`
+- `linkedin_post`
+- `carousel` (array)

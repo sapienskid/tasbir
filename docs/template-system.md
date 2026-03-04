@@ -1,224 +1,120 @@
 # Template System
 
-This project renders social assets from reusable HTML templates with config-driven selection logic.
+Templates define structure. CSS tokens define design.
 
-The goal is to let you add or modify designs without changing rendering code.
+## Purpose
 
-## Core Concepts
+The template system lets you:
 
-- `template_style`: visual look (editorial, illustration, minimal, bold, data, monochrome-swiss, brutal)
-- `post_archetype`: content intent (insight, metric, quote, checklist, timeline, promo)
-- `slot_content`: semantic content fields used by templates (`headline`, `metric_value`, `quote_text`, etc.)
+- add new layouts without changing renderer code
+- keep slot contracts explicit (`{{SLOT:key}}`)
+- let LLM fill content according to template requirements
 
-A template can target one or more styles, one or more archetypes, and one or more output formats.
+## File Roles
 
-## Sources of Truth
-
-- template files: `templates/**/*.html`
-- registry + constraints: `config/pipeline/templates.yaml` (`templates:` section; merged via `config/pipeline.config.yaml`)
-- generated runtime bundle: `src/generated/template-assets.ts`
-
-## Build Pipeline
-
-Run after template or config changes:
-
-```bash
-pnpm run build:templates
-```
-
-Or full asset build:
-
-```bash
-pnpm run build:assets
-```
-
-Validation includes:
-
-- config shape checks
-- duplicate template ID detection
-- unknown format/style/archetype detection
-- missing default template IDs
-- missing template file path detection
-
-## Template File Rules
-
-Use `.html` files.
-
-- put file under `templates/` for reusable layouts
-- use token placeholders like `{{TITLE}}`
-- use slot placeholders like `{{SLOT:headline}}`
-- do not add script execution logic in template files
+- `templates/*.html`: content layouts (the skeletons)
+- `templates/system/head-shell.html`: document head + stylesheet/token injection
+- `templates/system/frame-shell.html`: common frame/background wrapper
+- `templates/system/*.html`: reusable UI fragments
 
 ## Placeholder Types
 
-### Built-in Tokens
+Standard tokens:
 
 - `{{TITLE}}`
 - `{{CAPTION}}`
 - `{{HEADING}}`
 - `{{BODY}}`
 - `{{BRAND_NAME}}`
-- `{{TEMPLATE_ARCHETYPE}}`
 - `{{HEADER}}`
 - `{{FOOTER}}`
 - `{{KICKER}}`
-- `{{CONTENT_INSET}}`
-- `{{CONTENT_MAX_WIDTH}}`
-- `{{CAPTION_MAX_WIDTH}}`
-- `{{ALIGNMENT_STYLE}}`
+- `{{ALIGN_CLASS}}`
 
-Notes:
+Slot tokens:
 
-- `HEADER`, `FOOTER`, and `KICKER` inject controlled HTML fragments
-- other values are escaped before insertion
+- `{{SLOT:<key>}}`
+- examples: `{{SLOT:headline}}`, `{{SLOT:cta_text}}`, `{{SLOT:metric_value}}`
 
-### Slot Tokens
+## Slot Contract Behavior
 
-Pattern:
+For each selected template, runtime extracts slot keys from `{{SLOT:key}}` markers.
 
-- `{{SLOT:<slot_key>}}`
+Those keys become `required_slot_keys` and are enforced in LLM output schema.
 
-Examples:
+Slot value precedence:
 
-- `{{SLOT:headline}}`
-- `{{SLOT:metric_value}}`
-- `{{SLOT:quote_text}}`
-- `{{SLOT:step_2}}`
+1. LLM `slot_content`
+2. request `slotOverrides`
+3. runtime fallback inference by slot key pattern
 
-Slot keys are normalized:
+## Template Selection Behavior
 
-- lowercased
-- non-alphanumeric characters become `_`
-- repeated `_` collapse to single `_`
+Per format:
 
-## Slot Value Precedence
+1. use request `templateIds[format]` when provided
+2. otherwise ask LLM planner to select from candidate template IDs
+3. validate and fallback to format default template if needed
 
-When rendering, slot values are merged in this order:
+Candidate list is always derived from the current `templates.yaml` registry.
 
-1. YAML defaults (`slot_schema.defaults`)
-2. model-generated `slot_content`
-3. request `slotOverrides`
+## Add a New Template
 
-`slotOverrides` always wins.
-
-## Template Selection Logic
-
-Per format, the resolver chooses template in this order:
-
-1. explicit request `templateIds[format]`
-2. templates matching `templateStyle + postArchetype`
-3. templates matching `postArchetype`
-4. templates matching `templateStyle`
-5. `formats.<format>.default_template_id`
-6. first configured template compatible with that format (final safety fallback)
-
-If template defines `archetypes`, it is only eligible for those archetypes.
-If template defines `formats`, it is only eligible for those formats.
-
-## Font Selection Logic
-
-Font profile is resolved in this order:
-
-1. request `fontProfile`
-2. model output `font_profile`
-3. `typography.selection.by_style`
-4. `typography.selection.by_archetype`
-5. `typography.default_font_profile`
-
-## Add a New Template (Step by Step)
-
-Example: add a reusable metric card for all formats.
-
-1. Create HTML file:
-
-- `templates/metric-pill.html`
-
-2. Use placeholders in the file:
-
-```html
-<section class="..." style="{{ALIGNMENT_STYLE}}">
-  {{HEADER}}
-  <p>{{SLOT:kicker}}</p>
-  <h1>{{SLOT:metric_value}}</h1>
-  <p>{{SLOT:metric_label}}</p>
-  <p>{{SLOT:headline}}</p>
-  {{FOOTER}}
-</section>
-```
-
-3. Register it in YAML:
+1. Create file under `templates/`, for example `templates/feature-spotlight.html`.
+2. Add entry in `config/pipeline/templates.yaml`:
 
 ```yaml
-- id: core/metric-pill
-  styles: [data, monochrome-swiss]
-  formats: [instagram-post, instagram-story, carousel-slide, twitter-card, linkedin-post]
-  label: Metric Pill
-  archetypes: [metric]
-  file: "../templates/metric-pill.html"
+- id: core/feature-spotlight
+  label: Core Feature Spotlight
+  description: Hero layout for feature highlights.
+  file: ../templates/feature-spotlight.html
 ```
 
-4. Rebuild:
+3. Rebuild assets:
 
 ```bash
 pnpm run build:templates
 ```
 
-5. Preview:
+4. Verify:
 
-```bash
-curl "http://127.0.0.1:8787/template/instagram-post?templateId=core/metric-pill&archetype=metric&slot.metric_value=84%25&slot.metric_label=Completion&slot.headline=Process%20drives%20results"
-```
+- `GET /template-catalog`
+- `GET /template/<format>?templateId=core/feature-spotlight`
 
-6. If successful, include it in API generation via `templateIds.instagram-post` or allow auto-selection.
+## Add a New Shared System Fragment
 
-## Current Template Catalog
+1. Add HTML file under `templates/system/`, for example `badge-shell.html`.
+2. Rebuild assets.
+3. Render it via `src/templates.ts` using `renderSystemFragment(...)`.
 
-Configured shared templates:
+`embed-template-assets.mjs` auto-loads all `templates/system/*.html` files.
 
-- `core/editorial-base`
-- `core/illustration-base`
-- `core/bold-base`
-- `core/data-base`
-- `core/quote-focus` (quote)
-- `core/checklist-stack` (checklist, timeline)
-- `core/metric-split` (metric)
-- `core/promo-pill` (promo)
-
-## Preview Query Cookbook
-
-Style and archetype preview:
-
-```text
-/template/twitter-card?templateStyle=bold&archetype=promo
-```
+## Preview Cookbook
 
 Direct template preview:
 
 ```text
-/template/linkedin-post?templateId=core/checklist-stack
+/template/twitter-card?templateId=core/bold-base
 ```
 
 Slot override preview:
 
 ```text
-/template/carousel-slide?templateId=core/checklist-stack&slot.step_number=2&slot.step_total=5&slot.headline=Extract%20the%20signal&slot.body=Turn%20long%20content%20into%20short%20decisions.
+/template/instagram-post?templateId=core/promo-pill&slot.headline=Ship%20Faster&slot.supporting_line=One%20pipeline%20for%20all%20formats&slot.cta_text=Read%20Guide
 ```
 
-Font override preview:
+Design-control preview:
 
 ```text
-/template/instagram-post?fontProfile=data-mono
+/template/linkedin-post?templateId=core/editorial-base&showMetaFooter=true&textAlign=left&imageOpacity=0.45
 ```
 
-## Debugging Checklist
+## Troubleshooting Quick Checks
 
-If template does not appear in output:
-
-1. check template is registered in YAML `templates:`
+1. confirm template entry exists in `templates.yaml`
 2. run `pnpm run build:templates`
-3. confirm format/style/archetype names are valid
-4. confirm `default_template_id` exists for the format
-5. test direct preview with `templateId`
-6. check `archetypes` filter is not excluding current post archetype
+3. verify `default_template_id` for target format
+4. test direct preview with `templateId`
+5. verify slot keys match template `{{SLOT:key}}` names
 
-For more issues, see [Troubleshooting](troubleshooting.md).
+See [Troubleshooting](troubleshooting.md) for full list.
