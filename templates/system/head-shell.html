@@ -1,0 +1,60 @@
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{SAFE_TITLE}}</title>
+  <style>{{TEMPLATE_CSS}}</style>
+  <style>
+    :root {
+      --canvas-width: {{CANVAS_WIDTH}}px;
+      --canvas-height: {{CANVAS_HEIGHT}}px;
+
+      --font-display: var(--token-font-display, "Iowan Old Style", "Palatino Linotype", Palatino, "Times New Roman", serif);
+      --font-body: var(--token-font-body, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif);
+      --token-font-heading: var(--font-display);
+      --token-font-body: var(--font-body);
+
+      --color-text-primary: {{TOKEN_PRIMARY_TEXT}};
+      --color-text-secondary: {{TOKEN_SECONDARY_TEXT}};
+      --color-text-muted: {{TOKEN_MUTED_TEXT}};
+      --color-surface-base: {{TOKEN_SURFACE_BASE}};
+      --color-surface-elevated: {{TOKEN_SURFACE_ELEVATED}};
+      --color-border-subtle: {{TOKEN_BORDER_SUBTLE}};
+      --color-brand-accent: {{TOKEN_ACCENT}};
+      --color-brand-accent-foreground: {{TOKEN_ACCENT_FOREGROUND}};
+      --color-brand-glow: {{TOKEN_ACCENT_GLOW}};
+      --color-overlay-strong: {{TOKEN_OVERLAY_STRONG}};
+
+      --token-color-text-primary: {{TOKEN_PRIMARY_TEXT}};
+      --token-color-text-secondary: {{TOKEN_SECONDARY_TEXT}};
+      --token-color-text-muted: {{TOKEN_MUTED_TEXT}};
+      --token-color-surface-base: {{TOKEN_SURFACE_BASE}};
+      --token-color-surface-elevated: {{TOKEN_SURFACE_ELEVATED}};
+      --token-color-border-subtle: {{TOKEN_BORDER_SUBTLE}};
+      --token-color-brand-accent: {{TOKEN_ACCENT}};
+      --token-color-brand-accent-foreground: {{TOKEN_ACCENT_FOREGROUND}};
+
+      --shadow-soft: 0 32px 88px color-mix(in srgb, {{TOKEN_SHADOW_COLOR}} 72%, transparent);
+      --radius-card: {{TOKEN_RADIUS_CARD}};
+      --radius-pill: {{TOKEN_RADIUS_PILL}};
+      --token-radius-card: {{TOKEN_RADIUS_CARD}};
+      --token-radius-pill: {{TOKEN_RADIUS_PILL}};
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      width: var(--canvas-width);
+      height: var(--canvas-height);
+      overflow: hidden;
+      font-family: var(--font-body);
+      background: var(--color-surface-base);
+      color: var(--color-text-primary);
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+  </style>
+</head>

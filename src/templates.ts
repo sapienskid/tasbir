@@ -1,7 +1,6 @@
 import {
   createBrandTheme,
   renderTemplateHead,
-  resolveFontProfileId,
   resolveTemplateControl,
   templateControlSetFromQuery,
   tokenOverridesFromQuery,
@@ -14,32 +13,13 @@ import { PIPELINE_CONFIG, TEMPLATE_FILES } from "./generated/template-assets";
 export type { BrandTokenOverrides, TemplateControlSet };
 
 export type TemplateKind = TemplateFormatKey;
-export type TemplateStyleId = keyof typeof PIPELINE_CONFIG.template_styles.styles;
 
 interface TemplateDefinition {
   id: string;
   format?: TemplateKind;
   formats?: readonly TemplateKind[];
-  style?: string;
-  styles?: readonly string[];
   label: string;
-  default_for_style?: boolean;
-  archetypes?: readonly string[];
   file: string;
-}
-
-export interface TemplateStyleOption {
-  id: string;
-  label: string;
-  description: string;
-  llmHint: string;
-}
-
-export interface PostArchetypeOption {
-  id: string;
-  label: string;
-  description: string;
-  llmHint: string;
 }
 
 export interface SlotHintOption {
@@ -54,10 +34,7 @@ export interface BaseTemplateParams {
   imageUrl: string;
   brandColor: string;
   brandName: string;
-  templateStyle?: string;
   templateId?: string;
-  templateArchetype?: string;
-  fontProfile?: string;
   slots?: Record<string, string>;
   brandTokens?: BrandTokenOverrides;
   design?: TemplateControlSet;
@@ -100,8 +77,7 @@ const META_RIGHT_LABELS: Partial<Record<TemplateKind, string>> = {
 
 const DEFAULT_VISUAL_LAYERS = {
   useBackgroundImageOnly: true,
-  useHtmlDecorLayers: true,
-  styleProfile: "soft-orbital"
+  useHtmlDecorLayers: true
 } as const;
 
 const FRAME_DECOR_DEFAULTS = {
@@ -127,68 +103,8 @@ export function getTemplateDimensions(kind: TemplateKind): { width: number; heig
   };
 }
 
-export function getDefaultTemplateStyle(): string {
-  return PIPELINE_CONFIG.template_styles.default_style;
-}
-
-export function normalizeTemplateStyle(value: string | undefined | null): string {
-  if (!value) {
-    return getDefaultTemplateStyle();
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) {
-    return getDefaultTemplateStyle();
-  }
-
-  const styles = PIPELINE_CONFIG.template_styles.styles as Record<string, unknown>;
-  return styles[normalized] ? normalized : getDefaultTemplateStyle();
-}
-
-export function listTemplateStyles(): TemplateStyleOption[] {
-  const styles = PIPELINE_CONFIG.template_styles.styles;
-  return Object.entries(styles).map(([id, detail]) => ({
-    id,
-    label: detail.label,
-    description: detail.description,
-    llmHint: detail.llm_hint
-  }));
-}
-
-export function getDefaultPostArchetype(): string {
-  return PIPELINE_CONFIG.post_archetypes.default_archetype;
-}
-
-export function normalizePostArchetype(value: string | undefined | null): string {
-  if (!value) {
-    return getDefaultPostArchetype();
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) {
-    return getDefaultPostArchetype();
-  }
-
-  const archetypes = PIPELINE_CONFIG.post_archetypes.archetypes as Record<string, unknown>;
-  return archetypes[normalized] ? normalized : getDefaultPostArchetype();
-}
-
-export function listPostArchetypes(): PostArchetypeOption[] {
-  const archetypes = PIPELINE_CONFIG.post_archetypes.archetypes;
-  return Object.entries(archetypes).map(([id, detail]) => ({
-    id,
-    label: detail.label,
-    description: detail.description,
-    llmHint: detail.llm_hint
-  }));
-}
-
 export function listSlotHints(): SlotHintOption[] {
-  const hints = PIPELINE_CONFIG.slot_schema.slot_hints as Record<string, string>;
-  const defaults = PIPELINE_CONFIG.slot_schema.defaults as Record<string, string>;
   const slotKeys = new Set<string>([
-    ...Object.keys(defaults),
-    ...Object.keys(hints),
     ...listAllTemplateSlotKeys()
   ]);
 
@@ -197,36 +113,28 @@ export function listSlotHints(): SlotHintOption[] {
     .filter(Boolean)
     .map((id) => ({
       id,
-      hint: hints[id] ?? `Template slot used by one or more layouts: ${id.replaceAll("_", " ")}`,
-      defaultValue: defaults[id] ?? ""
+      hint: `Template slot used by one or more layouts: ${id.replaceAll("_", " ")}`,
+      defaultValue: ""
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export function listRequiredSlotKeys(
   kind: TemplateKind,
-  options?: { templateStyle?: string; templateId?: string; templateArchetype?: string }
+  options?: { templateId?: string }
 ): string[] {
   const templateId = resolveTemplateId(kind, options);
   return listTemplateSlotKeys(templateId);
 }
 
-export function resolveTemplateId(kind: TemplateKind, options?: { templateStyle?: string; templateId?: string; templateArchetype?: string }): string {
-  return selectTemplateDefinition(kind, options?.templateStyle, options?.templateId, options?.templateArchetype).id;
+export function resolveTemplateId(kind: TemplateKind, options?: { templateId?: string }): string {
+  return selectTemplateDefinition(kind, options?.templateId).id;
 }
 
 export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | CarouselTemplateParams): string {
   const format = PIPELINE_CONFIG.formats[kind];
-  const requestedTemplateStyle = normalizeTemplateStyle(params.templateStyle);
-  const selectedTemplate = selectTemplateDefinition(kind, requestedTemplateStyle, params.templateId, params.templateArchetype);
-  const resolvedTemplateStyle = resolveTemplateStyleForTemplate(selectedTemplate, requestedTemplateStyle);
+  const selectedTemplate = selectTemplateDefinition(kind, params.templateId);
   const control = resolveTemplateControl(kind, params.design);
-  const normalizedArchetype = normalizePostArchetype(params.templateArchetype);
-  const fontProfileId = resolveFontProfileId({
-    requested: params.fontProfile,
-    style: resolvedTemplateStyle,
-    archetype: normalizedArchetype
-  });
 
   const header = renderTopBar(
     kind,
@@ -235,10 +143,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     kind === "carousel-slide" ? `${(params as CarouselTemplateParams).slideNumber}/${(params as CarouselTemplateParams).totalSlides}` : undefined
   );
   const footer = renderMetaFooter(kind, control, defaultMetaLeft(kind), defaultMetaRight(kind));
-  const kicker =
-    kind === "carousel-slide" && control.showTitleKicker
-      ? `<p class="kicker content-limit">${escapeHtml(params.title)}</p>`
-      : "";
+  const kicker = renderKicker(kind, control, params.title);
 
   const slotValues = resolveSlotValues(kind, params);
 
@@ -248,7 +153,6 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     HEADING: escapeHtml(kind === "carousel-slide" ? (params as CarouselTemplateParams).heading : params.title),
     BODY: escapeHtml(kind === "carousel-slide" ? (params as CarouselTemplateParams).body : params.caption),
     BRAND_NAME: escapeHtml(params.brandName),
-    TEMPLATE_ARCHETYPE: escapeHtml(normalizedArchetype),
     HEADER: header,
     FOOTER: footer,
     KICKER: kicker,
@@ -265,20 +169,15 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
       height: format.height,
       params,
       control,
-      content,
-      fontProfileId
+      content
     },
-    selectedTemplate.id,
-    resolvedTemplateStyle,
-    normalizedArchetype
+    selectedTemplate.id
   );
 }
 
 function selectTemplateDefinition(
   kind: TemplateKind,
-  style?: string,
-  requestedTemplateId?: string,
-  archetype?: string
+  requestedTemplateId?: string
 ): TemplateDefinition {
   const byFormat = TEMPLATE_DEFINITIONS.filter((definition) => templateSupportsFormat(definition, kind));
   if (byFormat.length === 0) {
@@ -292,43 +191,6 @@ function selectTemplateDefinition(
     }
   }
 
-  const normalizedStyle = normalizeTemplateStyle(style);
-  const normalizedArchetype = normalizePostArchetype(archetype);
-
-  const styleAndExactArchetype = byFormat.filter(
-    (definition) => templateSupportsStyle(definition, normalizedStyle) && templateHasExplicitArchetype(definition, normalizedArchetype)
-  );
-  const styleAndExactArchetypePreferred = pickPreferredTemplate(styleAndExactArchetype, normalizedStyle);
-  if (styleAndExactArchetypePreferred) {
-    return styleAndExactArchetypePreferred;
-  }
-
-  const styleAndArchetype = byFormat.filter(
-    (definition) => templateSupportsStyle(definition, normalizedStyle) && templateSupportsArchetype(definition, normalizedArchetype)
-  );
-  const styleAndArchetypePreferred = pickPreferredTemplate(styleAndArchetype, normalizedStyle);
-  if (styleAndArchetypePreferred) {
-    return styleAndArchetypePreferred;
-  }
-
-  const exactArchetype = byFormat.filter((definition) => templateHasExplicitArchetype(definition, normalizedArchetype));
-  const exactArchetypePreferred = pickPreferredTemplate(exactArchetype, normalizedStyle);
-  if (exactArchetypePreferred) {
-    return exactArchetypePreferred;
-  }
-
-  const byArchetype = byFormat.filter((definition) => templateSupportsArchetype(definition, normalizedArchetype));
-  const archetypePreferred = pickPreferredTemplate(byArchetype, normalizedStyle);
-  if (archetypePreferred) {
-    return archetypePreferred;
-  }
-
-  const byStyle = byFormat.filter((definition) => templateSupportsStyle(definition, normalizedStyle));
-  const byStylePreferred = pickPreferredTemplate(byStyle, normalizedStyle);
-  if (byStylePreferred) {
-    return byStylePreferred;
-  }
-
   const defaultId = PIPELINE_CONFIG.formats[kind].default_template_id;
   const defaultTemplate = byFormat.find((definition) => definition.id === defaultId);
   if (defaultTemplate) {
@@ -336,45 +198,6 @@ function selectTemplateDefinition(
   }
 
   return byFormat[0];
-}
-
-function pickPreferredTemplate(definitions: TemplateDefinition[], preferredStyle: string): TemplateDefinition | null {
-  if (definitions.length === 0) {
-    return null;
-  }
-
-  const styleDefault = definitions.find(
-    (definition) => templateSupportsStyle(definition, preferredStyle) && definition.default_for_style
-  );
-  if (styleDefault) {
-    return styleDefault;
-  }
-
-  const styleMatch = definitions.find((definition) => templateSupportsStyle(definition, preferredStyle));
-  if (styleMatch) {
-    return styleMatch;
-  }
-
-  const genericDefault = definitions.find((definition) => definition.default_for_style);
-  if (genericDefault) {
-    return genericDefault;
-  }
-
-  return definitions[0];
-}
-
-function templateSupportsArchetype(definition: TemplateDefinition, archetype: string): boolean {
-  if (!definition.archetypes || definition.archetypes.length === 0) {
-    return true;
-  }
-  return definition.archetypes.includes(archetype);
-}
-
-function templateHasExplicitArchetype(definition: TemplateDefinition, archetype: string): boolean {
-  if (!definition.archetypes || definition.archetypes.length === 0) {
-    return false;
-  }
-  return definition.archetypes.includes(archetype);
 }
 
 function templateSupportsFormat(definition: TemplateDefinition, kind: TemplateKind): boolean {
@@ -388,38 +211,6 @@ function templateSupportsFormat(definition: TemplateDefinition, kind: TemplateKi
   }
 
   return true;
-}
-
-function templateSupportsStyle(definition: TemplateDefinition, style: string): boolean {
-  return templateStyles(definition).includes(style);
-}
-
-function resolveTemplateStyleForTemplate(definition: TemplateDefinition, requestedStyle: string): string {
-  if (templateSupportsStyle(definition, requestedStyle)) {
-    return requestedStyle;
-  }
-
-  const styles = templateStyles(definition);
-  return styles[0] ?? getDefaultTemplateStyle();
-}
-
-function templateStyles(definition: TemplateDefinition): string[] {
-  const normalizedStyles = (definition.styles ?? [])
-    .map((style) => style.trim().toLowerCase())
-    .filter(Boolean);
-
-  if (normalizedStyles.length > 0) {
-    return [...new Set(normalizedStyles)];
-  }
-
-  if (definition.style) {
-    const style = definition.style.trim().toLowerCase();
-    if (style) {
-      return [style];
-    }
-  }
-
-  return [getDefaultTemplateStyle()];
 }
 
 function loadTemplateMarkup(templateId: string): string {
@@ -446,13 +237,7 @@ function interpolateTemplate(template: string, tokens: Record<string, string>, s
 }
 
 function resolveSlotValues(kind: TemplateKind, params: BaseTemplateParams | CarouselTemplateParams): Record<string, string> {
-  const defaults = PIPELINE_CONFIG.slot_schema.defaults as Record<string, string>;
   const resolved: Record<string, string> = {};
-
-  for (const [slotKey, slotValue] of Object.entries(defaults)) {
-    const normalizedKey = normalizeSlotKey(slotKey);
-    resolved[normalizedKey] = expandSlotDefault(slotValue, kind, params);
-  }
 
   if (params.slots) {
     for (const [slotKey, slotValue] of Object.entries(params.slots)) {
@@ -482,32 +267,6 @@ function resolveSlotValues(kind: TemplateKind, params: BaseTemplateParams | Caro
   }
 
   return resolved;
-}
-
-function expandSlotDefault(value: string, kind: TemplateKind, params: BaseTemplateParams | CarouselTemplateParams): string {
-  const source = value.trim();
-  if (!source) {
-    return "";
-  }
-
-  return source.replace(/\{\{\s*([A-Z_]+)\s*\}\}/g, (_match, rawToken: string) => {
-    if (rawToken === "TITLE") {
-      return params.title;
-    }
-    if (rawToken === "CAPTION") {
-      return params.caption;
-    }
-    if (rawToken === "BRAND_NAME") {
-      return params.brandName;
-    }
-    if (rawToken === "HEADING") {
-      return kind === "carousel-slide" ? (params as CarouselTemplateParams).heading : params.title;
-    }
-    if (rawToken === "BODY") {
-      return kind === "carousel-slide" ? (params as CarouselTemplateParams).body : params.caption;
-    }
-    return "";
-  });
 }
 
 function normalizeSlotKey(input: string): string {
@@ -591,11 +350,8 @@ function renderFrame(
     params: BaseTemplateParams;
     control: ReturnType<typeof resolveTemplateControl>;
     content: string;
-    fontProfileId: string;
   },
-  templateId: string,
-  templateStyle: string,
-  templateArchetype: string
+  templateId: string
 ): string {
   const theme = createBrandTheme({
     brandName: args.params.brandName,
@@ -623,14 +379,10 @@ function renderFrame(
     ? "var(--frame-overlay-top), var(--frame-overlay-bottom), var(--frame-vignette)"
     : "var(--frame-overlay-top), var(--frame-vignette)";
   const accentSweepOpacity = shouldRenderBackgroundImage ? 0.42 : 0.16;
-  const decorLayerMarkup =
-    args.control.showDecorLayers && visualLayers.useHtmlDecorLayers
-      ? renderDecorativeHtmlLayers({
-          profile: visualLayers.styleProfile,
-          kind: args.kind,
-          hasBackgroundImage: shouldRenderBackgroundImage
-        })
-      : "";
+  const imageLayerStyle = shouldRenderBackgroundImage
+    ? `background-image: url('${safeImageUrl}'); opacity: var(--frame-image-opacity); filter: ${imageFilter}; transform: ${imageTransform};`
+    : "";
+  const imageVisibilityClass = shouldRenderBackgroundImage ? "" : "is-hidden";
 
   const rootVars = [
     `--content-inset:${args.control.contentInset}px`,
@@ -643,48 +395,42 @@ function renderFrame(
   if (typeof args.control.imageOpacity === "number") {
     rootVars.push(`--frame-image-opacity:${args.control.imageOpacity}`);
   }
+  if (!args.control.showDecorLayers || !visualLayers.useHtmlDecorLayers) {
+    rootVars.push("--frame-grain-opacity:0");
+  }
   const rootStyle = `width: ${args.width}px; height: ${args.height}px; ${rootVars.join(";")}`;
 
-  return `
-    <!doctype html>
-    <html>
-      ${renderTemplateHead({ safeTitle, width: args.width, height: args.height, theme, fontProfileId: args.fontProfileId })}
-      <body>
-        <div class="frame" data-template-id="${escapeHtml(templateId)}" data-template-style="${escapeHtml(templateStyle)}" data-template-archetype="${escapeHtml(templateArchetype)}" style="${rootStyle}">
-          <div class="frame-layer" style="background: var(--frame-bg);"></div>
-
-          ${
-            shouldRenderBackgroundImage
-              ? `<div class="frame-layer frame-layer--image" style="background-image: url('${safeImageUrl}'); opacity: var(--frame-image-opacity); filter: ${imageFilter}; transform: ${imageTransform};"></div>`
-              : ""
-          }
-          ${decorLayerMarkup}
-
-          <div class="frame-layer" style="opacity: ${overlayOpacity}; background: ${overlayBackground};"></div>
-          <div class="frame-layer" style="background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: ${accentSweepOpacity};"></div>
-
-          <div class="frame-layer" style="opacity: var(--frame-grain-opacity); background-image: radial-gradient(${frameDecor.grainDotColor} ${frameDecor.grainDotSizePx}px, transparent ${frameDecor.grainDotSizePx}px); background-size: ${frameDecor.grainBgSizePx}px ${frameDecor.grainBgSizePx}px;"></div>
-
-          <div class="frame-layer frame-layer--border" style="border-color: color-mix(in srgb, var(--color-border-subtle) ${frameDecor.borderAlphaPercent}%, transparent);"></div>
-
-          ${args.content}
-        </div>
-      </body>
-    </html>
-  `;
+  const frameShell = loadTemplateMarkup("@system/frame-shell");
+  return interpolateTemplate(
+    frameShell,
+    {
+      HEAD_HTML: renderTemplateHead({ safeTitle, width: args.width, height: args.height, theme }),
+      TEMPLATE_ID: escapeHtml(templateId),
+      ROOT_STYLE: rootStyle,
+      IMAGE_VISIBILITY_CLASS: imageVisibilityClass,
+      IMAGE_LAYER_STYLE: imageLayerStyle,
+      OVERLAY_OPACITY: overlayOpacity.toString(),
+      OVERLAY_BACKGROUND: overlayBackground,
+      ACCENT_SWEEP_OPACITY: accentSweepOpacity.toString(),
+      GRAIN_DOT_COLOR: frameDecor.grainDotColor,
+      GRAIN_DOT_SIZE: frameDecor.grainDotSizePx.toString(),
+      GRAIN_BG_SIZE: frameDecor.grainBgSizePx.toString(),
+      BORDER_ALPHA_PERCENT: frameDecor.borderAlphaPercent.toString(),
+      CONTENT: args.content
+    },
+    {}
+  );
 }
 
 interface VisualLayerSettings {
   useBackgroundImageOnly: boolean;
   useHtmlDecorLayers: boolean;
-  styleProfile: string;
 }
 
 function resolveVisualLayerSettings(): VisualLayerSettings {
   const defaults: VisualLayerSettings = {
     useBackgroundImageOnly: DEFAULT_VISUAL_LAYERS.useBackgroundImageOnly,
-    useHtmlDecorLayers: DEFAULT_VISUAL_LAYERS.useHtmlDecorLayers,
-    styleProfile: DEFAULT_VISUAL_LAYERS.styleProfile
+    useHtmlDecorLayers: DEFAULT_VISUAL_LAYERS.useHtmlDecorLayers
   };
 
   const renderConfig = (PIPELINE_CONFIG as unknown as {
@@ -692,8 +438,6 @@ function resolveVisualLayerSettings(): VisualLayerSettings {
       visual_layers?: {
         use_background_image_only?: boolean;
         use_html_decor_layers?: boolean;
-        style_profile?: string;
-        style_profiles?: Record<string, string>;
       };
     };
   }).render;
@@ -702,83 +446,10 @@ function resolveVisualLayerSettings(): VisualLayerSettings {
     return defaults;
   }
 
-  const styleProfiles = visual.style_profiles ?? {};
-  const styleProfile =
-    visual.style_profile?.trim() ??
-    styleProfiles[getDefaultTemplateStyle()] ??
-    defaults.styleProfile;
-
   return {
     useBackgroundImageOnly: visual.use_background_image_only ?? defaults.useBackgroundImageOnly,
-    useHtmlDecorLayers: visual.use_html_decor_layers ?? defaults.useHtmlDecorLayers,
-    styleProfile: styleProfile.trim() || defaults.styleProfile
+    useHtmlDecorLayers: visual.use_html_decor_layers ?? defaults.useHtmlDecorLayers
   };
-}
-
-function renderDecorativeHtmlLayers(args: {
-  profile: string;
-  kind: TemplateKind;
-  hasBackgroundImage: boolean;
-}): string {
-  const opacityBoost = args.hasBackgroundImage ? 0.76 : 1;
-  const profile = args.profile.trim().toLowerCase();
-
-  if (profile === "playful-blobs") {
-    return `
-      <div class="absolute inset-0" style="opacity: ${0.62 * opacityBoost};">
-        <div class="absolute" style="left: -14%; top: -8%; width: calc(560px * var(--layout-scale)); height: calc(560px * var(--layout-scale)); border-radius: 42% 58% 38% 62%; background: radial-gradient(circle at 28% 32%, color-mix(in srgb, var(--color-brand-glow) 68%, transparent), transparent 64%);"></div>
-        <div class="absolute" style="right: -10%; bottom: -12%; width: calc(460px * var(--layout-scale)); height: calc(460px * var(--layout-scale)); border-radius: 62% 38% 58% 42%; background: radial-gradient(circle at 56% 44%, color-mix(in srgb, var(--color-brand-accent) 56%, transparent), transparent 62%);"></div>
-      </div>
-    `;
-  }
-
-  if (profile === "subtle-grid") {
-    return `
-      <div class="absolute inset-0" style="opacity: ${0.42 * opacityBoost}; background-image: linear-gradient(to right, color-mix(in srgb, var(--color-border-subtle) 28%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--color-border-subtle) 24%, transparent) 1px, transparent 1px); background-size: calc(78px * var(--layout-scale)) calc(78px * var(--layout-scale));"></div>
-      <div class="absolute inset-0" style="opacity: ${0.24 * opacityBoost}; background: radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--color-brand-accent) 22%, transparent), transparent 48%);"></div>
-    `;
-  }
-
-  if (profile === "angular-burst") {
-    return `
-      <div class="absolute inset-0" style="opacity: ${0.64 * opacityBoost};">
-        <div class="absolute" style="right: -16%; top: -18%; width: calc(680px * var(--layout-scale)); height: calc(560px * var(--layout-scale)); background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 46%, transparent), transparent 68%); transform: rotate(-14deg);"></div>
-        <div class="absolute" style="left: -18%; bottom: -20%; width: calc(560px * var(--layout-scale)); height: calc(420px * var(--layout-scale)); background: linear-gradient(28deg, color-mix(in srgb, var(--color-brand-glow) 40%, transparent), transparent 72%); transform: rotate(8deg);"></div>
-      </div>
-    `;
-  }
-
-  if (profile === "metric-grid") {
-    const vertical = args.kind === "instagram-story" ? 16 : 10;
-    return `
-      <div class="absolute inset-0" style="opacity: ${0.5 * opacityBoost}; background-image: linear-gradient(to right, color-mix(in srgb, var(--color-border-subtle) 32%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--color-border-subtle) 26%, transparent) 1px, transparent 1px); background-size: calc(88px * var(--layout-scale)) calc(88px * var(--layout-scale));"></div>
-      <div class="absolute inset-0" style="opacity: ${0.34 * opacityBoost}; background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 28%, transparent) 0 calc(${vertical}px * var(--layout-scale)), transparent calc(${vertical}px * var(--layout-scale)) calc(${vertical * 2}px * var(--layout-scale)));"></div>
-    `;
-  }
-
-  if (profile === "swiss-grid") {
-    return `
-      <div class="absolute inset-0" style="opacity: ${0.34 * opacityBoost}; background-image: linear-gradient(to right, color-mix(in srgb, #ffffff 30%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, #ffffff 24%, transparent) 1px, transparent 1px); background-size: calc(70px * var(--layout-scale)) calc(70px * var(--layout-scale));"></div>
-      <div class="absolute" style="left: 0; top: 50%; width: 100%; height: 1px; opacity: ${0.32 * opacityBoost}; background: color-mix(in srgb, #ffffff 36%, transparent);"></div>
-      <div class="absolute" style="left: 50%; top: 0; width: 1px; height: 100%; opacity: ${0.32 * opacityBoost}; background: color-mix(in srgb, #ffffff 36%, transparent);"></div>
-    `;
-  }
-
-  if (profile === "cutout-noise") {
-    return `
-      <div class="absolute inset-0" style="opacity: ${0.62 * opacityBoost};">
-        <div class="absolute" style="left: -12%; top: 12%; width: calc(520px * var(--layout-scale)); height: calc(180px * var(--layout-scale)); background: linear-gradient(102deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent), transparent 72%); transform: rotate(-8deg);"></div>
-        <div class="absolute" style="right: -14%; bottom: 14%; width: calc(580px * var(--layout-scale)); height: calc(210px * var(--layout-scale)); background: linear-gradient(284deg, color-mix(in srgb, #ffffff 26%, transparent), transparent 70%); transform: rotate(9deg);"></div>
-      </div>
-    `;
-  }
-
-  return `
-    <div class="absolute inset-0" style="opacity: ${0.52 * opacityBoost};">
-      <div class="absolute" style="left: -10%; top: -14%; width: calc(540px * var(--layout-scale)); height: calc(540px * var(--layout-scale)); border-radius: 999px; background: radial-gradient(circle at 42% 34%, color-mix(in srgb, var(--color-brand-glow) 52%, transparent), transparent 66%);"></div>
-      <div class="absolute" style="right: -16%; bottom: -18%; width: calc(620px * var(--layout-scale)); height: calc(620px * var(--layout-scale)); border-radius: 999px; background: radial-gradient(circle at 46% 48%, color-mix(in srgb, var(--color-brand-accent) 34%, transparent), transparent 68%);"></div>
-    </div>
-  `;
 }
 
 function renderTopBar(
@@ -787,15 +458,17 @@ function renderTopBar(
   brandName: string,
   slideLabel?: string
 ): string {
-  const left = control.showBrandBadge ? renderBrandPill(brandName) : "";
-  const showSlide = kind === "carousel-slide" && control.showSlideBadge && slideLabel;
-  const right = showSlide ? renderBrandPill(slideLabel as string) : "";
+  const showLeft = control.showBrandBadge;
+  const showRight = kind === "carousel-slide" && control.showSlideBadge && Boolean(slideLabel?.trim());
+  const showTopBar = showLeft || showRight;
 
-  if (!left && !right) {
-    return "";
-  }
-
-  return `<div class="top-bar">${left}<span class="top-bar-right">${right}</span></div>`;
+  return renderSystemFragment("@system/top-bar-shell", {
+    TOP_BAR_VISIBILITY_CLASS: showTopBar ? "" : "is-hidden",
+    LEFT_PILL_VISIBILITY_CLASS: showLeft ? "" : "is-hidden",
+    RIGHT_PILL_VISIBILITY_CLASS: showRight ? "" : "is-hidden",
+    LEFT_LABEL: escapeHtml(brandName),
+    RIGHT_LABEL: escapeHtml(slideLabel ?? "")
+  });
 }
 
 function renderMetaFooter(
@@ -804,19 +477,26 @@ function renderMetaFooter(
   defaultLeft: string,
   defaultRight: string
 ): string {
-  if (!control.showMetaFooter) {
-    return "";
-  }
-
   const left = control.metaLeftText ?? defaultLeft;
   const right = control.metaRightText ?? defaultRight;
 
-  return `
-    <div class="meta-footer">
-      <span>${escapeHtml(left)}</span>
-      <span>${escapeHtml(right)}</span>
-    </div>
-  `;
+  return renderSystemFragment("@system/meta-footer-shell", {
+    META_FOOTER_VISIBILITY_CLASS: control.showMetaFooter ? "" : "is-hidden",
+    META_LEFT_LABEL: escapeHtml(left),
+    META_RIGHT_LABEL: escapeHtml(right)
+  });
+}
+
+function renderKicker(
+  kind: TemplateKind,
+  control: ReturnType<typeof resolveTemplateControl>,
+  title: string
+): string {
+  const shouldShowKicker = kind === "carousel-slide" && control.showTitleKicker;
+  return renderSystemFragment("@system/kicker-shell", {
+    KICKER_VISIBILITY_CLASS: shouldShowKicker ? "" : "is-hidden",
+    KICKER_TEXT: escapeHtml(title)
+  });
 }
 
 function defaultMetaLeft(kind: TemplateKind): string {
@@ -833,15 +513,19 @@ function defaultMetaRight(_kind: TemplateKind): string {
   return renderConfig?.meta_right_labels?.[_kind] ?? META_RIGHT_LABELS[_kind] ?? "";
 }
 
-function renderBrandPill(label: string): string {
-  return `<span class="brand-pill">${escapeHtml(label)}</span>`;
-}
-
 function alignmentClassName(alignment: "left" | "center"): string {
   if (alignment === "center") {
     return "align-center";
   }
   return "align-left";
+}
+
+function renderSystemFragment(templateId: string, tokens: Record<string, string>): string {
+  const template = loadTemplateMarkup(templateId);
+  return template.replace(/\{\{\s*([A-Z0-9_:-]+)\s*\}\}/g, (_match, rawKey: string) => {
+    const key = rawKey.trim().toUpperCase();
+    return tokens[key] ?? "";
+  });
 }
 
 function escapeHtml(value: string): string {
@@ -863,10 +547,7 @@ export function previewParamsFromUrl(kind: TemplateKind, url: URL): BaseTemplate
     imageUrl: url.searchParams.get("imageUrl") ?? "",
     brandColor: url.searchParams.get("brandingColor") ?? PIPELINE_CONFIG.brand.default_color,
     brandName: url.searchParams.get("brand") ?? url.searchParams.get("brandName") ?? PIPELINE_CONFIG.brand.default_name,
-    templateStyle: url.searchParams.get("templateStyle") ?? undefined,
     templateId: url.searchParams.get("templateId") ?? undefined,
-    templateArchetype: url.searchParams.get("templateArchetype") ?? url.searchParams.get("archetype") ?? undefined,
-    fontProfile: url.searchParams.get("fontProfile") ?? undefined,
     slots: slotValues,
     brandTokens: tokenOverridesFromQuery(url.searchParams),
     design: templateControlSetFromQuery(url.searchParams)

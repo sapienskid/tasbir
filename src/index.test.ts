@@ -54,10 +54,10 @@ describe("social pipeline worker", () => {
     expect(html).not.toContain("CAROUSEL");
   });
 
-  it("resolves preview templates with archetype and slot values", async () => {
+  it("resolves preview templates with slot values", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/instagram-post?templateStyle=data&templateId=core/metric-split&archetype=metric&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal+that+compounds&slot.insight_line=One+metric+only+works+when+paired+with+context."
+        "https://worker.test/template/instagram-post?templateId=core/metric-split&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal+that+compounds&slot.insight_line=One+metric+only+works+when+paired+with+context."
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -66,29 +66,28 @@ describe("social pipeline worker", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain('data-template-id="core/metric-split"');
-    expect(html).toContain('data-template-style="data"');
-    expect(html).toContain('data-template-archetype="metric"');
+    expect(html).not.toContain("data-template-archetype=");
     expect(html).toContain("9.8K");
     expect(html).toContain("Signal that compounds");
   });
 
-  it("applies requested font profile from preview query", async () => {
+  it("applies font variables from css-based template head", async () => {
     const response = await worker.fetch(
-      authorizedRequest("https://worker.test/template/twitter-card?title=Data&caption=Point&fontProfile=data-mono"),
+      authorizedRequest("https://worker.test/template/twitter-card?title=Data&caption=Point"),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
 
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain("IBM+Plex+Mono");
-    expect(html).toContain('--font-body: "IBM Plex Mono", monospace;');
+    expect(html).toContain("--font-display:");
+    expect(html).toContain("--font-body:");
   });
 
-  it("preserves template style metadata without style-specific css classes", async () => {
+  it("does not render style-specific css classes", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/twitter-card?templateStyle=data&templateId=core/data-base&title=Data+Story&caption=Signal+beats+noise"
+        "https://worker.test/template/twitter-card?templateId=core/data-base&title=Data+Story&caption=Signal+beats+noise"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -96,11 +95,10 @@ describe("social pipeline worker", () => {
 
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('data-template-style="data"');
     expect(html).not.toContain("style-data");
   });
 
-  it("returns template catalog with styles and template versions", async () => {
+  it("returns template catalog with template versions", async () => {
     const response = await worker.fetch(
       authorizedRequest("https://worker.test/template-catalog"),
       { API_KEYS: TEST_API_KEY } as never,
@@ -112,7 +110,6 @@ describe("social pipeline worker", () => {
       ok: boolean;
       schema_version: number;
       catalog_version: string;
-      styles: Array<{ id: string }>;
       templates: Array<{ id: string; version: string }>;
       templates_by_format: Record<string, string[]>;
     };
@@ -120,7 +117,6 @@ describe("social pipeline worker", () => {
     expect(body.ok).toBe(true);
     expect(body.schema_version).toBe(1);
     expect(typeof body.catalog_version).toBe("string");
-    expect(body.styles.some((style) => style.id === "editorial")).toBe(true);
     expect(body.templates.length).toBeGreaterThan(0);
     expect(body.templates[0].version.length).toBeGreaterThan(0);
     expect(body.templates_by_format["instagram-post"].length).toBeGreaterThan(0);
@@ -155,9 +151,6 @@ describe("social pipeline worker", () => {
             ],
             image_prompt: "A clean workspace with a laptop and notes, editorial style",
             use_feature_image: true,
-            template_style: "editorial",
-            post_archetype: "insight",
-            font_profile: "editorial-serif",
             slot_content: {
               headline: "Build repeatable systems",
               insight_line: "Consistency compounds when your process is simple."
@@ -224,9 +217,6 @@ describe("social pipeline worker", () => {
             hashtags: ["#workflow", "#contentops", "#socialmedia", "#cloudflare", "#automation", "#creator", "#pipeline", "#growth"],
             image_prompt: "A clean workspace with a laptop and notes, editorial style",
             use_feature_image: true,
-            template_style: "editorial",
-            post_archetype: "insight",
-            font_profile: "editorial-serif",
             slot_content: {
               headline: "Build repeatable systems",
               insight_line: "Consistency compounds when your process is simple."
@@ -301,9 +291,6 @@ describe("social pipeline worker", () => {
             hashtags: ["#workflow", "#contentops", "#socialmedia", "#cloudflare", "#automation", "#creator", "#pipeline", "#growth"],
             image_prompt: "A clean workspace with a laptop and notes, editorial style",
             use_feature_image: true,
-            template_style: "editorial",
-            post_archetype: "insight",
-            font_profile: "editorial-serif",
             slot_content: {
               headline: "Build repeatable systems",
               insight_line: "Consistency compounds when your process is simple."
@@ -369,9 +356,6 @@ describe("social pipeline worker", () => {
             hashtags: ["#workflow", "#contentops", "#socialmedia", "#automation", "#cloudflare", "#pipeline", "#creator", "#growth"],
             image_prompt: "A clean desk and laptop in natural lighting",
             use_feature_image: false,
-            template_style: "editorial",
-            post_archetype: "insight",
-            font_profile: "editorial-serif",
             slot_content: {}
           })
         }))

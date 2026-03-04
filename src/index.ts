@@ -1,15 +1,17 @@
 import puppeteer from "@cloudflare/puppeteer";
-import { generateStructuredCopy, normalizeSourceContent, type LlmOutput, type LlmPromptOverrides } from "./ai";
-import { listFontProfiles, normalizeFontProfileId, resolveFontProfileId } from "./template-theme";
+import {
+  chooseTemplateAssignments,
+  generateStructuredCopy,
+  normalizeSourceContent,
+  type LlmOutput,
+  type LlmPromptOverrides,
+  type TemplateChoiceCandidate
+} from "./ai";
 import {
   getTemplateDimensions,
   isTemplateKind,
-  listPostArchetypes,
   listRequiredSlotKeys,
   listTemplateKinds,
-  listTemplateStyles,
-  normalizePostArchetype,
-  normalizeTemplateStyle,
   previewParamsFromUrl,
   resolveTemplateId,
   renderTemplate,
@@ -58,6 +60,7 @@ interface ImageGenerationOptions {
 interface OutputOptions {
   formats?: TemplateKind[];
   carouselSlides?: number;
+  postCount?: number;
 }
 
 interface GenerateRequestBody {
@@ -65,9 +68,7 @@ interface GenerateRequestBody {
   url?: string;
   brandingColor?: string;
   brandName?: string;
-  templateStyle?: string;
-  postArchetype?: string;
-  fontProfile?: string;
+  prompt?: string;
   templateIds?: Partial<Record<TemplateKind, string>>;
   slotOverrides?: Record<string, string>;
   brandTokens?: BrandTokenOverrides;
@@ -91,9 +92,7 @@ interface DirectContentRequestBody {
   primary_tag?: string;
   brandingColor?: string;
   brandName?: string;
-  templateStyle?: string;
-  postArchetype?: string;
-  fontProfile?: string;
+  prompt?: string;
   templateIds?: Partial<Record<TemplateKind, string>>;
   slotOverrides?: Record<string, string>;
   brandTokens?: BrandTokenOverrides;
@@ -154,9 +153,6 @@ interface StoredAsset {
 }
 
 interface TemplatePlan {
-  templateStyle: string;
-  postArchetype: string;
-  fontProfile: string;
   templateIds: Partial<Record<TemplateKind, string>>;
   requiredSlotKeys: string[];
 }
@@ -168,9 +164,6 @@ interface GenerationResult {
   requested_formats: TemplateKind[];
   image_source: SelectedImage;
   template_plan: {
-    template_style: string;
-    post_archetype: string;
-    font_profile: string;
     required_slot_keys: string[];
     template_ids: Partial<Record<TemplateKind, string>>;
   };
@@ -182,6 +175,13 @@ interface GenerationResult {
     linkedin_post: StoredAsset | null;
     carousel: StoredAsset[];
   };
+  variants?: Array<{
+    index: number;
+    image_source: SelectedImage;
+    template_plan: GenerationResult["template_plan"];
+    llm_output: LlmOutput;
+    assets: GenerationResult["assets"];
+  }>;
 }
 
 type ProtectedRoute = "preview" | "catalog" | "generate" | "generate-from-content" | "webhook";
@@ -266,10 +266,15 @@ const STOCK_TOPIC_PATTERN = createTopicKeywordPattern(PIPELINE_CONFIG.generation
 const DEFAULT_CAROUSEL_SLIDES = PIPELINE_CONFIG.generation.carousel_required_slides;
 const TEMPLATE_KINDS = listTemplateKinds();
 const TEMPLATE_KIND_SET = new Set(TEMPLATE_KINDS);
+const TEMPLATE_REGISTRY = PIPELINE_CONFIG.templates as ReadonlyArray<{
+  id: string;
+  format?: string;
+  formats?: readonly string[];
+}>;
 const TEMPLATE_IDS_BY_FORMAT: Record<TemplateKind, Set<string>> = TEMPLATE_KINDS.reduce(
   (acc, format) => {
     acc[format] = new Set(
-      PIPELINE_CONFIG.templates
+      TEMPLATE_REGISTRY
         .filter((template) => templateSupportsFormat(template, format))
         .map((template) => template.id)
     );
@@ -277,9 +282,6 @@ const TEMPLATE_IDS_BY_FORMAT: Record<TemplateKind, Set<string>> = TEMPLATE_KINDS
   },
   {} as Record<TemplateKind, Set<string>>
 );
-const TEMPLATE_STYLE_SET = new Set(listTemplateStyles().map((style) => style.id));
-const POST_ARCHETYPE_SET = new Set(listPostArchetypes().map((archetype) => archetype.id));
-const FONT_PROFILE_SET = new Set(listFontProfiles().map((profile) => profile.id));
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -407,25 +409,18 @@ function handleTemplateCatalog(): Response {
     id: string;
     format?: TemplateKind;
     formats?: readonly TemplateKind[];
-    style?: string;
-    styles?: readonly string[];
     label: string;
-    default_for_style?: boolean;
-    archetypes?: readonly string[];
+    description?: string;
     file: string;
   }>).map((template) => {
     const templateMarkup = templateFileMap[template.id] ?? "";
     const formats = resolveTemplateFormats(template);
-    const styles = resolveTemplateStyles(template);
     return {
       id: template.id,
       format: formats[0],
       formats,
-      style: styles[0],
-      styles,
       label: template.label,
-      default_for_style: Boolean(template.default_for_style),
-      archetypes: template.archetypes ?? [],
+      description: template.description ?? "",
       file: template.file,
       version: stableShortHash(`${template.id}:${templateMarkup}`)
     };
@@ -434,19 +429,6 @@ function handleTemplateCatalog(): Response {
   const templatesByFormat = listTemplateKinds().reduce(
     (acc, kind) => {
       acc[kind] = templates.filter((template) => template.formats.includes(kind)).map((template) => template.id);
-      return acc;
-    },
-    {} as Record<TemplateKind, string[]>
-  );
-
-  const stylesByFormat = listTemplateKinds().reduce(
-    (acc, kind) => {
-      const styles = new Set(
-        templates
-          .filter((template) => template.formats.includes(kind))
-          .flatMap((template) => template.styles)
-      );
-      acc[kind] = [...styles];
       return acc;
     },
     {} as Record<TemplateKind, string[]>
@@ -464,7 +446,6 @@ function handleTemplateCatalog(): Response {
   const catalogVersion = stableShortHash(
     JSON.stringify({
       schema_version: PIPELINE_CONFIG.schema_version,
-      styles: listTemplateStyles().map((style) => style.id),
       templates: templates.map((template) => `${template.id}:${template.version}`)
     })
   );
@@ -474,18 +455,11 @@ function handleTemplateCatalog(): Response {
     schema_version: PIPELINE_CONFIG.schema_version,
     catalog_version: catalogVersion,
     defaults: {
-      template_style: PIPELINE_CONFIG.template_styles.default_style,
-      post_archetype: PIPELINE_CONFIG.post_archetypes.default_archetype,
-      font_profile: PIPELINE_CONFIG.typography.default_font_profile,
       carousel_required_slides: PIPELINE_CONFIG.generation.carousel_required_slides
     },
-    styles: listTemplateStyles(),
-    archetypes: listPostArchetypes(),
-    font_profiles: listFontProfiles(),
     formats,
     templates,
-    templates_by_format: templatesByFormat,
-    styles_by_format: stylesByFormat
+    templates_by_format: templatesByFormat
   });
 }
 
@@ -509,23 +483,6 @@ function resolveTemplateFormats(template: {
   }
 
   return [...TEMPLATE_KINDS];
-}
-
-function resolveTemplateStyles(template: {
-  style?: string;
-  styles?: readonly string[];
-}): string[] {
-  const fromArray = Array.isArray(template.styles) ? template.styles : [];
-  const fromSingle = typeof template.style === "string" ? [template.style] : [];
-  const normalized = [...fromArray, ...fromSingle]
-    .map((style) => (typeof style === "string" ? style.trim().toLowerCase() : ""))
-    .filter((style): style is string => Boolean(style));
-
-  if (normalized.length > 0) {
-    return [...new Set(normalized)];
-  }
-
-  return [PIPELINE_CONFIG.template_styles.default_style];
 }
 
 function templateSupportsFormat(
@@ -855,9 +812,7 @@ async function runPipelineFromPost(
   brandInput: {
     brandingColor?: string;
     brandName?: string;
-    templateStyle?: string;
-    postArchetype?: string;
-    fontProfile?: string;
+    prompt?: string;
     templateIds?: Partial<Record<TemplateKind, string>>;
     slotOverrides?: Record<string, string>;
     brandTokens?: BrandTokenOverrides;
@@ -870,86 +825,115 @@ async function runPipelineFromPost(
   security: ResolvedSecurityConfig
 ): Promise<GenerationResult> {
   const outputPlan = resolveOutputPlan(brandInput.output);
-  const templatePlan = buildTemplatePlan({
-    outputFormats: outputPlan.formats,
-    templateStyle: brandInput.templateStyle,
-    postArchetype: brandInput.postArchetype,
-    fontProfile: brandInput.fontProfile,
-    templateIds: brandInput.templateIds
-  });
-
-  const llmOutput = await generateStructuredCopy({
-    ai: env.AI,
-    llmModel: env.LLM_MODEL,
-    post,
-    requiredCarouselSlides: outputPlan.carouselSlides,
-    selectedTemplateStyle: templatePlan.templateStyle,
-    selectedPostArchetype: templatePlan.postArchetype,
-    selectedFontProfile: templatePlan.fontProfile,
-    requiredSlotKeys: templatePlan.requiredSlotKeys,
-    llmOverrides: brandInput.llm,
-    normalizeSlotContent
-  });
-  const mergedSlotContent = mergeSlotContent(
-    llmOutput.slot_content,
-    normalizeSlotContent(brandInput.slotOverrides, {
-      title: post.title,
-      fallbackText: post.custom_excerpt || post.excerpt || post.plaintext || "",
-      requiredSlotKeys: templatePlan.requiredSlotKeys
-    })
-  );
-  const selectedImage = await chooseImageSource(env, post, llmOutput, brandInput.image, security, {
-    templateStyle: templatePlan.templateStyle,
-    postArchetype: templatePlan.postArchetype
-  });
-
   const brandColor = brandInput.brandingColor ?? env.DEFAULT_BRAND_COLOR ?? PIPELINE_CONFIG.brand.default_color;
   const brandName = brandInput.brandName ?? env.BRAND_NAME ?? PIPELINE_CONFIG.brand.default_name;
+  const variants: NonNullable<GenerationResult["variants"]> = [];
 
-  const renderAssets = await renderAndStoreAssets(env, {
-    slug: post.slug,
-    postTitle: post.title,
-    imageUrl: selectedImage.imageUrl,
-    llmOutput: {
-      ...llmOutput,
-      slot_content: mergedSlotContent
-    },
-    brandColor,
-    brandName,
-    templateStyle: templatePlan.templateStyle,
-    templateArchetype: templatePlan.postArchetype,
-    fontProfile: templatePlan.fontProfile,
-    templateIds: templatePlan.templateIds,
-    requiredSlotKeys: templatePlan.requiredSlotKeys,
-    slotContent: mergedSlotContent,
-    brandTokens: brandInput.brandTokens,
-    design: brandInput.design,
-    storage: brandInput.storage,
-    requestedFormats: outputPlan.formats
-  });
+  for (let index = 0; index < outputPlan.postCount; index += 1) {
+    const variantPrompt =
+      outputPlan.postCount > 1
+        ? [brandInput.prompt?.trim(), `Variation index ${index + 1} of ${outputPlan.postCount}.`].filter(Boolean).join(" ")
+        : brandInput.prompt;
+
+    const templatePlan = await buildTemplatePlan({
+      ai: env.AI,
+      llmModel: env.LLM_MODEL,
+      post,
+      userPrompt: variantPrompt,
+      outputFormats: outputPlan.formats,
+      templateIds: brandInput.templateIds
+    });
+
+    const llmOutput = await generateStructuredCopy({
+      ai: env.AI,
+      llmModel: env.LLM_MODEL,
+      post,
+      requiredCarouselSlides: outputPlan.carouselSlides,
+      requiredSlotKeys: templatePlan.requiredSlotKeys,
+      userPrompt: variantPrompt,
+      llmOverrides: brandInput.llm,
+      normalizeSlotContent
+    });
+    const mergedSlotContent = mergeSlotContent(
+      llmOutput.slot_content,
+      normalizeSlotContent(brandInput.slotOverrides, {
+        title: post.title,
+        fallbackText: post.custom_excerpt || post.excerpt || post.plaintext || "",
+        requiredSlotKeys: templatePlan.requiredSlotKeys
+      })
+    );
+    const selectedImage = await chooseImageSource(env, post, llmOutput, brandInput.image, security);
+    const renderAssets = await renderAndStoreAssets(env, {
+      slug: post.slug,
+      postTitle: post.title,
+      imageUrl: selectedImage.imageUrl,
+      llmOutput: {
+        ...llmOutput,
+        slot_content: mergedSlotContent
+      },
+      brandColor,
+      brandName,
+      templateIds: templatePlan.templateIds,
+      requiredSlotKeys: templatePlan.requiredSlotKeys,
+      slotContent: mergedSlotContent,
+      brandTokens: brandInput.brandTokens,
+      design: brandInput.design,
+      storage: storageForVariant(brandInput.storage, index, outputPlan.postCount),
+      requestedFormats: outputPlan.formats
+    });
+
+    variants.push({
+      index: index + 1,
+      image_source: selectedImage,
+      template_plan: {
+        required_slot_keys: templatePlan.requiredSlotKeys,
+        template_ids: templatePlan.templateIds
+      },
+      llm_output: {
+        ...llmOutput,
+        slot_content: mergedSlotContent
+      },
+      assets: renderAssets
+    });
+  }
+
+  const primaryVariant = variants[0];
+  if (!primaryVariant) {
+    throw new HttpError(500, "Generation pipeline did not produce any output variants");
+  }
 
   return {
     ok: true,
     slug: post.slug,
     post_url: post.url,
     requested_formats: [...outputPlan.formats],
-    image_source: selectedImage,
-    template_plan: {
-      template_style: templatePlan.templateStyle,
-      post_archetype: templatePlan.postArchetype,
-      font_profile: templatePlan.fontProfile,
-      required_slot_keys: templatePlan.requiredSlotKeys,
-      template_ids: templatePlan.templateIds
-    },
-    llm_output: {
-      ...llmOutput,
-      slot_content: mergedSlotContent
-    },
-    assets: renderAssets
+    image_source: primaryVariant.image_source,
+    template_plan: primaryVariant.template_plan,
+    llm_output: primaryVariant.llm_output,
+    assets: primaryVariant.assets,
+    variants: outputPlan.postCount > 1 ? variants : undefined
   };
 }
 
-function resolveOutputPlan(output: OutputOptions | undefined): { formats: Set<TemplateKind>; carouselSlides: number } {
+function storageForVariant(storage: StorageOptions | undefined, index: number, totalCount: number): StorageOptions | undefined {
+  if (totalCount <= 1 || index === 0) {
+    return storage;
+  }
+
+  const existing = storage?.runId ? sanitizeRunId(storage.runId) : null;
+  const variantRunId = [existing ?? "variant", `v${index + 1}`].join("-");
+  return {
+    mode: "versioned",
+    includeDate: storage?.includeDate,
+    runId: variantRunId
+  };
+}
+
+function resolveOutputPlan(output: OutputOptions | undefined): {
+  formats: Set<TemplateKind>;
+  carouselSlides: number;
+  postCount: number;
+} {
   const requestedFormats = output?.formats && output.formats.length > 0 ? output.formats : TEMPLATE_KINDS;
   const normalizedFormats = new Set<TemplateKind>();
   for (const format of requestedFormats) {
@@ -965,42 +949,57 @@ function resolveOutputPlan(output: OutputOptions | undefined): { formats: Set<Te
   const requestedSlides = Math.round(
     clampNumber(output?.carouselSlides, 1, 10, DEFAULT_CAROUSEL_SLIDES)
   );
+  const postCount = Math.round(clampNumber(output?.postCount, 1, 10, 1));
   return {
     formats: normalizedFormats,
-    carouselSlides: requestedSlides
+    carouselSlides: requestedSlides,
+    postCount
   };
 }
 
-function buildTemplatePlan(args: {
+async function buildTemplatePlan(args: {
+  ai: Ai;
+  llmModel?: string;
+  post: GhostPost;
+  userPrompt?: string;
   outputFormats: Set<TemplateKind>;
-  templateStyle?: string;
-  postArchetype?: string;
-  fontProfile?: string;
   templateIds?: Partial<Record<TemplateKind, string>>;
-}): TemplatePlan {
-  const templateStyle = normalizeTemplateStyle(args.templateStyle);
-  const postArchetype = normalizePostArchetype(args.postArchetype);
-  const fontProfile = normalizeFontProfileId(
-    args.fontProfile ??
-      resolveFontProfileId({
-        style: templateStyle,
-        archetype: postArchetype
+}): Promise<TemplatePlan> {
+  const requestedFormats = [...args.outputFormats];
+  const templateCandidates = buildTemplateCandidates(requestedFormats);
+
+  const preselected: Record<string, string> = {};
+  const formatsForLlm: string[] = [];
+  for (const format of requestedFormats) {
+    const forcedTemplateId = args.templateIds?.[format];
+    if (forcedTemplateId) {
+      preselected[format] = forcedTemplateId;
+      continue;
+    }
+    formatsForLlm.push(format);
+  }
+
+  const llmSelected = formatsForLlm.length
+    ? await chooseTemplateAssignments({
+        ai: args.ai,
+        llmModel: args.llmModel,
+        post: args.post,
+        requestedFormats: formatsForLlm,
+        templateCandidates,
+        userPrompt: args.userPrompt
       })
-  );
+    : {};
 
   const templateIds: Partial<Record<TemplateKind, string>> = {};
   const requiredSlotKeySet = new Set<string>();
-  for (const format of args.outputFormats) {
+  for (const format of requestedFormats) {
+    const selectedTemplateId = preselected[format] ?? llmSelected[format];
     const resolvedTemplateId = resolveTemplateId(format, {
-      templateStyle,
-      templateArchetype: postArchetype,
-      templateId: args.templateIds?.[format]
+      templateId: selectedTemplateId
     });
     templateIds[format] = resolvedTemplateId;
 
     const requiredForTemplate = listRequiredSlotKeys(format, {
-      templateStyle,
-      templateArchetype: postArchetype,
       templateId: resolvedTemplateId
     });
     for (const key of requiredForTemplate) {
@@ -1012,12 +1011,31 @@ function buildTemplatePlan(args: {
   }
 
   return {
-    templateStyle,
-    postArchetype,
-    fontProfile,
     templateIds,
     requiredSlotKeys: [...requiredSlotKeySet]
   };
+}
+
+function buildTemplateCandidates(formats: TemplateKind[]): Record<string, TemplateChoiceCandidate[]> {
+  const templates = PIPELINE_CONFIG.templates as ReadonlyArray<{
+    id: string;
+    format?: TemplateKind;
+    formats?: readonly TemplateKind[];
+    label: string;
+    description?: string;
+  }>;
+
+  const candidates: Record<string, TemplateChoiceCandidate[]> = {};
+  for (const format of formats) {
+    const byFormat = templates.filter((template) => templateSupportsFormat(template, format));
+    candidates[format] = byFormat.map((template) => ({
+      id: template.id,
+      label: template.label,
+      description: template.description,
+      requiredSlotKeys: listRequiredSlotKeys(format, { templateId: template.id })
+    }));
+  }
+  return candidates;
 }
 
 function buildPostFromDirectContent(input: DirectContentRequestBody, security: ResolvedSecurityConfig): GhostPost {
@@ -1163,11 +1181,7 @@ async function chooseImageSource(
   post: GhostPost,
   llmOutput: LlmOutput,
   options: ImageGenerationOptions | undefined,
-  security: ResolvedSecurityConfig,
-  context?: {
-    templateStyle?: string;
-    postArchetype?: string;
-  }
+  security: ResolvedSecurityConfig
 ): Promise<SelectedImage> {
   const mode = (options?.mode ?? "auto").trim().toLowerCase() as NonNullable<ImageGenerationOptions["mode"]>;
   const prompt = ensureLength(options?.prompt ?? llmOutput.image_prompt, PIPELINE_CONFIG.generation.limits.image_prompt_max_chars, llmOutput.image_prompt);
@@ -1225,8 +1239,6 @@ async function chooseImageSource(
     }
     const aiImage = await generateAiImage(env, {
       prompt,
-      templateStyle: context?.templateStyle ?? normalizeTemplateStyle(undefined),
-      postArchetype: context?.postArchetype ?? normalizePostArchetype(undefined),
       postTitle: post.title,
       topTags: (post.tags ?? [])
         .map((tag) => tag.name ?? "")
@@ -1263,8 +1275,6 @@ async function chooseImageSource(
   if (allowAi) {
     const aiImage = await generateAiImage(env, {
       prompt,
-      templateStyle: context?.templateStyle ?? normalizeTemplateStyle(undefined),
-      postArchetype: context?.postArchetype ?? normalizePostArchetype(undefined),
       postTitle: post.title,
       topTags: (post.tags ?? [])
         .map((tag) => tag.name ?? "")
@@ -1347,29 +1357,17 @@ async function generateAiImage(
   env: Env,
   args: {
     prompt: string;
-    templateStyle?: string;
-    postArchetype?: string;
     postTitle?: string;
     topTags?: string;
   }
 ): Promise<SelectedImage | null> {
   const model = (env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL) as keyof AiModels;
-  const styleGuidance = (
-    (PIPELINE_CONFIG.generation.image as unknown as { style_guidance?: Record<string, string> }).style_guidance ?? {}
-  ) as Record<string, string>;
-  const archetypeGuidance = (
-    (PIPELINE_CONFIG.generation.image as unknown as { archetype_guidance?: Record<string, string> }).archetype_guidance ?? {}
-  ) as Record<string, string>;
   const negativeClauses = (
     (PIPELINE_CONFIG.generation.image as unknown as { negative_clauses?: string[] }).negative_clauses ?? []
   ) as string[];
 
-  const style = normalizeTemplateStyle(args.templateStyle);
-  const archetype = normalizePostArchetype(args.postArchetype);
   const imagePrompt = [
     ...PIPELINE_CONFIG.generation.image.prompt_prefix,
-    styleGuidance[style] ? `Visual style direction: ${styleGuidance[style]}` : "",
-    archetypeGuidance[archetype] ? `Marketing intent: ${archetypeGuidance[archetype]}` : "",
     args.postTitle ? `Campaign context title: ${args.postTitle}` : "",
     args.topTags ? `Context tags: ${args.topTags}` : "",
     `Scene: ${args.prompt}`,
@@ -1441,9 +1439,6 @@ async function renderAndStoreAssets(
     llmOutput: LlmOutput;
     brandColor: string;
     brandName: string;
-    templateStyle: string;
-    templateArchetype: string;
-    fontProfile: string;
     templateIds?: Partial<Record<TemplateKind, string>>;
     requiredSlotKeys: string[];
     slotContent: Record<string, string>;
@@ -1465,9 +1460,6 @@ async function renderAndStoreAssets(
     imageUrl: args.imageUrl,
     brandColor: args.brandColor,
     brandName: args.brandName,
-    templateStyle: args.templateStyle,
-    templateArchetype: args.templateArchetype,
-    fontProfile: args.fontProfile,
     slots: sharedSlots,
     brandTokens: args.brandTokens,
     design: args.design
@@ -1770,7 +1762,6 @@ function normalizeSlotContent(
   }
 ): Record<string, string> {
   const limits = PIPELINE_CONFIG.generation.limits;
-  const slotDefaults = PIPELINE_CONFIG.slot_schema.defaults as Record<string, string>;
   const untitled = PIPELINE_CONFIG.generation.fallbacks.untitled_text;
   const normalized: Record<string, string> = {};
 
@@ -1786,43 +1777,34 @@ function normalizeSlotContent(
   }
 
   const fallbackLine = toSingleSentence(ensureLength(args.fallbackText, limits.slot_fallback_line_max_chars, args.title));
-
-  const resolveSlotDefault = (slotKey: string): string => {
-    const raw = slotDefaults[slotKey] ?? "";
-    if (!raw) {
-      return "";
-    }
-    return raw
-      .replaceAll("{{TITLE}}", args.title)
-      .replaceAll("{{CAPTION}}", fallbackLine)
-      .replaceAll("{{BRAND_NAME}}", PIPELINE_CONFIG.brand.default_name);
+  const normalizedTitle = ensureLength(args.title, limits.slot_headline_max_chars, untitled);
+  const slotFallbackContext: SlotFallbackContext = {
+    title: normalizedTitle,
+    fallbackLine,
+    brandName: PIPELINE_CONFIG.brand.default_name,
+    defaultQuoteAuthor: PIPELINE_CONFIG.generation.fallbacks.default_quote_author,
+    slideHeadings: [],
+    slideCount: 1
   };
 
-  normalized.headline = normalized.headline || ensureLength(args.title, limits.slot_headline_max_chars, untitled);
-  normalized.subheadline = normalized.subheadline || fallbackLine;
-  normalized.short_hook = normalized.short_hook || ensureLength(args.title, limits.slot_headline_max_chars, args.title);
-  normalized.supporting_line = normalized.supporting_line || fallbackLine;
-  normalized.insight_line = normalized.insight_line || fallbackLine;
-  normalized.quote_text = normalized.quote_text || resolveSlotDefault("quote_text") || fallbackLine;
-  normalized.quote_author =
-    normalized.quote_author || resolveSlotDefault("quote_author") || PIPELINE_CONFIG.generation.fallbacks.default_quote_author;
-  normalized.cta_text = normalized.cta_text || resolveSlotDefault("cta_text");
-  normalized.kicker = normalized.kicker || resolveSlotDefault("kicker");
-  normalized.metric_value = normalized.metric_value || resolveSlotDefault("metric_value");
-  normalized.metric_label = normalized.metric_label || resolveSlotDefault("metric_label");
-  normalized.step_1 = normalized.step_1 || resolveSlotDefault("step_1");
-  normalized.step_2 = normalized.step_2 || resolveSlotDefault("step_2");
-  normalized.step_3 = normalized.step_3 || resolveSlotDefault("step_3");
-  normalized.step_4 = normalized.step_4 || resolveSlotDefault("step_4");
+  for (const slotKey of ["headline", "subheadline", "short_hook", "supporting_line", "insight_line"]) {
+    if (normalized[slotKey]) {
+      continue;
+    }
+    normalized[slotKey] = ensureLength(
+      inferSlotFallbackValue(slotKey, slotFallbackContext),
+      limits.slot_text_max_chars,
+      fallbackLine
+    );
+  }
 
   for (const requiredKey of args.requiredSlotKeys ?? []) {
     const normalizedKey = normalizeSlotKey(requiredKey);
     if (!normalizedKey || normalized[normalizedKey]) {
       continue;
     }
-    const fromDefaults = resolveSlotDefault(normalizedKey);
     normalized[normalizedKey] = ensureLength(
-      fromDefaults || fallbackLine,
+      inferSlotFallbackValue(normalizedKey, slotFallbackContext),
       limits.slot_text_max_chars,
       fallbackLine
     );
@@ -1848,12 +1830,10 @@ function buildSharedSlotContent(args: {
   postTitle: string;
   llmOutput: LlmOutput;
   brandName: string;
-  templateArchetype: string;
   slotContent: Record<string, string>;
   requiredSlotKeys: string[];
 }): Record<string, string> {
   const limits = PIPELINE_CONFIG.generation.limits;
-  const slotDefaults = PIPELINE_CONFIG.slot_schema.defaults as Record<string, string>;
   const defaultQuoteAuthor = PIPELINE_CONFIG.generation.fallbacks.default_quote_author;
   const slots = {
     ...args.slotContent
@@ -1866,10 +1846,6 @@ function buildSharedSlotContent(args: {
   const slideCount = Math.max(args.llmOutput.carousel_slides.length, 1);
 
   const firstSlide = args.llmOutput.carousel_slides[0];
-  const secondSlide = args.llmOutput.carousel_slides[1];
-  const thirdSlide = args.llmOutput.carousel_slides[2];
-  const fourthSlide = args.llmOutput.carousel_slides[3];
-
   const fallbackByKey: Record<string, string> = {
     headline: fallbackHeadline,
     heading: fallbackHeadline,
@@ -1880,27 +1856,16 @@ function buildSharedSlotContent(args: {
     insight_line: args.llmOutput.twitter_caption || fallbackLine,
     quote_text: args.llmOutput.linkedin_caption || fallbackLine,
     quote_author: args.brandName || defaultQuoteAuthor,
-    cta_text: slotDefaults.cta_text || "Read more",
-    kicker: slotDefaults.kicker || args.templateArchetype.toUpperCase(),
-    metric_value: slotDefaults.metric_value || "2.4K",
-    metric_label: slotDefaults.metric_label || "Weekly readers",
-    step_1: firstSlide?.heading || slotDefaults.step_1 || "",
-    step_2: secondSlide?.heading || slotDefaults.step_2 || "",
-    step_3: thirdSlide?.heading || slotDefaults.step_3 || "",
-    step_4: fourthSlide?.heading || slotDefaults.step_4 || "",
     step_number: "1",
     step_total: String(slideCount)
   };
-
-  const resolveDefaultTemplateValue = (slotKey: string): string => {
-    const raw = slotDefaults[slotKey] ?? "";
-    if (!raw) {
-      return "";
-    }
-    return raw
-      .replaceAll("{{TITLE}}", args.postTitle)
-      .replaceAll("{{CAPTION}}", fallbackLine)
-      .replaceAll("{{BRAND_NAME}}", args.brandName);
+  const slotFallbackContext: SlotFallbackContext = {
+    title: fallbackHeadline,
+    fallbackLine,
+    brandName: args.brandName || PIPELINE_CONFIG.brand.default_name,
+    defaultQuoteAuthor,
+    slideHeadings: args.llmOutput.carousel_slides.map((slide) => slide.heading).filter(Boolean),
+    slideCount
   };
 
   for (const [key, value] of Object.entries(fallbackByKey)) {
@@ -1912,9 +1877,9 @@ function buildSharedSlotContent(args: {
       slots[normalized] = ensureLength(value, limits.slot_text_max_chars, fallbackLine);
       continue;
     }
-    const fromDefaults = resolveDefaultTemplateValue(normalized);
-    if (fromDefaults.trim()) {
-      slots[normalized] = ensureLength(fromDefaults, limits.slot_text_max_chars, fallbackLine);
+    const inferred = inferSlotFallbackValue(normalized, slotFallbackContext);
+    if (inferred.trim()) {
+      slots[normalized] = ensureLength(inferred, limits.slot_text_max_chars, fallbackLine);
     }
   }
 
@@ -1924,11 +1889,82 @@ function buildSharedSlotContent(args: {
       continue;
     }
 
-    const fallback = fallbackByKey[normalized] || resolveDefaultTemplateValue(normalized) || fallbackLine;
+    const fallback = fallbackByKey[normalized] || inferSlotFallbackValue(normalized, slotFallbackContext) || fallbackLine;
     slots[normalized] = ensureLength(fallback, limits.slot_text_max_chars, fallbackLine);
   }
 
   return slots;
+}
+
+interface SlotFallbackContext {
+  title: string;
+  fallbackLine: string;
+  brandName: string;
+  defaultQuoteAuthor: string;
+  slideHeadings: string[];
+  slideCount: number;
+}
+
+function inferSlotFallbackValue(slotKey: string, context: SlotFallbackContext): string {
+  const normalized = normalizeSlotKey(slotKey);
+  if (!normalized) {
+    return context.fallbackLine;
+  }
+
+  const stepMatch = normalized.match(/^step_(\d+)$/);
+  if (stepMatch?.[1]) {
+    const stepIndex = Math.max(Number.parseInt(stepMatch[1], 10) - 1, 0);
+    return context.slideHeadings[stepIndex] || `Step ${stepIndex + 1}`;
+  }
+
+  if (normalized === "step_number" || normalized.endsWith("_number")) {
+    return "1";
+  }
+  if (normalized === "step_total" || normalized.endsWith("_total")) {
+    return String(Math.max(context.slideCount, 1));
+  }
+
+  if (normalized.includes("metric") && normalized.includes("value")) {
+    return "2.4K";
+  }
+  if (normalized.includes("metric") && (normalized.includes("label") || normalized.includes("name"))) {
+    return "Weekly readers";
+  }
+  if (normalized.includes("cta")) {
+    return "Read more";
+  }
+  if (normalized === "kicker" || normalized.endsWith("_kicker")) {
+    return "INSIGHT";
+  }
+  if (normalized === "quote_author" || normalized.endsWith("_author")) {
+    return context.brandName || context.defaultQuoteAuthor;
+  }
+
+  if (
+    normalized.includes("headline") ||
+    normalized.includes("heading") ||
+    normalized.includes("title") ||
+    normalized.includes("hook")
+  ) {
+    return context.title;
+  }
+
+  if (
+    normalized.includes("subheadline") ||
+    normalized.includes("support") ||
+    normalized.includes("insight") ||
+    normalized.includes("line") ||
+    normalized.includes("body") ||
+    normalized.includes("caption") ||
+    normalized.includes("summary") ||
+    normalized.includes("description") ||
+    normalized.includes("text") ||
+    normalized.includes("quote")
+  ) {
+    return context.fallbackLine;
+  }
+
+  return context.fallbackLine;
 }
 
 function normalizeSlotKey(input: string): string {
@@ -2034,9 +2070,7 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
     url: optionalString(body.url, "url", 400),
     brandingColor: optionalColor(body.brandingColor, "brandingColor"),
     brandName: optionalString(body.brandName, "brandName", 120),
-    templateStyle: optionalEnumString(body.templateStyle, "templateStyle", TEMPLATE_STYLE_SET),
-    postArchetype: optionalEnumString(body.postArchetype, "postArchetype", POST_ARCHETYPE_SET),
-    fontProfile: optionalEnumString(body.fontProfile, "fontProfile", FONT_PROFILE_SET),
+    prompt: optionalString(body.prompt, "prompt", 1200),
     templateIds,
     slotOverrides,
     brandTokens,
@@ -2071,9 +2105,7 @@ function validateDirectContentRequestBody(input: unknown, security: ResolvedSecu
     primary_tag: optionalString(body.primary_tag, "primary_tag", 80),
     brandingColor: optionalColor(body.brandingColor, "brandingColor"),
     brandName: optionalString(body.brandName, "brandName", 120),
-    templateStyle: optionalEnumString(body.templateStyle, "templateStyle", TEMPLATE_STYLE_SET),
-    postArchetype: optionalEnumString(body.postArchetype, "postArchetype", POST_ARCHETYPE_SET),
-    fontProfile: optionalEnumString(body.fontProfile, "fontProfile", FONT_PROFILE_SET),
+    prompt: optionalString(body.prompt, "prompt", 1200),
     templateIds: parseTemplateIds(body.templateIds, security),
     slotOverrides: parseSlotOverrides(body.slotOverrides, security),
     brandTokens: parseBrandTokens(body.brandTokens),
@@ -2378,10 +2410,15 @@ function parseOutputOptions(input: unknown): OutputOptions | undefined {
     object.carouselSlides !== undefined
       ? Math.round(clampNumber(requiredNumber(object.carouselSlides, "output.carouselSlides"), 1, 10, DEFAULT_CAROUSEL_SLIDES))
       : undefined;
+  const postCount =
+    object.postCount !== undefined
+      ? Math.round(clampNumber(requiredNumber(object.postCount, "output.postCount"), 1, 10, 1))
+      : undefined;
 
   const parsed: OutputOptions = {
     formats,
-    carouselSlides
+    carouselSlides,
+    postCount
   };
   return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
 }

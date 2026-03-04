@@ -1,6 +1,6 @@
-import { PIPELINE_CONFIG, TEMPLATE_CSS } from "./generated/template-assets";
+import { PIPELINE_CONFIG, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/template-assets";
 
-export type TemplateFormatKey = keyof typeof PIPELINE_CONFIG.formats;
+export type TemplateFormatKey = string;
 
 export interface BrandTokenOverrides {
   primaryText?: string;
@@ -66,29 +66,6 @@ interface ResolvedTemplateControl {
   metaRightText?: string;
 }
 
-export interface FontProfileOption {
-  id: string;
-  label: string;
-  llmHint: string;
-}
-
-interface FontProfile {
-  label: string;
-  llm_hint: string;
-  google_fonts_css2_query: string;
-  display_font_css: string;
-  body_font_css: string;
-}
-
-interface TypographyConfig {
-  default_font_profile: string;
-  profiles: Record<string, FontProfile>;
-  selection: {
-    by_style: Record<string, string>;
-    by_archetype: Record<string, string>;
-  };
-}
-
 interface ThemingConfig {
   readable_light_text: string;
   readable_dark_text: string;
@@ -140,23 +117,6 @@ interface LayoutControlDefaults {
 const DEFAULT_BRAND: BrandConfig = {
   default_name: "Brand",
   default_color: "#1f7a8c"
-};
-
-const FALLBACK_TYPOGRAPHY: TypographyConfig = {
-  default_font_profile: "modern-sans",
-  profiles: {
-    "modern-sans": {
-      label: "Modern Sans",
-      llm_hint: "Clean and neutral.",
-      google_fonts_css2_query: "family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800",
-      display_font_css: '"Sora", sans-serif',
-      body_font_css: '"Inter", sans-serif'
-    }
-  },
-  selection: {
-    by_style: {},
-    by_archetype: {}
-  }
 };
 
 const FALLBACK_THEME: ThemingConfig = {
@@ -244,11 +204,6 @@ function brandConfig(): BrandConfig {
   return ((PIPELINE_CONFIG as unknown as { brand?: BrandConfig }).brand ?? DEFAULT_BRAND) as BrandConfig;
 }
 
-function typographyConfig(): TypographyConfig {
-  return ((PIPELINE_CONFIG as unknown as { typography?: TypographyConfig }).typography ??
-    FALLBACK_TYPOGRAPHY) as TypographyConfig;
-}
-
 function themingConfig(): ThemingConfig {
   return ((PIPELINE_CONFIG as unknown as { theming?: ThemingConfig }).theming ?? FALLBACK_THEME) as ThemingConfig;
 }
@@ -265,65 +220,6 @@ function layoutDefaultsForFormat(kind: TemplateFormatKey): LayoutControlDefaults
 
 export function listTemplateCompositionDirectives(): string[] {
   return [...DESIGN_PROMPT_DIRECTIVES];
-}
-
-export function listFontProfiles(): FontProfileOption[] {
-  const profiles = typographyConfig().profiles as Record<string, FontProfile>;
-  return Object.entries(profiles).map(([id, profile]) => ({
-    id,
-    label: profile.label,
-    llmHint: profile.llm_hint
-  }));
-}
-
-export function normalizeFontProfileId(value: string | undefined | null): string {
-  const typography = typographyConfig();
-  const profiles = typography.profiles as Record<string, FontProfile>;
-  const fallback = typography.default_font_profile;
-
-  if (!value) {
-    return fallback;
-  }
-
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) {
-    return fallback;
-  }
-
-  return profiles[normalized] ? normalized : fallback;
-}
-
-export function resolveFontProfileId(args: {
-  requested?: string;
-  style?: string;
-  archetype?: string;
-}): string {
-  if (args.requested) {
-    return normalizeFontProfileId(args.requested);
-  }
-
-  const typography = typographyConfig();
-  const byStyle = typography.selection.by_style as Record<string, string>;
-  const byArchetype = typography.selection.by_archetype as Record<string, string>;
-
-  const style = args.style?.trim().toLowerCase() || "";
-  const archetype = args.archetype?.trim().toLowerCase() || "";
-
-  if (style && byStyle[style]) {
-    return normalizeFontProfileId(byStyle[style]);
-  }
-
-  if (archetype && byArchetype[archetype]) {
-    return normalizeFontProfileId(byArchetype[archetype]);
-  }
-
-  return normalizeFontProfileId(typography.default_font_profile);
-}
-
-function getFontProfile(fontProfileId: string): FontProfile {
-  const profiles = typographyConfig().profiles as Record<string, FontProfile>;
-  const normalized = normalizeFontProfileId(fontProfileId);
-  return profiles[normalized];
 }
 
 export function createBrandTheme(args: {
@@ -463,76 +359,28 @@ export function renderTemplateHead(args: {
   width: number;
   height: number;
   theme: BrandTheme;
-  fontProfileId?: string;
 }): string {
   const t = args.theme.tokens;
   const safeCss = TEMPLATE_CSS.replaceAll("</style", "<\\/style");
-  const fontProfile = getFontProfile(args.fontProfileId ?? typographyConfig().default_font_profile);
-  const fontHref = `https://fonts.googleapis.com/css2?${fontProfile.google_fonts_css2_query}&display=swap`;
-
-  return `
-    <head>
-      <meta charset="utf-8" />
-      <meta name="viewport" content="width=device-width, initial-scale=1" />
-      <title>${args.safeTitle}</title>
-      <link rel="preconnect" href="https://fonts.googleapis.com" />
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-      <link href="${fontHref}" rel="stylesheet" />
-      <style>${safeCss}</style>
-      <style>
-        :root {
-          --canvas-width: ${args.width}px;
-          --canvas-height: ${args.height}px;
-
-          --font-display: ${fontProfile.display_font_css};
-          --font-body: ${fontProfile.body_font_css};
-          --token-font-heading: ${fontProfile.display_font_css};
-          --token-font-body: ${fontProfile.body_font_css};
-
-          --color-text-primary: ${t.primaryText};
-          --color-text-secondary: ${t.secondaryText};
-          --color-text-muted: ${t.mutedText};
-          --color-surface-base: ${t.surfaceBase};
-          --color-surface-elevated: ${t.surfaceElevated};
-          --color-border-subtle: ${t.borderSubtle};
-          --color-brand-accent: ${t.accent};
-          --color-brand-accent-foreground: ${t.accentForeground};
-          --color-brand-glow: ${t.accentGlow};
-          --color-overlay-strong: ${t.overlayStrong};
-
-          --token-color-text-primary: ${t.primaryText};
-          --token-color-text-secondary: ${t.secondaryText};
-          --token-color-text-muted: ${t.mutedText};
-          --token-color-surface-base: ${t.surfaceBase};
-          --token-color-surface-elevated: ${t.surfaceElevated};
-          --token-color-border-subtle: ${t.borderSubtle};
-          --token-color-brand-accent: ${t.accent};
-          --token-color-brand-accent-foreground: ${t.accentForeground};
-
-          --shadow-soft: 0 32px 88px color-mix(in srgb, ${t.shadowColor} 72%, transparent);
-          --radius-card: ${t.radiusCard};
-          --radius-pill: ${t.radiusPill};
-          --token-radius-card: ${t.radiusCard};
-          --token-radius-pill: ${t.radiusPill};
-        }
-        * {
-          box-sizing: border-box;
-        }
-        html,
-        body {
-          margin: 0;
-          width: var(--canvas-width);
-          height: var(--canvas-height);
-          overflow: hidden;
-          font-family: var(--font-body);
-          background: var(--color-surface-base);
-          color: var(--color-text-primary);
-          text-rendering: optimizeLegibility;
-          -webkit-font-smoothing: antialiased;
-        }
-      </style>
-    </head>
-  `;
+  return renderSystemTemplate("@system/head-shell", {
+    SAFE_TITLE: args.safeTitle,
+    TEMPLATE_CSS: safeCss,
+    CANVAS_WIDTH: String(args.width),
+    CANVAS_HEIGHT: String(args.height),
+    TOKEN_PRIMARY_TEXT: t.primaryText,
+    TOKEN_SECONDARY_TEXT: t.secondaryText,
+    TOKEN_MUTED_TEXT: t.mutedText,
+    TOKEN_SURFACE_BASE: t.surfaceBase,
+    TOKEN_SURFACE_ELEVATED: t.surfaceElevated,
+    TOKEN_BORDER_SUBTLE: t.borderSubtle,
+    TOKEN_ACCENT: t.accent,
+    TOKEN_ACCENT_FOREGROUND: t.accentForeground,
+    TOKEN_ACCENT_GLOW: t.accentGlow,
+    TOKEN_OVERLAY_STRONG: t.overlayStrong,
+    TOKEN_SHADOW_COLOR: t.shadowColor,
+    TOKEN_RADIUS_CARD: t.radiusCard,
+    TOKEN_RADIUS_PILL: t.radiusPill
+  });
 }
 
 export function tokenOverridesFromQuery(searchParams: URLSearchParams): BrandTokenOverrides | undefined {
@@ -746,4 +594,16 @@ function rgbToHex(rgb: { r: number; g: number; b: number }): string {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function renderSystemTemplate(templateId: string, tokens: Record<string, string>): string {
+  const template = TEMPLATE_FILES[templateId];
+  if (!template) {
+    throw new Error(`Missing system template: ${templateId}`);
+  }
+
+  return template.replace(/\{\{\s*([A-Z0-9_:-]+)\s*\}\}/g, (_match, rawKey: string) => {
+    const key = rawKey.trim().toUpperCase();
+    return tokens[key] ?? "";
+  });
 }

@@ -36,6 +36,13 @@ export interface LlmSourcePost {
   tags?: Array<{ name?: string }>;
 }
 
+export interface TemplateChoiceCandidate {
+  id: string;
+  label: string;
+  description?: string;
+  requiredSlotKeys: string[];
+}
+
 const DEFAULT_LLM_MODEL = PIPELINE_CONFIG.generation.llm.default_model;
 const DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT = PIPELINE_CONFIG.generation.llm.system_prompt.join(" ");
 
@@ -95,10 +102,8 @@ export async function generateStructuredCopy(args: {
   llmModel?: string;
   post: LlmSourcePost;
   requiredCarouselSlides: number;
-  selectedTemplateStyle: string;
-  selectedPostArchetype: string;
-  selectedFontProfile: string;
   requiredSlotKeys: string[];
+  userPrompt?: string;
   llmOverrides?: LlmPromptOverrides;
   normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string; requiredSlotKeys: string[] }) => Record<string, string>;
 }): Promise<LlmOutput> {
@@ -128,17 +133,18 @@ export async function generateStructuredCopy(args: {
     .replace("<hashtag_min_count>", String(limits.hashtag_min_count))
     .replace("<hashtag_max_count>", String(limits.hashtag_max_count))
     .replace("<available_slot_keys>", slotHints || args.requiredSlotKeys.join(", "))
-    .replace("<selected_template_style>", args.selectedTemplateStyle)
-    .replace("<selected_post_archetype>", args.selectedPostArchetype)
-    .replace("<selected_font_profile>", args.selectedFontProfile)
     .replace("<required_slot_keys>", args.requiredSlotKeys.join(", "))
     .replace(
       "<template_composition_directives>",
       templateCompositionPromptHints || "- Use deterministic HTML template composition."
     );
+  const userBrief =
+    typeof args.userPrompt === "string" && args.userPrompt.trim().length > 0
+      ? `- user campaign brief: ${args.userPrompt.trim()}`
+      : "";
   const slotCoverageDirective = `- slot_content contract: include every key from ${args.requiredSlotKeys.join(", ")} with concrete copy that can render directly.`;
   const appendedInstructions = normalizePromptAppend(args.llmOverrides?.userInstructionsAppend);
-  const mergedBaseInstructions = `${userInstructions}\n${slotCoverageDirective}`;
+  const mergedBaseInstructions = [userInstructions, userBrief, slotCoverageDirective].filter(Boolean).join("\n");
   const mergedInstructions = appendedInstructions
     ? `${mergedBaseInstructions}\n${appendedInstructions}`
     : mergedBaseInstructions;
@@ -160,9 +166,6 @@ export async function generateStructuredCopy(args: {
     mergedInstructions,
     "",
     "Template contract:",
-    `<selected_template_style>${args.selectedTemplateStyle}</selected_template_style>`,
-    `<selected_post_archetype>${args.selectedPostArchetype}</selected_post_archetype>`,
-    `<selected_font_profile>${args.selectedFontProfile}</selected_font_profile>`,
     `<required_slot_keys>${args.requiredSlotKeys.join(", ")}</required_slot_keys>`,
     "",
     "Blog post source:",
@@ -205,6 +208,148 @@ export async function generateStructuredCopy(args: {
     requiredSlotKeys: args.requiredSlotKeys,
     normalizeSlotContent: args.normalizeSlotContent
   });
+}
+
+export async function chooseTemplateAssignments(args: {
+  ai: Ai;
+  llmModel?: string;
+  post: LlmSourcePost;
+  requestedFormats: string[];
+  templateCandidates: Record<string, TemplateChoiceCandidate[]>;
+  userPrompt?: string;
+}): Promise<Record<string, string>> {
+  const textModel = (args.llmModel || DEFAULT_LLM_MODEL) as keyof AiModels;
+  const requestedFormats = [...new Set(args.requestedFormats.map((format) => format.trim()).filter(Boolean))];
+  if (requestedFormats.length === 0) {
+    return {};
+  }
+
+  const promptLines = requestedFormats.map((format) => {
+    const candidates = args.templateCandidates[format] ?? [];
+    const candidateLines = candidates
+      .map((candidate) => {
+        const slotSummary =
+          candidate.requiredSlotKeys.length > 0 ? candidate.requiredSlotKeys.join(", ") : "(no explicit SLOT keys)";
+        const description = candidate.description ? ` - ${candidate.description}` : "";
+        return `  - ${candidate.id}: ${candidate.label}${description}; slots: ${slotSummary}`;
+      })
+      .join("\n");
+    return `format: ${format}\n${candidateLines}`;
+  });
+
+  const excerpt = (args.post.custom_excerpt || args.post.excerpt || "").trim();
+  const plainBody = (args.post.plaintext || stripHtml(args.post.html || "")).trim();
+  const postText =
+    plainBody.length > PIPELINE_CONFIG.generation.limits.post_text_max_chars
+      ? `${plainBody.slice(0, PIPELINE_CONFIG.generation.limits.post_text_max_chars)}...`
+      : plainBody;
+  const userBrief =
+    typeof args.userPrompt === "string" && args.userPrompt.trim().length > 0
+      ? `\n<user_brief>${args.userPrompt.trim()}</user_brief>`
+      : "";
+
+  const prompt = [
+    "Choose one best template per requested format based on source content.",
+    "Rules:",
+    "- Return strict JSON only.",
+    "- Use only template ids listed under each format.",
+    "- Prefer templates whose slot requirements fit the content naturally.",
+    "- Ensure all requested formats have one selected template id.",
+    "",
+    "Requested formats and candidate templates:",
+    promptLines.join("\n\n"),
+    "",
+    "Source content:",
+    `<title>${args.post.title.trim()}</title>`,
+    `<excerpt>${excerpt || "(none)"}</excerpt>`,
+    "<body>",
+    postText,
+    "</body>",
+    userBrief
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  try {
+    const raw = await args.ai.run(textModel, {
+      messages: [
+        {
+          role: "system",
+          content: "You are an expert template planner for social content automation."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: buildTemplateAssignmentSchema(requestedFormats, args.templateCandidates)
+      },
+      temperature: 0.1,
+      max_tokens: 900
+    });
+
+    const parsed = parseModelJson(raw);
+    const templateIdsRaw = parsed.template_ids;
+    if (!templateIdsRaw || typeof templateIdsRaw !== "object") {
+      throw new Error("Template planner did not return template_ids object");
+    }
+
+    const selected: Record<string, string> = {};
+    const templateIds = templateIdsRaw as Record<string, unknown>;
+    for (const format of requestedFormats) {
+      const candidates = args.templateCandidates[format] ?? [];
+      const candidateIdSet = new Set(candidates.map((candidate) => candidate.id));
+      const requestedTemplateId = toText(templateIds[format]);
+      if (requestedTemplateId && candidateIdSet.has(requestedTemplateId)) {
+        selected[format] = requestedTemplateId;
+        continue;
+      }
+      if (candidates[0]) {
+        selected[format] = candidates[0].id;
+      }
+    }
+
+    return selected;
+  } catch {
+    const fallback: Record<string, string> = {};
+    for (const format of requestedFormats) {
+      const first = args.templateCandidates[format]?.[0];
+      if (first) {
+        fallback[format] = first.id;
+      }
+    }
+    return fallback;
+  }
+}
+
+function buildTemplateAssignmentSchema(
+  requestedFormats: string[],
+  templateCandidates: Record<string, TemplateChoiceCandidate[]>
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  for (const format of requestedFormats) {
+    const candidates = templateCandidates[format] ?? [];
+    const candidateIds = [...new Set(candidates.map((candidate) => candidate.id).filter(Boolean))];
+    properties[format] = {
+      type: "string",
+      enum: candidateIds
+    };
+  }
+
+  return {
+    type: "object",
+    properties: {
+      template_ids: {
+        type: "object",
+        properties,
+        required: requestedFormats,
+        additionalProperties: false
+      }
+    },
+    required: ["template_ids"]
+  };
 }
 
 function parseModelJson(raw: unknown): Record<string, unknown> {

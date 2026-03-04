@@ -1,0 +1,15 @@
+<!doctype html>
+<html>
+  {{HEAD_HTML}}
+  <body>
+    <div class="frame" data-template-id="{{TEMPLATE_ID}}" style="{{ROOT_STYLE}}">
+      <div class="frame-layer" style="background: var(--frame-bg);"></div>
+      <div class="frame-layer frame-layer--image {{IMAGE_VISIBILITY_CLASS}}" style="{{IMAGE_LAYER_STYLE}}"></div>
+      <div class="frame-layer" style="opacity: {{OVERLAY_OPACITY}}; background: {{OVERLAY_BACKGROUND}};"></div>
+      <div class="frame-layer" style="background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: {{ACCENT_SWEEP_OPACITY}};"></div>
+      <div class="frame-layer" style="opacity: var(--frame-grain-opacity); background-image: radial-gradient({{GRAIN_DOT_COLOR}} {{GRAIN_DOT_SIZE}}px, transparent {{GRAIN_DOT_SIZE}}px); background-size: {{GRAIN_BG_SIZE}}px {{GRAIN_BG_SIZE}}px;"></div>
+      <div class="frame-layer frame-layer--border" style="border-color: color-mix(in srgb, var(--color-border-subtle) {{BORDER_ALPHA_PERCENT}}%, transparent);"></div>
+      {{CONTENT}}
+    </div>
+  </body>
+</html>
