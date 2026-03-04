@@ -36,6 +36,16 @@ Fix:
 
 - set `formats.<name>.default_template_id` to valid template ID
 
+### `Format <name> default_template_id does not support this format`
+
+Cause:
+
+- default template exists, but its `format`/`formats` constraints do not include the current format
+
+Fix:
+
+- add the format to `templates[].formats`, or remove format restriction for that template
+
 ## Runtime Errors
 
 ### `Missing env var GHOST_API_URL` or `GHOST_CONTENT_API_KEY`

@@ -27,13 +27,13 @@ References:
 
 Decision:
 
-- maintain one central YAML control plane at `config/pipeline.config.yaml`
+- maintain one composed YAML control plane via `config/pipeline.config.yaml` with focused fragments in `config/pipeline/*.yaml`
 
 Reasoning:
 
 - human-readable, nested structure fits this domain
 - easy to review in pull requests
-- keeps style/archetype/font/template policies in one place
+- keeps style/archetype/font/template policies centralized while reducing single-file complexity
 
 Reference:
 

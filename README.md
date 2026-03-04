@@ -11,7 +11,7 @@ A Cloudflare Worker that turns blog content into platform-ready social assets (c
 This project is fully config-driven:
 
 - all layout templates live in `templates/**/*.html`
-- all behavior is controlled from `config/pipeline.config.yaml`
+- all behavior is controlled from `config/pipeline/*.yaml` (via `config/pipeline.config.yaml` entrypoint)
 - runtime reads generated assets from `src/generated/template-assets.ts`
 
 No template rendering logic is hardcoded per design.
@@ -34,7 +34,10 @@ Use `.html` templates.
 
 ## Project Layout
 
-- `config/pipeline.config.yaml`: single control plane for styles, archetypes, fonts, formats, limits, templates, and feature flags
+- `config/pipeline.config.yaml`: composed config entrypoint (`extends` fragments)
+- `config/pipeline/design.yaml`: design system, styles, formats, templates
+- `config/pipeline/content.yaml`: archetypes, slot schema, generation prompts/limits
+- `config/pipeline/runtime.yaml`: runtime, feature flags, security, storage
 - `templates/**/*.html`: visual templates using token and slot placeholders
 - `scripts/embed-template-assets.mjs`: validates YAML + embeds template files into generated TypeScript
 - `src/generated/template-assets.ts`: generated runtime config/template bundle (do not edit manually)

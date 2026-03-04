@@ -63,7 +63,7 @@ pnpm run build:assets
 What this does:
 
 - builds Tailwind CSS into `src/styles/tailwind-css.ts`
-- validates `config/pipeline.config.yaml`
+- validates merged config from `config/pipeline.config.yaml` + `config/pipeline/*.yaml`
 - embeds all template HTML into `src/generated/template-assets.ts`
 
 ## 5. Run Locally
@@ -152,21 +152,21 @@ Use request-level `output.formats` to generate only selected formats, for exampl
 
 Change brand defaults:
 
-- edit `brand.default_name` and `brand.default_color` in `config/pipeline.config.yaml`
+- edit `brand.default_name` and `brand.default_color` in `config/pipeline/design.yaml`
 - run `pnpm run build:assets`
 
 Add new template:
 
-1. create a new `.html` file under `templates/<format>/`
-2. add a template record under `templates:` in YAML
+1. create a new `.html` file under `templates/`
+2. add a template record under `templates:` in `config/pipeline/design.yaml`
 3. run `pnpm run build:templates`
 4. preview via `GET /template/<format>?templateId=<new-id>`
 
 Tune AI behavior:
 
-- update `generation.llm.system_prompt`
-- update `generation.llm.user_instructions`
-- adjust `generation.limits`
+- update `generation.llm.system_prompt` in `config/pipeline/content.yaml`
+- update `generation.llm.user_instructions` in `config/pipeline/content.yaml`
+- adjust `generation.limits` in `config/pipeline/content.yaml`
 
 ## 11. Validate Before Commit
 

@@ -135,9 +135,9 @@ curl "http://127.0.0.1:8787/template-catalog" \
   "styles": [{ "id": "editorial", "label": "Editorial" }],
   "archetypes": [{ "id": "insight", "label": "Insight" }],
   "font_profiles": [{ "id": "editorial-serif", "label": "Editorial Serif" }],
-  "formats": [{ "id": "instagram-post", "default_template_id": "instagram-post/editorial" }],
-  "templates": [{ "id": "instagram-post/editorial", "version": "8a31f10c" }],
-  "templates_by_format": { "instagram-post": ["instagram-post/editorial"] },
+  "formats": [{ "id": "instagram-post", "default_template_id": "core/editorial-base" }],
+  "templates": [{ "id": "core/editorial-base", "version": "8a31f10c" }],
+  "templates_by_format": { "instagram-post": ["core/editorial-base"] },
   "styles_by_format": { "instagram-post": ["editorial", "data"] }
 }
 ```
@@ -179,8 +179,8 @@ Optional overrides:
   "postArchetype": "metric",
   "fontProfile": "data-mono",
   "templateIds": {
-    "instagram-post": "instagram-post/stat-split",
-    "twitter-card": "twitter-card/data-strip"
+    "instagram-post": "core/metric-split",
+    "twitter-card": "core/data-base"
   },
   "slotOverrides": {
     "metric_value": "2.4K",

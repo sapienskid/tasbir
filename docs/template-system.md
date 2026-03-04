@@ -6,16 +6,16 @@ The goal is to let you add or modify designs without changing rendering code.
 
 ## Core Concepts
 
-- `template_style`: visual look (editorial, minimal, bold, data, illustration)
+- `template_style`: visual look (editorial, illustration, minimal, bold, data, monochrome-swiss, brutal)
 - `post_archetype`: content intent (insight, metric, quote, checklist, timeline, promo)
 - `slot_content`: semantic content fields used by templates (`headline`, `metric_value`, `quote_text`, etc.)
 
-A template can target a style, one or more archetypes, or both.
+A template can target one or more styles, one or more archetypes, and one or more output formats.
 
 ## Sources of Truth
 
 - template files: `templates/**/*.html`
-- registry + constraints: `config/pipeline.config.yaml` (`templates:` section)
+- registry + constraints: `config/pipeline/design.yaml` (`templates:` section; merged via `config/pipeline.config.yaml`)
 - generated runtime bundle: `src/generated/template-assets.ts`
 
 ## Build Pipeline
@@ -44,7 +44,7 @@ Validation includes:
 
 Use `.html` files.
 
-- put file under `templates/<format>/`
+- put file under `templates/` for reusable layouts
 - use token placeholders like `{{TITLE}}`
 - use slot placeholders like `{{SLOT:headline}}`
 - do not add script execution logic in template files
@@ -110,9 +110,10 @@ Per format, the resolver chooses template in this order:
 3. templates matching `postArchetype`
 4. templates matching `templateStyle`
 5. `formats.<format>.default_template_id`
-6. first configured template for format (final safety fallback)
+6. first configured template compatible with that format (final safety fallback)
 
 If template defines `archetypes`, it is only eligible for those archetypes.
+If template defines `formats`, it is only eligible for those formats.
 
 ## Font Selection Logic
 
@@ -126,11 +127,11 @@ Font profile is resolved in this order:
 
 ## Add a New Template (Step by Step)
 
-Example: add a new Instagram metric card.
+Example: add a reusable metric card for all formats.
 
 1. Create HTML file:
 
-- `templates/instagram-post/metric-pill.html`
+- `templates/metric-pill.html`
 
 2. Use placeholders in the file:
 
@@ -148,12 +149,12 @@ Example: add a new Instagram metric card.
 3. Register it in YAML:
 
 ```yaml
-- id: instagram-post/metric-pill
-  format: instagram-post
-  style: data
+- id: core/metric-pill
+  styles: [data, monochrome-swiss]
+  formats: [instagram-post, instagram-story, carousel-slide, twitter-card, linkedin-post]
   label: Metric Pill
   archetypes: [metric]
-  file: "../templates/instagram-post/metric-pill.html"
+  file: "../templates/metric-pill.html"
 ```
 
 4. Rebuild:
@@ -165,54 +166,23 @@ pnpm run build:templates
 5. Preview:
 
 ```bash
-curl "http://127.0.0.1:8787/template/instagram-post?templateId=instagram-post/metric-pill&archetype=metric&slot.metric_value=84%25&slot.metric_label=Completion&slot.headline=Process%20drives%20results"
+curl "http://127.0.0.1:8787/template/instagram-post?templateId=core/metric-pill&archetype=metric&slot.metric_value=84%25&slot.metric_label=Completion&slot.headline=Process%20drives%20results"
 ```
 
 6. If successful, include it in API generation via `templateIds.instagram-post` or allow auto-selection.
 
 ## Current Template Catalog
 
-Configured templates by format:
+Configured shared templates:
 
-### `instagram-post`
-
-- `instagram-post/editorial`
-- `instagram-post/illustration`
-- `instagram-post/grid` (metric)
-- `instagram-post/stat-split` (metric)
-- `instagram-post/quote-focus` (quote)
-- `instagram-post/checklist` (checklist, timeline)
-
-### `instagram-story`
-
-- `instagram-story/spotlight`
-- `instagram-story/illustration` (insight, quote)
-- `instagram-story/timeline` (timeline, checklist)
-- `instagram-story/promo-banner` (promo)
-
-### `carousel-slide`
-
-- `carousel-slide/minimal`
-- `carousel-slide/illustration` (insight)
-- `carousel-slide/quote` (quote)
-- `carousel-slide/step-card` (checklist, timeline)
-- `carousel-slide/stat-card` (metric)
-
-### `twitter-card`
-
-- `twitter-card/bold`
-- `twitter-card/data-strip` (metric)
-- `twitter-card/editorial`
-- `twitter-card/quote-focus` (quote)
-- `twitter-card/promo-pill` (promo)
-
-### `linkedin-post`
-
-- `linkedin-post/clean`
-- `linkedin-post/editorial`
-- `linkedin-post/illustration` (insight, promo)
-- `linkedin-post/checklist` (checklist, timeline)
-- `linkedin-post/quote-insight` (quote)
+- `core/editorial-base`
+- `core/illustration-base`
+- `core/bold-base`
+- `core/data-base`
+- `core/quote-focus` (quote)
+- `core/checklist-stack` (checklist, timeline)
+- `core/metric-split` (metric)
+- `core/promo-pill` (promo)
 
 ## Preview Query Cookbook
 
@@ -225,13 +195,13 @@ Style and archetype preview:
 Direct template preview:
 
 ```text
-/template/linkedin-post?templateId=linkedin-post/checklist
+/template/linkedin-post?templateId=core/checklist-stack
 ```
 
 Slot override preview:
 
 ```text
-/template/carousel-slide?templateId=carousel-slide/step-card&slot.step_number=2&slot.step_total=5&slot.headline=Extract%20the%20signal&slot.body=Turn%20long%20content%20into%20short%20decisions.
+/template/carousel-slide?templateId=core/checklist-stack&slot.step_number=2&slot.step_total=5&slot.headline=Extract%20the%20signal&slot.body=Turn%20long%20content%20into%20short%20decisions.
 ```
 
 Font override preview:

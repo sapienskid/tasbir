@@ -34,6 +34,9 @@ Build-time compilation keeps Worker runtime deterministic.
 Inputs:
 
 - `config/pipeline.config.yaml`
+- `config/pipeline/design.yaml`
+- `config/pipeline/content.yaml`
+- `config/pipeline/runtime.yaml`
 - `templates/**/*.html`
 - `src/styles/tailwind.input.css`
 

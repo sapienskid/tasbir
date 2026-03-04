@@ -3,15 +3,18 @@
 Main config file:
 
 - `config/pipeline.config.yaml`
+- composed fragments: `config/pipeline/design.yaml`, `config/pipeline/content.yaml`, `config/pipeline/runtime.yaml`
 
-This file is the control plane for the entire pipeline. Most behavior changes should be done here, not in `src/*.ts`.
+`pipeline.config.yaml` is now a lightweight entrypoint that composes the fragment files through `extends`.
+Most behavior changes should be done in the fragment YAML files, not in `src/*.ts`.
 
 ## How Config Is Loaded
 
-1. `scripts/embed-template-assets.mjs` reads YAML
-2. script validates schema and template references
-3. script writes generated runtime module: `src/generated/template-assets.ts`
-4. Worker imports generated module at runtime
+1. `scripts/embed-template-assets.mjs` reads `config/pipeline.config.yaml`
+2. script resolves `extends` recursively and deep-merges fragments
+3. script validates merged schema and template references
+4. script writes generated runtime module: `src/generated/template-assets.ts`
+5. Worker imports generated module at runtime
 
 After config changes, run:
 
@@ -354,25 +357,27 @@ Template registry entries.
 Required fields:
 
 - `id`
-- `format`
-- `style`
+- `style` or `styles`
 - `label`
 - `file`
 
 Optional fields:
 
+- `format` (single format target)
+- `formats` (multi-format target; omit to allow all formats)
+- `styles` (multi-style target)
 - `default_for_style`
 - `archetypes`
 
 Example:
 
 ```yaml
-- id: instagram-post/stat-split
-  format: instagram-post
-  style: data
-  label: Stat Split
+- id: core/metric-split
+  styles: [data, monochrome-swiss]
+  formats: [instagram-post, instagram-story, carousel-slide, twitter-card, linkedin-post]
+  label: Core Metric Split
   archetypes: [metric]
-  file: "../templates/instagram-post/stat-split.html"
+  file: "../templates/metric-split.html"
 ```
 
 ## Environment vs Config Overrides
@@ -422,6 +427,7 @@ Per field precedence:
 - `Duplicate template id: ...`
 - `Template <id> references unknown format/style/archetype`
 - `Format <name> points to missing default_template_id`
+- `Format <name> default_template_id does not support this format`
 - `template_styles.default_style is unknown`
 - `post_archetypes.default_archetype is unknown`
 
