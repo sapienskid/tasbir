@@ -19,11 +19,13 @@ export type TemplateStyleId = keyof typeof PIPELINE_CONFIG.template_styles.style
 
 interface TemplateDefinition {
   id: string;
-  format: TemplateKind;
-  style: string;
+  format?: TemplateKind;
+  formats?: readonly TemplateKind[];
+  style?: string;
+  styles?: readonly string[];
   label: string;
   default_for_style?: boolean;
-  archetypes?: string[];
+  archetypes?: readonly string[];
   file: string;
 }
 
@@ -159,12 +161,14 @@ export function resolveTemplateId(kind: TemplateKind, options?: { templateStyle?
 
 export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | CarouselTemplateParams): string {
   const format = PIPELINE_CONFIG.formats[kind];
-  const selectedTemplate = selectTemplateDefinition(kind, params.templateStyle, params.templateId, params.templateArchetype);
-  const control = resolveTemplateControl(kind, params.design, selectedTemplate.style);
+  const requestedTemplateStyle = normalizeTemplateStyle(params.templateStyle);
+  const selectedTemplate = selectTemplateDefinition(kind, requestedTemplateStyle, params.templateId, params.templateArchetype);
+  const resolvedTemplateStyle = resolveTemplateStyleForTemplate(selectedTemplate, requestedTemplateStyle);
+  const control = resolveTemplateControl(kind, params.design, resolvedTemplateStyle);
   const normalizedArchetype = normalizePostArchetype(params.templateArchetype);
   const fontProfileId = resolveFontProfileId({
     requested: params.fontProfile,
-    style: selectedTemplate.style,
+    style: resolvedTemplateStyle,
     archetype: normalizedArchetype
   });
 
@@ -212,7 +216,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
       fontProfileId
     },
     selectedTemplate.id,
-    selectedTemplate.style,
+    resolvedTemplateStyle,
     normalizedArchetype
   );
 }
@@ -223,7 +227,7 @@ function selectTemplateDefinition(
   requestedTemplateId?: string,
   archetype?: string
 ): TemplateDefinition {
-  const byFormat = TEMPLATE_DEFINITIONS.filter((definition) => definition.format === kind);
+  const byFormat = TEMPLATE_DEFINITIONS.filter((definition) => templateSupportsFormat(definition, kind));
   if (byFormat.length === 0) {
     throw new Error(`No templates configured for format ${kind}`);
   }
@@ -238,12 +242,26 @@ function selectTemplateDefinition(
   const normalizedStyle = normalizeTemplateStyle(style);
   const normalizedArchetype = normalizePostArchetype(archetype);
 
+  const styleAndExactArchetype = byFormat.filter(
+    (definition) => templateSupportsStyle(definition, normalizedStyle) && templateHasExplicitArchetype(definition, normalizedArchetype)
+  );
+  const styleAndExactArchetypePreferred = pickPreferredTemplate(styleAndExactArchetype, normalizedStyle);
+  if (styleAndExactArchetypePreferred) {
+    return styleAndExactArchetypePreferred;
+  }
+
   const styleAndArchetype = byFormat.filter(
-    (definition) => definition.style === normalizedStyle && templateSupportsArchetype(definition, normalizedArchetype)
+    (definition) => templateSupportsStyle(definition, normalizedStyle) && templateSupportsArchetype(definition, normalizedArchetype)
   );
   const styleAndArchetypePreferred = pickPreferredTemplate(styleAndArchetype, normalizedStyle);
   if (styleAndArchetypePreferred) {
     return styleAndArchetypePreferred;
+  }
+
+  const exactArchetype = byFormat.filter((definition) => templateHasExplicitArchetype(definition, normalizedArchetype));
+  const exactArchetypePreferred = pickPreferredTemplate(exactArchetype, normalizedStyle);
+  if (exactArchetypePreferred) {
+    return exactArchetypePreferred;
   }
 
   const byArchetype = byFormat.filter((definition) => templateSupportsArchetype(definition, normalizedArchetype));
@@ -252,7 +270,7 @@ function selectTemplateDefinition(
     return archetypePreferred;
   }
 
-  const byStyle = byFormat.filter((definition) => definition.style === normalizedStyle);
+  const byStyle = byFormat.filter((definition) => templateSupportsStyle(definition, normalizedStyle));
   const byStylePreferred = pickPreferredTemplate(byStyle, normalizedStyle);
   if (byStylePreferred) {
     return byStylePreferred;
@@ -273,13 +291,13 @@ function pickPreferredTemplate(definitions: TemplateDefinition[], preferredStyle
   }
 
   const styleDefault = definitions.find(
-    (definition) => definition.style === preferredStyle && definition.default_for_style
+    (definition) => templateSupportsStyle(definition, preferredStyle) && definition.default_for_style
   );
   if (styleDefault) {
     return styleDefault;
   }
 
-  const styleMatch = definitions.find((definition) => definition.style === preferredStyle);
+  const styleMatch = definitions.find((definition) => templateSupportsStyle(definition, preferredStyle));
   if (styleMatch) {
     return styleMatch;
   }
@@ -297,6 +315,58 @@ function templateSupportsArchetype(definition: TemplateDefinition, archetype: st
     return true;
   }
   return definition.archetypes.includes(archetype);
+}
+
+function templateHasExplicitArchetype(definition: TemplateDefinition, archetype: string): boolean {
+  if (!definition.archetypes || definition.archetypes.length === 0) {
+    return false;
+  }
+  return definition.archetypes.includes(archetype);
+}
+
+function templateSupportsFormat(definition: TemplateDefinition, kind: TemplateKind): boolean {
+  const formats = definition.formats?.map((format) => format.trim()).filter(Boolean) ?? [];
+  if (formats.length > 0) {
+    return formats.includes(kind);
+  }
+
+  if (definition.format) {
+    return definition.format === kind;
+  }
+
+  return true;
+}
+
+function templateSupportsStyle(definition: TemplateDefinition, style: string): boolean {
+  return templateStyles(definition).includes(style);
+}
+
+function resolveTemplateStyleForTemplate(definition: TemplateDefinition, requestedStyle: string): string {
+  if (templateSupportsStyle(definition, requestedStyle)) {
+    return requestedStyle;
+  }
+
+  const styles = templateStyles(definition);
+  return styles[0] ?? getDefaultTemplateStyle();
+}
+
+function templateStyles(definition: TemplateDefinition): string[] {
+  const normalizedStyles = (definition.styles ?? [])
+    .map((style) => style.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (normalizedStyles.length > 0) {
+    return [...new Set(normalizedStyles)];
+  }
+
+  if (definition.style) {
+    const style = definition.style.trim().toLowerCase();
+    if (style) {
+      return [style];
+    }
+  }
+
+  return [getDefaultTemplateStyle()];
 }
 
 function loadTemplateMarkup(templateId: string): string {
@@ -422,6 +492,9 @@ function renderFrame(
   });
 
   const preset = getPresetStyle(args.control.preset);
+  const widthScale = args.width / 1080;
+  const heightScale = args.height / 1080;
+  const layoutScale = Math.max(0.55, Math.min(1.9, Math.min(widthScale, heightScale)));
 
   const safeTitle = escapeHtml(args.params.title);
   const safeImageUrl = escapeHtml(args.params.imageUrl.trim());
@@ -442,7 +515,12 @@ function renderFrame(
     `--frame-title-shadow:${preset.titleShadow}`,
     `--frame-caption-shadow:${preset.captionShadow}`,
     `--frame-grain-opacity:${preset.grainOpacity}`,
-    `--frame-image-opacity:${args.control.imageOpacity}`
+    `--frame-image-opacity:${args.control.imageOpacity}`,
+    `--frame-type-scale:${preset.typeScale}`,
+    `--frame-space-scale:${preset.spaceScale}`,
+    `--layout-scale:${layoutScale.toFixed(4)}`,
+    `--layout-width-scale:${widthScale.toFixed(4)}`,
+    `--layout-height-scale:${heightScale.toFixed(4)}`
   ].join(";");
 
   return `

@@ -57,7 +57,7 @@ describe("social pipeline worker", () => {
   it("resolves preview templates with archetype and slot values", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/instagram-post?templateStyle=data&templateId=instagram-post/stat-split&archetype=metric&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal+that+compounds&slot.insight_line=One+metric+only+works+when+paired+with+context."
+        "https://worker.test/template/instagram-post?templateStyle=data&templateId=core/metric-split&archetype=metric&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal+that+compounds&slot.insight_line=One+metric+only+works+when+paired+with+context."
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -65,7 +65,7 @@ describe("social pipeline worker", () => {
 
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('data-template-id="instagram-post/stat-split"');
+    expect(html).toContain('data-template-id="core/metric-split"');
     expect(html).toContain('data-template-style="data"');
     expect(html).toContain('data-template-archetype="metric"');
     expect(html).toContain("9.8K");
@@ -88,7 +88,7 @@ describe("social pipeline worker", () => {
   it("applies preset mapping based on resolved template style", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/twitter-card?templateStyle=data&templateId=twitter-card/data-strip&title=Data+Story&caption=Signal+beats+noise"
+        "https://worker.test/template/twitter-card?templateStyle=data&templateId=core/data-base&title=Data+Story&caption=Signal+beats+noise"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -97,7 +97,7 @@ describe("social pipeline worker", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain('data-template-style="data"');
-    expect(html).toContain("--frame-image-opacity:0.68");
+    expect(html).toContain("--frame-image-opacity:0.52");
   });
 
   it("returns template catalog with styles and template versions", async () => {

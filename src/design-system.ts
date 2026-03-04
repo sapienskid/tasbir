@@ -45,6 +45,8 @@ export interface TemplatePresetStyle {
   captionShadow: string;
   grainOpacity: number;
   imageOpacity: number;
+  typeScale: number;
+  spaceScale: number;
 }
 
 interface BrandTokens {
@@ -297,7 +299,12 @@ export function resolveTemplateControl(
 
 export function getPresetStyle(preset: TemplatePreset): TemplatePresetStyle {
   const presetStyles = PIPELINE_CONFIG.render.preset_styles as Record<string, TemplatePresetStyle>;
-  return presetStyles[preset] ?? presetStyles[firstPreset()];
+  const resolved = presetStyles[preset] ?? presetStyles[firstPreset()];
+  return {
+    ...resolved,
+    typeScale: typeof resolved.typeScale === "number" ? resolved.typeScale : 1,
+    spaceScale: typeof resolved.spaceScale === "number" ? resolved.spaceScale : 1
+  };
 }
 
 export function renderTemplateHead(args: {

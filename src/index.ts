@@ -254,7 +254,7 @@ const TEMPLATE_IDS_BY_FORMAT: Record<TemplateKind, Set<string>> = TEMPLATE_KINDS
   (acc, format) => {
     acc[format] = new Set(
       PIPELINE_CONFIG.templates
-        .filter((template) => template.format === format)
+        .filter((template) => templateSupportsFormat(template, format))
         .map((template) => template.id)
     );
     return acc;
@@ -389,18 +389,24 @@ function handleTemplateCatalog(): Response {
   const templateFileMap = TEMPLATE_FILES as Record<string, string>;
   const templates = (PIPELINE_CONFIG.templates as ReadonlyArray<{
     id: string;
-    format: TemplateKind;
-    style: string;
+    format?: TemplateKind;
+    formats?: readonly TemplateKind[];
+    style?: string;
+    styles?: readonly string[];
     label: string;
     default_for_style?: boolean;
     archetypes?: readonly string[];
     file: string;
   }>).map((template) => {
     const templateMarkup = templateFileMap[template.id] ?? "";
+    const formats = resolveTemplateFormats(template);
+    const styles = resolveTemplateStyles(template);
     return {
       id: template.id,
-      format: template.format,
-      style: template.style,
+      format: formats[0],
+      formats,
+      style: styles[0],
+      styles,
       label: template.label,
       default_for_style: Boolean(template.default_for_style),
       archetypes: template.archetypes ?? [],
@@ -411,7 +417,7 @@ function handleTemplateCatalog(): Response {
 
   const templatesByFormat = listTemplateKinds().reduce(
     (acc, kind) => {
-      acc[kind] = templates.filter((template) => template.format === kind).map((template) => template.id);
+      acc[kind] = templates.filter((template) => template.formats.includes(kind)).map((template) => template.id);
       return acc;
     },
     {} as Record<TemplateKind, string[]>
@@ -419,7 +425,11 @@ function handleTemplateCatalog(): Response {
 
   const stylesByFormat = listTemplateKinds().reduce(
     (acc, kind) => {
-      const styles = new Set(templates.filter((template) => template.format === kind).map((template) => template.style));
+      const styles = new Set(
+        templates
+          .filter((template) => template.formats.includes(kind))
+          .flatMap((template) => template.styles)
+      );
       acc[kind] = [...styles];
       return acc;
     },
@@ -466,6 +476,50 @@ function handleTemplateCatalog(): Response {
 function matchTemplateKind(pathname: string): TemplateKind | null {
   const candidate = pathname.replace(/^\/template\//, "").replace(/\/+$/, "").trim();
   return isTemplateKind(candidate) ? candidate : null;
+}
+
+function resolveTemplateFormats(template: {
+  format?: string;
+  formats?: readonly string[];
+}): TemplateKind[] {
+  const fromArray = Array.isArray(template.formats) ? template.formats : [];
+  const fromSingle = typeof template.format === "string" ? [template.format] : [];
+  const normalized = [...fromArray, ...fromSingle]
+    .map((format) => (typeof format === "string" ? format.trim() : ""))
+    .filter(isTemplateKind);
+
+  if (normalized.length > 0) {
+    return [...new Set(normalized)];
+  }
+
+  return [...TEMPLATE_KINDS];
+}
+
+function resolveTemplateStyles(template: {
+  style?: string;
+  styles?: readonly string[];
+}): string[] {
+  const fromArray = Array.isArray(template.styles) ? template.styles : [];
+  const fromSingle = typeof template.style === "string" ? [template.style] : [];
+  const normalized = [...fromArray, ...fromSingle]
+    .map((style) => (typeof style === "string" ? style.trim().toLowerCase() : ""))
+    .filter((style): style is string => Boolean(style));
+
+  if (normalized.length > 0) {
+    return [...new Set(normalized)];
+  }
+
+  return [PIPELINE_CONFIG.template_styles.default_style];
+}
+
+function templateSupportsFormat(
+  template: {
+    format?: string;
+    formats?: readonly string[];
+  },
+  format: TemplateKind
+): boolean {
+  return resolveTemplateFormats(template).includes(format);
 }
 
 function resolveSecurityConfig(env: Env): ResolvedSecurityConfig {
