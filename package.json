@@ -10,6 +10,7 @@
     "build:styles": "echo 'No separate style build needed. template.css is embedded by build:templates.'",
     "build:templates": "node ./scripts/embed-template-assets.mjs",
     "build:assets": "pnpm run build:templates",
+    "render:previews": "node ./scripts/render-template-previews.mjs",
     "test": "vitest run"
   },
   "devDependencies": {
