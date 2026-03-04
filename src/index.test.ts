@@ -85,6 +85,32 @@ describe("social pipeline worker", () => {
     expect(html).toContain('--font-body: "IBM Plex Mono", monospace;');
   });
 
+  it("returns template catalog with styles and template versions", async () => {
+    const response = await worker.fetch(
+      authorizedRequest("https://worker.test/template-catalog"),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      ok: boolean;
+      schema_version: number;
+      catalog_version: string;
+      styles: Array<{ id: string }>;
+      templates: Array<{ id: string; version: string }>;
+      templates_by_format: Record<string, string[]>;
+    };
+
+    expect(body.ok).toBe(true);
+    expect(body.schema_version).toBe(1);
+    expect(typeof body.catalog_version).toBe("string");
+    expect(body.styles.some((style) => style.id === "editorial")).toBe(true);
+    expect(body.templates.length).toBeGreaterThan(0);
+    expect(body.templates[0].version.length).toBeGreaterThan(0);
+    expect(body.templates_by_format["instagram-post"].length).toBeGreaterThan(0);
+  });
+
   it("generates assets from direct plain-content endpoint", async () => {
     launchMock.mockResolvedValue(fakeBrowser());
 
@@ -238,6 +264,76 @@ describe("social pipeline worker", () => {
     expect(body.assets.instagram_story).toBeNull();
     expect(body.assets.linkedin_post).toBeNull();
     expect(body.assets.carousel).toHaveLength(0);
+  });
+
+  it("normalizes markdown captions and generic carousel headings", async () => {
+    launchMock.mockResolvedValue(fakeBrowser());
+
+    const env = {
+      AI: {
+        run: vi.fn(async () => ({
+          response: JSON.stringify({
+            instagram_caption: "# Social Media Asset Pipeline Worker\n\nShip better content from one source.",
+            twitter_caption: "## Social Media Asset Pipeline Worker\n\nShip better content from one source.",
+            linkedin_caption: "# Social Media Asset Pipeline Worker\n\nShip better content from one source.",
+            carousel_slides: [
+              { heading: "Insight 1", body: "# Start from one source article and define a clear hook." },
+              { heading: "Insight 2", body: "- Break the source into focused points for each platform." },
+              { heading: "Insight 3", body: "## End with a clear next step the audience can apply today." }
+            ],
+            hashtags: ["#workflow", "#contentops", "#socialmedia", "#automation", "#cloudflare", "#pipeline", "#creator", "#growth"],
+            image_prompt: "A clean desk and laptop in natural lighting",
+            use_feature_image: false,
+            template_style: "editorial",
+            post_archetype: "insight",
+            font_profile: "editorial-serif",
+            slot_content: {}
+          })
+        }))
+      },
+      BROWSER: {},
+      OUTPUT_BUCKET: {
+        put: vi.fn(async () => null)
+      },
+      API_KEYS: TEST_API_KEY,
+      R2_KEY_PREFIX: "social-assets"
+    } as never;
+
+    const response = await worker.fetch(
+      authorizedRequest("https://worker.test/generate-from-content", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Social Media Asset Pipeline Worker",
+          content: "# Social Media Asset Pipeline Worker\n\nTurn one post into multi-platform outputs.",
+          output: {
+            formats: ["carousel-slide"],
+            carouselSlides: 3
+          }
+        })
+      }),
+      env,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      llm_output: {
+        instagram_caption: string;
+        twitter_caption: string;
+        linkedin_caption: string;
+        carousel_slides: Array<{ heading: string; body: string }>;
+      };
+    };
+
+    expect(body.llm_output.instagram_caption.startsWith("#")).toBe(false);
+    expect(body.llm_output.twitter_caption.startsWith("#")).toBe(false);
+    expect(body.llm_output.linkedin_caption.startsWith("#")).toBe(false);
+    expect(body.llm_output.carousel_slides).toHaveLength(3);
+    for (const slide of body.llm_output.carousel_slides) {
+      expect(/^insight\s*\d*$/i.test(slide.heading)).toBe(false);
+      expect(slide.body.length).toBeGreaterThan(0);
+    }
   });
 
   it("returns 400 when plain-content payload misses required content", async () => {

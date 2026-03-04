@@ -119,6 +119,7 @@ You should receive:
 
 - `GET /health`
 - `GET /template/<format>` preview renderer (API key required)
+- `GET /template-catalog` test catalog for styles/templates/versions (API key required)
 - `POST /generate` fetches Ghost post by `slug` or `url` (API key required)
 - `POST /generate-from-content` uses direct title/content payload (API key required)
 - `POST /webhook/ghost` webhook-triggered generation (`x-webhook-token` required)

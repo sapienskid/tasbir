@@ -7,6 +7,7 @@ Base URL in local dev is usually `http://127.0.0.1:8787`.
 Protected routes:
 
 - `GET /template/<format>`
+- `GET /template-catalog`
 - `POST /generate`
 - `POST /generate-from-content`
 
@@ -100,6 +101,46 @@ curl "http://127.0.0.1:8787/template/twitter-card?templateStyle=bold&templateArc
 ```
 
 Response content type: `text/html`.
+
+## `GET /template-catalog`
+
+Returns a testing catalog of styles, formats, archetypes, fonts, templates, and template versions.
+
+Useful for:
+
+- validating available `templateStyle` / `postArchetype` combinations
+- verifying template IDs per format
+- tracking template changes via `catalog_version` and per-template `version`
+
+### Example
+
+```bash
+curl "http://127.0.0.1:8787/template-catalog" \
+  -H 'x-api-key: your-api-key'
+```
+
+### Response (shape)
+
+```json
+{
+  "ok": true,
+  "schema_version": 1,
+  "catalog_version": "2f9bc4a1",
+  "defaults": {
+    "template_style": "editorial",
+    "post_archetype": "insight",
+    "font_profile": "editorial-serif",
+    "carousel_required_slides": 5
+  },
+  "styles": [{ "id": "editorial", "label": "Editorial" }],
+  "archetypes": [{ "id": "insight", "label": "Insight" }],
+  "font_profiles": [{ "id": "editorial-serif", "label": "Editorial Serif" }],
+  "formats": [{ "id": "instagram-post", "default_template_id": "instagram-post/editorial" }],
+  "templates": [{ "id": "instagram-post/editorial", "version": "8a31f10c" }],
+  "templates_by_format": { "instagram-post": ["instagram-post/editorial"] },
+  "styles_by_format": { "instagram-post": ["editorial", "data"] }
+}
+```
 
 ## `POST /generate`
 

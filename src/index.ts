@@ -17,7 +17,7 @@ import {
   type TemplateControlSet,
   type TemplateKind
 } from "./templates";
-import { PIPELINE_CONFIG } from "./generated/template-assets";
+import { PIPELINE_CONFIG, TEMPLATE_FILES } from "./generated/template-assets";
 
 interface Env {
   AI: Ai;
@@ -194,7 +194,7 @@ interface GenerationResult {
   };
 }
 
-type ProtectedRoute = "preview" | "generate" | "generate-from-content" | "webhook";
+type ProtectedRoute = "preview" | "catalog" | "generate" | "generate-from-content" | "webhook";
 
 interface SecurityConfig {
   api_auth: {
@@ -269,7 +269,7 @@ const SECURITY_DEFAULTS: SecurityConfig = {
 };
 
 const RATE_LIMIT_BUCKETS = new Map<string, { count: number; resetAt: number }>();
-const PROTECTED_ROUTE_SET = new Set<ProtectedRoute>(["preview", "generate", "generate-from-content", "webhook"]);
+const PROTECTED_ROUTE_SET = new Set<ProtectedRoute>(["preview", "catalog", "generate", "generate-from-content", "webhook"]);
 
 const DEFAULT_LLM_MODEL = PIPELINE_CONFIG.generation.llm.default_model;
 const DEFAULT_IMAGE_MODEL = PIPELINE_CONFIG.generation.image.default_model;
@@ -369,6 +369,11 @@ export default {
         return finalizeResponse(request, security, handleTemplatePreview(url));
       }
 
+      if (request.method === "GET" && url.pathname === "/template-catalog") {
+        enforceRouteSecurity(request, security, "catalog");
+        return finalizeResponse(request, security, handleTemplateCatalog());
+      }
+
       if (request.method === "GET" && url.pathname === "/health") {
         return finalizeResponse(request, security, json({ ok: true }));
       }
@@ -437,6 +442,7 @@ export default {
               "POST /generate",
               "POST /generate-from-content",
               "POST /webhook/ghost",
+              "GET /template-catalog",
               ...TEMPLATE_KINDS.map((kind) => `GET /template/${kind}?...`)
             ]
           },
@@ -462,6 +468,84 @@ function handleTemplatePreview(url: URL): Response {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store"
     }
+  });
+}
+
+function handleTemplateCatalog(): Response {
+  const templateFileMap = TEMPLATE_FILES as Record<string, string>;
+  const templates = (PIPELINE_CONFIG.templates as ReadonlyArray<{
+    id: string;
+    format: TemplateKind;
+    style: string;
+    label: string;
+    default_for_style?: boolean;
+    archetypes?: readonly string[];
+    file: string;
+  }>).map((template) => {
+    const templateMarkup = templateFileMap[template.id] ?? "";
+    return {
+      id: template.id,
+      format: template.format,
+      style: template.style,
+      label: template.label,
+      default_for_style: Boolean(template.default_for_style),
+      archetypes: template.archetypes ?? [],
+      file: template.file,
+      version: stableShortHash(`${template.id}:${templateMarkup}`)
+    };
+  });
+
+  const templatesByFormat = listTemplateKinds().reduce(
+    (acc, kind) => {
+      acc[kind] = templates.filter((template) => template.format === kind).map((template) => template.id);
+      return acc;
+    },
+    {} as Record<TemplateKind, string[]>
+  );
+
+  const stylesByFormat = listTemplateKinds().reduce(
+    (acc, kind) => {
+      const styles = new Set(templates.filter((template) => template.format === kind).map((template) => template.style));
+      acc[kind] = [...styles];
+      return acc;
+    },
+    {} as Record<TemplateKind, string[]>
+  );
+
+  const formats = listTemplateKinds().map((kind) => ({
+    id: kind,
+    width: PIPELINE_CONFIG.formats[kind].width,
+    height: PIPELINE_CONFIG.formats[kind].height,
+    caption_source: PIPELINE_CONFIG.formats[kind].caption_source,
+    hashtag_count: PIPELINE_CONFIG.formats[kind].hashtag_count,
+    default_template_id: PIPELINE_CONFIG.formats[kind].default_template_id
+  }));
+
+  const catalogVersion = stableShortHash(
+    JSON.stringify({
+      schema_version: PIPELINE_CONFIG.schema_version,
+      styles: listTemplateStyles().map((style) => style.id),
+      templates: templates.map((template) => `${template.id}:${template.version}`)
+    })
+  );
+
+  return json({
+    ok: true,
+    schema_version: PIPELINE_CONFIG.schema_version,
+    catalog_version: catalogVersion,
+    defaults: {
+      template_style: PIPELINE_CONFIG.template_styles.default_style,
+      post_archetype: PIPELINE_CONFIG.post_archetypes.default_archetype,
+      font_profile: PIPELINE_CONFIG.typography.default_font_profile,
+      carousel_required_slides: PIPELINE_CONFIG.generation.carousel_required_slides
+    },
+    styles: listTemplateStyles(),
+    archetypes: listPostArchetypes(),
+    font_profiles: listFontProfiles(),
+    formats,
+    templates,
+    templates_by_format: templatesByFormat,
+    styles_by_format: stylesByFormat
   });
 }
 
@@ -605,6 +689,7 @@ function enforceApiAuth(request: Request, security: ResolvedSecurityConfig, rout
   }
   const routeNeedsAuth =
     (route === "preview" && security.api_auth.require_for_preview) ||
+    (route === "catalog" && security.api_auth.require_for_preview) ||
     (route === "generate" && security.api_auth.require_for_generate) ||
     (route === "generate-from-content" && security.api_auth.require_for_direct_content) ||
     (route === "webhook" && security.api_auth.require_for_webhook);
@@ -889,7 +974,7 @@ function buildPostFromDirectContent(input: DirectContentRequestBody, security: R
     throw new HttpError(400, "title is required for /generate-from-content");
   }
 
-  const plainContent = (input.content ?? input.body ?? "").trim();
+  const plainContent = normalizeSourceContent((input.content ?? input.body ?? "").trim());
   if (!plainContent) {
     throw new HttpError(400, "content (or body) is required for /generate-from-content");
   }
@@ -900,7 +985,9 @@ function buildPostFromDirectContent(input: DirectContentRequestBody, security: R
   }
 
   const tags = normalizeTags(input.tags);
-  const excerpt = (input.excerpt ?? plainContent.slice(0, PIPELINE_CONFIG.generation.limits.direct_excerpt_default_max_chars)).trim();
+  const excerpt = normalizeSourceContent(
+    (input.excerpt ?? plainContent.slice(0, PIPELINE_CONFIG.generation.limits.direct_excerpt_default_max_chars)).trim()
+  );
   const url = input.url?.trim() || `https://local.test/${derivedSlug}/`;
   const featureImage = input.feature_image
     ? sanitizeImageUrl(
@@ -1047,6 +1134,8 @@ async function generateStructuredCopy(
     .replace("<instagram_caption_max_chars>", String(limits.instagram_caption_max_chars))
     .replace("<twitter_caption_max_chars>", String(limits.twitter_caption_max_chars))
     .replace("<linkedin_caption_max_chars>", String(limits.linkedin_caption_max_chars))
+    .replace("<carousel_heading_max_chars>", String(limits.carousel_heading_max_chars))
+    .replace("<carousel_body_max_chars>", String(limits.carousel_body_max_chars))
     .replace("<hashtag_min_count>", String(limits.hashtag_min_count))
     .replace("<hashtag_max_count>", String(limits.hashtag_max_count))
     .replace("<available_template_styles>", styleHints)
@@ -1181,38 +1270,30 @@ function normalizeLlmOutput(
   requiredCarouselSlides: number
 ): LlmOutput {
   const limits = PIPELINE_CONFIG.generation.limits;
-  const fallbacks = PIPELINE_CONFIG.generation.fallbacks;
-  const instagramCaption = ensureLength(toText(payload.instagram_caption), limits.instagram_caption_max_chars, fallbackText);
-  const twitterCaption = ensureLength(toText(payload.twitter_caption), limits.twitter_caption_max_chars, fallbackText);
-  const linkedinCaption = ensureLength(toText(payload.linkedin_caption), limits.linkedin_caption_max_chars, fallbackText);
+  const cleanedFallbackText = normalizeSourceContent(fallbackText) || fallbackText;
+  const captions = normalizePlatformCaptions(
+    {
+      instagram: toText(payload.instagram_caption),
+      twitter: toText(payload.twitter_caption),
+      linkedin: toText(payload.linkedin_caption)
+    },
+    {
+      title,
+      fallbackText: cleanedFallbackText
+    }
+  );
 
   const rawSlides = Array.isArray(payload.carousel_slides) ? payload.carousel_slides : [];
-  const normalizedSlides: CarouselSlide[] = rawSlides
-    .map((slide) => {
-      if (!slide || typeof slide !== "object") {
-        return null;
-      }
-      const entry = slide as Record<string, unknown>;
-      const heading = ensureLength(toText(entry.heading), limits.carousel_heading_max_chars, fallbacks.carousel_heading);
-      const body = toSingleSentence(ensureLength(toText(entry.body), limits.carousel_body_max_chars, fallbackText));
-      if (!heading || !body) {
-        return null;
-      }
-      return { heading, body };
-    })
-    .filter((slide): slide is CarouselSlide => slide !== null)
-    .slice(0, requiredCarouselSlides);
-
-  while (normalizedSlides.length < requiredCarouselSlides) {
-    const index = normalizedSlides.length + 1;
-    normalizedSlides.push({
-      heading: `${fallbacks.carousel_heading_prefix} ${index}`,
-      body: toSingleSentence(ensureLength(fallbackText, limits.carousel_body_max_chars, fallbackText))
-    });
-  }
+  const sourceSentences = sentencePoolFromSource(`${title}. ${cleanedFallbackText}`);
+  const normalizedSlides = normalizeCarouselSlides(rawSlides, {
+    title,
+    fallbackText: cleanedFallbackText,
+    requiredSlides: requiredCarouselSlides,
+    sourceSentences
+  });
 
   const rawHashtags = Array.isArray(payload.hashtags) ? payload.hashtags : [];
-  const hashtags = normalizeHashtags(rawHashtags, title, fallbackText);
+  const hashtags = normalizeHashtags(rawHashtags, title, cleanedFallbackText);
 
   const imagePromptFallback = `${title}, modern editorial photo, clean composition, natural lighting, no text overlay`;
   const imagePrompt = ensureLength(toText(payload.image_prompt), limits.image_prompt_max_chars, imagePromptFallback);
@@ -1223,13 +1304,13 @@ function normalizeLlmOutput(
   const fontProfile = normalizeFontProfileId(toText(payload.font_profile));
   const slotContent = normalizeSlotContent(payload.slot_content, {
     title,
-    fallbackText
+    fallbackText: cleanedFallbackText
   });
 
   return {
-    instagram_caption: instagramCaption,
-    twitter_caption: twitterCaption,
-    linkedin_caption: linkedinCaption,
+    instagram_caption: captions.instagram,
+    twitter_caption: captions.twitter,
+    linkedin_caption: captions.linkedin,
     carousel_slides: normalizedSlides,
     hashtags,
     image_prompt: imagePrompt,
@@ -1239,6 +1320,273 @@ function normalizeLlmOutput(
     font_profile: fontProfile,
     slot_content: slotContent
   };
+}
+
+function normalizePlatformCaptions(
+  captions: { instagram: string; twitter: string; linkedin: string },
+  context: { title: string; fallbackText: string }
+): { instagram: string; twitter: string; linkedin: string } {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const fallbackCaption = normalizeSourceContent(context.fallbackText) || context.title;
+
+  return {
+    instagram: normalizeCaptionText(captions.instagram, context.title, limits.instagram_caption_max_chars, fallbackCaption),
+    twitter: normalizeCaptionText(captions.twitter, context.title, limits.twitter_caption_max_chars, fallbackCaption),
+    linkedin: normalizeCaptionText(captions.linkedin, context.title, limits.linkedin_caption_max_chars, fallbackCaption)
+  };
+}
+
+function normalizeCaptionText(rawText: string, title: string, maxChars: number, fallbackText: string): string {
+  const cleaned = removeTitlePrefix(normalizeSourceContent(rawText), title);
+  const fallback = removeTitlePrefix(normalizeSourceContent(fallbackText), title) || normalizeSourceContent(title);
+  const source = cleaned || fallback || title;
+  return ensureLength(source, maxChars, fallback || title);
+}
+
+function normalizeCarouselSlides(
+  rawSlides: unknown[],
+  args: { title: string; fallbackText: string; requiredSlides: number; sourceSentences: string[] }
+): CarouselSlide[] {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const usedSentenceIndexes = new Set<number>();
+  const seenBodyKeys = new Set<string>();
+  const seenHeadingKeys = new Set<string>();
+  const fallbackSentence = toSingleSentence(ensureLength(args.fallbackText, limits.carousel_body_max_chars, args.title));
+
+  const nextSentence = (): string => {
+    for (const [index, sentence] of args.sourceSentences.entries()) {
+      if (!usedSentenceIndexes.has(index)) {
+        usedSentenceIndexes.add(index);
+        return sentence;
+      }
+    }
+    return "";
+  };
+
+  const ensureBody = (rawBody: string): string => {
+    const cleanedBody = normalizeSourceContent(rawBody);
+    const fallbackBody = nextSentence() || fallbackSentence;
+    let body = toSingleSentence(ensureLength(cleanedBody, limits.carousel_body_max_chars, fallbackBody));
+    let bodyKey = canonicalText(body);
+
+    if (!bodyKey || seenBodyKeys.has(bodyKey)) {
+      const alternative = nextSentence();
+      if (alternative) {
+        body = toSingleSentence(ensureLength(alternative, limits.carousel_body_max_chars, fallbackBody));
+        bodyKey = canonicalText(body);
+      }
+    }
+
+    if (bodyKey) {
+      seenBodyKeys.add(bodyKey);
+    }
+    return body;
+  };
+
+  const slides: CarouselSlide[] = [];
+  for (const [index, rawSlide] of rawSlides.entries()) {
+    if (slides.length >= args.requiredSlides) {
+      break;
+    }
+    if (!rawSlide || typeof rawSlide !== "object") {
+      continue;
+    }
+
+    const entry = rawSlide as Record<string, unknown>;
+    const body = ensureBody(toText(entry.body));
+    const heading = ensureCarouselHeading(toText(entry.heading), {
+      body,
+      title: args.title,
+      index,
+      total: args.requiredSlides,
+      usedHeadingKeys: seenHeadingKeys
+    });
+
+    slides.push({ heading, body });
+  }
+
+  while (slides.length < args.requiredSlides) {
+    const index = slides.length;
+    const body = ensureBody("");
+    const heading = ensureCarouselHeading("", {
+      body,
+      title: args.title,
+      index,
+      total: args.requiredSlides,
+      usedHeadingKeys: seenHeadingKeys
+    });
+    slides.push({ heading, body });
+  }
+
+  return slides;
+}
+
+function ensureCarouselHeading(
+  rawHeading: string,
+  args: {
+    body: string;
+    title: string;
+    index: number;
+    total: number;
+    usedHeadingKeys: Set<string>;
+  }
+): string {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const phase = getCarouselPhase(args.index, args.total);
+  const cleanedHeading = normalizeSourceContent(rawHeading);
+
+  let heading = cleanedHeading;
+  if (!heading || isGenericCarouselHeading(heading)) {
+    heading = deriveHeadingFromBody(args.body, args.title, phase);
+  }
+
+  heading = ensureLength(heading, limits.carousel_heading_max_chars, defaultHeadingForPhase(phase, args.index));
+  heading = heading.replace(/[.!?]+$/g, "").trim();
+  if (!heading) {
+    heading = defaultHeadingForPhase(phase, args.index);
+  }
+
+  let key = canonicalText(heading);
+  if (!key || args.usedHeadingKeys.has(key)) {
+    heading = ensureLength(
+      `${defaultHeadingForPhase(phase, args.index)} ${args.index + 1}`,
+      limits.carousel_heading_max_chars,
+      defaultHeadingForPhase(phase, args.index)
+    );
+    key = canonicalText(heading);
+  }
+
+  if (key) {
+    args.usedHeadingKeys.add(key);
+  }
+
+  return heading;
+}
+
+function deriveHeadingFromBody(body: string, title: string, phase: "intro" | "middle" | "conclusion"): string {
+  const source = normalizeSourceContent(body) || normalizeSourceContent(title);
+  const clause = source.split(/[.!?;:]/)[0]?.trim() || "";
+  const words = clause.split(/\s+/).filter(Boolean).slice(0, 6);
+  const candidate = toHeadlineCase(words.join(" "));
+  return candidate || defaultHeadingForPhase(phase, 0);
+}
+
+function defaultHeadingForPhase(phase: "intro" | "middle" | "conclusion", index: number): string {
+  if (phase === "intro") {
+    return "Start Here";
+  }
+  if (phase === "conclusion") {
+    return "What To Do Next";
+  }
+  return index % 2 === 0 ? "Core Insight" : "How It Works";
+}
+
+function getCarouselPhase(index: number, total: number): "intro" | "middle" | "conclusion" {
+  if (index <= 0) {
+    return "intro";
+  }
+  if (index >= total - 1) {
+    return "conclusion";
+  }
+  return "middle";
+}
+
+function isGenericCarouselHeading(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  return /^(insight|slide|point|tip|step|idea|key point)\s*\d*$/i.test(normalized);
+}
+
+function sentencePoolFromSource(value: string): string[] {
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const source = normalizeSourceContent(value);
+  if (!source) {
+    return [];
+  }
+
+  const rawSentences = source.split(/(?<=[.!?])\s+/g).map((sentence) => sentence.trim()).filter(Boolean);
+  const deduped: string[] = [];
+  const seen = new Set<string>();
+
+  for (const sentence of rawSentences) {
+    const single = toSingleSentence(ensureLength(sentence, limits.carousel_body_max_chars, sentence));
+    const key = canonicalText(single);
+    if (!key || key.length < 12 || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(single);
+    if (deduped.length >= 24) {
+      break;
+    }
+  }
+
+  return deduped;
+}
+
+function normalizeSourceContent(input: string): string {
+  if (!input) {
+    return "";
+  }
+
+  return input
+    .replace(/\r\n/g, "\n")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+[.)]\s+/gm, "")
+    .replace(/^[#]+(?=\S)/gm, "")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{2,}/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function removeTitlePrefix(value: string, title: string): string {
+  if (!value) {
+    return "";
+  }
+  const safeTitle = normalizeSourceContent(title);
+  if (!safeTitle) {
+    return value.trim();
+  }
+
+  const titlePattern = new RegExp(`^${escapeRegExp(safeTitle)}(?:\\s*[:\\-–—|]\\s*|\\s+)`, "i");
+  const stripped = value.replace(titlePattern, "").trim();
+  if (stripped && canonicalText(value).startsWith(canonicalText(safeTitle))) {
+    return stripped;
+  }
+  return value.trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function toHeadlineCase(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function canonicalText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function normalizeHashtags(rawTags: unknown[], title: string, fallbackText: string): string[] {
@@ -1960,7 +2308,22 @@ function ensureLength(value: string, max: number, fallback: string): string {
   if (source.length <= max) {
     return source;
   }
-  return `${source.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
+
+  const sentenceWindow = source.slice(0, max);
+  const sentenceBoundary = Math.max(
+    sentenceWindow.lastIndexOf("."),
+    sentenceWindow.lastIndexOf("!"),
+    sentenceWindow.lastIndexOf("?")
+  );
+  if (sentenceBoundary >= Math.floor(max * 0.55)) {
+    return source.slice(0, sentenceBoundary + 1).trimEnd();
+  }
+
+  const maxBody = Math.max(1, max - 1);
+  const sliced = source.slice(0, maxBody);
+  const wordBoundary = sliced.lastIndexOf(" ");
+  const cutoff = wordBoundary >= Math.floor(max * 0.55) ? sliced.slice(0, wordBoundary) : sliced;
+  return `${cutoff.trimEnd()}…`;
 }
 
 function stripHtml(html: string): string {
@@ -1980,6 +2343,15 @@ function toText(value: unknown): string {
     return String(value);
   }
   return "";
+}
+
+function stableShortHash(input: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
 function arrayBufferToBase64(bytes: Uint8Array): string {
