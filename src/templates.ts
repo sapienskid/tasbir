@@ -426,6 +426,10 @@ function renderFrame(
   const safeTitle = escapeHtml(args.params.title);
   const safeImageUrl = escapeHtml(args.params.imageUrl.trim());
   const hasImage = safeImageUrl.length > 0;
+  const isDataImage = safeImageUrl.startsWith("data:image/");
+  const imageFilter = isDataImage ? "blur(1.8px) saturate(0.88)" : "none";
+  const imageTransform = isDataImage ? "scale(1.04)" : "none";
+  const overlayOpacity = hasImage ? (isDataImage ? 0.84 : 0.72) : 1;
 
   const rootVars = [
     `--frame-bg:${preset.containerBackground}`,
@@ -451,11 +455,12 @@ function renderFrame(
 
           ${
             hasImage
-              ? `<div class="absolute inset-0 bg-cover bg-center" style="background-image: url('${safeImageUrl}'); opacity: var(--frame-image-opacity);"></div>`
+              ? `<div class="absolute inset-0 bg-cover bg-center" style="background-image: url('${safeImageUrl}'); opacity: var(--frame-image-opacity); filter: ${imageFilter}; transform: ${imageTransform};"></div>`
               : ""
           }
 
-          <div class="absolute inset-0" style="background: var(--frame-overlay-top), var(--frame-overlay-bottom), var(--frame-vignette);"></div>
+          <div class="absolute inset-0" style="opacity: ${overlayOpacity}; background: var(--frame-overlay-top), var(--frame-overlay-bottom), var(--frame-vignette);"></div>
+          <div class="absolute inset-0" style="background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: ${hasImage ? 0.42 : 0.28};"></div>
 
           <div class="absolute inset-0" style="opacity: var(--frame-grain-opacity); background-image: radial-gradient(${PIPELINE_CONFIG.render.frame_decor.grain_dot_color} ${PIPELINE_CONFIG.render.frame_decor.grain_dot_size_px}px, transparent ${PIPELINE_CONFIG.render.frame_decor.grain_dot_size_px}px); background-size: ${PIPELINE_CONFIG.render.frame_decor.grain_bg_size_px}px ${PIPELINE_CONFIG.render.frame_decor.grain_bg_size_px}px;"></div>
 

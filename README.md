@@ -115,6 +115,63 @@ You should receive:
 - `assets` keys for each format
 - optional public URLs if `R2_PUBLIC_BASE_URL` is configured
 
+## Render Templates Locally
+
+Use this when you want to test template visuals quickly without running full `/generate`.
+
+1. Start local dev:
+
+```bash
+pnpm run build:assets
+pnpm run dev -- --port 8787
+```
+
+2. In another terminal, resolve a local API key from `.dev.vars`:
+
+```bash
+API_KEY=$(grep '^API_KEYS=' .dev.vars | head -n1 | sed 's/^API_KEYS=//' | sed 's/^\"//;s/\"$//' | cut -d',' -f1 | xargs)
+```
+
+3. Render one template HTML (example: Twitter editorial):
+
+```bash
+curl "http://127.0.0.1:8787/template/twitter-card?templateId=twitter-card/editorial&templateStyle=editorial&templateArchetype=insight&title=Why%20Async%20Product%20Updates%20Build%20Trust&caption=Teams%20build%20trust%20when%20updates%20focus%20on%20decisions%20and%20outcomes.&brandName=Tasbir%20Blog&brandingColor=%231f7a8c" \
+  -H "x-api-key: $API_KEY" \
+  > /tmp/twitter-editorial.html
+```
+
+4. Optional: create a PNG from the rendered HTML with headless Chrome:
+
+```bash
+google-chrome-stable \
+  --headless=new \
+  --disable-gpu \
+  --hide-scrollbars \
+  --window-size=1200,630 \
+  --virtual-time-budget=3500 \
+  --screenshot=/tmp/twitter-editorial.png \
+  "file:///tmp/twitter-editorial.html"
+```
+
+### Render Every Registered Template
+
+```bash
+mkdir -p /tmp/template-previews/html
+curl -sS "http://127.0.0.1:8787/template-catalog" -H "x-api-key: $API_KEY" > /tmp/template-previews/catalog.json
+
+jq -c '.templates[]' /tmp/template-previews/catalog.json | while read -r t; do
+  id=$(printf '%s' "$t" | jq -r '.id')
+  format=$(printf '%s' "$t" | jq -r '.format')
+  style=$(printf '%s' "$t" | jq -r '.style')
+  archetype=$(printf '%s' "$t" | jq -r '.archetypes[0] // "insight"')
+  file="/tmp/template-previews/html/${id//\//__}.html"
+  curl -sS "http://127.0.0.1:8787/template/${format}?templateId=$(printf '%s' "$id" | jq -sRr @uri)&templateStyle=$(printf '%s' "$style" | jq -sRr @uri)&templateArchetype=$(printf '%s' "$archetype" | jq -sRr @uri)&title=Local%20Template%20Preview&caption=Visual%20check%20for%20layout%20and%20readability.&brandName=Tasbir%20Blog&brandingColor=%231f7a8c" \
+    -H "x-api-key: $API_KEY" > "$file"
+done
+```
+
+This produces one `.html` per template ID under `/tmp/template-previews/html`.
+
 ## API Routes
 
 - `GET /health`

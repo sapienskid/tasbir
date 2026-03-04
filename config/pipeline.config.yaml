@@ -130,8 +130,8 @@ render:
       brandPillText: "var(--color-text-primary)"
       titleShadow: "0 10px 24px rgba(0, 0, 0, 0.18)"
       captionShadow: "0 6px 18px rgba(0, 0, 0, 0.14)"
-      grainOpacity: 0.08
-      imageOpacity: 0.6
+      grainOpacity: 0.05
+      imageOpacity: 0.48
     illustration:
       containerBackground: "radial-gradient(circle at 16% 14%, color-mix(in srgb, var(--color-brand-glow) 48%, transparent) 0%, transparent 46%), linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 18%, var(--color-surface-base)), color-mix(in srgb, var(--color-surface-base) 86%, #0b1524))"
       overlayTop: "linear-gradient(170deg, rgba(3, 8, 14, 0.02), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 78%)"
@@ -142,8 +142,8 @@ render:
       brandPillText: "var(--color-text-primary)"
       titleShadow: "0 8px 22px rgba(0, 0, 0, 0.12)"
       captionShadow: "0 4px 16px rgba(0, 0, 0, 0.1)"
-      grainOpacity: 0.04
-      imageOpacity: 0.74
+      grainOpacity: 0.03
+      imageOpacity: 0.54
     editorial:
       containerBackground: "radial-gradient(circle at 13% 12%, color-mix(in srgb, var(--color-brand-glow) 54%, transparent) 0%, transparent 50%), linear-gradient(162deg, color-mix(in srgb, var(--color-brand-accent) 24%, var(--color-surface-base)), var(--color-surface-base))"
       overlayTop: "linear-gradient(168deg, rgba(2, 7, 14, 0.08), color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 72%)"
@@ -154,8 +154,8 @@ render:
       brandPillText: "var(--color-text-primary)"
       titleShadow: "0 16px 34px rgba(0, 0, 0, 0.24)"
       captionShadow: "0 8px 24px rgba(0, 0, 0, 0.18)"
-      grainOpacity: 0.14
-      imageOpacity: 0.64
+      grainOpacity: 0.07
+      imageOpacity: 0.5
     spotlight:
       containerBackground: "radial-gradient(circle at 72% 10%, color-mix(in srgb, var(--color-brand-accent) 54%, transparent) 0%, transparent 42%), linear-gradient(150deg, color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-base)), var(--color-surface-base))"
       overlayTop: "linear-gradient(180deg, rgba(1, 5, 10, 0.06), color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 70%)"
@@ -166,8 +166,8 @@ render:
       brandPillText: "var(--color-text-primary)"
       titleShadow: "0 18px 38px rgba(0, 0, 0, 0.24)"
       captionShadow: "0 10px 26px rgba(0, 0, 0, 0.2)"
-      grainOpacity: 0.16
-      imageOpacity: 0.62
+      grainOpacity: 0.08
+      imageOpacity: 0.52
     bold:
       containerBackground: "linear-gradient(145deg, color-mix(in srgb, var(--color-brand-accent) 44%, #050812), var(--color-surface-base))"
       overlayTop: "linear-gradient(170deg, rgba(0, 0, 0, 0.04), color-mix(in srgb, var(--color-overlay-strong) 48%, transparent) 74%)"
@@ -178,8 +178,8 @@ render:
       brandPillText: "var(--color-brand-accent-foreground)"
       titleShadow: "0 16px 32px rgba(0, 0, 0, 0.24)"
       captionShadow: "0 8px 22px rgba(0, 0, 0, 0.18)"
-      grainOpacity: 0.1
-      imageOpacity: 0.58
+      grainOpacity: 0.06
+      imageOpacity: 0.46
     clean:
       containerBackground: "linear-gradient(160deg, color-mix(in srgb, var(--color-brand-accent) 16%, #0a1320), #0a1320 50%, color-mix(in srgb, var(--color-brand-accent) 8%, #0b1119))"
       overlayTop: "linear-gradient(170deg, rgba(2, 8, 14, 0.03), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 82%)"
@@ -190,8 +190,8 @@ render:
       brandPillText: "var(--color-text-secondary)"
       titleShadow: "0 10px 20px rgba(0, 0, 0, 0.12)"
       captionShadow: "0 4px 14px rgba(0, 0, 0, 0.1)"
-      grainOpacity: 0.06
-      imageOpacity: 0.68
+      grainOpacity: 0.04
+      imageOpacity: 0.52
   caption_width_rules:
     instagram-post:
       add: 20
@@ -431,7 +431,7 @@ generation:
     prompt_prefix:
       - "Create one campaign-quality social background image that can be reused across square, portrait, and landscape crops."
       - "Use one clear focal subject, intentional negative space for headline placement, and brand-safe composition."
-      - "No text, no logos, no UI elements, no watermarks."
+      - "No text, no letters, no numbers, no logos, no UI elements, no watermarks."
       - "Avoid heavy black gradients unless dramatic contrast is explicitly requested."
     style_guidance:
       editorial: "photorealistic editorial scene, nuanced depth, premium natural textures, balanced highlights"
@@ -450,6 +450,8 @@ generation:
       - "Avoid muddy shadows and overly dark vignette overlays."
       - "Avoid cluttered scenes that reduce text readability."
       - "Avoid generic stock-photo look; keep visual identity distinct."
+      - "Do not render any typography, captions, labels, symbols, glyphs, or watermarks."
+      - "Avoid signage, billboards, screens, packaging text, and posters with words."
 
 template_styles:
   default_style: "editorial"

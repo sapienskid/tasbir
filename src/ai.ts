@@ -445,52 +445,84 @@ function ensureCarouselHeading(
 ): string {
   const limits = PIPELINE_CONFIG.generation.limits;
   const phase = getCarouselPhase(args.index, args.total);
-  const cleanedHeading = normalizeSourceContent(rawHeading);
+  const fallback = defaultHeadingForPhase(phase, args.index);
+  const candidates = [
+    normalizeSourceContent(rawHeading),
+    deriveHeadingFromBody(args.body, args.title, phase),
+    deriveHeadingFromBody(args.title, args.title, phase),
+    ...defaultHeadingVariantsForPhase(phase)
+  ];
 
-  let heading = cleanedHeading;
-  if (!heading || isGenericCarouselHeading(heading)) {
-    heading = deriveHeadingFromBody(args.body, args.title, phase);
-  }
-
-  heading = ensureLength(heading, limits.carousel_heading_max_chars, defaultHeadingForPhase(phase, args.index));
-  heading = heading.replace(/[.!?]+$/g, "").trim();
-  if (!heading) {
-    heading = defaultHeadingForPhase(phase, args.index);
-  }
-
-  let key = canonicalText(heading);
-  if (!key || args.usedHeadingKeys.has(key)) {
-    heading = ensureLength(
-      `${defaultHeadingForPhase(phase, args.index)} ${args.index + 1}`,
-      limits.carousel_heading_max_chars,
-      defaultHeadingForPhase(phase, args.index)
-    );
-    key = canonicalText(heading);
-  }
-
-  if (key) {
+  for (const candidate of candidates) {
+    const heading = normalizeCarouselHeadingCandidate(candidate, limits.carousel_heading_max_chars, fallback);
+    const key = canonicalText(heading);
+    if (!key || args.usedHeadingKeys.has(key) || isGenericCarouselHeading(heading)) {
+      continue;
+    }
     args.usedHeadingKeys.add(key);
+    return heading;
   }
 
-  return heading;
+  const fallbackHeading = normalizeCarouselHeadingCandidate(fallback, limits.carousel_heading_max_chars, fallback);
+  const fallbackKey = canonicalText(fallbackHeading);
+  if (fallbackKey) {
+    args.usedHeadingKeys.add(fallbackKey);
+  }
+  return fallbackHeading;
 }
 
 function deriveHeadingFromBody(body: string, title: string, phase: "intro" | "middle" | "conclusion"): string {
   const source = normalizeSourceContent(body) || normalizeSourceContent(title);
-  const clause = source.split(/[.!?;:]/)[0]?.trim() || "";
-  const words = clause.split(/\s+/).filter(Boolean).slice(0, 6);
-  const candidate = toHeadlineCase(words.join(" "));
-  return candidate || defaultHeadingForPhase(phase, 0);
+  if (!source) {
+    return defaultHeadingForPhase(phase, 0);
+  }
+
+  const clause = source
+    .replace(/[–—]/g, " ")
+    .split(/[.!?;:]/)[0]
+    ?.trim() || "";
+  const words = clause
+    .split(/\s+/)
+    .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
+    .filter(Boolean)
+    .filter((word) => word.length > 1);
+  const selected = words.slice(0, 7);
+  const candidate = toHeadlineCase(selected.join(" "));
+  if (candidate && !isGenericCarouselHeading(candidate)) {
+    return candidate;
+  }
+  return defaultHeadingForPhase(phase, 0);
 }
 
 function defaultHeadingForPhase(phase: "intro" | "middle" | "conclusion", index: number): string {
   if (phase === "intro") {
-    return "Start Here";
+    return index % 2 === 0 ? "The Main Idea" : "Why This Matters";
   }
   if (phase === "conclusion") {
-    return "What To Do Next";
+    return index % 2 === 0 ? "What To Do Next" : "Final Takeaway";
   }
-  return index % 2 === 0 ? "Core Insight" : "How It Works";
+  return index % 2 === 0 ? "Key Insight" : "How To Apply It";
+}
+
+function defaultHeadingVariantsForPhase(phase: "intro" | "middle" | "conclusion"): string[] {
+  if (phase === "intro") {
+    return ["Big Picture", "Why It Matters"];
+  }
+  if (phase === "conclusion") {
+    return ["Next Move", "Put It Into Practice"];
+  }
+  return ["Proof In Practice", "What Changes"];
+}
+
+function normalizeCarouselHeadingCandidate(value: string, maxChars: number, fallback: string): string {
+  const cleaned = ensureLength(value, maxChars, fallback)
+    .replace(/[.!?]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) {
+    return fallback;
+  }
+  return cleaned;
 }
 
 function getCarouselPhase(index: number, total: number): "intro" | "middle" | "conclusion" {
@@ -508,7 +540,13 @@ function isGenericCarouselHeading(value: string): boolean {
   if (!normalized) {
     return true;
   }
-  return /^(insight|slide|point|tip|step|idea|key point)\s*\d*$/i.test(normalized);
+  if (/^(insight|slide|point|tip|step|idea|key point|takeaway)\s*\d*$/i.test(normalized)) {
+    return true;
+  }
+  if (/^(start here|core insight|how it works|what to do next)\s*\d*$/i.test(normalized)) {
+    return true;
+  }
+  return /^([a-z]+\s*){1,3}\d+$/.test(normalized);
 }
 
 function sentencePoolFromSource(value: string): string[] {
