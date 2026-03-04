@@ -1,64 +1,92 @@
-# Research Summary (validated on March 4, 2026)
+# Research Summary
 
-## 1) Template file format decision: `.html` vs `htmlx`
+Validated on March 4, 2026.
 
-Decision: use `.html`.
+This document records the design decisions behind the current architecture.
 
-Why:
-- `.html` is the standard HTML document format with universal tooling/editor support.
-- The HTML specification and mainstream documentation center on standard HTML documents.
-- `htmlx` is not a standard web template file extension.
-- If the intent was **htmx**, it is an HTML attribute-based library and still works with normal `.html` files.
+## 1) Template File Format: `.html` vs `htmlx`
 
-Sources:
+Decision:
+
+- use standard `.html` files
+
+Reasoning:
+
+- `.html` is universal and tool-friendly
+- no special loader is required
+- `htmlx` is not a web-standard template format
+- if the intention is `htmx`, it still uses regular `.html`
+
+References:
+
 - https://developer.mozilla.org/en-US/docs/Web/HTML
 - https://html.spec.whatwg.org/
 - https://htmx.org/docs/
 
-## 2) Central configuration format decision
+## 2) Configuration Strategy
 
-Decision: use one YAML config file (`config/pipeline.config.yaml`) as the project control plane.
+Decision:
 
-Why:
-- YAML is a mature, human-editable serialization format.
-- It handles nested config for brand defaults, style taxonomy, format dimensions, and template registry cleanly.
+- maintain one central YAML control plane at `config/pipeline.config.yaml`
 
-Source:
+Reasoning:
+
+- human-readable, nested structure fits this domain
+- easy to review in pull requests
+- keeps style/archetype/font/template policies in one place
+
+Reference:
+
 - https://yaml.org/spec/1.2.2/
 
-## 3) Cloudflare Worker compatibility
+## 3) Worker Runtime Determinism
 
-Decision: compile YAML + template HTML into generated TypeScript at build time.
+Decision:
 
-Why:
-- Worker runtime should stay deterministic and avoid runtime filesystem assumptions.
-- Build-time generation keeps runtime fast and makes template/config changes explicit via source control.
+- compile YAML + HTML into TypeScript at build time
 
-Sources:
+Reasoning:
+
+- Cloudflare Worker runtime should not depend on local filesystem reads
+- generated asset module makes deploy behavior deterministic
+- validation failures happen at build time, not after deploy
+
+References:
+
 - https://developers.cloudflare.com/workers/
 - https://developers.cloudflare.com/workers/runtime-apis/nodejs/
 
-## 4) Existing platform choices retained
+## 4) Stack Choices Retained
 
-- Ghost Content API ingestion
-  - https://docs.ghost.org/content-api/posts
-  - https://docs.ghost.org/content-api/parameters
+Ghost Content API:
 
-- Workers AI for JSON-structured copy and image generation
-  - https://developers.cloudflare.com/workers-ai/features/json-mode/
-  - https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/
-  - https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/
+- source-of-truth blog content ingestion
+- https://docs.ghost.org/content-api/posts
+- https://docs.ghost.org/content-api/parameters
 
-- Browser Rendering for HTML -> PNG
-  - https://developers.cloudflare.com/browser-rendering/get-started/screenshots/
+Workers AI:
 
-- R2 for output storage
-  - https://developers.cloudflare.com/r2/api/workers/workers-api-reference/
+- structured JSON output for captions/slots/style/archetype/font
+- image generation fallback
+- https://developers.cloudflare.com/workers-ai/features/json-mode/
+- https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/
+- https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/
 
-## Final recommendation
+Browser Rendering:
 
-Keep the Worker orchestration and Cloudflare-native stack, but make template behavior configuration-driven:
-- `.html` templates in repository
-- single YAML configuration authority
-- build-time registry generation
-- runtime template/style resolution from config + model output
+- deterministic HTML -> PNG capture
+- https://developers.cloudflare.com/browser-rendering/get-started/screenshots/
+
+R2:
+
+- output asset storage and optional public URL serving
+- https://developers.cloudflare.com/r2/api/workers/workers-api-reference/
+
+## 5) Outcome
+
+The resulting architecture supports broad template expansion with minimal code changes:
+
+- add/edit HTML templates
+- register behavior in YAML
+- rebuild assets
+- render through one generic runtime pipeline

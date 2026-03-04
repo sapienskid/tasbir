@@ -2,34 +2,94 @@
 
 Validated on March 4, 2026.
 
-## 1. Configuration-first behavior
+These principles explain how the project is intended to evolve.
 
-All defaults are centralized in `config/pipeline.config.yaml`:
-- brand defaults
-- feature flags
-- model settings
-- style taxonomy
-- post archetypes
-- slot schema
-- format dimensions
-- template registry
+## 1. Config First, Code Second
 
-## 2. Template files over inline markup
+Behavior should be controlled through `config/pipeline.config.yaml` whenever possible.
 
-All visual layouts live in `templates/**/*.html`.
-Renderer code only handles selection, slot interpolation, and shared frame styling.
+Examples:
 
-## 3. Archetype + style separation
+- adding archetypes
+- changing default styles/fonts
+- adjusting generation limits
+- changing output dimensions
 
-Visual style (`template_style`) and content intent (`post_archetype`) are separate signals.
-This enables one archetype (e.g., metric) to render in different visual styles (e.g., data or bold) without changing business logic.
+Only add TypeScript logic when config cannot express the requirement.
 
-## 4. Slot-based content contracts
+## 2. Templates Are Product Surface Area
 
-Templates consume semantic slots (`headline`, `metric_value`, `quote_text`, `step_1`, etc.) instead of hardcoded field assumptions.
-Slots are populated from model output, request overrides, and YAML defaults.
+All visual layout lives in `templates/**/*.html`.
 
-## 5. Deterministic Worker runtime
+Renderer code should remain generic:
 
-YAML + HTML are compiled at build time into `src/generated/template-assets.ts`.
-Runtime never reads from filesystem, keeping rendering deterministic in Worker execution.
+- select template
+- resolve tokens and slots
+- apply design system
+- render output
+
+Avoid creating format-specific custom renderer branches.
+
+## 3. Style and Intent Are Separate Axes
+
+- style = how it looks (`template_style`)
+- archetype = what kind of message it is (`post_archetype`)
+
+Keeping these independent allows one intent to be rendered in multiple visual languages.
+
+## 4. Slot Contracts Over Hardcoded Fields
+
+Templates should use semantic slots (`headline`, `quote_text`, `metric_value`, etc.) so content can adapt across layouts.
+
+Use slot defaults in config and let model/output overrides refine values.
+
+## 5. Deterministic Runtime
+
+Worker should not read filesystem assets at runtime.
+
+All config/templates are compiled into `src/generated/template-assets.ts` during build. This keeps runtime behavior deterministic and deploy-friendly.
+
+## 6. Safe Fallbacks Everywhere
+
+Pipeline should continue producing usable output when model fields are missing.
+
+Fallback strategy includes:
+
+- caption truncation
+- slide count enforcement
+- slot defaults
+- template/style/archetype defaults
+- image source fallback chain
+
+## 7. Explicit Override Precedence
+
+When multiple sources provide values, precedence is deterministic and documented.
+
+Typical precedence pattern:
+
+1. request payload
+2. model output
+3. config defaults
+
+This keeps behavior predictable for automation and manual use.
+
+## 8. One Build Step Validates Everything
+
+`pnpm run build:templates` should fail fast for config/template inconsistencies.
+
+A broken template registry must be caught before deploy.
+
+## 9. Observability-Friendly APIs
+
+Responses include normalized `llm_output`, selected image source, and asset keys so callers can inspect actual decisions made by the pipeline.
+
+## 10. Extend by Adding, Not Rewriting
+
+Preferred extension path:
+
+1. add config entries
+2. add templates
+3. rebuild assets
+4. test via preview and generation routes
+
+This keeps long-term maintenance simple and prevents renderer sprawl.

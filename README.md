@@ -1,114 +1,194 @@
 # Social Media Asset Pipeline Worker
 
-Cloudflare Worker that generates social-ready assets from blog content using Ghost + Workers AI + Browser Rendering + R2.
+A Cloudflare Worker that turns blog content into platform-ready social assets (captions + images) for:
 
-## What this now supports
+- Instagram post (1080x1080)
+- Instagram story (1080x1920)
+- Carousel slides (1080x1080)
+- Twitter/X card (1200x630)
+- LinkedIn post (1200x627)
 
-The system is now `template + slot schema` based:
-- HTML templates in `templates/**/*.html`
-- central configuration in `config/pipeline.config.yaml`
-- archetype-aware template selection (`insight`, `metric`, `quote`, `checklist`, `timeline`, `promo`)
-- automatic font-profile selection (AI + config mappings by style/archetype)
-- slot-driven content (`slot_content`) for flexible layouts
+This project is fully config-driven:
 
-This makes it possible to support many post structures without hardcoding new renderer functions.
+- all layout templates live in `templates/**/*.html`
+- all behavior is controlled from `config/pipeline.config.yaml`
+- runtime reads generated assets from `src/generated/template-assets.ts`
 
-## `.html` vs `htmlx`
+No template rendering logic is hardcoded per design.
 
-Use `.html`.
-- `.html` is the standard format and has universal tooling support.
-- `htmlx` is not a web-standard template format.
-- If you meant **htmx**, it still uses regular `.html` files.
+## What You Get
 
-References:
-- https://developer.mozilla.org/en-US/docs/Web/HTML
-- https://html.spec.whatwg.org/
-- https://htmx.org/docs/
+- AI-generated social copy (`instagram_caption`, `twitter_caption`, `linkedin_caption`)
+- AI-selected `template_style`, `post_archetype`, and `font_profile`
+- Slot-based template filling (`slot_content` + user overrides)
+- Optional stock image lookup and AI image generation fallback
+- PNG rendering through Cloudflare Browser Rendering + upload to R2
 
-## Project structure
+## HTML vs `htmlx`
 
-- `config/pipeline.config.yaml`: source of truth for styles/archetypes/formats/templates/slots
-- `templates/**/*.html`: template files
-- `scripts/embed-template-assets.mjs`: compile YAML + HTML into runtime module
-- `src/generated/template-assets.ts`: generated config/template assets
-- `src/templates.ts`: template resolver + slot interpolation
-- `src/index.ts`: API + orchestration
+Use `.html` templates.
 
-## Setup
+- `.html` is the web standard and works with all tooling
+- `htmlx` is not a standard HTML template format
+- if you mean `htmx`, it still uses normal `.html` files
+
+## Project Layout
+
+- `config/pipeline.config.yaml`: single control plane for styles, archetypes, fonts, formats, limits, templates, and feature flags
+- `templates/**/*.html`: visual templates using token and slot placeholders
+- `scripts/embed-template-assets.mjs`: validates YAML + embeds template files into generated TypeScript
+- `src/generated/template-assets.ts`: generated runtime config/template bundle (do not edit manually)
+- `src/index.ts`: Worker routes + orchestration pipeline
+- `src/templates.ts`: template selection, token interpolation, slot resolution
+- `src/design-system.ts`: typography, color tokens, and render controls
+
+## Prerequisites
+
+- Node.js 20+
+- pnpm 9+
+- Cloudflare account
+- Workers AI enabled
+- Browser Rendering enabled
+- R2 bucket created
+- Ghost Content API key (or use `/generate-from-content` for direct content)
+
+## Quick Start
+
+1. Install dependencies:
 
 ```bash
 pnpm install
+```
+
+2. Build generated assets (required after config/template/style changes):
+
+```bash
 pnpm run build:assets
+```
+
+3. Configure local environment:
+
+```bash
 cp .dev.vars.example .dev.vars
+```
+
+4. Fill required vars in `.dev.vars`:
+
+- `GHOST_API_URL`
+- `GHOST_CONTENT_API_KEY`
+
+5. Start local dev server:
+
+```bash
 pnpm run dev
 ```
 
-Deploy:
+6. Check health route:
 
 ```bash
-pnpm run deploy
+curl http://127.0.0.1:8787/health
 ```
 
-## API
+If your local port differs, use the port printed by Wrangler.
 
-### `POST /generate`
+## First End-to-End Test
 
-```json
-{
-  "slug": "my-post-slug",
-  "templateStyle": "data",
-  "postArchetype": "metric",
-  "fontProfile": "data-mono",
-  "templateIds": {
-    "instagram-post": "instagram-post/stat-split"
-  },
-  "slotOverrides": {
-    "metric_value": "2.4K",
-    "metric_label": "Monthly signups",
-    "headline": "Growth with less noise"
-  }
-}
+Generate assets directly from provided content (no Ghost fetch required):
+
+```bash
+curl -X POST http://127.0.0.1:8787/generate-from-content \
+  -H 'content-type: application/json' \
+  -d '{
+    "title": "Ship Social Content Faster",
+    "content": "A repeatable process helps teams publish consistent social posts.",
+    "templateStyle": "editorial",
+    "postArchetype": "insight",
+    "fontProfile": "editorial-serif"
+  }'
 ```
 
-### `POST /generate-from-content`
+You should receive:
 
-```json
-{
-  "title": "A post without Ghost",
-  "content": "Plain content for testing.",
-  "templateStyle": "editorial",
-  "postArchetype": "quote",
-  "fontProfile": "editorial-serif"
-}
-```
+- `llm_output` (captions, hashtags, style/archetype/font, slots)
+- `assets` keys for each format
+- optional public URLs if `R2_PUBLIC_BASE_URL` is configured
 
-### `GET /template/<format>`
+## API Routes
 
-Preview template HTML.
+- `GET /health`
+- `GET /template/<format>` preview renderer
+- `POST /generate` fetches Ghost post by `slug` or `url`
+- `POST /generate-from-content` uses direct title/content payload
+- `POST /webhook/ghost` webhook-triggered generation
 
-Examples:
-- `/template/instagram-post?templateId=instagram-post/stat-split&archetype=metric&slot.metric_value=9.8K`
-- `/template/twitter-card?templateStyle=bold&templateArchetype=promo&fontProfile=bold-campaign&slot.cta_text=Read+Now`
+See [API Reference](docs/api-reference.md) for full request/response examples.
 
-## Selection behavior
+## Template Selection Behavior
 
-Per format, template resolution order:
-1. `templateIds[format]`
+For each format, template resolution order is:
+
+1. explicit `templateIds[format]` from request
 2. `templateStyle + postArchetype`
 3. `postArchetype`
 4. `templateStyle`
-5. YAML `default_template_id`
+5. `formats.<format>.default_template_id`
 
-## Docs
+Font profile resolution order is:
 
+1. explicit request `fontProfile`
+2. model output `font_profile`
+3. `typography.selection.by_style`
+4. `typography.selection.by_archetype`
+5. `typography.default_font_profile`
+
+## Core Runtime Overrides (Per Request)
+
+You can override generation behavior in request payload:
+
+- `templateStyle`, `postArchetype`, `fontProfile`
+- `templateIds` per format
+- `slotOverrides` for direct slot control
+- `brandingColor`, `brandName`
+- `brandTokens` (fine-grained color token overrides)
+- `design` (preset/alignment/opacity/layout controls)
+- `storage` (overwrite/versioned path behavior)
+
+## Environment Variables
+
+Required:
+
+- `GHOST_API_URL`
+- `GHOST_CONTENT_API_KEY`
+
+Optional:
+
+- `R2_PUBLIC_BASE_URL`
+- `PEXELS_API_KEY`
+- `GHOST_WEBHOOK_TOKEN`
+- `NOTIFY_WEBHOOK_URL`
+- `DEFAULT_BRAND_COLOR`
+- `BRAND_NAME`
+- `LLM_MODEL`
+- `IMAGE_MODEL`
+- `R2_KEY_PREFIX`
+
+## Daily Development Commands
+
+```bash
+pnpm run build:assets    # rebuild generated runtime assets
+pnpm run check           # type-check
+pnpm run test            # run tests
+pnpm run dev             # local worker
+pnpm run deploy          # deploy to Cloudflare
+```
+
+## Documentation
+
+- [Getting Started](docs/getting-started.md)
+- [API Reference](docs/api-reference.md)
 - [Architecture](docs/architecture.md)
 - [Template System](docs/template-system.md)
 - [Config Reference](docs/config-reference.md)
-- [Research Summary](docs/research-summary.md)
 - [Design Principles](docs/design-principles.md)
-
-## Commands
-
-- `pnpm run build:assets`
-- `pnpm run check`
-- `pnpm run test`
+- [Research Summary](docs/research-summary.md)
+- [Troubleshooting](docs/troubleshooting.md)
