@@ -257,14 +257,23 @@ export function createBrandTheme(args: {
   };
 }
 
-export function resolveTemplateControl(kind: TemplateFormatKey, set?: TemplateControlSet): ResolvedTemplateControl {
+export function resolveTemplateControl(
+  kind: TemplateFormatKey,
+  set?: TemplateControlSet,
+  templateStyle?: string
+): ResolvedTemplateControl {
   const baseDefaults = PIPELINE_CONFIG.render.control_defaults;
   const formatDefaults = PIPELINE_CONFIG.render.format_control_defaults[kind];
   const formatPreset = parsePreset(formatDefaults.default_preset) ?? firstPreset();
-  const presetStyle = getPresetStyle(formatPreset);
+  const stylePresetMap = ((PIPELINE_CONFIG.render as unknown as { style_preset_map?: Record<string, string> }).style_preset_map ??
+    {}) as Record<string, string>;
+  const normalizedStyle = templateStyle?.trim().toLowerCase() ?? "";
+  const stylePreset = normalizedStyle ? parsePreset(stylePresetMap[normalizedStyle]) : undefined;
+  const basePreset = stylePreset ?? formatPreset;
+  const presetStyle = getPresetStyle(basePreset);
 
   const base: ResolvedTemplateControl = {
-    preset: formatPreset,
+    preset: basePreset,
     showBrandBadge: baseDefaults.showBrandBadge,
     showSlideBadge: baseDefaults.showSlideBadge,
     showMetaFooter: baseDefaults.showMetaFooter,
@@ -278,7 +287,7 @@ export function resolveTemplateControl(kind: TemplateFormatKey, set?: TemplateCo
   const mergedGlobal = mergeControl(base, set);
   const mergedFormat = mergeControl(mergedGlobal, set?.formatOverrides?.[kind]);
 
-  const resolvedPreset = parsePreset(mergedFormat.preset) ?? formatPreset;
+  const resolvedPreset = parsePreset(mergedFormat.preset) ?? basePreset;
   return {
     ...mergedFormat,
     preset: resolvedPreset,

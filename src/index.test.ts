@@ -85,6 +85,21 @@ describe("social pipeline worker", () => {
     expect(html).toContain('--font-body: "IBM Plex Mono", monospace;');
   });
 
+  it("applies preset mapping based on resolved template style", async () => {
+    const response = await worker.fetch(
+      authorizedRequest(
+        "https://worker.test/template/twitter-card?templateStyle=data&templateId=twitter-card/data-strip&title=Data+Story&caption=Signal+beats+noise"
+      ),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('data-template-style="data"');
+    expect(html).toContain("--frame-image-opacity:0.68");
+  });
+
   it("returns template catalog with styles and template versions", async () => {
     const response = await worker.fetch(
       authorizedRequest("https://worker.test/template-catalog"),

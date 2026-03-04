@@ -818,7 +818,10 @@ async function runPipelineFromPost(
       fallbackText: post.custom_excerpt || post.excerpt || post.plaintext || ""
     })
   );
-  const selectedImage = await chooseImageSource(env, post, llmOutput, brandInput.image, security);
+  const selectedImage = await chooseImageSource(env, post, llmOutput, brandInput.image, security, {
+    templateStyle: selectedTemplateStyle,
+    postArchetype: selectedPostArchetype
+  });
 
   const brandColor = brandInput.brandingColor ?? env.DEFAULT_BRAND_COLOR ?? PIPELINE_CONFIG.brand.default_color;
   const brandName = brandInput.brandName ?? env.BRAND_NAME ?? PIPELINE_CONFIG.brand.default_name;
@@ -1029,7 +1032,11 @@ async function chooseImageSource(
   post: GhostPost,
   llmOutput: LlmOutput,
   options: ImageGenerationOptions | undefined,
-  security: ResolvedSecurityConfig
+  security: ResolvedSecurityConfig,
+  context?: {
+    templateStyle?: string;
+    postArchetype?: string;
+  }
 ): Promise<SelectedImage> {
   const mode = (options?.mode ?? "auto").trim().toLowerCase() as NonNullable<ImageGenerationOptions["mode"]>;
   const prompt = ensureLength(options?.prompt ?? llmOutput.image_prompt, PIPELINE_CONFIG.generation.limits.image_prompt_max_chars, llmOutput.image_prompt);
@@ -1078,7 +1085,17 @@ async function chooseImageSource(
     if (!allowAi) {
       throw new HttpError(422, "AI image mode is disabled by configuration or request controls");
     }
-    const aiImage = await generateAiImage(env, prompt);
+    const aiImage = await generateAiImage(env, {
+      prompt,
+      templateStyle: context?.templateStyle ?? llmOutput.template_style,
+      postArchetype: context?.postArchetype ?? llmOutput.post_archetype,
+      postTitle: post.title,
+      topTags: (post.tags ?? [])
+        .map((tag) => tag.name ?? "")
+        .filter(Boolean)
+        .slice(0, 5)
+        .join(", ")
+    });
     if (!aiImage) {
       throw new HttpError(422, "AI image mode did not return a usable image");
     }
@@ -1106,7 +1123,17 @@ async function chooseImageSource(
   }
 
   if (allowAi) {
-    const aiImage = await generateAiImage(env, prompt);
+    const aiImage = await generateAiImage(env, {
+      prompt,
+      templateStyle: context?.templateStyle ?? llmOutput.template_style,
+      postArchetype: context?.postArchetype ?? llmOutput.post_archetype,
+      postTitle: post.title,
+      topTags: (post.tags ?? [])
+        .map((tag) => tag.name ?? "")
+        .filter(Boolean)
+        .slice(0, 5)
+        .join(", ")
+    });
     if (aiImage) {
       return aiImage;
     }
@@ -1178,9 +1205,40 @@ async function searchPexelsImage(title: string, apiKey: string, security: Resolv
   };
 }
 
-async function generateAiImage(env: Env, prompt: string): Promise<SelectedImage | null> {
+async function generateAiImage(
+  env: Env,
+  args: {
+    prompt: string;
+    templateStyle?: string;
+    postArchetype?: string;
+    postTitle?: string;
+    topTags?: string;
+  }
+): Promise<SelectedImage | null> {
   const model = (env.IMAGE_MODEL || DEFAULT_IMAGE_MODEL) as keyof AiModels;
-  const imagePrompt = [...PIPELINE_CONFIG.generation.image.prompt_prefix, `Scene: ${prompt}`].join(" ");
+  const styleGuidance = (
+    (PIPELINE_CONFIG.generation.image as unknown as { style_guidance?: Record<string, string> }).style_guidance ?? {}
+  ) as Record<string, string>;
+  const archetypeGuidance = (
+    (PIPELINE_CONFIG.generation.image as unknown as { archetype_guidance?: Record<string, string> }).archetype_guidance ?? {}
+  ) as Record<string, string>;
+  const negativeClauses = (
+    (PIPELINE_CONFIG.generation.image as unknown as { negative_clauses?: string[] }).negative_clauses ?? []
+  ) as string[];
+
+  const style = normalizeTemplateStyle(args.templateStyle);
+  const archetype = normalizePostArchetype(args.postArchetype);
+  const imagePrompt = [
+    ...PIPELINE_CONFIG.generation.image.prompt_prefix,
+    styleGuidance[style] ? `Visual style direction: ${styleGuidance[style]}` : "",
+    archetypeGuidance[archetype] ? `Marketing intent: ${archetypeGuidance[archetype]}` : "",
+    args.postTitle ? `Campaign context title: ${args.postTitle}` : "",
+    args.topTags ? `Context tags: ${args.topTags}` : "",
+    `Scene: ${args.prompt}`,
+    ...negativeClauses
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   try {
     const raw = await env.AI.run(model, {

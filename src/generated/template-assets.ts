@@ -133,71 +133,91 @@ export const PIPELINE_CONFIG = {
         "textAlign": "left"
       }
     },
+    "style_preset_map": {
+      "editorial": "editorial",
+      "illustration": "illustration",
+      "minimal": "clean",
+      "bold": "bold",
+      "data": "clean"
+    },
     "preset_styles": {
       "minimal": {
         "containerBackground": "radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--color-brand-glow) 24%, transparent) 0%, transparent 44%), linear-gradient(165deg, color-mix(in srgb, var(--color-brand-accent) 12%, var(--color-surface-base)), var(--color-surface-base))",
-        "overlayTop": "linear-gradient(170deg, rgba(2, 7, 14, 0.12), color-mix(in srgb, var(--color-overlay-strong) 84%, transparent) 72%)",
-        "overlayBottom": "linear-gradient(18deg, color-mix(in srgb, var(--color-brand-accent) 28%, transparent) 0%, transparent 48%)",
-        "vignette": "radial-gradient(circle at 50% 76%, transparent 20%, color-mix(in srgb, var(--color-overlay-strong) 76%, transparent) 90%)",
+        "overlayTop": "linear-gradient(170deg, rgba(2, 7, 14, 0.04), color-mix(in srgb, var(--color-overlay-strong) 52%, transparent) 76%)",
+        "overlayBottom": "linear-gradient(18deg, color-mix(in srgb, var(--color-brand-accent) 22%, transparent) 0%, transparent 58%)",
+        "vignette": "radial-gradient(circle at 50% 76%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 52%, transparent) 98%)",
         "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 52%, transparent)",
         "brandPillBorder": "color-mix(in srgb, var(--color-border-subtle) 74%, transparent)",
         "brandPillText": "var(--color-text-primary)",
-        "titleShadow": "0 12px 32px rgba(0, 0, 0, 0.28)",
-        "captionShadow": "0 8px 22px rgba(0, 0, 0, 0.24)",
+        "titleShadow": "0 10px 24px rgba(0, 0, 0, 0.18)",
+        "captionShadow": "0 6px 18px rgba(0, 0, 0, 0.14)",
         "grainOpacity": 0.08,
-        "imageOpacity": 0.34
+        "imageOpacity": 0.6
+      },
+      "illustration": {
+        "containerBackground": "radial-gradient(circle at 16% 14%, color-mix(in srgb, var(--color-brand-glow) 48%, transparent) 0%, transparent 46%), linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 18%, var(--color-surface-base)), color-mix(in srgb, var(--color-surface-base) 86%, #0b1524))",
+        "overlayTop": "linear-gradient(170deg, rgba(3, 8, 14, 0.02), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 78%)",
+        "overlayBottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 20%, transparent), transparent 64%)",
+        "vignette": "radial-gradient(circle at 52% 86%, transparent 36%, color-mix(in srgb, var(--color-overlay-strong) 30%, transparent) 98%)",
+        "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 44%, transparent)",
+        "brandPillBorder": "color-mix(in srgb, var(--color-border-subtle) 58%, transparent)",
+        "brandPillText": "var(--color-text-primary)",
+        "titleShadow": "0 8px 22px rgba(0, 0, 0, 0.12)",
+        "captionShadow": "0 4px 16px rgba(0, 0, 0, 0.1)",
+        "grainOpacity": 0.04,
+        "imageOpacity": 0.74
       },
       "editorial": {
         "containerBackground": "radial-gradient(circle at 13% 12%, color-mix(in srgb, var(--color-brand-glow) 54%, transparent) 0%, transparent 50%), linear-gradient(162deg, color-mix(in srgb, var(--color-brand-accent) 24%, var(--color-surface-base)), var(--color-surface-base))",
-        "overlayTop": "linear-gradient(168deg, rgba(2, 7, 14, 0.18), color-mix(in srgb, var(--color-overlay-strong) 90%, transparent) 70%)",
-        "overlayBottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 64%, transparent) 0%, transparent 45%)",
-        "vignette": "radial-gradient(circle at 54% 82%, transparent 22%, color-mix(in srgb, var(--color-overlay-strong) 88%, transparent) 96%)",
+        "overlayTop": "linear-gradient(168deg, rgba(2, 7, 14, 0.08), color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 72%)",
+        "overlayBottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 46%, transparent) 0%, transparent 52%)",
+        "vignette": "radial-gradient(circle at 54% 82%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 98%)",
         "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 70%, transparent)",
         "brandPillBorder": "var(--color-border-subtle)",
         "brandPillText": "var(--color-text-primary)",
-        "titleShadow": "0 20px 44px rgba(0, 0, 0, 0.34)",
-        "captionShadow": "0 10px 30px rgba(0, 0, 0, 0.26)",
+        "titleShadow": "0 16px 34px rgba(0, 0, 0, 0.24)",
+        "captionShadow": "0 8px 24px rgba(0, 0, 0, 0.18)",
         "grainOpacity": 0.14,
-        "imageOpacity": 0.52
+        "imageOpacity": 0.64
       },
       "spotlight": {
         "containerBackground": "radial-gradient(circle at 72% 10%, color-mix(in srgb, var(--color-brand-accent) 54%, transparent) 0%, transparent 42%), linear-gradient(150deg, color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-base)), var(--color-surface-base))",
-        "overlayTop": "linear-gradient(180deg, rgba(1, 5, 10, 0.1), color-mix(in srgb, var(--color-overlay-strong) 90%, transparent) 66%)",
-        "overlayBottom": "linear-gradient(0deg, color-mix(in srgb, var(--color-brand-accent) 72%, transparent) 0%, transparent 54%)",
-        "vignette": "radial-gradient(circle at 50% 92%, transparent 16%, color-mix(in srgb, var(--color-overlay-strong) 90%, transparent) 96%)",
+        "overlayTop": "linear-gradient(180deg, rgba(1, 5, 10, 0.06), color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 70%)",
+        "overlayBottom": "linear-gradient(0deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent) 0%, transparent 58%)",
+        "vignette": "radial-gradient(circle at 50% 92%, transparent 22%, color-mix(in srgb, var(--color-overlay-strong) 60%, transparent) 98%)",
         "brandPillBackground": "color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-elevated))",
         "brandPillBorder": "color-mix(in srgb, var(--color-brand-accent) 72%, var(--color-border-subtle))",
         "brandPillText": "var(--color-text-primary)",
-        "titleShadow": "0 28px 54px rgba(0, 0, 0, 0.42)",
-        "captionShadow": "0 14px 36px rgba(0, 0, 0, 0.34)",
+        "titleShadow": "0 18px 38px rgba(0, 0, 0, 0.24)",
+        "captionShadow": "0 10px 26px rgba(0, 0, 0, 0.2)",
         "grainOpacity": 0.16,
-        "imageOpacity": 0.46
+        "imageOpacity": 0.62
       },
       "bold": {
         "containerBackground": "linear-gradient(145deg, color-mix(in srgb, var(--color-brand-accent) 44%, #050812), var(--color-surface-base))",
-        "overlayTop": "linear-gradient(170deg, rgba(0, 0, 0, 0.08), color-mix(in srgb, var(--color-overlay-strong) 76%, transparent) 72%)",
-        "overlayBottom": "linear-gradient(16deg, color-mix(in srgb, var(--color-brand-accent) 72%, transparent) 0%, transparent 42%)",
-        "vignette": "radial-gradient(circle at 88% 88%, color-mix(in srgb, var(--color-brand-accent) 28%, transparent) 0%, transparent 40%), radial-gradient(circle at 50% 76%, transparent 28%, color-mix(in srgb, var(--color-overlay-strong) 82%, transparent) 94%)",
+        "overlayTop": "linear-gradient(170deg, rgba(0, 0, 0, 0.04), color-mix(in srgb, var(--color-overlay-strong) 48%, transparent) 74%)",
+        "overlayBottom": "linear-gradient(16deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent) 0%, transparent 50%)",
+        "vignette": "radial-gradient(circle at 88% 88%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 48%), radial-gradient(circle at 50% 76%, transparent 34%, color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 98%)",
         "brandPillBackground": "color-mix(in srgb, var(--color-brand-accent) 34%, var(--color-surface-elevated))",
         "brandPillBorder": "color-mix(in srgb, var(--color-brand-accent) 88%, var(--color-border-subtle))",
         "brandPillText": "var(--color-brand-accent-foreground)",
-        "titleShadow": "0 24px 48px rgba(0, 0, 0, 0.4)",
-        "captionShadow": "0 12px 32px rgba(0, 0, 0, 0.32)",
+        "titleShadow": "0 16px 32px rgba(0, 0, 0, 0.24)",
+        "captionShadow": "0 8px 22px rgba(0, 0, 0, 0.18)",
         "grainOpacity": 0.1,
-        "imageOpacity": 0.48
+        "imageOpacity": 0.58
       },
       "clean": {
         "containerBackground": "linear-gradient(160deg, color-mix(in srgb, var(--color-brand-accent) 16%, #0a1320), #0a1320 50%, color-mix(in srgb, var(--color-brand-accent) 8%, #0b1119))",
-        "overlayTop": "linear-gradient(170deg, rgba(2, 8, 14, 0.06), color-mix(in srgb, var(--color-overlay-strong) 68%, transparent) 78%)",
-        "overlayBottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 24%, transparent), transparent 56%)",
-        "vignette": "radial-gradient(circle at 50% 76%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 68%, transparent) 98%)",
+        "overlayTop": "linear-gradient(170deg, rgba(2, 8, 14, 0.03), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 82%)",
+        "overlayBottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 16%, transparent), transparent 62%)",
+        "vignette": "radial-gradient(circle at 50% 76%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%)",
         "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 42%, transparent)",
         "brandPillBorder": "color-mix(in srgb, var(--color-border-subtle) 52%, transparent)",
         "brandPillText": "var(--color-text-secondary)",
-        "titleShadow": "0 16px 36px rgba(0, 0, 0, 0.24)",
-        "captionShadow": "0 8px 24px rgba(0, 0, 0, 0.18)",
+        "titleShadow": "0 10px 20px rgba(0, 0, 0, 0.12)",
+        "captionShadow": "0 4px 14px rgba(0, 0, 0, 0.1)",
         "grainOpacity": 0.06,
-        "imageOpacity": 0.32
+        "imageOpacity": 0.68
       }
     },
     "caption_width_rules": {
@@ -411,8 +431,8 @@ export const PIPELINE_CONFIG = {
       "carousel_heading_max_chars": 48,
       "carousel_body_max_chars": 140,
       "image_prompt_max_chars": 400,
-      "hashtag_min_count": 8,
-      "hashtag_max_count": 10,
+      "hashtag_min_count": 5,
+      "hashtag_max_count": 8,
       "hashtag_min_token_chars": 3,
       "title_keyword_min_chars": 3,
       "fallback_keyword_min_chars": 4,
@@ -434,26 +454,30 @@ export const PIPELINE_CONFIG = {
       "temperature": 0.2,
       "max_tokens": 1400,
       "system_prompt": [
-        "You are a senior social content strategist for a personal tech/lifestyle blog.",
-        "Write concise platform-native copy with strong clarity and no hype.",
+        "You are a senior social growth strategist and marketing copywriter for a personal tech/lifestyle brand.",
+        "Write persuasive but credible platform-native copy with a clear value proposition.",
+        "Use concrete benefits, audience pain points, and action-oriented language.",
         "Do not invent facts that are not present in the source material.",
         "Always respond with strict JSON matching the required schema."
       ],
       "user_instructions": [
-        "Create platform-ready social copy for the blog post below.",
+        "Create platform-ready marketing copy for the blog post below.",
+        "Primary goal: convert attention into intent (read, save, share, click, or follow).",
         "Constraints:",
-        "- instagram_caption: casual, natural voice, max <instagram_caption_max_chars> characters.",
-        "- twitter_caption: punchy, high signal, max <twitter_caption_max_chars> characters.",
-        "- linkedin_caption: professional and practical, max <linkedin_caption_max_chars> characters.",
+        "- keep one unified campaign angle across all platforms, adapted to native tone per platform.",
+        "- instagram_caption: emotionally engaging hook + concrete value + soft CTA, max <instagram_caption_max_chars> characters.",
+        "- twitter_caption: concise high-signal insight + tangible payoff + quick CTA, max <twitter_caption_max_chars> characters.",
+        "- linkedin_caption: problem -> insight -> action structure in a professional tone, max <linkedin_caption_max_chars> characters.",
         "- all captions must be plain text only: no markdown headings, no bullet list markers, and no leading #.",
         "- captions should feel human and specific, not robotic or generic.",
+        "- avoid generic phrases such as game changer, unlock potential, next level, or in today's world.",
         "- carousel_slides: exactly <required_carousel_slides> items with a narrative arc.",
         "- carousel narrative shape: slide 1 = hook/intro, middle slides = distinct supporting points, final slide = conclusion with practical next step.",
         "- each carousel heading: specific 2-6 words, max <carousel_heading_max_chars> characters, never placeholders like Insight 1 / Slide 2 / Key Point.",
         "- each carousel body: one complete sentence, max <carousel_body_max_chars> characters, plain text only.",
         "- each carousel slide must add new information; avoid repeated headings or repeated body sentences.",
         "- hashtags: <hashtag_min_count>-<hashtag_max_count> relevant tags, each beginning with #, no spaces inside a tag.",
-        "- image_prompt: vivid but realistic visual direction for image generation.",
+        "- image_prompt: vivid but realistic marketing art direction aligned with selected template_style and post_archetype.",
         "- use_feature_image: boolean, true only if feature image is present and contextually aligned.",
         "- template_style: choose one style id from <available_template_styles>.",
         "- post_archetype: choose one archetype id from <available_post_archetypes>.",
@@ -465,9 +489,30 @@ export const PIPELINE_CONFIG = {
     "image": {
       "default_model": "@cf/black-forest-labs/flux-1-schnell",
       "prompt_prefix": [
-        "Create a single photorealistic social media background image.",
+        "Create one campaign-quality social background image that can be reused across square, portrait, and landscape crops.",
+        "Use one clear focal subject, intentional negative space for headline placement, and brand-safe composition.",
         "No text, no logos, no UI elements, no watermarks.",
-        "Clean composition, modern editorial lighting, high detail."
+        "Avoid heavy black gradients unless dramatic contrast is explicitly requested."
+      ],
+      "style_guidance": {
+        "editorial": "photorealistic editorial scene, nuanced depth, premium natural textures, balanced highlights",
+        "illustration": "stylized but realistic environment, softer tones, creative shapes, playful but polished composition",
+        "minimal": "clean modern scene with simple geometry, fewer objects, calm neutral palette, high readability space",
+        "bold": "high-contrast campaign scene with strong directional light and decisive composition",
+        "data": "analytical modern environment with structured visual rhythm, subtle grid-like cues, precise composition"
+      },
+      "archetype_guidance": {
+        "insight": "focus on clarity and thoughtful discovery",
+        "metric": "include context that suggests measurement, growth, or benchmark thinking",
+        "quote": "focus on emotion and narrative symbolism",
+        "checklist": "focus on process, order, and practical execution",
+        "timeline": "focus on progression, milestones, and forward movement",
+        "promo": "focus on urgency, launch energy, and commercial intent"
+      },
+      "negative_clauses": [
+        "Avoid muddy shadows and overly dark vignette overlays.",
+        "Avoid cluttered scenes that reduce text readability.",
+        "Avoid generic stock-photo look; keep visual identity distinct."
       ]
     }
   },
@@ -506,14 +551,14 @@ export const PIPELINE_CONFIG = {
       "width": 1080,
       "height": 1080,
       "caption_source": "instagram_caption",
-      "hashtag_count": 4,
+      "hashtag_count": 3,
       "default_template_id": "instagram-post/editorial"
     },
     "instagram-story": {
       "width": 1080,
       "height": 1920,
       "caption_source": "instagram_caption",
-      "hashtag_count": 3,
+      "hashtag_count": 2,
       "default_template_id": "instagram-story/spotlight"
     },
     "carousel-slide": {
@@ -527,14 +572,14 @@ export const PIPELINE_CONFIG = {
       "width": 1200,
       "height": 630,
       "caption_source": "twitter_caption",
-      "hashtag_count": 2,
+      "hashtag_count": 0,
       "default_template_id": "twitter-card/bold"
     },
     "linkedin-post": {
       "width": 1200,
       "height": 627,
       "caption_source": "linkedin_caption",
-      "hashtag_count": 2,
+      "hashtag_count": 0,
       "default_template_id": "linkedin-post/clean"
     }
   },

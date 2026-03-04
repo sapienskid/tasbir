@@ -159,8 +159,8 @@ export function resolveTemplateId(kind: TemplateKind, options?: { templateStyle?
 
 export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | CarouselTemplateParams): string {
   const format = PIPELINE_CONFIG.formats[kind];
-  const control = resolveTemplateControl(kind, params.design);
   const selectedTemplate = selectTemplateDefinition(kind, params.templateStyle, params.templateId, params.templateArchetype);
+  const control = resolveTemplateControl(kind, params.design, selectedTemplate.style);
   const normalizedArchetype = normalizePostArchetype(params.templateArchetype);
   const fontProfileId = resolveFontProfileId({
     requested: params.fontProfile,
