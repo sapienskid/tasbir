@@ -1,0 +1,21 @@
+GHOST_API_URL="https://YOUR_GHOST_DOMAIN/ghost/api/content"
+GHOST_CONTENT_API_KEY="YOUR_GHOST_CONTENT_API_KEY"
+
+# Optional but recommended for public URLs in API responses.
+R2_PUBLIC_BASE_URL="https://pub-xxxxxxxx.r2.dev"
+
+# Optional stock image fallback.
+PEXELS_API_KEY="YOUR_PEXELS_API_KEY"
+
+# Optional webhook security for /webhook/ghost
+GHOST_WEBHOOK_TOKEN="replace-with-random-secret"
+
+# Optional callback after generation completes.
+NOTIFY_WEBHOOK_URL="https://example.com/notify"
+
+# Optional runtime overrides. If omitted, values from config/pipeline.config.yaml are used.
+DEFAULT_BRAND_COLOR="#1f7a8c"
+BRAND_NAME="Tasbir Blog"
+LLM_MODEL="@cf/openai/gpt-oss-120b"
+IMAGE_MODEL="@cf/black-forest-labs/flux-1-schnell"
+R2_KEY_PREFIX="social-assets"

@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@source "../templates.ts";
+@source "../../templates/**/*.html";
+
+@utility text-balance {
+  text-wrap: balance;
+}
