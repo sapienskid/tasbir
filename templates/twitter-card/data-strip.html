@@ -1,0 +1,11 @@
+<div class="absolute inset-x-0 top-0 h-14" style="background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 36%, transparent) 0 32px, color-mix(in srgb, var(--color-surface-elevated) 82%, transparent) 32px 64px);"></div>
+<div class="absolute bottom-10 right-10 rounded-xl border px-4 py-3" style="border-color: color-mix(in srgb, var(--color-border-subtle) 86%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 72%, transparent);">
+  <p class="text-[12px] uppercase tracking-[0.09em] text-[var(--color-text-muted)]">Signal</p>
+  <p class="text-[20px] font-semibold" style="font-family: var(--font-display);">{{BRAND_NAME}}</p>
+</div>
+<div class="relative z-10 flex h-full w-full flex-col gap-4" style="padding: {{CONTENT_INSET}}px; padding-top: calc({{CONTENT_INSET}}px + 28px); {{ALIGNMENT_STYLE}}">
+  {{HEADER}}
+  <h1 class="text-balance text-[56px] leading-[1] tracking-[-0.02em]" style="font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);">{{TITLE}}</h1>
+  <p class="text-[26px] leading-[1.33] text-[var(--color-text-secondary)]" style="max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);">{{CAPTION}}</p>
+  {{FOOTER}}
+</div>

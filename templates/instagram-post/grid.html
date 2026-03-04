@@ -1,0 +1,11 @@
+<div class="absolute inset-0" style="background-image: linear-gradient(color-mix(in srgb, var(--color-border-subtle) 40%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--color-border-subtle) 36%, transparent) 1px, transparent 1px); background-size: 72px 72px;"></div>
+<div class="absolute right-14 top-14 rounded-2xl border px-6 py-4" style="border-color: color-mix(in srgb, var(--color-brand-accent) 72%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 72%, transparent);">
+  <p class="text-[14px] font-semibold uppercase tracking-[0.09em] text-[var(--color-text-muted)]">Insights</p>
+  <p class="text-[30px] font-semibold" style="font-family: var(--font-display);">{{BRAND_NAME}}</p>
+</div>
+<div class="relative z-10 flex h-full w-full flex-col gap-7" style="padding: {{CONTENT_INSET}}px; {{ALIGNMENT_STYLE}}">
+  {{HEADER}}
+  <h1 class="text-balance text-[74px] leading-[1] tracking-[-0.02em]" style="font-family: var(--font-display); max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);">{{TITLE}}</h1>
+  <p class="text-[32px] leading-[1.34] text-[var(--color-text-secondary)]" style="max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);">{{CAPTION}}</p>
+  {{FOOTER}}
+</div>
