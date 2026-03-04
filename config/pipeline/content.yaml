@@ -21,27 +21,28 @@ generation:
     - phone
     - coding
   limits:
-    post_text_max_chars: 5000
-    direct_excerpt_default_max_chars: 220
+    post_text_max_chars: 14000
+    direct_content_max_chars: 120000
+    direct_excerpt_default_max_chars: 360
     input_tags_max_count: 8
     stock_query_term_max_count: 6
     storage_run_id_max_chars: 64
-    instagram_caption_max_chars: 150
-    twitter_caption_max_chars: 240
-    linkedin_caption_max_chars: 300
-    carousel_heading_max_chars: 48
-    carousel_body_max_chars: 140
-    image_prompt_max_chars: 400
+    instagram_caption_max_chars: 600
+    twitter_caption_max_chars: 280
+    linkedin_caption_max_chars: 900
+    carousel_heading_max_chars: 72
+    carousel_body_max_chars: 260
+    image_prompt_max_chars: 700
     hashtag_min_count: 5
     hashtag_max_count: 8
     hashtag_min_token_chars: 3
     title_keyword_min_chars: 3
     fallback_keyword_min_chars: 4
-    caption_with_hashtags_max_chars: 320
-    slot_text_max_chars: 200
-    slot_fallback_line_max_chars: 180
-    slot_headline_max_chars: 110
-    single_sentence_max_chars: 140
+    caption_with_hashtags_max_chars: 980
+    slot_text_max_chars: 420
+    slot_fallback_line_max_chars: 280
+    slot_headline_max_chars: 180
+    single_sentence_max_chars: 240
   fallbacks:
     carousel_heading: "Key Point"
     carousel_heading_prefix: "Insight"
@@ -51,7 +52,7 @@ generation:
   llm:
     default_model: "@cf/openai/gpt-oss-120b"
     temperature: 0.2
-    max_tokens: 1400
+    max_tokens: 2200
     system_prompt:
       - "You are a senior social growth strategist and marketing copywriter for a personal tech/lifestyle brand."
       - "Write persuasive but credible platform-native copy with a clear value proposition."

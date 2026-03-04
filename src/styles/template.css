@@ -63,6 +63,30 @@ body {
   --frame-space-scale: 1;
 }
 
+.frame.frame-tone-dark,
+.frame[data-template-tone="dark"] {
+  --color-text-primary: #f2f2f2;
+  --color-text-secondary: #d1d1d1;
+  --color-text-muted: #9a9a9a;
+  --color-surface-base: #070707;
+  --color-surface-elevated: #131313;
+  --color-border-subtle: #2b2b2b;
+  --frame-bg: #050505;
+  --frame-overlay-top: linear-gradient(
+    180deg,
+    color-mix(in srgb, #000000 32%, transparent) 0%,
+    color-mix(in srgb, #000000 60%, transparent) 100%
+  );
+  --frame-overlay-bottom: linear-gradient(
+    0deg,
+    color-mix(in srgb, #000000 22%, transparent) 0%,
+    transparent 62%
+  );
+  --frame-brand-pill-bg: color-mix(in srgb, #000000 16%, transparent);
+  --frame-brand-pill-border: color-mix(in srgb, #ffffff 24%, transparent);
+  --frame-brand-pill-text: var(--color-text-primary);
+}
+
 .frame-layer {
   position: absolute;
   inset: 0;
@@ -237,12 +261,12 @@ body {
 }
 
 .template-dark {
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #cccccc;
-  --color-text-muted: #999999;
-  --color-surface-base: #000000;
-  --color-surface-elevated: #1a1a1a;
-  --color-border-subtle: #333333;
+  --color-text-primary: #f2f2f2;
+  --color-text-secondary: #d1d1d1;
+  --color-text-muted: #9a9a9a;
+  --color-surface-base: #070707;
+  --color-surface-elevated: #131313;
+  --color-border-subtle: #2b2b2b;
 }
 
 .rule-line--inverted {

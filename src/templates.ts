@@ -22,6 +22,8 @@ interface TemplateDefinition {
   file: string;
 }
 
+type FrameTone = "default" | "dark";
+
 export interface SlotHintOption {
   id: string;
   hint: string;
@@ -162,6 +164,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   };
 
   const templateMarkup = loadTemplateMarkup(selectedTemplate.id);
+  const frameTone = detectFrameTone(templateMarkup);
   const content = interpolateTemplate(templateMarkup, tokens, slotValues);
 
   return renderFrame(
@@ -171,7 +174,8 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
       height: format.height,
       params,
       control,
-      content
+      content,
+      frameTone
     },
     selectedTemplate.id
   );
@@ -222,6 +226,10 @@ function loadTemplateMarkup(templateId: string): string {
     throw new Error(`Template file not found for id ${templateId}`);
   }
   return content;
+}
+
+function detectFrameTone(templateMarkup: string): FrameTone {
+  return /\btemplate-dark\b/i.test(templateMarkup) ? "dark" : "default";
 }
 
 function interpolateTemplate(template: string, tokens: Record<string, string>, slots: Record<string, string>): string {
@@ -352,6 +360,7 @@ function renderFrame(
     params: BaseTemplateParams;
     control: ReturnType<typeof resolveTemplateControl>;
     content: string;
+    frameTone: FrameTone;
   },
   templateId: string
 ): string {
@@ -408,6 +417,8 @@ function renderFrame(
     {
       HEAD_HTML: renderTemplateHead({ safeTitle, width: args.width, height: args.height, theme }),
       TEMPLATE_ID: escapeHtml(templateId),
+      FRAME_TONE_CLASS: args.frameTone === "dark" ? "frame-tone-dark" : "",
+      FRAME_TONE: args.frameTone,
       ROOT_STYLE: rootStyle,
       IMAGE_VISIBILITY_CLASS: imageVisibilityClass,
       IMAGE_LAYER_STYLE: imageLayerStyle,

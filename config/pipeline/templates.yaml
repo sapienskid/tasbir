@@ -75,10 +75,10 @@ formats:
     default_template_id: core/editorial-base
 
 preview_defaults:
-  title: Swiss Design Trends 2026
-  caption: Exploring the resurgence of monochromatic minimalism in digital media.
-  heading: Minimalism is the new maximalism
-  body: In an age of information overload, clarity becomes our most valuable asset.
+  title: Building a Monochromatic Swiss Content Engine That Scales Across Every Platform
+  caption: A practical system for turning one source article into platform-native outputs with consistent structure, language discipline, and reusable visual identity.
+  heading: Structure first. Style through tokens.
+  body: Templates stay skeletal while one centralized tokenized CSS system controls color, typography, spacing, and tone so every output remains cohesive as your template library evolves.
   slide_number: 1
   total_slides: 5
 

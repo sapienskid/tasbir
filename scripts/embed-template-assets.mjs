@@ -328,6 +328,8 @@ async function loadSystemTemplateFiles(directoryPath) {
   assertSystemTemplateTokenSet(loaded["@system/frame-shell"], "@system/frame-shell", [
     "HEAD_HTML",
     "TEMPLATE_ID",
+    "FRAME_TONE_CLASS",
+    "FRAME_TONE",
     "ROOT_STYLE",
     "IMAGE_VISIBILITY_CLASS",
     "IMAGE_LAYER_STYLE",

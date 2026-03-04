@@ -75,26 +75,32 @@ for (const format of formats) {
     const html = await fetchText(
       buildTemplatePreviewUrl(baseUrl, format.id, {
         templateId,
-        title: "Local Template Preview",
-        caption: "Rendered by automation to validate format sizing and template composition.",
-        heading: "Local Heading",
-        body: "Local body content for preview verification.",
+        title: "Monochromatic Swiss Content System - Local Stress Preview",
+        caption:
+          "Rendered by automation to validate typography, spacing, and token consistency across every format while exercising longer copy lengths and dense slot coverage.",
+        heading: "One source article, many coherent outputs",
+        body:
+          "This preview intentionally uses longer narrative copy to test text wrapping, line rhythm, and readability boundaries without breaking the frame structure or token-driven layout behavior.",
         brandName: "Tasbir Blog",
-        brandingColor: "#1f7a8c",
+        brandingColor: "#111111",
         slots: {
-          headline: "Signal that compounds",
-          subheadline: "One source article, many platform outputs.",
-          supporting_line: "Reusable templates with centralized design tokens.",
-          insight_line: "Clarity and consistency improve iteration speed.",
-          cta_text: "Read the guide",
-          metric_value: "9.8K",
-          metric_label: "Engagement",
-          quote_text: "Great systems reduce content production friction.",
+          headline: "Editorial structure with deterministic composition",
+          subheadline: "Generate copy once, map it across templates, and keep platform voice aligned.",
+          supporting_line: "Design tokens control tone globally, so template additions never fragment the system.",
+          insight_line: "Long-form testing confirms wrapping behavior before production publishing.",
+          cta_text: "Read the full framework",
+          metric_value: "12.4x",
+          metric_label: "Faster iteration velocity",
+          quote_text:
+            "A reliable content pipeline is not about writing more - it is about preserving intent, consistency, and clarity at scale.",
           quote_author: "Tasbir Team",
-          step_1: "Define objective",
-          step_2: "Extract key points",
-          step_3: "Compose by platform",
-          step_4: "Review and publish"
+          author_role: "Editorial Systems",
+          series_label: "Content Ops / Vol 01",
+          slide_index: "03",
+          step_1: "Define one campaign angle from the source content.",
+          step_2: "Extract high-signal points that map cleanly to template slots.",
+          step_3: "Render every output with shared tokens and format-aware copy.",
+          step_4: "Review contrast, spacing, and truncation before publishing."
         }
       }),
       {

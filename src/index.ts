@@ -2085,6 +2085,10 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
 
 function validateDirectContentRequestBody(input: unknown, security: ResolvedSecurityConfig): DirectContentRequestBody {
   const body = requireObject(input, "Request body");
+  const directContentMaxChars = Math.max(
+    1_000,
+    Number(PIPELINE_CONFIG.generation?.limits?.direct_content_max_chars ?? 30_000)
+  );
   const tags = body.tags;
   const tagValue =
     tags === undefined
@@ -2096,8 +2100,8 @@ function validateDirectContentRequestBody(input: unknown, security: ResolvedSecu
   const request = {
     title: optionalString(body.title, "title", 280),
     excerpt: optionalString(body.excerpt, "excerpt", 1_000),
-    content: optionalString(body.content, "content", 30_000),
-    body: optionalString(body.body, "body", 30_000),
+    content: optionalString(body.content, "content", directContentMaxChars),
+    body: optionalString(body.body, "body", directContentMaxChars),
     slug: optionalString(body.slug, "slug", 200),
     url: optionalString(body.url, "url", 500),
     feature_image: optionalString(body.feature_image, "feature_image", 2_000),

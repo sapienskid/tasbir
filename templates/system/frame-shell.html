@@ -2,7 +2,7 @@
 <html>
   {{HEAD_HTML}}
   <body>
-    <div class="frame" data-template-id="{{TEMPLATE_ID}}" style="{{ROOT_STYLE}}">
+    <div class="frame {{FRAME_TONE_CLASS}}" data-template-id="{{TEMPLATE_ID}}" data-template-tone="{{FRAME_TONE}}" style="{{ROOT_STYLE}}">
       <div class="frame-layer" style="background: var(--frame-bg);"></div>
       <div class="frame-layer frame-layer--image {{IMAGE_VISIBILITY_CLASS}}" style="{{IMAGE_LAYER_STYLE}}"></div>
       <div class="frame-layer" style="opacity: {{OVERLAY_OPACITY}}; background: {{OVERLAY_BACKGROUND}};"></div>
