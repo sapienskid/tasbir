@@ -34,30 +34,28 @@ Build-time compilation keeps Worker runtime deterministic.
 Inputs:
 
 - `config/pipeline.config.yaml`
-- `config/pipeline/design.yaml`
+- `config/pipeline/templates.yaml`
 - `config/pipeline/content.yaml`
 - `config/pipeline/runtime.yaml`
 - `templates/**/*.html`
-- `src/styles/tailwind.input.css`
+- `src/styles/template.css`
 
 Outputs:
 
-- `src/styles/tailwind-css.ts`
 - `src/generated/template-assets.ts`
 
 Commands:
 
-- `pnpm run build:styles`
 - `pnpm run build:templates`
 - `pnpm run build:assets`
 
-`build:templates` validates the config and template registry before generating runtime assets.
+`build:templates` validates config and embeds templates + stylesheet for runtime rendering.
 
 ## Runtime Components
 
 - `src/index.ts`: routes and orchestration
 - `src/templates.ts`: template selection and interpolation
-- `src/design-system.ts`: theming, font, and visual controls
+- `src/template-theme.ts`: theming, font, and visual controls
 - Cloudflare Workers AI (`AI` binding)
 - Cloudflare Browser Rendering (`BROWSER` binding)
 - Cloudflare R2 (`OUTPUT_BUCKET` binding)
@@ -86,9 +84,6 @@ Worker sends prompt to Workers AI and expects strict JSON schema:
 - carousel slides
 - hashtags
 - image prompt
-- template style
-- post archetype
-- font profile
 - slot content
 
 ### 3) Normalization and fallback
@@ -102,9 +97,9 @@ Worker normalizes and constrains model output using `generation.limits` and `gen
 
 ### 4) Style/archetype/font resolution
 
-- style: request override -> model output -> config default
-- archetype: request override -> model output -> config default
-- font: request override -> model output -> style/archetype mapping -> default
+- style: request override -> config default
+- archetype: request override -> config default
+- font: request override -> style/archetype mapping -> default
 
 ### 5) Image source selection
 
@@ -122,7 +117,7 @@ Per format, resolver chooses template based on explicit ID, style/archetype comp
 
 HTML render includes:
 
-- design-system tokens and preset styles
+- template-theme tokens and render defaults
 - Google Fonts profile CSS import
 - token + slot interpolation
 - final frame metadata attributes (`data-template-id`, `data-template-style`, `data-template-archetype`)

@@ -2,677 +2,339 @@
 // Do not edit manually.
 
 export const PIPELINE_CONFIG = {
-  "design_system": {
-    "version": 2,
-    "purpose": "Central design system contract. Runtime projects these values into legacy top-level keys.",
-    "brand": {
-      "default_name": "Tasbir Blog",
-      "default_color": "#1f7a8c"
-    },
-    "typography": {
-      "default_font_profile": "editorial-serif",
-      "profiles": {
-        "editorial-serif": {
-          "label": "Editorial Serif",
-          "llm_hint": "Elegant and expressive for thought pieces.",
-          "google_fonts_css2_query": "family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800;9..144,900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800",
-          "display_font_css": "\"Fraunces\", serif",
-          "body_font_css": "\"Plus Jakarta Sans\", sans-serif"
-        },
-        "modern-sans": {
-          "label": "Modern Sans",
-          "llm_hint": "Clean and neutral for tutorials and checklists.",
-          "google_fonts_css2_query": "family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800",
-          "display_font_css": "\"Sora\", sans-serif",
-          "body_font_css": "\"Inter\", sans-serif"
-        },
-        "data-mono": {
-          "label": "Data Mono",
-          "llm_hint": "Structured and analytical for metrics and benchmark posts.",
-          "google_fonts_css2_query": "family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700",
-          "display_font_css": "\"Space Grotesk\", sans-serif",
-          "body_font_css": "\"IBM Plex Mono\", monospace"
-        },
-        "bold-campaign": {
-          "label": "Bold Campaign",
-          "llm_hint": "High-impact voice for promo and launch posts.",
-          "google_fonts_css2_query": "family=Bebas+Neue&family=Manrope:wght@400;500;600;700;800",
-          "display_font_css": "\"Bebas Neue\", sans-serif",
-          "body_font_css": "\"Manrope\", sans-serif"
-        }
-      },
-      "selection": {
-        "by_style": {
-          "editorial": "editorial-serif",
-          "illustration": "modern-sans",
-          "minimal": "modern-sans",
-          "bold": "bold-campaign",
-          "data": "data-mono",
-          "monochrome-swiss": "data-mono",
-          "brutal": "bold-campaign"
-        },
-        "by_archetype": {
-          "insight": "editorial-serif",
-          "metric": "data-mono",
-          "quote": "editorial-serif",
-          "checklist": "modern-sans",
-          "timeline": "modern-sans",
-          "promo": "bold-campaign"
-        }
-      }
-    },
-    "theming": {
-      "readable_light_text": "#edf4ff",
-      "readable_dark_text": "#07101d",
-      "color_engine": {
-        "surface_base_mix_target": "#05080f",
-        "surface_base_mix_ratio_from_target": 0.84,
-        "surface_base_fallback": "#0a111b",
-        "surface_elevated_mix_target": "#0e1a2a",
-        "surface_elevated_mix_ratio_from_target": 0.68,
-        "surface_elevated_fallback": "#101d2f",
-        "border_subtle_mix_target": "#9ec7ff",
-        "border_subtle_mix_ratio_from_target": 0.42,
-        "border_subtle_fallback": "#5a7da9",
-        "secondary_text_mix_target": "#8ea3c0",
-        "secondary_text_mix_ratio_from_target": 0.45,
-        "secondary_text_fallback": "#c8d8ee",
-        "muted_text_mix_target": "#607797",
-        "muted_text_mix_ratio_from_target": 0.5,
-        "muted_text_fallback": "#9bb1cc",
-        "accent_glow_mix_target": "#ffffff",
-        "accent_glow_mix_ratio_from_target": 0.34,
-        "overlay_strong_mix_target": "#01040a",
-        "overlay_strong_mix_ratio_from_target": 0.6,
-        "shadow_color_mix_target": "#000000",
-        "shadow_color_mix_ratio_from_target": 0.72,
-        "primary_text_min_contrast": 4.5,
-        "secondary_text_min_contrast": 3.8,
-        "muted_text_min_contrast": 3,
-        "border_subtle_min_contrast": 1.5,
-        "accent_foreground_min_contrast": 4
-      },
-      "radius": {
-        "card": "28px",
-        "pill": "999px"
-      }
-    },
-    "tokens": {
-      "aliases": {
-        "render.preset.minimal.container-background": "radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--color-brand-glow) 24%, transparent) 0%, transparent 44%), linear-gradient(165deg, color-mix(in srgb, var(--color-brand-accent) 12%, var(--color-surface-base)), var(--color-surface-base))",
-        "render.preset.minimal.overlay-top": "linear-gradient(170deg, rgba(2, 7, 14, 0.04), color-mix(in srgb, var(--color-overlay-strong) 52%, transparent) 76%)",
-        "render.preset.minimal.overlay-bottom": "linear-gradient(18deg, color-mix(in srgb, var(--color-brand-accent) 22%, transparent) 0%, transparent 58%)",
-        "render.preset.minimal.vignette": "radial-gradient(circle at 50% 76%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 52%, transparent) 98%)",
-        "render.preset.minimal.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 52%, transparent)",
-        "render.preset.minimal.brand-pill-border": "color-mix(in srgb, var(--color-border-subtle) 74%, transparent)",
-        "render.preset.minimal.brand-pill-text": "var(--color-text-primary)",
-        "render.preset.minimal.title-shadow": "0 10px 24px rgba(0, 0, 0, 0.18)",
-        "render.preset.minimal.caption-shadow": "0 6px 18px rgba(0, 0, 0, 0.14)",
-        "render.preset.illustration.container-background": "radial-gradient(circle at 16% 14%, color-mix(in srgb, var(--color-brand-glow) 48%, transparent) 0%, transparent 46%), linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 18%, var(--color-surface-base)), color-mix(in srgb, var(--color-surface-base) 86%, #0b1524))",
-        "render.preset.illustration.overlay-top": "linear-gradient(170deg, rgba(3, 8, 14, 0.02), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 78%)",
-        "render.preset.illustration.overlay-bottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 20%, transparent), transparent 64%)",
-        "render.preset.illustration.vignette": "radial-gradient(circle at 52% 86%, transparent 36%, color-mix(in srgb, var(--color-overlay-strong) 30%, transparent) 98%)",
-        "render.preset.illustration.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 44%, transparent)",
-        "render.preset.illustration.brand-pill-border": "color-mix(in srgb, var(--color-border-subtle) 58%, transparent)",
-        "render.preset.illustration.brand-pill-text": "var(--color-text-primary)",
-        "render.preset.illustration.title-shadow": "0 8px 22px rgba(0, 0, 0, 0.12)",
-        "render.preset.illustration.caption-shadow": "0 4px 16px rgba(0, 0, 0, 0.1)",
-        "render.preset.editorial.container-background": "radial-gradient(circle at 13% 12%, color-mix(in srgb, var(--color-brand-glow) 54%, transparent) 0%, transparent 50%), linear-gradient(162deg, color-mix(in srgb, var(--color-brand-accent) 24%, var(--color-surface-base)), var(--color-surface-base))",
-        "render.preset.editorial.overlay-top": "linear-gradient(168deg, rgba(2, 7, 14, 0.08), color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 72%)",
-        "render.preset.editorial.overlay-bottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 46%, transparent) 0%, transparent 52%)",
-        "render.preset.editorial.vignette": "radial-gradient(circle at 54% 82%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 98%)",
-        "render.preset.editorial.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 70%, transparent)",
-        "render.preset.editorial.brand-pill-border": "var(--color-border-subtle)",
-        "render.preset.editorial.brand-pill-text": "var(--color-text-primary)",
-        "render.preset.editorial.title-shadow": "0 16px 34px rgba(0, 0, 0, 0.24)",
-        "render.preset.editorial.caption-shadow": "0 8px 24px rgba(0, 0, 0, 0.18)",
-        "render.preset.spotlight.container-background": "radial-gradient(circle at 72% 10%, color-mix(in srgb, var(--color-brand-accent) 54%, transparent) 0%, transparent 42%), linear-gradient(150deg, color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-base)), var(--color-surface-base))",
-        "render.preset.spotlight.overlay-top": "linear-gradient(180deg, rgba(1, 5, 10, 0.06), color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 70%)",
-        "render.preset.spotlight.overlay-bottom": "linear-gradient(0deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent) 0%, transparent 58%)",
-        "render.preset.spotlight.vignette": "radial-gradient(circle at 50% 92%, transparent 22%, color-mix(in srgb, var(--color-overlay-strong) 60%, transparent) 98%)",
-        "render.preset.spotlight.brand-pill-background": "color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-elevated))",
-        "render.preset.spotlight.brand-pill-border": "color-mix(in srgb, var(--color-brand-accent) 72%, var(--color-border-subtle))",
-        "render.preset.spotlight.brand-pill-text": "var(--color-text-primary)",
-        "render.preset.spotlight.title-shadow": "0 18px 38px rgba(0, 0, 0, 0.24)",
-        "render.preset.spotlight.caption-shadow": "0 10px 26px rgba(0, 0, 0, 0.2)",
-        "render.preset.bold.container-background": "linear-gradient(145deg, color-mix(in srgb, var(--color-brand-accent) 44%, #050812), var(--color-surface-base))",
-        "render.preset.bold.overlay-top": "linear-gradient(170deg, rgba(0, 0, 0, 0.04), color-mix(in srgb, var(--color-overlay-strong) 48%, transparent) 74%)",
-        "render.preset.bold.overlay-bottom": "linear-gradient(16deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent) 0%, transparent 50%)",
-        "render.preset.bold.vignette": "radial-gradient(circle at 88% 88%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 48%), radial-gradient(circle at 50% 76%, transparent 34%, color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 98%)",
-        "render.preset.bold.brand-pill-background": "color-mix(in srgb, var(--color-brand-accent) 34%, var(--color-surface-elevated))",
-        "render.preset.bold.brand-pill-border": "color-mix(in srgb, var(--color-brand-accent) 88%, var(--color-border-subtle))",
-        "render.preset.bold.brand-pill-text": "var(--color-brand-accent-foreground)",
-        "render.preset.bold.title-shadow": "0 16px 32px rgba(0, 0, 0, 0.24)",
-        "render.preset.bold.caption-shadow": "0 8px 22px rgba(0, 0, 0, 0.18)",
-        "render.preset.clean.container-background": "linear-gradient(160deg, color-mix(in srgb, var(--color-brand-accent) 16%, #0a1320), #0a1320 50%, color-mix(in srgb, var(--color-brand-accent) 8%, #0b1119))",
-        "render.preset.clean.overlay-top": "linear-gradient(170deg, rgba(2, 8, 14, 0.03), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 82%)",
-        "render.preset.clean.overlay-bottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 16%, transparent), transparent 62%)",
-        "render.preset.clean.vignette": "radial-gradient(circle at 50% 76%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%)",
-        "render.preset.clean.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 42%, transparent)",
-        "render.preset.clean.brand-pill-border": "color-mix(in srgb, var(--color-border-subtle) 52%, transparent)",
-        "render.preset.clean.brand-pill-text": "var(--color-text-secondary)",
-        "render.preset.clean.title-shadow": "0 10px 20px rgba(0, 0, 0, 0.12)",
-        "render.preset.clean.caption-shadow": "0 4px 14px rgba(0, 0, 0, 0.1)",
-        "render.preset.swiss-mono.container-background": "linear-gradient(180deg, color-mix(in srgb, var(--color-surface-base) 88%, #020509), color-mix(in srgb, var(--color-surface-base) 70%, #0f1a2b))",
-        "render.preset.swiss-mono.overlay-top": "linear-gradient(180deg, color-mix(in srgb, #ffffff 3%, transparent), color-mix(in srgb, var(--color-overlay-strong) 24%, transparent) 72%)",
-        "render.preset.swiss-mono.overlay-bottom": "linear-gradient(0deg, color-mix(in srgb, #ffffff 5%, transparent) 0%, transparent 64%)",
-        "render.preset.swiss-mono.vignette": "radial-gradient(circle at 50% 78%, transparent 44%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%)",
-        "render.preset.swiss-mono.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 40%, transparent)",
-        "render.preset.swiss-mono.brand-pill-border": "color-mix(in srgb, #ffffff 48%, transparent)",
-        "render.preset.swiss-mono.brand-pill-text": "var(--color-text-primary)",
-        "render.preset.swiss-mono.title-shadow": "0 6px 14px rgba(0, 0, 0, 0.1)",
-        "render.preset.swiss-mono.caption-shadow": "0 2px 10px rgba(0, 0, 0, 0.08)",
-        "render.preset.brutal.container-background": "linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 54%, #05070c), #05070c 58%, color-mix(in srgb, var(--color-brand-accent) 42%, #111827))",
-        "render.preset.brutal.overlay-top": "linear-gradient(165deg, rgba(0, 0, 0, 0.06), color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 76%)",
-        "render.preset.brutal.overlay-bottom": "linear-gradient(10deg, color-mix(in srgb, var(--color-brand-accent) 62%, transparent) 0%, transparent 48%)",
-        "render.preset.brutal.vignette": "radial-gradient(circle at 84% 84%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 38%), radial-gradient(circle at 20% 18%, color-mix(in srgb, #ffffff 14%, transparent) 0%, transparent 30%), radial-gradient(circle at 50% 74%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 99%)",
-        "render.preset.brutal.brand-pill-background": "color-mix(in srgb, var(--color-brand-accent) 46%, var(--color-surface-elevated))",
-        "render.preset.brutal.brand-pill-border": "color-mix(in srgb, #ffffff 72%, transparent)",
-        "render.preset.brutal.brand-pill-text": "var(--color-brand-accent-foreground)",
-        "render.preset.brutal.title-shadow": "0 18px 34px rgba(0, 0, 0, 0.24)",
-        "render.preset.brutal.caption-shadow": "0 8px 22px rgba(0, 0, 0, 0.18)"
-      }
-    },
-    "ai_contract": {
-      "planner_directives": [
-        "Act as a campaign strategist that selects the best template style and archetype before writing copy.",
-        "Treat HTML/CSS/SVG layers as the primary composition system; keep generated images background-only and optional.",
-        "Optimize copy for conversion intent while preserving brand voice and audience trust.",
-        "Use slot content as modular layer inputs that can be stitched by deterministic templates."
-      ],
-      "rendering_constraints": [
-        "Never ask the image model to render any text, logos, UI components, or layout copy.",
-        "Assume final typography, hierarchy, and layout are handled by the HTML renderer and template slots."
-      ]
-    },
-    "render": {
-      "control_defaults": {
-        "showBrandBadge": true,
-        "showSlideBadge": false,
-        "showMetaFooter": false,
-        "showTitleKicker": true,
-        "showDecorLayers": true,
-        "textAlign": "left"
-      },
-      "format_control_defaults": {
-        "instagram-post": {
-          "default_preset": "editorial",
-          "contentMaxWidth": 1020,
-          "contentInset": 68,
-          "textAlign": "left"
-        },
-        "instagram-story": {
-          "default_preset": "spotlight",
-          "contentMaxWidth": 930,
-          "contentInset": 82,
-          "textAlign": "left"
-        },
-        "carousel-slide": {
-          "default_preset": "minimal",
-          "contentMaxWidth": 1020,
-          "contentInset": 68,
-          "textAlign": "left"
-        },
-        "twitter-card": {
-          "default_preset": "bold",
-          "contentMaxWidth": 1020,
-          "contentInset": 48,
-          "textAlign": "left"
-        },
-        "linkedin-post": {
-          "default_preset": "clean",
-          "contentMaxWidth": 1020,
-          "contentInset": 48,
-          "textAlign": "left"
-        }
-      },
-      "style_preset_map": {
-        "editorial": "editorial",
-        "illustration": "illustration",
-        "minimal": "clean",
-        "bold": "bold",
-        "data": "clean",
-        "monochrome-swiss": "swiss-mono",
-        "brutal": "brutal"
-      },
-      "visual_layers": {
-        "use_background_image_only": true,
-        "use_html_decor_layers": true,
-        "style_profiles": {
-          "editorial": "soft-orbital",
-          "illustration": "playful-blobs",
-          "minimal": "subtle-grid",
-          "bold": "angular-burst",
-          "data": "metric-grid",
-          "monochrome-swiss": "swiss-grid",
-          "brutal": "cutout-noise"
-        }
-      },
-      "preset_styles": {
-        "minimal": {
-          "containerBackground": "@render.preset.minimal.container-background",
-          "overlayTop": "@render.preset.minimal.overlay-top",
-          "overlayBottom": "@render.preset.minimal.overlay-bottom",
-          "vignette": "@render.preset.minimal.vignette",
-          "brandPillBackground": "@render.preset.minimal.brand-pill-background",
-          "brandPillBorder": "@render.preset.minimal.brand-pill-border",
-          "brandPillText": "@render.preset.minimal.brand-pill-text",
-          "titleShadow": "@render.preset.minimal.title-shadow",
-          "captionShadow": "@render.preset.minimal.caption-shadow",
-          "grainOpacity": 0.05,
-          "imageOpacity": 0.48,
-          "typeScale": 0.96,
-          "spaceScale": 0.94
-        },
-        "illustration": {
-          "containerBackground": "@render.preset.illustration.container-background",
-          "overlayTop": "@render.preset.illustration.overlay-top",
-          "overlayBottom": "@render.preset.illustration.overlay-bottom",
-          "vignette": "@render.preset.illustration.vignette",
-          "brandPillBackground": "@render.preset.illustration.brand-pill-background",
-          "brandPillBorder": "@render.preset.illustration.brand-pill-border",
-          "brandPillText": "@render.preset.illustration.brand-pill-text",
-          "titleShadow": "@render.preset.illustration.title-shadow",
-          "captionShadow": "@render.preset.illustration.caption-shadow",
-          "grainOpacity": 0.03,
-          "imageOpacity": 0.54,
-          "typeScale": 1.02,
-          "spaceScale": 1
-        },
-        "editorial": {
-          "containerBackground": "@render.preset.editorial.container-background",
-          "overlayTop": "@render.preset.editorial.overlay-top",
-          "overlayBottom": "@render.preset.editorial.overlay-bottom",
-          "vignette": "@render.preset.editorial.vignette",
-          "brandPillBackground": "@render.preset.editorial.brand-pill-background",
-          "brandPillBorder": "@render.preset.editorial.brand-pill-border",
-          "brandPillText": "@render.preset.editorial.brand-pill-text",
-          "titleShadow": "@render.preset.editorial.title-shadow",
-          "captionShadow": "@render.preset.editorial.caption-shadow",
-          "grainOpacity": 0.07,
-          "imageOpacity": 0.5,
-          "typeScale": 1,
-          "spaceScale": 1
-        },
-        "spotlight": {
-          "containerBackground": "@render.preset.spotlight.container-background",
-          "overlayTop": "@render.preset.spotlight.overlay-top",
-          "overlayBottom": "@render.preset.spotlight.overlay-bottom",
-          "vignette": "@render.preset.spotlight.vignette",
-          "brandPillBackground": "@render.preset.spotlight.brand-pill-background",
-          "brandPillBorder": "@render.preset.spotlight.brand-pill-border",
-          "brandPillText": "@render.preset.spotlight.brand-pill-text",
-          "titleShadow": "@render.preset.spotlight.title-shadow",
-          "captionShadow": "@render.preset.spotlight.caption-shadow",
-          "grainOpacity": 0.08,
-          "imageOpacity": 0.52,
-          "typeScale": 1.08,
-          "spaceScale": 1.08
-        },
-        "bold": {
-          "containerBackground": "@render.preset.bold.container-background",
-          "overlayTop": "@render.preset.bold.overlay-top",
-          "overlayBottom": "@render.preset.bold.overlay-bottom",
-          "vignette": "@render.preset.bold.vignette",
-          "brandPillBackground": "@render.preset.bold.brand-pill-background",
-          "brandPillBorder": "@render.preset.bold.brand-pill-border",
-          "brandPillText": "@render.preset.bold.brand-pill-text",
-          "titleShadow": "@render.preset.bold.title-shadow",
-          "captionShadow": "@render.preset.bold.caption-shadow",
-          "grainOpacity": 0.06,
-          "imageOpacity": 0.46,
-          "typeScale": 1.04,
-          "spaceScale": 1.02
-        },
-        "clean": {
-          "containerBackground": "@render.preset.clean.container-background",
-          "overlayTop": "@render.preset.clean.overlay-top",
-          "overlayBottom": "@render.preset.clean.overlay-bottom",
-          "vignette": "@render.preset.clean.vignette",
-          "brandPillBackground": "@render.preset.clean.brand-pill-background",
-          "brandPillBorder": "@render.preset.clean.brand-pill-border",
-          "brandPillText": "@render.preset.clean.brand-pill-text",
-          "titleShadow": "@render.preset.clean.title-shadow",
-          "captionShadow": "@render.preset.clean.caption-shadow",
-          "grainOpacity": 0.04,
-          "imageOpacity": 0.52,
-          "typeScale": 0.95,
-          "spaceScale": 0.92
-        },
-        "swiss-mono": {
-          "containerBackground": "@render.preset.swiss-mono.container-background",
-          "overlayTop": "@render.preset.swiss-mono.overlay-top",
-          "overlayBottom": "@render.preset.swiss-mono.overlay-bottom",
-          "vignette": "@render.preset.swiss-mono.vignette",
-          "brandPillBackground": "@render.preset.swiss-mono.brand-pill-background",
-          "brandPillBorder": "@render.preset.swiss-mono.brand-pill-border",
-          "brandPillText": "@render.preset.swiss-mono.brand-pill-text",
-          "titleShadow": "@render.preset.swiss-mono.title-shadow",
-          "captionShadow": "@render.preset.swiss-mono.caption-shadow",
-          "grainOpacity": 0.02,
-          "imageOpacity": 0.44,
-          "typeScale": 0.9,
-          "spaceScale": 0.86
-        },
-        "brutal": {
-          "containerBackground": "@render.preset.brutal.container-background",
-          "overlayTop": "@render.preset.brutal.overlay-top",
-          "overlayBottom": "@render.preset.brutal.overlay-bottom",
-          "vignette": "@render.preset.brutal.vignette",
-          "brandPillBackground": "@render.preset.brutal.brand-pill-background",
-          "brandPillBorder": "@render.preset.brutal.brand-pill-border",
-          "brandPillText": "@render.preset.brutal.brand-pill-text",
-          "titleShadow": "@render.preset.brutal.title-shadow",
-          "captionShadow": "@render.preset.brutal.caption-shadow",
-          "grainOpacity": 0.07,
-          "imageOpacity": 0.5,
-          "typeScale": 1.14,
-          "spaceScale": 1.1
-        }
-      },
-      "caption_width_rules": {
-        "instagram-post": {
-          "add": 20,
-          "max": 960
-        },
-        "instagram-story": {
-          "add": 30,
-          "max": 980
-        },
-        "carousel-slide": {
-          "add": 30,
-          "max": 980
-        },
-        "twitter-card": {
-          "add": 40,
-          "max": 1020
-        },
-        "linkedin-post": {
-          "add": 40,
-          "max": 1020
-        }
-      },
-      "meta_left_labels": {
-        "instagram-post": "Instagram",
-        "instagram-story": "Story",
-        "twitter-card": "X / Twitter",
-        "linkedin-post": "LinkedIn",
-        "carousel-slide": ""
-      },
-      "meta_right_labels": {
-        "instagram-post": "",
-        "instagram-story": "",
-        "twitter-card": "",
-        "linkedin-post": "",
-        "carousel-slide": ""
-      },
-      "frame_decor": {
-        "border_alpha_percent": 22,
-        "grain_dot_color": "rgba(255, 255, 255, 0.28)",
-        "grain_dot_size_px": 0.6,
-        "grain_bg_size_px": 3
-      }
-    },
-    "template_styles": {
-      "default_style": "editorial",
-      "styles": {
-        "editorial": {
-          "label": "Editorial",
-          "description": "Magazine-like layouts with clean typography and elevated contrast.",
-          "llm_hint": "Best for thoughtful, narrative, and opinion posts."
-        },
-        "illustration": {
-          "label": "Illustration",
-          "description": "Abstract shapes, soft gradients, and illustrative decorative elements.",
-          "llm_hint": "Best for conceptual explainers and creative storytelling."
-        },
-        "minimal": {
-          "label": "Minimal",
-          "description": "Calm whitespace, low ornamentation, and direct readability.",
-          "llm_hint": "Best for tutorials, checklists, and straightforward instructions."
-        },
-        "bold": {
-          "label": "Bold",
-          "description": "Strong color blocks and high-impact hierarchy for short statements.",
-          "llm_hint": "Best for announcements and strong takes."
-        },
-        "data": {
-          "label": "Data",
-          "description": "Structured accents that resemble charts, grids, and insight strips.",
-          "llm_hint": "Best for metrics, benchmarks, and evidence-heavy posts."
-        },
-        "monochrome-swiss": {
-          "label": "Monochrome Swiss",
-          "description": "High-contrast monochrome hierarchy with restrained geometry and grid discipline.",
-          "llm_hint": "Best for minimalist thought leadership and typographic clarity."
-        },
-        "brutal": {
-          "label": "Brutal",
-          "description": "Aggressive composition, loud contrast, and campaign-grade visual impact.",
-          "llm_hint": "Best for bold announcements, manifestos, and sharp opinions."
-        }
-      }
-    },
-    "formats": {
-      "instagram-post": {
-        "width": 1080,
-        "height": 1080,
-        "caption_source": "instagram_caption",
-        "hashtag_count": 3,
-        "default_template_id": "core/editorial-base"
-      },
-      "instagram-story": {
-        "width": 1080,
-        "height": 1920,
-        "caption_source": "instagram_caption",
-        "hashtag_count": 2,
-        "default_template_id": "core/editorial-base"
-      },
-      "carousel-slide": {
-        "width": 1080,
-        "height": 1080,
-        "caption_source": "carousel_slides",
-        "hashtag_count": 0,
-        "default_template_id": "core/editorial-base"
-      },
-      "twitter-card": {
-        "width": 1200,
-        "height": 630,
-        "caption_source": "twitter_caption",
-        "hashtag_count": 0,
-        "default_template_id": "core/bold-base"
-      },
-      "linkedin-post": {
-        "width": 1200,
-        "height": 627,
-        "caption_source": "linkedin_caption",
-        "hashtag_count": 0,
-        "default_template_id": "core/editorial-base"
-      }
-    },
-    "preview_defaults": {
-      "title": "Sample Blog Post Title",
-      "caption": "Sample caption for a social media image preview.",
-      "heading": "Key idea goes here",
-      "body": "One concise sentence that explains the idea for this slide.",
-      "slide_number": 1,
-      "total_slides": 5
-    },
-    "templates": [
-      {
-        "id": "core/editorial-base",
-        "styles": [
-          "editorial",
-          "minimal",
-          "monochrome-swiss"
-        ],
-        "label": "Core Editorial Base",
-        "default_for_style": true,
-        "file": "templates/editorial-base.html",
-        "formats": [
-          "instagram-post",
-          "instagram-story",
-          "carousel-slide",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "style": "editorial"
-      },
-      {
-        "id": "core/illustration-base",
-        "styles": [
-          "illustration"
-        ],
-        "label": "Core Illustration Base",
-        "default_for_style": true,
-        "file": "templates/illustration-base.html",
-        "formats": [
-          "instagram-post",
-          "instagram-story",
-          "carousel-slide",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "style": "illustration"
-      },
-      {
-        "id": "core/bold-base",
-        "styles": [
-          "bold",
-          "brutal"
-        ],
-        "label": "Core Bold Base",
-        "default_for_style": true,
-        "file": "templates/bold-base.html",
-        "formats": [
-          "instagram-post",
-          "instagram-story",
-          "carousel-slide",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "style": "bold"
-      },
-      {
-        "id": "core/data-base",
-        "styles": [
-          "data"
-        ],
-        "label": "Core Data Base",
-        "default_for_style": true,
-        "file": "templates/data-base.html",
-        "formats": [
-          "instagram-post",
-          "instagram-story",
-          "carousel-slide",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "style": "data"
-      },
-      {
-        "id": "core/quote-focus",
-        "styles": [
-          "editorial",
-          "illustration",
-          "minimal",
-          "bold",
-          "data",
-          "monochrome-swiss",
-          "brutal"
-        ],
-        "label": "Core Quote Focus",
-        "archetypes": [
-          "quote"
-        ],
-        "file": "templates/quote-focus.html",
-        "formats": [
-          "instagram-post",
-          "instagram-story",
-          "carousel-slide",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "style": "editorial"
-      },
-      {
-        "id": "core/checklist-stack",
-        "styles": [
-          "editorial",
-          "illustration",
-          "minimal",
-          "bold",
-          "data",
-          "monochrome-swiss",
-          "brutal"
-        ],
-        "label": "Core Checklist Stack",
-        "archetypes": [
-          "checklist",
-          "timeline"
-        ],
-        "file": "templates/checklist-stack.html",
-        "formats": [
-          "instagram-post",
-          "instagram-story",
-          "carousel-slide",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "style": "editorial"
-      },
-      {
-        "id": "core/metric-split",
-        "styles": [
-          "editorial",
-          "illustration",
-          "minimal",
-          "bold",
-          "data",
-          "monochrome-swiss",
-          "brutal"
-        ],
-        "label": "Core Metric Split",
-        "archetypes": [
-          "metric"
-        ],
-        "file": "templates/metric-split.html",
-        "formats": [
-          "instagram-post",
-          "instagram-story",
-          "carousel-slide",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "style": "editorial"
-      },
-      {
-        "id": "core/promo-pill",
-        "styles": [
-          "editorial",
-          "illustration",
-          "minimal",
-          "bold",
-          "data",
-          "monochrome-swiss",
-          "brutal"
-        ],
-        "label": "Core Promo Pill",
-        "archetypes": [
-          "promo"
-        ],
-        "file": "templates/promo-pill.html",
-        "formats": [
-          "instagram-post",
-          "instagram-story",
-          "carousel-slide",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "style": "editorial"
-      }
-    ]
+  "brand": {
+    "default_name": "Tasbir Blog",
+    "default_color": "#1f7a8c"
   },
+  "typography": {
+    "default_font_profile": "editorial-serif",
+    "profiles": {
+      "editorial-serif": {
+        "label": "Editorial Serif",
+        "llm_hint": "Elegant and expressive for thought pieces.",
+        "google_fonts_css2_query": "family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800;9..144,900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800",
+        "display_font_css": "\"Fraunces\", serif",
+        "body_font_css": "\"Plus Jakarta Sans\", sans-serif"
+      },
+      "modern-sans": {
+        "label": "Modern Sans",
+        "llm_hint": "Clean and neutral for tutorials and checklists.",
+        "google_fonts_css2_query": "family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800",
+        "display_font_css": "\"Sora\", sans-serif",
+        "body_font_css": "\"Inter\", sans-serif"
+      },
+      "data-mono": {
+        "label": "Data Mono",
+        "llm_hint": "Structured and analytical for metrics and benchmark posts.",
+        "google_fonts_css2_query": "family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700",
+        "display_font_css": "\"Space Grotesk\", sans-serif",
+        "body_font_css": "\"IBM Plex Mono\", monospace"
+      },
+      "bold-campaign": {
+        "label": "Bold Campaign",
+        "llm_hint": "High-impact voice for promo and launch posts.",
+        "google_fonts_css2_query": "family=Bebas+Neue&family=Manrope:wght@400;500;600;700;800",
+        "display_font_css": "\"Bebas Neue\", sans-serif",
+        "body_font_css": "\"Manrope\", sans-serif"
+      }
+    },
+    "selection": {
+      "by_style": {
+        "editorial": "editorial-serif",
+        "illustration": "modern-sans",
+        "minimal": "modern-sans",
+        "bold": "bold-campaign",
+        "data": "data-mono",
+        "monochrome-swiss": "data-mono",
+        "brutal": "bold-campaign"
+      },
+      "by_archetype": {
+        "insight": "editorial-serif",
+        "metric": "data-mono",
+        "quote": "editorial-serif",
+        "checklist": "modern-sans",
+        "timeline": "modern-sans",
+        "promo": "bold-campaign"
+      }
+    }
+  },
+  "template_styles": {
+    "default_style": "editorial",
+    "styles": {
+      "editorial": {
+        "label": "Editorial",
+        "description": "Magazine-like layouts with clean typography and elevated contrast.",
+        "llm_hint": "Best for thoughtful, narrative, and opinion posts."
+      },
+      "illustration": {
+        "label": "Illustration",
+        "description": "Abstract shapes, soft gradients, and illustrative decorative elements.",
+        "llm_hint": "Best for conceptual explainers and creative storytelling."
+      },
+      "minimal": {
+        "label": "Minimal",
+        "description": "Calm whitespace, low ornamentation, and direct readability.",
+        "llm_hint": "Best for tutorials, checklists, and straightforward instructions."
+      },
+      "bold": {
+        "label": "Bold",
+        "description": "Strong color blocks and high-impact hierarchy for short statements.",
+        "llm_hint": "Best for announcements and strong takes."
+      },
+      "data": {
+        "label": "Data",
+        "description": "Structured accents that resemble charts, grids, and insight strips.",
+        "llm_hint": "Best for metrics, benchmarks, and evidence-heavy posts."
+      },
+      "monochrome-swiss": {
+        "label": "Monochrome Swiss",
+        "description": "High-contrast monochrome hierarchy with restrained geometry and grid discipline.",
+        "llm_hint": "Best for minimalist thought leadership and typographic clarity."
+      },
+      "brutal": {
+        "label": "Brutal",
+        "description": "Aggressive composition, loud contrast, and campaign-grade visual impact.",
+        "llm_hint": "Best for bold announcements, manifestos, and sharp opinions."
+      }
+    }
+  },
+  "formats": {
+    "instagram-post": {
+      "width": 1080,
+      "height": 1080,
+      "caption_source": "instagram_caption",
+      "hashtag_count": 3,
+      "default_template_id": "core/editorial-base"
+    },
+    "instagram-story": {
+      "width": 1080,
+      "height": 1920,
+      "caption_source": "instagram_caption",
+      "hashtag_count": 2,
+      "default_template_id": "core/editorial-base"
+    },
+    "carousel-slide": {
+      "width": 1080,
+      "height": 1080,
+      "caption_source": "carousel_slides",
+      "hashtag_count": 0,
+      "default_template_id": "core/editorial-base"
+    },
+    "twitter-card": {
+      "width": 1200,
+      "height": 630,
+      "caption_source": "twitter_caption",
+      "hashtag_count": 0,
+      "default_template_id": "core/bold-base"
+    },
+    "linkedin-post": {
+      "width": 1200,
+      "height": 627,
+      "caption_source": "linkedin_caption",
+      "hashtag_count": 0,
+      "default_template_id": "core/editorial-base"
+    }
+  },
+  "preview_defaults": {
+    "title": "Sample Blog Post Title",
+    "caption": "Sample caption for a social media image preview.",
+    "heading": "Key idea goes here",
+    "body": "One concise sentence that explains the idea for this slide.",
+    "slide_number": 1,
+    "total_slides": 5
+  },
+  "templates": [
+    {
+      "id": "core/editorial-base",
+      "styles": [
+        "editorial",
+        "minimal",
+        "monochrome-swiss"
+      ],
+      "label": "Core Editorial Base",
+      "default_for_style": true,
+      "archetypes": [
+        "insight",
+        "quote",
+        "checklist",
+        "timeline"
+      ],
+      "file": "templates/editorial-base.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    },
+    {
+      "id": "core/illustration-base",
+      "styles": [
+        "illustration"
+      ],
+      "label": "Core Illustration Base",
+      "default_for_style": true,
+      "archetypes": [
+        "insight",
+        "quote"
+      ],
+      "file": "templates/illustration-base.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "illustration"
+    },
+    {
+      "id": "core/bold-base",
+      "styles": [
+        "bold",
+        "brutal"
+      ],
+      "label": "Core Bold Base",
+      "default_for_style": true,
+      "archetypes": [
+        "promo",
+        "insight"
+      ],
+      "file": "templates/bold-base.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "bold"
+    },
+    {
+      "id": "core/data-base",
+      "styles": [
+        "data"
+      ],
+      "label": "Core Data Base",
+      "default_for_style": true,
+      "archetypes": [
+        "metric",
+        "insight"
+      ],
+      "file": "templates/data-base.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "data"
+    },
+    {
+      "id": "core/quote-focus",
+      "styles": [
+        "editorial",
+        "illustration",
+        "minimal",
+        "bold",
+        "data",
+        "monochrome-swiss",
+        "brutal"
+      ],
+      "label": "Core Quote Focus",
+      "archetypes": [
+        "quote"
+      ],
+      "file": "templates/quote-focus.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    },
+    {
+      "id": "core/checklist-stack",
+      "styles": [
+        "editorial",
+        "illustration",
+        "minimal",
+        "bold",
+        "data",
+        "monochrome-swiss",
+        "brutal"
+      ],
+      "label": "Core Checklist Stack",
+      "archetypes": [
+        "checklist",
+        "timeline"
+      ],
+      "file": "templates/checklist-stack.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    },
+    {
+      "id": "core/metric-split",
+      "styles": [
+        "editorial",
+        "illustration",
+        "minimal",
+        "bold",
+        "data",
+        "monochrome-swiss",
+        "brutal"
+      ],
+      "label": "Core Metric Split",
+      "archetypes": [
+        "metric"
+      ],
+      "file": "templates/metric-split.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    },
+    {
+      "id": "core/promo-pill",
+      "styles": [
+        "editorial",
+        "illustration",
+        "minimal",
+        "bold",
+        "data",
+        "monochrome-swiss",
+        "brutal"
+      ],
+      "label": "Core Promo Pill",
+      "archetypes": [
+        "promo"
+      ],
+      "file": "templates/promo-pill.html",
+      "formats": [
+        "instagram-post",
+        "instagram-story",
+        "carousel-slide",
+        "twitter-card",
+        "linkedin-post"
+      ],
+      "style": "editorial"
+    }
+  ],
   "post_archetypes": {
     "default_archetype": "insight",
     "archetypes": {
@@ -827,12 +489,12 @@ export const PIPELINE_CONFIG = {
         "- hashtags: <hashtag_min_count>-<hashtag_max_count> relevant tags, each beginning with #, no spaces inside a tag.",
         "- image_prompt: optional BACKGROUND-ONLY art direction aligned with selected template_style and post_archetype (no text, no UI, no logos).",
         "- use_feature_image: boolean, true only if feature image is present and contextually aligned.",
-        "- template_style: choose one style id from <available_template_styles>.",
-        "- post_archetype: choose one archetype id from <available_post_archetypes>.",
-        "- font_profile: choose one font profile id from <available_font_profiles>.",
-        "- slot_content: object of string values using the most relevant keys from <available_slot_keys>.",
-        "- apply these design-system composition directives exactly:",
-        "<design_system_directives>",
+        "- selected_template_style is fixed to: <selected_template_style>.",
+        "- selected_post_archetype is fixed to: <selected_post_archetype>.",
+        "- selected_font_profile is fixed to: <selected_font_profile>.",
+        "- slot_content: object of string values that MUST include every key from <required_slot_keys>.",
+        "- apply these template composition directives exactly:",
+        "<template_composition_directives>",
         "Output JSON only."
       ]
     },
@@ -932,598 +594,21 @@ export const PIPELINE_CONFIG = {
     "default_mode": "overwrite",
     "versioned_include_date": true
   },
-  "schema_version": 1,
-  "brand": {
-    "default_name": "Tasbir Blog",
-    "default_color": "#1f7a8c"
-  },
-  "typography": {
-    "default_font_profile": "editorial-serif",
-    "profiles": {
-      "editorial-serif": {
-        "label": "Editorial Serif",
-        "llm_hint": "Elegant and expressive for thought pieces.",
-        "google_fonts_css2_query": "family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800;9..144,900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800",
-        "display_font_css": "\"Fraunces\", serif",
-        "body_font_css": "\"Plus Jakarta Sans\", sans-serif"
-      },
-      "modern-sans": {
-        "label": "Modern Sans",
-        "llm_hint": "Clean and neutral for tutorials and checklists.",
-        "google_fonts_css2_query": "family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800",
-        "display_font_css": "\"Sora\", sans-serif",
-        "body_font_css": "\"Inter\", sans-serif"
-      },
-      "data-mono": {
-        "label": "Data Mono",
-        "llm_hint": "Structured and analytical for metrics and benchmark posts.",
-        "google_fonts_css2_query": "family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700",
-        "display_font_css": "\"Space Grotesk\", sans-serif",
-        "body_font_css": "\"IBM Plex Mono\", monospace"
-      },
-      "bold-campaign": {
-        "label": "Bold Campaign",
-        "llm_hint": "High-impact voice for promo and launch posts.",
-        "google_fonts_css2_query": "family=Bebas+Neue&family=Manrope:wght@400;500;600;700;800",
-        "display_font_css": "\"Bebas Neue\", sans-serif",
-        "body_font_css": "\"Manrope\", sans-serif"
-      }
-    },
-    "selection": {
-      "by_style": {
-        "editorial": "editorial-serif",
-        "illustration": "modern-sans",
-        "minimal": "modern-sans",
-        "bold": "bold-campaign",
-        "data": "data-mono",
-        "monochrome-swiss": "data-mono",
-        "brutal": "bold-campaign"
-      },
-      "by_archetype": {
-        "insight": "editorial-serif",
-        "metric": "data-mono",
-        "quote": "editorial-serif",
-        "checklist": "modern-sans",
-        "timeline": "modern-sans",
-        "promo": "bold-campaign"
-      }
-    }
-  },
-  "theming": {
-    "readable_light_text": "#edf4ff",
-    "readable_dark_text": "#07101d",
-    "color_engine": {
-      "surface_base_mix_target": "#05080f",
-      "surface_base_mix_ratio_from_target": 0.84,
-      "surface_base_fallback": "#0a111b",
-      "surface_elevated_mix_target": "#0e1a2a",
-      "surface_elevated_mix_ratio_from_target": 0.68,
-      "surface_elevated_fallback": "#101d2f",
-      "border_subtle_mix_target": "#9ec7ff",
-      "border_subtle_mix_ratio_from_target": 0.42,
-      "border_subtle_fallback": "#5a7da9",
-      "secondary_text_mix_target": "#8ea3c0",
-      "secondary_text_mix_ratio_from_target": 0.45,
-      "secondary_text_fallback": "#c8d8ee",
-      "muted_text_mix_target": "#607797",
-      "muted_text_mix_ratio_from_target": 0.5,
-      "muted_text_fallback": "#9bb1cc",
-      "accent_glow_mix_target": "#ffffff",
-      "accent_glow_mix_ratio_from_target": 0.34,
-      "overlay_strong_mix_target": "#01040a",
-      "overlay_strong_mix_ratio_from_target": 0.6,
-      "shadow_color_mix_target": "#000000",
-      "shadow_color_mix_ratio_from_target": 0.72,
-      "primary_text_min_contrast": 4.5,
-      "secondary_text_min_contrast": 3.8,
-      "muted_text_min_contrast": 3,
-      "border_subtle_min_contrast": 1.5,
-      "accent_foreground_min_contrast": 4
-    },
-    "radius": {
-      "card": "28px",
-      "pill": "999px"
-    }
-  },
-  "render": {
-    "control_defaults": {
-      "showBrandBadge": true,
-      "showSlideBadge": false,
-      "showMetaFooter": false,
-      "showTitleKicker": true,
-      "showDecorLayers": true,
-      "textAlign": "left"
-    },
-    "format_control_defaults": {
-      "instagram-post": {
-        "default_preset": "editorial",
-        "contentMaxWidth": 1020,
-        "contentInset": 68,
-        "textAlign": "left"
-      },
-      "instagram-story": {
-        "default_preset": "spotlight",
-        "contentMaxWidth": 930,
-        "contentInset": 82,
-        "textAlign": "left"
-      },
-      "carousel-slide": {
-        "default_preset": "minimal",
-        "contentMaxWidth": 1020,
-        "contentInset": 68,
-        "textAlign": "left"
-      },
-      "twitter-card": {
-        "default_preset": "bold",
-        "contentMaxWidth": 1020,
-        "contentInset": 48,
-        "textAlign": "left"
-      },
-      "linkedin-post": {
-        "default_preset": "clean",
-        "contentMaxWidth": 1020,
-        "contentInset": 48,
-        "textAlign": "left"
-      }
-    },
-    "style_preset_map": {
-      "editorial": "editorial",
-      "illustration": "illustration",
-      "minimal": "clean",
-      "bold": "bold",
-      "data": "clean",
-      "monochrome-swiss": "swiss-mono",
-      "brutal": "brutal"
-    },
-    "visual_layers": {
-      "use_background_image_only": true,
-      "use_html_decor_layers": true,
-      "style_profiles": {
-        "editorial": "soft-orbital",
-        "illustration": "playful-blobs",
-        "minimal": "subtle-grid",
-        "bold": "angular-burst",
-        "data": "metric-grid",
-        "monochrome-swiss": "swiss-grid",
-        "brutal": "cutout-noise"
-      }
-    },
-    "preset_styles": {
-      "minimal": {
-        "containerBackground": "@render.preset.minimal.container-background",
-        "overlayTop": "@render.preset.minimal.overlay-top",
-        "overlayBottom": "@render.preset.minimal.overlay-bottom",
-        "vignette": "@render.preset.minimal.vignette",
-        "brandPillBackground": "@render.preset.minimal.brand-pill-background",
-        "brandPillBorder": "@render.preset.minimal.brand-pill-border",
-        "brandPillText": "@render.preset.minimal.brand-pill-text",
-        "titleShadow": "@render.preset.minimal.title-shadow",
-        "captionShadow": "@render.preset.minimal.caption-shadow",
-        "grainOpacity": 0.05,
-        "imageOpacity": 0.48,
-        "typeScale": 0.96,
-        "spaceScale": 0.94
-      },
-      "illustration": {
-        "containerBackground": "@render.preset.illustration.container-background",
-        "overlayTop": "@render.preset.illustration.overlay-top",
-        "overlayBottom": "@render.preset.illustration.overlay-bottom",
-        "vignette": "@render.preset.illustration.vignette",
-        "brandPillBackground": "@render.preset.illustration.brand-pill-background",
-        "brandPillBorder": "@render.preset.illustration.brand-pill-border",
-        "brandPillText": "@render.preset.illustration.brand-pill-text",
-        "titleShadow": "@render.preset.illustration.title-shadow",
-        "captionShadow": "@render.preset.illustration.caption-shadow",
-        "grainOpacity": 0.03,
-        "imageOpacity": 0.54,
-        "typeScale": 1.02,
-        "spaceScale": 1
-      },
-      "editorial": {
-        "containerBackground": "@render.preset.editorial.container-background",
-        "overlayTop": "@render.preset.editorial.overlay-top",
-        "overlayBottom": "@render.preset.editorial.overlay-bottom",
-        "vignette": "@render.preset.editorial.vignette",
-        "brandPillBackground": "@render.preset.editorial.brand-pill-background",
-        "brandPillBorder": "@render.preset.editorial.brand-pill-border",
-        "brandPillText": "@render.preset.editorial.brand-pill-text",
-        "titleShadow": "@render.preset.editorial.title-shadow",
-        "captionShadow": "@render.preset.editorial.caption-shadow",
-        "grainOpacity": 0.07,
-        "imageOpacity": 0.5,
-        "typeScale": 1,
-        "spaceScale": 1
-      },
-      "spotlight": {
-        "containerBackground": "@render.preset.spotlight.container-background",
-        "overlayTop": "@render.preset.spotlight.overlay-top",
-        "overlayBottom": "@render.preset.spotlight.overlay-bottom",
-        "vignette": "@render.preset.spotlight.vignette",
-        "brandPillBackground": "@render.preset.spotlight.brand-pill-background",
-        "brandPillBorder": "@render.preset.spotlight.brand-pill-border",
-        "brandPillText": "@render.preset.spotlight.brand-pill-text",
-        "titleShadow": "@render.preset.spotlight.title-shadow",
-        "captionShadow": "@render.preset.spotlight.caption-shadow",
-        "grainOpacity": 0.08,
-        "imageOpacity": 0.52,
-        "typeScale": 1.08,
-        "spaceScale": 1.08
-      },
-      "bold": {
-        "containerBackground": "@render.preset.bold.container-background",
-        "overlayTop": "@render.preset.bold.overlay-top",
-        "overlayBottom": "@render.preset.bold.overlay-bottom",
-        "vignette": "@render.preset.bold.vignette",
-        "brandPillBackground": "@render.preset.bold.brand-pill-background",
-        "brandPillBorder": "@render.preset.bold.brand-pill-border",
-        "brandPillText": "@render.preset.bold.brand-pill-text",
-        "titleShadow": "@render.preset.bold.title-shadow",
-        "captionShadow": "@render.preset.bold.caption-shadow",
-        "grainOpacity": 0.06,
-        "imageOpacity": 0.46,
-        "typeScale": 1.04,
-        "spaceScale": 1.02
-      },
-      "clean": {
-        "containerBackground": "@render.preset.clean.container-background",
-        "overlayTop": "@render.preset.clean.overlay-top",
-        "overlayBottom": "@render.preset.clean.overlay-bottom",
-        "vignette": "@render.preset.clean.vignette",
-        "brandPillBackground": "@render.preset.clean.brand-pill-background",
-        "brandPillBorder": "@render.preset.clean.brand-pill-border",
-        "brandPillText": "@render.preset.clean.brand-pill-text",
-        "titleShadow": "@render.preset.clean.title-shadow",
-        "captionShadow": "@render.preset.clean.caption-shadow",
-        "grainOpacity": 0.04,
-        "imageOpacity": 0.52,
-        "typeScale": 0.95,
-        "spaceScale": 0.92
-      },
-      "swiss-mono": {
-        "containerBackground": "@render.preset.swiss-mono.container-background",
-        "overlayTop": "@render.preset.swiss-mono.overlay-top",
-        "overlayBottom": "@render.preset.swiss-mono.overlay-bottom",
-        "vignette": "@render.preset.swiss-mono.vignette",
-        "brandPillBackground": "@render.preset.swiss-mono.brand-pill-background",
-        "brandPillBorder": "@render.preset.swiss-mono.brand-pill-border",
-        "brandPillText": "@render.preset.swiss-mono.brand-pill-text",
-        "titleShadow": "@render.preset.swiss-mono.title-shadow",
-        "captionShadow": "@render.preset.swiss-mono.caption-shadow",
-        "grainOpacity": 0.02,
-        "imageOpacity": 0.44,
-        "typeScale": 0.9,
-        "spaceScale": 0.86
-      },
-      "brutal": {
-        "containerBackground": "@render.preset.brutal.container-background",
-        "overlayTop": "@render.preset.brutal.overlay-top",
-        "overlayBottom": "@render.preset.brutal.overlay-bottom",
-        "vignette": "@render.preset.brutal.vignette",
-        "brandPillBackground": "@render.preset.brutal.brand-pill-background",
-        "brandPillBorder": "@render.preset.brutal.brand-pill-border",
-        "brandPillText": "@render.preset.brutal.brand-pill-text",
-        "titleShadow": "@render.preset.brutal.title-shadow",
-        "captionShadow": "@render.preset.brutal.caption-shadow",
-        "grainOpacity": 0.07,
-        "imageOpacity": 0.5,
-        "typeScale": 1.14,
-        "spaceScale": 1.1
-      }
-    },
-    "caption_width_rules": {
-      "instagram-post": {
-        "add": 20,
-        "max": 960
-      },
-      "instagram-story": {
-        "add": 30,
-        "max": 980
-      },
-      "carousel-slide": {
-        "add": 30,
-        "max": 980
-      },
-      "twitter-card": {
-        "add": 40,
-        "max": 1020
-      },
-      "linkedin-post": {
-        "add": 40,
-        "max": 1020
-      }
-    },
-    "meta_left_labels": {
-      "instagram-post": "Instagram",
-      "instagram-story": "Story",
-      "twitter-card": "X / Twitter",
-      "linkedin-post": "LinkedIn",
-      "carousel-slide": ""
-    },
-    "meta_right_labels": {
-      "instagram-post": "",
-      "instagram-story": "",
-      "twitter-card": "",
-      "linkedin-post": "",
-      "carousel-slide": ""
-    },
-    "frame_decor": {
-      "border_alpha_percent": 22,
-      "grain_dot_color": "rgba(255, 255, 255, 0.28)",
-      "grain_dot_size_px": 0.6,
-      "grain_bg_size_px": 3
-    }
-  },
-  "template_styles": {
-    "default_style": "editorial",
-    "styles": {
-      "editorial": {
-        "label": "Editorial",
-        "description": "Magazine-like layouts with clean typography and elevated contrast.",
-        "llm_hint": "Best for thoughtful, narrative, and opinion posts."
-      },
-      "illustration": {
-        "label": "Illustration",
-        "description": "Abstract shapes, soft gradients, and illustrative decorative elements.",
-        "llm_hint": "Best for conceptual explainers and creative storytelling."
-      },
-      "minimal": {
-        "label": "Minimal",
-        "description": "Calm whitespace, low ornamentation, and direct readability.",
-        "llm_hint": "Best for tutorials, checklists, and straightforward instructions."
-      },
-      "bold": {
-        "label": "Bold",
-        "description": "Strong color blocks and high-impact hierarchy for short statements.",
-        "llm_hint": "Best for announcements and strong takes."
-      },
-      "data": {
-        "label": "Data",
-        "description": "Structured accents that resemble charts, grids, and insight strips.",
-        "llm_hint": "Best for metrics, benchmarks, and evidence-heavy posts."
-      },
-      "monochrome-swiss": {
-        "label": "Monochrome Swiss",
-        "description": "High-contrast monochrome hierarchy with restrained geometry and grid discipline.",
-        "llm_hint": "Best for minimalist thought leadership and typographic clarity."
-      },
-      "brutal": {
-        "label": "Brutal",
-        "description": "Aggressive composition, loud contrast, and campaign-grade visual impact.",
-        "llm_hint": "Best for bold announcements, manifestos, and sharp opinions."
-      }
-    }
-  },
-  "formats": {
-    "instagram-post": {
-      "width": 1080,
-      "height": 1080,
-      "caption_source": "instagram_caption",
-      "hashtag_count": 3,
-      "default_template_id": "core/editorial-base"
-    },
-    "instagram-story": {
-      "width": 1080,
-      "height": 1920,
-      "caption_source": "instagram_caption",
-      "hashtag_count": 2,
-      "default_template_id": "core/editorial-base"
-    },
-    "carousel-slide": {
-      "width": 1080,
-      "height": 1080,
-      "caption_source": "carousel_slides",
-      "hashtag_count": 0,
-      "default_template_id": "core/editorial-base"
-    },
-    "twitter-card": {
-      "width": 1200,
-      "height": 630,
-      "caption_source": "twitter_caption",
-      "hashtag_count": 0,
-      "default_template_id": "core/bold-base"
-    },
-    "linkedin-post": {
-      "width": 1200,
-      "height": 627,
-      "caption_source": "linkedin_caption",
-      "hashtag_count": 0,
-      "default_template_id": "core/editorial-base"
-    }
-  },
-  "preview_defaults": {
-    "title": "Sample Blog Post Title",
-    "caption": "Sample caption for a social media image preview.",
-    "heading": "Key idea goes here",
-    "body": "One concise sentence that explains the idea for this slide.",
-    "slide_number": 1,
-    "total_slides": 5
-  },
-  "templates": [
-    {
-      "id": "core/editorial-base",
-      "styles": [
-        "editorial",
-        "minimal",
-        "monochrome-swiss"
-      ],
-      "label": "Core Editorial Base",
-      "default_for_style": true,
-      "file": "templates/editorial-base.html",
-      "formats": [
-        "instagram-post",
-        "instagram-story",
-        "carousel-slide",
-        "twitter-card",
-        "linkedin-post"
-      ],
-      "style": "editorial"
-    },
-    {
-      "id": "core/illustration-base",
-      "styles": [
-        "illustration"
-      ],
-      "label": "Core Illustration Base",
-      "default_for_style": true,
-      "file": "templates/illustration-base.html",
-      "formats": [
-        "instagram-post",
-        "instagram-story",
-        "carousel-slide",
-        "twitter-card",
-        "linkedin-post"
-      ],
-      "style": "illustration"
-    },
-    {
-      "id": "core/bold-base",
-      "styles": [
-        "bold",
-        "brutal"
-      ],
-      "label": "Core Bold Base",
-      "default_for_style": true,
-      "file": "templates/bold-base.html",
-      "formats": [
-        "instagram-post",
-        "instagram-story",
-        "carousel-slide",
-        "twitter-card",
-        "linkedin-post"
-      ],
-      "style": "bold"
-    },
-    {
-      "id": "core/data-base",
-      "styles": [
-        "data"
-      ],
-      "label": "Core Data Base",
-      "default_for_style": true,
-      "file": "templates/data-base.html",
-      "formats": [
-        "instagram-post",
-        "instagram-story",
-        "carousel-slide",
-        "twitter-card",
-        "linkedin-post"
-      ],
-      "style": "data"
-    },
-    {
-      "id": "core/quote-focus",
-      "styles": [
-        "editorial",
-        "illustration",
-        "minimal",
-        "bold",
-        "data",
-        "monochrome-swiss",
-        "brutal"
-      ],
-      "label": "Core Quote Focus",
-      "archetypes": [
-        "quote"
-      ],
-      "file": "templates/quote-focus.html",
-      "formats": [
-        "instagram-post",
-        "instagram-story",
-        "carousel-slide",
-        "twitter-card",
-        "linkedin-post"
-      ],
-      "style": "editorial"
-    },
-    {
-      "id": "core/checklist-stack",
-      "styles": [
-        "editorial",
-        "illustration",
-        "minimal",
-        "bold",
-        "data",
-        "monochrome-swiss",
-        "brutal"
-      ],
-      "label": "Core Checklist Stack",
-      "archetypes": [
-        "checklist",
-        "timeline"
-      ],
-      "file": "templates/checklist-stack.html",
-      "formats": [
-        "instagram-post",
-        "instagram-story",
-        "carousel-slide",
-        "twitter-card",
-        "linkedin-post"
-      ],
-      "style": "editorial"
-    },
-    {
-      "id": "core/metric-split",
-      "styles": [
-        "editorial",
-        "illustration",
-        "minimal",
-        "bold",
-        "data",
-        "monochrome-swiss",
-        "brutal"
-      ],
-      "label": "Core Metric Split",
-      "archetypes": [
-        "metric"
-      ],
-      "file": "templates/metric-split.html",
-      "formats": [
-        "instagram-post",
-        "instagram-story",
-        "carousel-slide",
-        "twitter-card",
-        "linkedin-post"
-      ],
-      "style": "editorial"
-    },
-    {
-      "id": "core/promo-pill",
-      "styles": [
-        "editorial",
-        "illustration",
-        "minimal",
-        "bold",
-        "data",
-        "monochrome-swiss",
-        "brutal"
-      ],
-      "label": "Core Promo Pill",
-      "archetypes": [
-        "promo"
-      ],
-      "file": "templates/promo-pill.html",
-      "formats": [
-        "instagram-post",
-        "instagram-story",
-        "carousel-slide",
-        "twitter-card",
-        "linkedin-post"
-      ],
-      "style": "editorial"
-    }
-  ]
+  "schema_version": 1
 } as const;
 
 export const TEMPLATE_FILES = {
-  "core/editorial-base": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-40\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-66 content-max\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words body-lead-29 caption-max\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/illustration-base": "<div class=\"absolute -left-[6%] top-[6%] illustration-left-orb\"></div>\n<div class=\"absolute right-[7%] bottom-[9%] illustration-right-blob\"></div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-38\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-68 content-max\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words body-lead-29 caption-max\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/bold-base": "<div class=\"absolute inset-y-0 left-0 bold-left-wash\"></div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-34\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-64 content-max\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words body-lead-27 caption-max\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/data-base": "<div class=\"absolute inset-x-0 top-0 data-top-band\"></div>\n<div class=\"content-shell content-shell--data-topband {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-34\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-61 content-max\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words body-lead-27 caption-max\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/quote-focus": "<div class=\"absolute left-[8%] top-[7%] quote-mark\">“</div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-34\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-60 content-max\">{{SLOT:quote_text}}</h1>\n    <p class=\"mt-3 break-words body-lead-24 caption-max\">- {{SLOT:quote_author}}</p>\n    <p class=\"mt-2 break-words body-lead-24 caption-max\">{{SLOT:insight_line}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/checklist-stack": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-32\">\n    {{KICKER}}\n    <h1 class=\"mt-3 text-balance break-words heading-display-58 content-max\">{{SLOT:headline}}</h1>\n    <div class=\"mt-4 flex flex-col checklist-items caption-max\">\n      <div class=\"check-item\">1. {{SLOT:step_1}}</div>\n      <div class=\"check-item\">2. {{SLOT:step_2}}</div>\n      <div class=\"check-item\">3. {{SLOT:step_3}}</div>\n      <div class=\"check-item\">4. {{SLOT:step_4}}</div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/metric-split": "<div class=\"absolute inset-x-0 top-0 metric-top-band\"></div>\n<div class=\"content-shell content-shell--metric-topband {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-30\">\n    <div class=\"flex items-start justify-between panel-gap-18\">\n      <div class=\"content-max-minus-metric\">\n        {{KICKER}}\n        <h1 class=\"mt-2 text-balance break-words heading-display-58\">{{SLOT:headline}}</h1>\n        <p class=\"mt-3 break-words body-lead-26 caption-max-minus-metric\">{{SLOT:insight_line}}</p>\n      </div>\n      <div class=\"metric-card\">\n        <p class=\"tabular-nums metric-value\">{{SLOT:metric_value}}</p>\n        <p class=\"mt-1 break-words metric-label\">{{SLOT:metric_label}}</p>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/promo-pill": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-34\">\n    {{KICKER}}\n    <h1 class=\"mt-3 text-balance break-words heading-display-62 content-max\">{{SLOT:headline}}</h1>\n    <p class=\"mt-3 break-words body-lead-26 caption-max\">{{SLOT:supporting_line}}</p>\n    <div class=\"mt-6 cta-pill\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n"
+  "core/editorial-base": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/illustration-base": "<div class=\"decor-orb-left\"></div>\n<div class=\"decor-blob-right\"></div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/bold-base": "<div class=\"decor-wash-left\"></div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/data-base": "<div class=\"top-band top-band--data\"></div>\n<div class=\"content-shell content-shell--data-topband {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/quote-focus": "<div class=\"quote-mark\">“</div>\n<div class=\"content-shell template-quote {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-quote flow-after-kicker content-limit text-balance word-safe\">{{SLOT:quote_text}}</h1>\n    <p class=\"body-quote-attribution flow-after-heading caption-limit word-safe\">- {{SLOT:quote_author}}</p>\n    <p class=\"body-secondary flow-after-subheading caption-limit word-safe\">{{SLOT:insight_line}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/checklist-stack": "<div class=\"content-shell template-checklist {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-secondary flow-after-heading content-limit text-balance word-safe\">{{SLOT:headline}}</h1>\n    <div class=\"checklist-list flow-after-section caption-limit\">\n      <div class=\"check-item\">1. {{SLOT:step_1}}</div>\n      <div class=\"check-item\">2. {{SLOT:step_2}}</div>\n      <div class=\"check-item\">3. {{SLOT:step_3}}</div>\n      <div class=\"check-item\">4. {{SLOT:step_4}}</div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/metric-split": "<div class=\"top-band top-band--metric\"></div>\n<div class=\"content-shell content-shell--metric-topband template-metric {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    <div class=\"metric-layout\">\n      <div class=\"metric-content\">\n        {{KICKER}}\n        <h1 class=\"heading-secondary flow-after-kicker text-balance word-safe\">{{SLOT:headline}}</h1>\n        <p class=\"body-secondary flow-after-heading caption-limit-metric word-safe\">{{SLOT:insight_line}}</p>\n      </div>\n      <div class=\"metric-card\">\n        <p class=\"tabular-nums metric-value\">{{SLOT:metric_value}}</p>\n        <p class=\"metric-label flow-after-kicker word-safe\">{{SLOT:metric_label}}</p>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/promo-pill": "<div class=\"content-shell template-promo {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel push-end\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-heading content-limit text-balance word-safe\">{{SLOT:headline}}</h1>\n    <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{SLOT:supporting_line}}</p>\n    <div class=\"cta-pill flow-after-section\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n"
 } as const;
+
+export const TEMPLATE_CSS = ":root {\n  --token-space-2xs: 8px;\n  --token-space-xs: 12px;\n  --token-space-sm: 16px;\n  --token-space-md: 24px;\n  --token-space-lg: 32px;\n  --token-space-xl: 40px;\n  --token-space-2xl: 46px;\n\n  --token-type-kicker: 24px;\n  --token-type-heading: 64px;\n  --token-type-body: 28px;\n  --token-type-metric-value: 66px;\n  --token-type-metric-label: 20px;\n\n  --token-radius-card: var(--radius-card);\n  --token-radius-pill: var(--radius-pill);\n  --token-shadow-title: var(--frame-title-shadow);\n  --token-shadow-caption: var(--frame-caption-shadow);\n}\n\n* {\n  box-sizing: border-box;\n}\n\nhtml,\nbody {\n  margin: 0;\n}\n\n.absolute {\n  position: absolute;\n}\n\n.inset-0 {\n  inset: 0;\n}\n\n.frame {\n  position: relative;\n  isolation: isolate;\n  overflow: hidden;\n\n  --frame-bg: var(--color-surface-base);\n  --frame-overlay-top: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 46%, transparent));\n  --frame-overlay-bottom: linear-gradient(0deg, transparent, transparent);\n  --frame-vignette: radial-gradient(circle at 50% 72%, transparent 36%, color-mix(in srgb, var(--color-overlay-strong) 42%, transparent) 100%);\n  --frame-brand-pill-bg: color-mix(in srgb, var(--color-surface-elevated) 52%, transparent);\n  --frame-brand-pill-border: color-mix(in srgb, var(--color-border-subtle) 72%, transparent);\n  --frame-brand-pill-text: var(--color-text-primary);\n  --frame-title-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);\n  --frame-caption-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);\n  --frame-grain-opacity: 0.05;\n  --frame-image-opacity: 0.5;\n  --frame-type-scale: 1;\n  --frame-space-scale: 1;\n}\n\n.frame-layer {\n  position: absolute;\n  inset: 0;\n}\n\n.frame-layer--image {\n  background-size: cover;\n  background-position: center;\n}\n\n.frame-layer--border {\n  border: 1px solid transparent;\n}\n\n.top-band {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: calc(46px * var(--layout-scale));\n}\n\n.top-band--data {\n  background: repeating-linear-gradient(\n    90deg,\n    color-mix(in srgb, var(--color-brand-accent) 26%, transparent) 0 30px,\n    color-mix(in srgb, var(--color-surface-elevated) 68%, transparent) 30px 60px\n  );\n}\n\n.top-band--metric {\n  background: repeating-linear-gradient(\n    90deg,\n    color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0 30px,\n    transparent 30px 60px\n  );\n}\n\n.decor-orb-left {\n  position: absolute;\n  left: -6%;\n  top: 6%;\n  width: calc(320px * var(--layout-scale));\n  height: calc(320px * var(--layout-scale));\n  border-radius: 999px;\n  background: color-mix(in srgb, var(--color-brand-glow) 48%, transparent);\n}\n\n.decor-blob-right {\n  position: absolute;\n  right: 7%;\n  bottom: 9%;\n  width: calc(240px * var(--layout-scale));\n  height: calc(240px * var(--layout-scale));\n  border-radius: 30%;\n  background: color-mix(in srgb, var(--color-brand-accent) 36%, transparent);\n}\n\n.decor-wash-left {\n  position: absolute;\n  top: 0;\n  bottom: 0;\n  left: 0;\n  width: 42%;\n  background: linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 42%, transparent), transparent);\n}\n\n.quote-mark {\n  position: absolute;\n  left: 8%;\n  top: 7%;\n  font-family: var(--font-display);\n  font-size: calc(148px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 0.8;\n  opacity: 0.22;\n  color: var(--color-brand-accent);\n}\n\n.content-shell {\n  --template-panel-padding: 34px;\n  --template-heading-size: var(--token-type-heading);\n  --template-heading-secondary-size: var(--template-heading-size);\n  --template-heading-quote-size: var(--template-heading-size);\n  --template-heading-line-height: 1.03;\n  --template-heading-letter-spacing: -0.02em;\n  --template-body-size: var(--token-type-body);\n  --template-body-secondary-size: var(--template-body-size);\n  --template-body-quote-size: var(--template-body-size);\n  --template-body-line-height: 1.32;\n  --template-body-color: var(--color-text-secondary);\n  --template-flow-kicker: var(--token-space-2xs);\n  --template-flow-heading: var(--token-space-xs);\n  --template-flow-subheading: var(--token-space-2xs);\n  --template-flow-section: var(--token-space-md);\n  --template-check-item-size: 22px;\n  --template-metric-value-size: var(--token-type-metric-value);\n  --template-metric-label-size: var(--token-type-metric-label);\n\n  position: relative;\n  z-index: 10;\n  display: flex;\n  width: 100%;\n  height: 100%;\n  flex-direction: column;\n  padding: calc(var(--content-inset) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--data-topband {\n  padding-top: calc((var(--content-inset) + 18px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--metric-topband {\n  padding-top: calc((var(--content-inset) + 14px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.template-quote {\n  --template-panel-padding: 34px;\n  --template-heading-quote-size: 60px;\n  --template-body-quote-size: 24px;\n  --template-body-secondary-size: 24px;\n}\n\n.template-checklist {\n  --template-panel-padding: 32px;\n  --template-heading-secondary-size: 58px;\n  --template-flow-section: var(--token-space-sm);\n}\n\n.template-metric {\n  --template-panel-padding: 30px;\n  --template-heading-secondary-size: 58px;\n  --template-body-secondary-size: 26px;\n}\n\n.template-promo {\n  --template-panel-padding: 34px;\n  --template-heading-size: 62px;\n  --template-body-secondary-size: 26px;\n}\n\n.align-left {\n  align-items: flex-start;\n  text-align: left;\n}\n\n.align-center {\n  align-items: center;\n  text-align: center;\n}\n\n.content-panel {\n  padding: calc(var(--template-panel-padding) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.push-end {\n  margin-top: auto;\n}\n\n.content-limit {\n  max-width: var(--content-max-width);\n}\n\n.caption-limit {\n  max-width: var(--caption-max-width);\n}\n\n.metric-content {\n  max-width: calc(var(--content-max-width) - (220px * var(--layout-scale)));\n}\n\n.caption-limit-metric {\n  max-width: calc(var(--caption-max-width) - (220px * var(--layout-scale)));\n}\n\n.kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n  font-size: calc(var(--token-type-kicker) * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  line-height: 1.1;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n  max-width: var(--content-max-width);\n}\n\n.heading-primary,\n.heading-secondary,\n.heading-quote {\n  font-family: var(--font-display);\n  line-height: var(--template-heading-line-height);\n  letter-spacing: var(--template-heading-letter-spacing);\n  text-shadow: var(--token-shadow-title);\n}\n\n.heading-primary {\n  font-size: calc(var(--template-heading-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-secondary {\n  font-size: calc(var(--template-heading-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-quote {\n  font-size: calc(var(--template-heading-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.body-primary,\n.body-secondary,\n.body-quote-attribution {\n  line-height: var(--template-body-line-height);\n  color: var(--template-body-color);\n  text-shadow: var(--token-shadow-caption);\n}\n\n.body-primary {\n  font-size: calc(var(--template-body-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.body-secondary {\n  font-size: calc(var(--template-body-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.body-quote-attribution {\n  font-size: calc(var(--template-body-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.flow-after-kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-heading {\n  margin-top: calc(var(--template-flow-heading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-subheading {\n  margin-top: calc(var(--template-flow-subheading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-section {\n  margin-top: calc(var(--template-flow-section) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.top-bar {\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  gap: calc(20px * var(--layout-scale));\n}\n\n.top-bar-right {\n  margin-left: auto;\n}\n\n.brand-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: var(--token-radius-pill);\n  border: 1px solid var(--frame-brand-pill-border);\n  background: var(--frame-brand-pill-bg);\n  color: var(--frame-brand-pill-text);\n  padding: calc(8px * var(--layout-scale) * var(--frame-space-scale))\n    calc(16px * var(--layout-scale) * var(--frame-space-scale));\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  line-height: 1.1;\n}\n\n.meta-footer {\n  margin-top: auto;\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  color: var(--color-text-muted);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  line-height: 1.2;\n}\n\n.checklist-list {\n  display: flex;\n  flex-direction: column;\n  gap: calc(10px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.check-item {\n  border-radius: 0.75rem;\n  border: 1px solid color-mix(in srgb, var(--color-border-subtle) 76%, transparent);\n  background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale))\n    calc(14px * var(--layout-scale) * var(--frame-space-scale));\n  font-size: calc(var(--template-check-item-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.25;\n  color: var(--color-text-primary);\n}\n\n.metric-layout {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  gap: calc(18px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-card {\n  min-width: calc(220px * var(--layout-scale));\n  border-radius: 1rem;\n  border: 1px solid color-mix(in srgb, var(--color-brand-accent) 80%, transparent);\n  background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);\n  padding: calc(14px * var(--layout-scale) * var(--frame-space-scale))\n    calc(16px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-value {\n  font-family: var(--font-display);\n  font-size: calc(var(--template-metric-value-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1;\n  color: var(--color-text-primary);\n}\n\n.metric-label {\n  font-size: calc(var(--template-metric-label-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  color: var(--color-text-secondary);\n}\n\n.cta-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: var(--token-radius-pill);\n  background: var(--color-brand-accent);\n  color: var(--color-brand-accent-foreground);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale))\n    calc(24px * var(--layout-scale) * var(--frame-space-scale));\n  font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 700;\n  line-height: 1.1;\n}\n\n.text-balance {\n  text-wrap: balance;\n}\n\n.word-safe {\n  overflow-wrap: anywhere;\n  word-break: break-word;\n}\n\n.tabular-nums {\n  font-variant-numeric: tabular-nums;\n}\n";
 
 export type PipelineConfig = typeof PIPELINE_CONFIG;
 export type TemplateFileId = keyof typeof TEMPLATE_FILES;

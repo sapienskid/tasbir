@@ -3,13 +3,13 @@
 Main config file:
 
 - `config/pipeline.config.yaml`
-- composed fragments: `config/pipeline/design.yaml`, `config/pipeline/content.yaml`, `config/pipeline/runtime.yaml`
+- composed fragments: `config/pipeline/templates.yaml`, `config/pipeline/content.yaml`, `config/pipeline/runtime.yaml`
 
 `pipeline.config.yaml` is now a lightweight entrypoint that composes the fragment files through `extends`.
 Most behavior changes should be done in the fragment YAML files, not in `src/*.ts`.
 
-`config/pipeline/design.yaml` now uses a single `design_system` root as the source of truth.
-During `build:templates`, the embed script projects `design_system` sections into legacy top-level keys for backward compatibility.
+Design tokens now live in `src/styles/template.css` (single CSS source of truth).
+Template/layout metadata is defined in `config/pipeline/templates.yaml`.
 
 ## How Config Is Loaded
 
@@ -28,11 +28,12 @@ pnpm run build:templates
 ## Top-Level Sections
 
 - `schema_version`
-- `design_system`
 - `brand`
 - `typography`
-- `theming`
-- `render`
+- `template_styles`
+- `formats`
+- `preview_defaults`
+- `templates`
 - `runtime`
 - `features`
 - `security`
@@ -45,25 +46,14 @@ pnpm run build:templates
 - `preview_defaults`
 - `templates`
 
-`brand`/`typography`/`theming`/`render`/`template_styles`/`formats`/`preview_defaults`/`templates` are compatibility projections when `design_system` is present.
-Edit `design_system` first.
+Styling is no longer config-projected. Visual tokens, typography scales, spacing, and surface styles are defined in `src/styles/template.css`.
+Config now focuses on template registry, content archetypes, runtime controls, and generation behavior.
 
-## `design_system`
+## Styling Source
 
-Central design contract used by renderer + prompts.
-
-Key areas:
-
-- `brand`
-- `typography`
-- `theming`
-- `tokens.aliases` (alias-based design tokens, e.g. preset gradients/shadows)
-- `render` (controls, visual layers, preset styles)
-- `template_styles`
-- `formats`
-- `preview_defaults`
-- `templates`
-- `ai_contract` (prompt directives injected into copy generation)
+- `src/styles/template.css` is the canonical design-token source.
+- `scripts/embed-template-assets.mjs` embeds the stylesheet as `TEMPLATE_CSS` in `src/generated/template-assets.ts`.
+- `src/template-theme.ts` injects token values (brand color, readable text palette, radius) at render time.
 
 ## `schema_version`
 

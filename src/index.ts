@@ -1,15 +1,17 @@
 import puppeteer from "@cloudflare/puppeteer";
 import { generateStructuredCopy, normalizeSourceContent, type LlmOutput, type LlmPromptOverrides } from "./ai";
-import { listFontProfiles, listPresetIds, normalizeFontProfileId } from "./design-system";
+import { listFontProfiles, normalizeFontProfileId, resolveFontProfileId } from "./template-theme";
 import {
   getTemplateDimensions,
   isTemplateKind,
   listPostArchetypes,
+  listRequiredSlotKeys,
   listTemplateKinds,
   listTemplateStyles,
   normalizePostArchetype,
   normalizeTemplateStyle,
   previewParamsFromUrl,
+  resolveTemplateId,
   renderTemplate,
   type BrandTokenOverrides,
   type BaseTemplateParams,
@@ -151,12 +153,27 @@ interface StoredAsset {
   url: string | null;
 }
 
+interface TemplatePlan {
+  templateStyle: string;
+  postArchetype: string;
+  fontProfile: string;
+  templateIds: Partial<Record<TemplateKind, string>>;
+  requiredSlotKeys: string[];
+}
+
 interface GenerationResult {
   ok: true;
   slug: string;
   post_url: string;
   requested_formats: TemplateKind[];
   image_source: SelectedImage;
+  template_plan: {
+    template_style: string;
+    post_archetype: string;
+    font_profile: string;
+    required_slot_keys: string[];
+    template_ids: Partial<Record<TemplateKind, string>>;
+  };
   llm_output: LlmOutput;
   assets: {
     instagram_post: StoredAsset | null;
@@ -249,7 +266,6 @@ const STOCK_TOPIC_PATTERN = createTopicKeywordPattern(PIPELINE_CONFIG.generation
 const DEFAULT_CAROUSEL_SLIDES = PIPELINE_CONFIG.generation.carousel_required_slides;
 const TEMPLATE_KINDS = listTemplateKinds();
 const TEMPLATE_KIND_SET = new Set(TEMPLATE_KINDS);
-const PRESET_SET = new Set(listPresetIds());
 const TEMPLATE_IDS_BY_FORMAT: Record<TemplateKind, Set<string>> = TEMPLATE_KINDS.reduce(
   (acc, format) => {
     acc[format] = new Set(
@@ -854,27 +870,37 @@ async function runPipelineFromPost(
   security: ResolvedSecurityConfig
 ): Promise<GenerationResult> {
   const outputPlan = resolveOutputPlan(brandInput.output);
+  const templatePlan = buildTemplatePlan({
+    outputFormats: outputPlan.formats,
+    templateStyle: brandInput.templateStyle,
+    postArchetype: brandInput.postArchetype,
+    fontProfile: brandInput.fontProfile,
+    templateIds: brandInput.templateIds
+  });
+
   const llmOutput = await generateStructuredCopy({
     ai: env.AI,
     llmModel: env.LLM_MODEL,
     post,
     requiredCarouselSlides: outputPlan.carouselSlides,
+    selectedTemplateStyle: templatePlan.templateStyle,
+    selectedPostArchetype: templatePlan.postArchetype,
+    selectedFontProfile: templatePlan.fontProfile,
+    requiredSlotKeys: templatePlan.requiredSlotKeys,
     llmOverrides: brandInput.llm,
     normalizeSlotContent
   });
-  const selectedTemplateStyle = normalizeTemplateStyle(brandInput.templateStyle ?? llmOutput.template_style);
-  const selectedPostArchetype = normalizePostArchetype(brandInput.postArchetype ?? llmOutput.post_archetype);
-  const selectedFontProfile = normalizeFontProfileId(brandInput.fontProfile ?? llmOutput.font_profile);
   const mergedSlotContent = mergeSlotContent(
     llmOutput.slot_content,
     normalizeSlotContent(brandInput.slotOverrides, {
       title: post.title,
-      fallbackText: post.custom_excerpt || post.excerpt || post.plaintext || ""
+      fallbackText: post.custom_excerpt || post.excerpt || post.plaintext || "",
+      requiredSlotKeys: templatePlan.requiredSlotKeys
     })
   );
   const selectedImage = await chooseImageSource(env, post, llmOutput, brandInput.image, security, {
-    templateStyle: selectedTemplateStyle,
-    postArchetype: selectedPostArchetype
+    templateStyle: templatePlan.templateStyle,
+    postArchetype: templatePlan.postArchetype
   });
 
   const brandColor = brandInput.brandingColor ?? env.DEFAULT_BRAND_COLOR ?? PIPELINE_CONFIG.brand.default_color;
@@ -886,17 +912,15 @@ async function runPipelineFromPost(
     imageUrl: selectedImage.imageUrl,
     llmOutput: {
       ...llmOutput,
-      template_style: selectedTemplateStyle,
-      post_archetype: selectedPostArchetype,
-      font_profile: selectedFontProfile,
       slot_content: mergedSlotContent
     },
     brandColor,
     brandName,
-    templateStyle: selectedTemplateStyle,
-    templateArchetype: selectedPostArchetype,
-    fontProfile: selectedFontProfile,
-    templateIds: brandInput.templateIds,
+    templateStyle: templatePlan.templateStyle,
+    templateArchetype: templatePlan.postArchetype,
+    fontProfile: templatePlan.fontProfile,
+    templateIds: templatePlan.templateIds,
+    requiredSlotKeys: templatePlan.requiredSlotKeys,
     slotContent: mergedSlotContent,
     brandTokens: brandInput.brandTokens,
     design: brandInput.design,
@@ -910,11 +934,15 @@ async function runPipelineFromPost(
     post_url: post.url,
     requested_formats: [...outputPlan.formats],
     image_source: selectedImage,
+    template_plan: {
+      template_style: templatePlan.templateStyle,
+      post_archetype: templatePlan.postArchetype,
+      font_profile: templatePlan.fontProfile,
+      required_slot_keys: templatePlan.requiredSlotKeys,
+      template_ids: templatePlan.templateIds
+    },
     llm_output: {
       ...llmOutput,
-      template_style: selectedTemplateStyle,
-      post_archetype: selectedPostArchetype,
-      font_profile: selectedFontProfile,
       slot_content: mergedSlotContent
     },
     assets: renderAssets
@@ -940,6 +968,55 @@ function resolveOutputPlan(output: OutputOptions | undefined): { formats: Set<Te
   return {
     formats: normalizedFormats,
     carouselSlides: requestedSlides
+  };
+}
+
+function buildTemplatePlan(args: {
+  outputFormats: Set<TemplateKind>;
+  templateStyle?: string;
+  postArchetype?: string;
+  fontProfile?: string;
+  templateIds?: Partial<Record<TemplateKind, string>>;
+}): TemplatePlan {
+  const templateStyle = normalizeTemplateStyle(args.templateStyle);
+  const postArchetype = normalizePostArchetype(args.postArchetype);
+  const fontProfile = normalizeFontProfileId(
+    args.fontProfile ??
+      resolveFontProfileId({
+        style: templateStyle,
+        archetype: postArchetype
+      })
+  );
+
+  const templateIds: Partial<Record<TemplateKind, string>> = {};
+  const requiredSlotKeySet = new Set<string>();
+  for (const format of args.outputFormats) {
+    const resolvedTemplateId = resolveTemplateId(format, {
+      templateStyle,
+      templateArchetype: postArchetype,
+      templateId: args.templateIds?.[format]
+    });
+    templateIds[format] = resolvedTemplateId;
+
+    const requiredForTemplate = listRequiredSlotKeys(format, {
+      templateStyle,
+      templateArchetype: postArchetype,
+      templateId: resolvedTemplateId
+    });
+    for (const key of requiredForTemplate) {
+      const normalized = normalizeSlotKey(key);
+      if (normalized) {
+        requiredSlotKeySet.add(normalized);
+      }
+    }
+  }
+
+  return {
+    templateStyle,
+    postArchetype,
+    fontProfile,
+    templateIds,
+    requiredSlotKeys: [...requiredSlotKeySet]
   };
 }
 
@@ -1148,8 +1225,8 @@ async function chooseImageSource(
     }
     const aiImage = await generateAiImage(env, {
       prompt,
-      templateStyle: context?.templateStyle ?? llmOutput.template_style,
-      postArchetype: context?.postArchetype ?? llmOutput.post_archetype,
+      templateStyle: context?.templateStyle ?? normalizeTemplateStyle(undefined),
+      postArchetype: context?.postArchetype ?? normalizePostArchetype(undefined),
       postTitle: post.title,
       topTags: (post.tags ?? [])
         .map((tag) => tag.name ?? "")
@@ -1186,8 +1263,8 @@ async function chooseImageSource(
   if (allowAi) {
     const aiImage = await generateAiImage(env, {
       prompt,
-      templateStyle: context?.templateStyle ?? llmOutput.template_style,
-      postArchetype: context?.postArchetype ?? llmOutput.post_archetype,
+      templateStyle: context?.templateStyle ?? normalizeTemplateStyle(undefined),
+      postArchetype: context?.postArchetype ?? normalizePostArchetype(undefined),
       postTitle: post.title,
       topTags: (post.tags ?? [])
         .map((tag) => tag.name ?? "")
@@ -1368,6 +1445,7 @@ async function renderAndStoreAssets(
     templateArchetype: string;
     fontProfile: string;
     templateIds?: Partial<Record<TemplateKind, string>>;
+    requiredSlotKeys: string[];
     slotContent: Record<string, string>;
     brandTokens?: BrandTokenOverrides;
     design?: TemplateControlSet;
@@ -1376,7 +1454,10 @@ async function renderAndStoreAssets(
   }
 ): Promise<GenerationResult["assets"]> {
   const keyPrefix = buildR2KeyPrefix(env, args.slug, args.storage);
-  const sharedSlots = buildSharedSlotContent(args);
+  const sharedSlots = buildSharedSlotContent({
+    ...args,
+    requiredSlotKeys: args.requiredSlotKeys
+  });
 
   const commonTemplateValues: BaseTemplateParams = {
     title: args.postTitle,
@@ -1685,6 +1766,7 @@ function normalizeSlotContent(
   args: {
     title: string;
     fallbackText: string;
+    requiredSlotKeys?: string[];
   }
 ): Record<string, string> {
   const limits = PIPELINE_CONFIG.generation.limits;
@@ -1733,6 +1815,19 @@ function normalizeSlotContent(
   normalized.step_3 = normalized.step_3 || resolveSlotDefault("step_3");
   normalized.step_4 = normalized.step_4 || resolveSlotDefault("step_4");
 
+  for (const requiredKey of args.requiredSlotKeys ?? []) {
+    const normalizedKey = normalizeSlotKey(requiredKey);
+    if (!normalizedKey || normalized[normalizedKey]) {
+      continue;
+    }
+    const fromDefaults = resolveSlotDefault(normalizedKey);
+    normalized[normalizedKey] = ensureLength(
+      fromDefaults || fallbackLine,
+      limits.slot_text_max_chars,
+      fallbackLine
+    );
+  }
+
   return normalized;
 }
 
@@ -1755,34 +1850,83 @@ function buildSharedSlotContent(args: {
   brandName: string;
   templateArchetype: string;
   slotContent: Record<string, string>;
+  requiredSlotKeys: string[];
 }): Record<string, string> {
   const limits = PIPELINE_CONFIG.generation.limits;
   const slotDefaults = PIPELINE_CONFIG.slot_schema.defaults as Record<string, string>;
+  const defaultQuoteAuthor = PIPELINE_CONFIG.generation.fallbacks.default_quote_author;
   const slots = {
     ...args.slotContent
   };
 
-  slots.headline = slots.headline || args.postTitle;
-  slots.subheadline = slots.subheadline || args.llmOutput.linkedin_caption;
-  slots.short_hook = slots.short_hook || ensureLength(args.postTitle, limits.slot_headline_max_chars, args.postTitle);
-  slots.supporting_line = slots.supporting_line || args.llmOutput.instagram_caption;
-  slots.insight_line = slots.insight_line || args.llmOutput.twitter_caption;
-  slots.quote_text = slots.quote_text || args.llmOutput.linkedin_caption;
-  slots.quote_author = slots.quote_author || args.brandName;
-  slots.cta_text = slots.cta_text || slotDefaults.cta_text || "";
-  slots.kicker = slots.kicker || slotDefaults.kicker || args.templateArchetype.toUpperCase();
+  const fallbackLine = toSingleSentence(
+    ensureLength(args.llmOutput.linkedin_caption || args.llmOutput.instagram_caption, limits.slot_fallback_line_max_chars, args.postTitle)
+  );
+  const fallbackHeadline = ensureLength(args.postTitle, limits.slot_headline_max_chars, args.postTitle);
+  const slideCount = Math.max(args.llmOutput.carousel_slides.length, 1);
 
   const firstSlide = args.llmOutput.carousel_slides[0];
   const secondSlide = args.llmOutput.carousel_slides[1];
   const thirdSlide = args.llmOutput.carousel_slides[2];
   const fourthSlide = args.llmOutput.carousel_slides[3];
 
-  slots.step_1 = slots.step_1 || firstSlide?.heading || slotDefaults.step_1 || "";
-  slots.step_2 = slots.step_2 || secondSlide?.heading || slotDefaults.step_2 || "";
-  slots.step_3 = slots.step_3 || thirdSlide?.heading || slotDefaults.step_3 || "";
-  slots.step_4 = slots.step_4 || fourthSlide?.heading || slotDefaults.step_4 || "";
-  slots.metric_value = slots.metric_value || slotDefaults.metric_value || "";
-  slots.metric_label = slots.metric_label || slotDefaults.metric_label || "";
+  const fallbackByKey: Record<string, string> = {
+    headline: fallbackHeadline,
+    heading: fallbackHeadline,
+    body: firstSlide?.body || fallbackLine,
+    subheadline: args.llmOutput.linkedin_caption || fallbackLine,
+    short_hook: fallbackHeadline,
+    supporting_line: args.llmOutput.instagram_caption || fallbackLine,
+    insight_line: args.llmOutput.twitter_caption || fallbackLine,
+    quote_text: args.llmOutput.linkedin_caption || fallbackLine,
+    quote_author: args.brandName || defaultQuoteAuthor,
+    cta_text: slotDefaults.cta_text || "Read more",
+    kicker: slotDefaults.kicker || args.templateArchetype.toUpperCase(),
+    metric_value: slotDefaults.metric_value || "2.4K",
+    metric_label: slotDefaults.metric_label || "Weekly readers",
+    step_1: firstSlide?.heading || slotDefaults.step_1 || "",
+    step_2: secondSlide?.heading || slotDefaults.step_2 || "",
+    step_3: thirdSlide?.heading || slotDefaults.step_3 || "",
+    step_4: fourthSlide?.heading || slotDefaults.step_4 || "",
+    step_number: "1",
+    step_total: String(slideCount)
+  };
+
+  const resolveDefaultTemplateValue = (slotKey: string): string => {
+    const raw = slotDefaults[slotKey] ?? "";
+    if (!raw) {
+      return "";
+    }
+    return raw
+      .replaceAll("{{TITLE}}", args.postTitle)
+      .replaceAll("{{CAPTION}}", fallbackLine)
+      .replaceAll("{{BRAND_NAME}}", args.brandName);
+  };
+
+  for (const [key, value] of Object.entries(fallbackByKey)) {
+    const normalized = normalizeSlotKey(key);
+    if (!normalized || slots[normalized]) {
+      continue;
+    }
+    if (value.trim()) {
+      slots[normalized] = ensureLength(value, limits.slot_text_max_chars, fallbackLine);
+      continue;
+    }
+    const fromDefaults = resolveDefaultTemplateValue(normalized);
+    if (fromDefaults.trim()) {
+      slots[normalized] = ensureLength(fromDefaults, limits.slot_text_max_chars, fallbackLine);
+    }
+  }
+
+  for (const key of args.requiredSlotKeys) {
+    const normalized = normalizeSlotKey(key);
+    if (!normalized || slots[normalized]) {
+      continue;
+    }
+
+    const fallback = fallbackByKey[normalized] || resolveDefaultTemplateValue(normalized) || fallbackLine;
+    slots[normalized] = ensureLength(fallback, limits.slot_text_max_chars, fallbackLine);
+  }
 
   return slots;
 }
@@ -2063,13 +2207,6 @@ function parseDesignOverrides(input: unknown): TemplateControlSet | undefined {
   const object = requireObject(input, "design");
   const parsed: TemplateControlSet = {};
 
-  const preset = optionalString(object.preset, "design.preset", 64);
-  if (preset) {
-    if (!PRESET_SET.has(preset)) {
-      throw new HttpError(400, `design.preset is unknown: ${preset}`);
-    }
-    parsed.preset = preset as TemplateControlSet["preset"];
-  }
   if (object.showBrandBadge !== undefined) {
     parsed.showBrandBadge = requiredBoolean(object.showBrandBadge, "design.showBrandBadge");
   }
@@ -2081,6 +2218,9 @@ function parseDesignOverrides(input: unknown): TemplateControlSet | undefined {
   }
   if (object.showTitleKicker !== undefined) {
     parsed.showTitleKicker = requiredBoolean(object.showTitleKicker, "design.showTitleKicker");
+  }
+  if (object.showDecorLayers !== undefined) {
+    parsed.showDecorLayers = requiredBoolean(object.showDecorLayers, "design.showDecorLayers");
   }
   if (object.textAlign !== undefined) {
     const textAlign = optionalString(object.textAlign, "design.textAlign", 20);

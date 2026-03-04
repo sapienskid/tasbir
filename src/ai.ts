@@ -1,11 +1,5 @@
-import { listDesignSystemPromptDirectives, listFontProfiles, normalizeFontProfileId } from "./design-system";
-import {
-  listPostArchetypes,
-  listSlotHints,
-  listTemplateStyles,
-  normalizePostArchetype,
-  normalizeTemplateStyle
-} from "./templates";
+import { listTemplateCompositionDirectives } from "./template-theme";
+import { listSlotHints } from "./templates";
 import { PIPELINE_CONFIG } from "./generated/template-assets";
 
 export interface LlmPromptOverrides {
@@ -29,9 +23,6 @@ export interface LlmOutput {
   hashtags: string[];
   image_prompt: string;
   use_feature_image: boolean;
-  template_style: string;
-  post_archetype: string;
-  font_profile: string;
   slot_content: Record<string, string>;
 }
 
@@ -48,87 +39,78 @@ export interface LlmSourcePost {
 const DEFAULT_LLM_MODEL = PIPELINE_CONFIG.generation.llm.default_model;
 const DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT = PIPELINE_CONFIG.generation.llm.system_prompt.join(" ");
 
-const LLM_JSON_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  properties: {
-    instagram_caption: { type: "string" },
-    twitter_caption: { type: "string" },
-    linkedin_caption: { type: "string" },
-    carousel_slides: {
-      type: "array",
-      items: {
+function buildLlmJsonSchema(requiredSlotKeys: string[]): Record<string, unknown> {
+  const normalizedRequiredSlotKeys = [...new Set(requiredSlotKeys.map((key) => key.trim()).filter(Boolean))];
+  const slotProperties = Object.fromEntries(
+    normalizedRequiredSlotKeys.map((slotKey) => [slotKey, { type: "string" }])
+  );
+
+  return {
+    type: "object",
+    properties: {
+      instagram_caption: { type: "string" },
+      twitter_caption: { type: "string" },
+      linkedin_caption: { type: "string" },
+      carousel_slides: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            heading: { type: "string" },
+            body: { type: "string" }
+          },
+          required: ["heading", "body"]
+        }
+      },
+      hashtags: {
+        type: "array",
+        items: { type: "string" }
+      },
+      image_prompt: { type: "string" },
+      use_feature_image: { type: "boolean" },
+      slot_content: {
         type: "object",
-        properties: {
-          heading: { type: "string" },
-          body: { type: "string" }
-        },
-        required: ["heading", "body"]
+        properties: slotProperties,
+        required: normalizedRequiredSlotKeys,
+        additionalProperties: {
+          type: "string"
+        }
       }
     },
-    hashtags: {
-      type: "array",
-      items: { type: "string" }
-    },
-    image_prompt: { type: "string" },
-    use_feature_image: { type: "boolean" },
-    template_style: {
-      type: "string",
-      enum: listTemplateStyles().map((style) => style.id)
-    },
-    post_archetype: {
-      type: "string",
-      enum: listPostArchetypes().map((archetype) => archetype.id)
-    },
-    font_profile: {
-      type: "string",
-      enum: listFontProfiles().map((profile) => profile.id)
-    },
-    slot_content: {
-      type: "object",
-      additionalProperties: {
-        type: "string"
-      }
-    }
-  },
-  required: [
-    "instagram_caption",
-    "twitter_caption",
-    "linkedin_caption",
-    "carousel_slides",
-    "hashtags",
-    "image_prompt",
-    "use_feature_image",
-    "template_style",
-    "post_archetype",
-    "font_profile",
-    "slot_content"
-  ]
-};
+    required: [
+      "instagram_caption",
+      "twitter_caption",
+      "linkedin_caption",
+      "carousel_slides",
+      "hashtags",
+      "image_prompt",
+      "use_feature_image",
+      "slot_content"
+    ]
+  } satisfies Record<string, unknown>;
+}
 
 export async function generateStructuredCopy(args: {
   ai: Ai;
   llmModel?: string;
   post: LlmSourcePost;
   requiredCarouselSlides: number;
+  selectedTemplateStyle: string;
+  selectedPostArchetype: string;
+  selectedFontProfile: string;
+  requiredSlotKeys: string[];
   llmOverrides?: LlmPromptOverrides;
-  normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string }) => Record<string, string>;
+  normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string; requiredSlotKeys: string[] }) => Record<string, string>;
 }): Promise<LlmOutput> {
   const textModel = (args.llmModel || DEFAULT_LLM_MODEL) as keyof AiModels;
-  const styleHints = listTemplateStyles()
-    .map((style) => `${style.id}: ${style.llmHint}`)
-    .join(" | ");
-  const archetypeHints = listPostArchetypes()
-    .map((archetype) => `${archetype.id}: ${archetype.llmHint}`)
-    .join(" | ");
-  const fontHints = listFontProfiles()
-    .map((profile) => `${profile.id}: ${profile.llmHint}`)
-    .join(" | ");
+  const requiredSlotKeySet = new Set(args.requiredSlotKeys.map((key) => key.trim().toLowerCase()).filter(Boolean));
   const slotHints = listSlotHints()
+    .filter((slot) => requiredSlotKeySet.size === 0 || requiredSlotKeySet.has(slot.id))
     .map((slot) => `${slot.id}: ${slot.hint}`)
     .join(" | ");
 
   const limits = PIPELINE_CONFIG.generation.limits;
-  const designSystemPromptHints = listDesignSystemPromptDirectives()
+  const templateCompositionPromptHints = listTemplateCompositionDirectives()
     .slice(0, 12)
     .map((line) => `- ${line}`)
     .join("\n");
@@ -145,13 +127,21 @@ export async function generateStructuredCopy(args: {
     .replace("<carousel_body_max_chars>", String(limits.carousel_body_max_chars))
     .replace("<hashtag_min_count>", String(limits.hashtag_min_count))
     .replace("<hashtag_max_count>", String(limits.hashtag_max_count))
-    .replace("<available_template_styles>", styleHints)
-    .replace("<available_post_archetypes>", archetypeHints)
-    .replace("<available_font_profiles>", fontHints)
-    .replace("<available_slot_keys>", slotHints)
-    .replace("<design_system_directives>", designSystemPromptHints || "- Use deterministic HTML template composition.");
+    .replace("<available_slot_keys>", slotHints || args.requiredSlotKeys.join(", "))
+    .replace("<selected_template_style>", args.selectedTemplateStyle)
+    .replace("<selected_post_archetype>", args.selectedPostArchetype)
+    .replace("<selected_font_profile>", args.selectedFontProfile)
+    .replace("<required_slot_keys>", args.requiredSlotKeys.join(", "))
+    .replace(
+      "<template_composition_directives>",
+      templateCompositionPromptHints || "- Use deterministic HTML template composition."
+    );
+  const slotCoverageDirective = `- slot_content contract: include every key from ${args.requiredSlotKeys.join(", ")} with concrete copy that can render directly.`;
   const appendedInstructions = normalizePromptAppend(args.llmOverrides?.userInstructionsAppend);
-  const mergedInstructions = appendedInstructions ? `${userInstructions}\n${appendedInstructions}` : userInstructions;
+  const mergedBaseInstructions = `${userInstructions}\n${slotCoverageDirective}`;
+  const mergedInstructions = appendedInstructions
+    ? `${mergedBaseInstructions}\n${appendedInstructions}`
+    : mergedBaseInstructions;
   const systemPrompt = buildPromptTemplate(args.llmOverrides?.systemPrompt, PIPELINE_CONFIG.generation.llm.system_prompt);
   const title = args.post.title.trim();
   const excerpt = (args.post.custom_excerpt || args.post.excerpt || "").trim();
@@ -168,6 +158,12 @@ export async function generateStructuredCopy(args: {
 
   const prompt = [
     mergedInstructions,
+    "",
+    "Template contract:",
+    `<selected_template_style>${args.selectedTemplateStyle}</selected_template_style>`,
+    `<selected_post_archetype>${args.selectedPostArchetype}</selected_post_archetype>`,
+    `<selected_font_profile>${args.selectedFontProfile}</selected_font_profile>`,
+    `<required_slot_keys>${args.requiredSlotKeys.join(", ")}</required_slot_keys>`,
     "",
     "Blog post source:",
     `<title>${title}</title>`,
@@ -192,7 +188,7 @@ export async function generateStructuredCopy(args: {
     ],
     response_format: {
       type: "json_schema",
-      json_schema: LLM_JSON_SCHEMA
+      json_schema: buildLlmJsonSchema(args.requiredSlotKeys)
     },
     temperature: clampNumber(args.llmOverrides?.temperature, 0, 2, PIPELINE_CONFIG.generation.llm.temperature),
     max_tokens: Math.round(
@@ -206,6 +202,7 @@ export async function generateStructuredCopy(args: {
     title,
     fallbackText: excerpt || postText,
     requiredCarouselSlides: args.requiredCarouselSlides,
+    requiredSlotKeys: args.requiredSlotKeys,
     normalizeSlotContent: args.normalizeSlotContent
   });
 }
@@ -283,7 +280,8 @@ function normalizeLlmOutput(
     title: string;
     fallbackText: string;
     requiredCarouselSlides: number;
-    normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string }) => Record<string, string>;
+    requiredSlotKeys: string[];
+    normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string; requiredSlotKeys: string[] }) => Record<string, string>;
   }
 ): LlmOutput {
   const limits = PIPELINE_CONFIG.generation.limits;
@@ -316,12 +314,10 @@ function normalizeLlmOutput(
   const imagePrompt = ensureLength(toText(payload.image_prompt), limits.image_prompt_max_chars, imagePromptFallback);
 
   const useFeatureImage = args.hasFeatureImage && Boolean(payload.use_feature_image);
-  const templateStyle = normalizeTemplateStyle(toText(payload.template_style));
-  const postArchetype = normalizePostArchetype(toText(payload.post_archetype));
-  const fontProfile = normalizeFontProfileId(toText(payload.font_profile));
   const slotContent = args.normalizeSlotContent(payload.slot_content, {
     title: args.title,
-    fallbackText: cleanedFallbackText
+    fallbackText: cleanedFallbackText,
+    requiredSlotKeys: args.requiredSlotKeys
   });
 
   return {
@@ -332,9 +328,6 @@ function normalizeLlmOutput(
     hashtags,
     image_prompt: imagePrompt,
     use_feature_image: useFeatureImage,
-    template_style: templateStyle,
-    post_archetype: postArchetype,
-    font_profile: fontProfile,
     slot_content: slotContent
   };
 }

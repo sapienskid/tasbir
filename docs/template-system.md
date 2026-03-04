@@ -15,7 +15,7 @@ A template can target one or more styles, one or more archetypes, and one or mor
 ## Sources of Truth
 
 - template files: `templates/**/*.html`
-- registry + constraints: `config/pipeline/design.yaml` (`templates:` section; merged via `config/pipeline.config.yaml`)
+- registry + constraints: `config/pipeline/templates.yaml` (`templates:` section; merged via `config/pipeline.config.yaml`)
 - generated runtime bundle: `src/generated/template-assets.ts`
 
 ## Build Pipeline

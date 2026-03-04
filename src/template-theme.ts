@@ -1,8 +1,6 @@
-import { PIPELINE_CONFIG } from "./generated/template-assets";
-import { TAILWIND_CSS } from "./styles/tailwind-css";
+import { PIPELINE_CONFIG, TEMPLATE_CSS } from "./generated/template-assets";
 
 export type TemplateFormatKey = keyof typeof PIPELINE_CONFIG.formats;
-export type TemplatePreset = keyof typeof PIPELINE_CONFIG.render.preset_styles;
 
 export interface BrandTokenOverrides {
   primaryText?: string;
@@ -16,7 +14,6 @@ export interface BrandTokenOverrides {
 }
 
 export interface TemplateControl {
-  preset?: TemplatePreset;
   showBrandBadge?: boolean;
   showSlideBadge?: boolean;
   showMetaFooter?: boolean;
@@ -32,22 +29,6 @@ export interface TemplateControl {
 
 export interface TemplateControlSet extends TemplateControl {
   formatOverrides?: Partial<Record<TemplateFormatKey, TemplateControl>>;
-}
-
-export interface TemplatePresetStyle {
-  containerBackground: string;
-  overlayTop: string;
-  overlayBottom: string;
-  vignette: string;
-  brandPillBackground: string;
-  brandPillBorder: string;
-  brandPillText: string;
-  titleShadow: string;
-  captionShadow: string;
-  grainOpacity: number;
-  imageOpacity: number;
-  typeScale: number;
-  spaceScale: number;
 }
 
 interface BrandTokens {
@@ -72,7 +53,6 @@ export interface BrandTheme {
 }
 
 interface ResolvedTemplateControl {
-  preset: TemplatePreset;
   showBrandBadge: boolean;
   showSlideBadge: boolean;
   showMetaFooter: boolean;
@@ -146,91 +126,145 @@ interface ThemingConfig {
   };
 }
 
-interface RenderConfig {
-  control_defaults: {
-    showBrandBadge: boolean;
-    showSlideBadge: boolean;
-    showMetaFooter: boolean;
-    showTitleKicker: boolean;
-    showDecorLayers?: boolean;
-    textAlign?: string;
-  };
-  format_control_defaults: Record<
-    TemplateFormatKey,
-    {
-      default_preset: string;
-      contentMaxWidth: number;
-      contentInset: number;
-      textAlign?: string;
-    }
-  >;
-  style_preset_map?: Record<string, string>;
-  preset_styles: Record<string, TemplatePresetStyle>;
-}
-
 interface BrandConfig {
   default_name: string;
   default_color: string;
 }
 
-interface DesignSystemConfig {
-  brand?: BrandConfig;
-  typography?: TypographyConfig;
-  theming?: ThemingConfig;
-  render?: RenderConfig;
-  tokens?: {
-    aliases?: Record<string, string | number>;
-  };
-  ai_contract?: {
-    planner_directives?: string[];
-    rendering_constraints?: string[];
-  };
+interface LayoutControlDefaults {
+  contentMaxWidth: number;
+  contentInset: number;
+  textAlign: "left" | "center";
 }
 
-const DESIGN_SYSTEM = ((PIPELINE_CONFIG as unknown as { design_system?: DesignSystemConfig }).design_system ??
-  {}) as DesignSystemConfig;
+const DEFAULT_BRAND: BrandConfig = {
+  default_name: "Brand",
+  default_color: "#1f7a8c"
+};
+
+const FALLBACK_TYPOGRAPHY: TypographyConfig = {
+  default_font_profile: "modern-sans",
+  profiles: {
+    "modern-sans": {
+      label: "Modern Sans",
+      llm_hint: "Clean and neutral.",
+      google_fonts_css2_query: "family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800",
+      display_font_css: '"Sora", sans-serif',
+      body_font_css: '"Inter", sans-serif'
+    }
+  },
+  selection: {
+    by_style: {},
+    by_archetype: {}
+  }
+};
+
+const FALLBACK_THEME: ThemingConfig = {
+  readable_light_text: "#edf4ff",
+  readable_dark_text: "#07101d",
+  color_engine: {
+    surface_base_mix_target: "#05080f",
+    surface_base_mix_ratio_from_target: 0.84,
+    surface_base_fallback: "#0a111b",
+    surface_elevated_mix_target: "#0e1a2a",
+    surface_elevated_mix_ratio_from_target: 0.68,
+    surface_elevated_fallback: "#101d2f",
+    border_subtle_mix_target: "#9ec7ff",
+    border_subtle_mix_ratio_from_target: 0.42,
+    border_subtle_fallback: "#5a7da9",
+    secondary_text_mix_target: "#8ea3c0",
+    secondary_text_mix_ratio_from_target: 0.45,
+    secondary_text_fallback: "#c8d8ee",
+    muted_text_mix_target: "#607797",
+    muted_text_mix_ratio_from_target: 0.5,
+    muted_text_fallback: "#9bb1cc",
+    accent_glow_mix_target: "#ffffff",
+    accent_glow_mix_ratio_from_target: 0.34,
+    overlay_strong_mix_target: "#01040a",
+    overlay_strong_mix_ratio_from_target: 0.6,
+    shadow_color_mix_target: "#000000",
+    shadow_color_mix_ratio_from_target: 0.72,
+    primary_text_min_contrast: 4.5,
+    secondary_text_min_contrast: 3.8,
+    muted_text_min_contrast: 3,
+    border_subtle_min_contrast: 1.5,
+    accent_foreground_min_contrast: 4
+  },
+  radius: {
+    card: "28px",
+    pill: "999px"
+  }
+};
+
+const CONTROL_DEFAULTS = {
+  showBrandBadge: true,
+  showSlideBadge: false,
+  showMetaFooter: false,
+  showTitleKicker: true,
+  showDecorLayers: true,
+  textAlign: "left" as const
+};
+
+const FORMAT_LAYOUT_DEFAULTS: Partial<Record<TemplateFormatKey, LayoutControlDefaults>> = {
+  "instagram-post": {
+    contentMaxWidth: 1020,
+    contentInset: 68,
+    textAlign: "left"
+  },
+  "instagram-story": {
+    contentMaxWidth: 930,
+    contentInset: 82,
+    textAlign: "left"
+  },
+  "carousel-slide": {
+    contentMaxWidth: 1020,
+    contentInset: 68,
+    textAlign: "left"
+  },
+  "twitter-card": {
+    contentMaxWidth: 1020,
+    contentInset: 48,
+    textAlign: "left"
+  },
+  "linkedin-post": {
+    contentMaxWidth: 1020,
+    contentInset: 48,
+    textAlign: "left"
+  }
+};
+
+const DESIGN_PROMPT_DIRECTIVES = [
+  "Treat templates as structure-only skeletons and place all design decisions through CSS tokens.",
+  "Fill slot_content comprehensively so every likely template slot has useful copy.",
+  "Never request generated text in images; typography is always rendered by the template system.",
+  "Keep slot values concise, specific, and directly usable without extra formatting."
+] as const;
 
 function brandConfig(): BrandConfig {
-  return (DESIGN_SYSTEM.brand ??
-    (PIPELINE_CONFIG as unknown as { brand?: BrandConfig }).brand ?? {
-      default_name: "Brand",
-      default_color: "#1f7a8c"
-    }) as BrandConfig;
+  return ((PIPELINE_CONFIG as unknown as { brand?: BrandConfig }).brand ?? DEFAULT_BRAND) as BrandConfig;
 }
 
 function typographyConfig(): TypographyConfig {
-  return (DESIGN_SYSTEM.typography ?? PIPELINE_CONFIG.typography) as TypographyConfig;
+  return ((PIPELINE_CONFIG as unknown as { typography?: TypographyConfig }).typography ??
+    FALLBACK_TYPOGRAPHY) as TypographyConfig;
 }
 
 function themingConfig(): ThemingConfig {
-  return (DESIGN_SYSTEM.theming ?? PIPELINE_CONFIG.theming) as ThemingConfig;
+  return ((PIPELINE_CONFIG as unknown as { theming?: ThemingConfig }).theming ?? FALLBACK_THEME) as ThemingConfig;
 }
 
-function renderConfig(): RenderConfig {
-  return (DESIGN_SYSTEM.render ?? PIPELINE_CONFIG.render) as RenderConfig;
+function layoutDefaultsForFormat(kind: TemplateFormatKey): LayoutControlDefaults {
+  return (
+    FORMAT_LAYOUT_DEFAULTS[kind] ?? {
+      contentMaxWidth: 1020,
+      contentInset: 64,
+      textAlign: "left"
+    }
+  );
 }
 
-function presetStyleMap(): Record<string, TemplatePresetStyle> {
-  return renderConfig().preset_styles as Record<string, TemplatePresetStyle>;
-}
-
-function designTokenAliases(): Record<string, string | number> {
-  return (DESIGN_SYSTEM.tokens?.aliases ?? {}) as Record<string, string | number>;
-}
-
-export function listDesignSystemPromptDirectives(): string[] {
-  const planner = Array.isArray(DESIGN_SYSTEM.ai_contract?.planner_directives)
-    ? DESIGN_SYSTEM.ai_contract?.planner_directives
-    : [];
-  const constraints = Array.isArray(DESIGN_SYSTEM.ai_contract?.rendering_constraints)
-    ? DESIGN_SYSTEM.ai_contract?.rendering_constraints
-    : [];
-
-  return [...planner, ...constraints].map((line) => line.trim()).filter(Boolean);
-}
-
-export function listPresetIds(): string[] {
-  return Object.keys(presetStyleMap());
+export function listTemplateCompositionDirectives(): string[] {
+  return [...DESIGN_PROMPT_DIRECTIVES];
 }
 
 export function listFontProfiles(): FontProfileOption[] {
@@ -399,106 +433,29 @@ export function createBrandTheme(args: {
 
 export function resolveTemplateControl(
   kind: TemplateFormatKey,
-  set?: TemplateControlSet,
-  templateStyle?: string
+  set?: TemplateControlSet
 ): ResolvedTemplateControl {
-  const render = renderConfig();
-  const baseDefaults = render.control_defaults;
-  const formatDefaults = render.format_control_defaults[kind];
-  const formatPreset = parsePreset(formatDefaults.default_preset) ?? firstPreset();
-  const stylePresetMap = (render.style_preset_map ?? {}) as Record<string, string>;
-  const normalizedStyle = templateStyle?.trim().toLowerCase() ?? "";
-  const stylePreset = normalizedStyle ? parsePreset(stylePresetMap[normalizedStyle]) : undefined;
-  const basePreset = stylePreset ?? formatPreset;
+  const layout = layoutDefaultsForFormat(kind);
 
   const base: ResolvedTemplateControl = {
-    preset: basePreset,
-    showBrandBadge: baseDefaults.showBrandBadge,
-    showSlideBadge: baseDefaults.showSlideBadge,
-    showMetaFooter: baseDefaults.showMetaFooter,
-    showTitleKicker: baseDefaults.showTitleKicker,
-    showDecorLayers: baseDefaults.showDecorLayers ?? true,
-    textAlign: parseTextAlign(formatDefaults.textAlign) ?? parseTextAlign(baseDefaults.textAlign) ?? "left",
-    contentMaxWidth: Number(formatDefaults.contentMaxWidth),
-    contentInset: Number(formatDefaults.contentInset)
+    showBrandBadge: CONTROL_DEFAULTS.showBrandBadge,
+    showSlideBadge: CONTROL_DEFAULTS.showSlideBadge,
+    showMetaFooter: CONTROL_DEFAULTS.showMetaFooter,
+    showTitleKicker: CONTROL_DEFAULTS.showTitleKicker,
+    showDecorLayers: CONTROL_DEFAULTS.showDecorLayers,
+    textAlign: layout.textAlign,
+    contentMaxWidth: layout.contentMaxWidth,
+    contentInset: layout.contentInset
   };
 
   const mergedGlobal = mergeControl(base, set);
   const mergedFormat = mergeControl(mergedGlobal, set?.formatOverrides?.[kind]);
 
-  const resolvedPreset = parsePreset(mergedFormat.preset) ?? basePreset;
   return {
     ...mergedFormat,
-    preset: resolvedPreset,
     imageOpacity:
       typeof mergedFormat.imageOpacity === "number" ? clamp(mergedFormat.imageOpacity, 0, 1) : undefined
   };
-}
-
-export function getPresetStyle(preset: TemplatePreset): TemplatePresetStyle {
-  const presetStyles = presetStyleMap();
-  const resolved = (presetStyles[preset] ?? presetStyles[firstPreset()] ?? {}) as Partial<TemplatePresetStyle>;
-  return {
-    containerBackground: resolvePresetString(resolved.containerBackground, "var(--color-surface-base)"),
-    overlayTop: resolvePresetString(resolved.overlayTop, "linear-gradient(180deg, transparent, transparent)"),
-    overlayBottom: resolvePresetString(resolved.overlayBottom, "linear-gradient(0deg, transparent, transparent)"),
-    vignette: resolvePresetString(resolved.vignette, "radial-gradient(circle at 50% 50%, transparent 0%, transparent 100%)"),
-    brandPillBackground: resolvePresetString(resolved.brandPillBackground, "color-mix(in srgb, var(--color-surface-elevated) 52%, transparent)"),
-    brandPillBorder: resolvePresetString(resolved.brandPillBorder, "color-mix(in srgb, var(--color-border-subtle) 70%, transparent)"),
-    brandPillText: resolvePresetString(resolved.brandPillText, "var(--color-text-primary)"),
-    titleShadow: resolvePresetString(resolved.titleShadow, "0 12px 28px rgba(0, 0, 0, 0.18)"),
-    captionShadow: resolvePresetString(resolved.captionShadow, "0 6px 16px rgba(0, 0, 0, 0.12)"),
-    grainOpacity: resolvePresetNumber(resolved.grainOpacity, 0.05),
-    imageOpacity: resolvePresetNumber(resolved.imageOpacity, 0.5),
-    typeScale: resolvePresetNumber(resolved.typeScale, 1),
-    spaceScale: resolvePresetNumber(resolved.spaceScale, 1)
-  };
-}
-
-function resolvePresetString(value: unknown, fallback: string): string {
-  const resolved = resolveDesignTokenReference(value);
-  if (typeof resolved === "string" && resolved.trim()) {
-    return resolved;
-  }
-  return fallback;
-}
-
-function resolvePresetNumber(value: unknown, fallback: number): number {
-  const resolved = resolveDesignTokenReference(value);
-  if (typeof resolved === "number" && Number.isFinite(resolved)) {
-    return resolved;
-  }
-  if (typeof resolved === "string") {
-    const numeric = Number(resolved.trim());
-    if (Number.isFinite(numeric)) {
-      return numeric;
-    }
-  }
-  return fallback;
-}
-
-function resolveDesignTokenReference(value: unknown, seen: Set<string> = new Set()): unknown {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  const match = value.trim().match(/^@([a-z0-9._-]+)$/i);
-  if (!match?.[1]) {
-    return value;
-  }
-
-  const alias = match[1];
-  if (seen.has(alias)) {
-    return value;
-  }
-  seen.add(alias);
-
-  const aliases = designTokenAliases();
-  if (!(alias in aliases)) {
-    return value;
-  }
-
-  return resolveDesignTokenReference(aliases[alias], seen);
 }
 
 export function renderTemplateHead(args: {
@@ -509,7 +466,7 @@ export function renderTemplateHead(args: {
   fontProfileId?: string;
 }): string {
   const t = args.theme.tokens;
-  const safeTailwind = TAILWIND_CSS.replaceAll("</style", "<\\/style");
+  const safeCss = TEMPLATE_CSS.replaceAll("</style", "<\\/style");
   const fontProfile = getFontProfile(args.fontProfileId ?? typographyConfig().default_font_profile);
   const fontHref = `https://fonts.googleapis.com/css2?${fontProfile.google_fonts_css2_query}&display=swap`;
 
@@ -521,13 +478,17 @@ export function renderTemplateHead(args: {
       <link rel="preconnect" href="https://fonts.googleapis.com" />
       <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
       <link href="${fontHref}" rel="stylesheet" />
-      <style>${safeTailwind}</style>
+      <style>${safeCss}</style>
       <style>
         :root {
           --canvas-width: ${args.width}px;
           --canvas-height: ${args.height}px;
+
           --font-display: ${fontProfile.display_font_css};
           --font-body: ${fontProfile.body_font_css};
+          --token-font-heading: ${fontProfile.display_font_css};
+          --token-font-body: ${fontProfile.body_font_css};
+
           --color-text-primary: ${t.primaryText};
           --color-text-secondary: ${t.secondaryText};
           --color-text-muted: ${t.mutedText};
@@ -538,9 +499,21 @@ export function renderTemplateHead(args: {
           --color-brand-accent-foreground: ${t.accentForeground};
           --color-brand-glow: ${t.accentGlow};
           --color-overlay-strong: ${t.overlayStrong};
+
+          --token-color-text-primary: ${t.primaryText};
+          --token-color-text-secondary: ${t.secondaryText};
+          --token-color-text-muted: ${t.mutedText};
+          --token-color-surface-base: ${t.surfaceBase};
+          --token-color-surface-elevated: ${t.surfaceElevated};
+          --token-color-border-subtle: ${t.borderSubtle};
+          --token-color-brand-accent: ${t.accent};
+          --token-color-brand-accent-foreground: ${t.accentForeground};
+
           --shadow-soft: 0 32px 88px color-mix(in srgb, ${t.shadowColor} 72%, transparent);
           --radius-card: ${t.radiusCard};
           --radius-pill: ${t.radiusPill};
+          --token-radius-card: ${t.radiusCard};
+          --token-radius-pill: ${t.radiusPill};
         }
         * {
           box-sizing: border-box;
@@ -556,20 +529,6 @@ export function renderTemplateHead(args: {
           color: var(--color-text-primary);
           text-rendering: optimizeLegibility;
           -webkit-font-smoothing: antialiased;
-        }
-        .text-balance {
-          text-wrap: balance;
-        }
-        h1,
-        h2,
-        h3,
-        p,
-        li {
-          overflow-wrap: anywhere;
-          word-break: break-word;
-        }
-        .tabular-nums {
-          font-variant-numeric: tabular-nums;
         }
       </style>
     </head>
@@ -594,7 +553,6 @@ export function tokenOverridesFromQuery(searchParams: URLSearchParams): BrandTok
 
 export function templateControlSetFromQuery(searchParams: URLSearchParams): TemplateControlSet | undefined {
   const control: TemplateControlSet = {
-    preset: parsePreset(searchParams.get("preset")),
     showBrandBadge: parseBoolean(searchParams.get("showBrandBadge")),
     showSlideBadge: parseBoolean(searchParams.get("showSlideBadge")),
     showMetaFooter: parseBoolean(searchParams.get("showMetaFooter")),
@@ -619,7 +577,6 @@ function mergeControl(base: ResolvedTemplateControl, override?: TemplateControl)
 
   return {
     ...base,
-    preset: parsePreset(override.preset) ?? base.preset,
     showBrandBadge: override.showBrandBadge ?? base.showBrandBadge,
     showSlideBadge: override.showSlideBadge ?? base.showSlideBadge,
     showMetaFooter: override.showMetaFooter ?? base.showMetaFooter,
@@ -632,21 +589,6 @@ function mergeControl(base: ResolvedTemplateControl, override?: TemplateControl)
     metaLeftText: override.metaLeftText ?? base.metaLeftText,
     metaRightText: override.metaRightText ?? base.metaRightText
   };
-}
-
-function parsePreset(value: string | null | undefined): TemplatePreset | undefined {
-  if (!value) {
-    return undefined;
-  }
-
-  const normalized = value.trim();
-  const presets = presetStyleMap() as Record<string, unknown>;
-  return (presets[normalized] ? normalized : undefined) as TemplatePreset | undefined;
-}
-
-function firstPreset(): TemplatePreset {
-  const presets = Object.keys(presetStyleMap());
-  return presets[0] as TemplatePreset;
 }
 
 function parseTextAlign(value: string | null | undefined): "left" | "center" | undefined {
@@ -685,7 +627,6 @@ function parseNumber(value: string | null): number | undefined {
   }
   return parsed;
 }
-
 function normalizeHexColor(value: string | undefined, fallback: string): string {
   if (!value) {
     return fallback;

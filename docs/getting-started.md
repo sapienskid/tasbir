@@ -62,9 +62,8 @@ pnpm run build:assets
 
 What this does:
 
-- builds Tailwind CSS into `src/styles/tailwind-css.ts`
 - validates merged config from `config/pipeline.config.yaml` + `config/pipeline/*.yaml`
-- embeds all template HTML into `src/generated/template-assets.ts`
+- embeds all template HTML + `src/styles/template.css` into `src/generated/template-assets.ts`
 
 ## 5. Run Locally
 
@@ -100,7 +99,7 @@ You can pass:
 - `templateStyle`, `templateId`, `archetype` / `templateArchetype`
 - `fontProfile`
 - `slot.<name>=...` values
-- design controls like `preset`, `textAlign`, `imageOpacity`
+- design controls like `textAlign`, `imageOpacity`
 
 ## 7. Generate From Direct Content
 
@@ -152,13 +151,13 @@ Use request-level `output.formats` to generate only selected formats, for exampl
 
 Change brand defaults:
 
-- edit `brand.default_name` and `brand.default_color` in `config/pipeline/design.yaml`
+- edit `brand.default_name` and `brand.default_color` in `config/pipeline/templates.yaml`
 - run `pnpm run build:assets`
 
 Add new template:
 
 1. create a new `.html` file under `templates/`
-2. add a template record under `templates:` in `config/pipeline/design.yaml`
+2. add a template record under `templates:` in `config/pipeline/templates.yaml`
 3. run `pnpm run build:templates`
 4. preview via `GET /template/<format>?templateId=<new-id>`
 

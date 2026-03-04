@@ -85,7 +85,7 @@ describe("social pipeline worker", () => {
     expect(html).toContain('--font-body: "IBM Plex Mono", monospace;');
   });
 
-  it("applies css style class based on resolved template style", async () => {
+  it("preserves template style metadata without style-specific css classes", async () => {
     const response = await worker.fetch(
       authorizedRequest(
         "https://worker.test/template/twitter-card?templateStyle=data&templateId=core/data-base&title=Data+Story&caption=Signal+beats+noise"
@@ -97,7 +97,7 @@ describe("social pipeline worker", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain('data-template-style="data"');
-    expect(html).toContain("style-data");
+    expect(html).not.toContain("style-data");
   });
 
   it("returns template catalog with styles and template versions", async () => {

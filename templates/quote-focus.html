@@ -1,11 +1,11 @@
-<div class="absolute left-[8%] top-[7%] quote-mark">“</div>
-<div class="content-shell {{ALIGN_CLASS}}">
+<div class="quote-mark">“</div>
+<div class="content-shell template-quote {{ALIGN_CLASS}}">
   {{HEADER}}
-  <div class="mt-auto panel-pad-34">
+  <div class="content-panel push-end">
     {{KICKER}}
-    <h1 class="mt-2 text-balance break-words heading-display-60 content-max">{{SLOT:quote_text}}</h1>
-    <p class="mt-3 break-words body-lead-24 caption-max">- {{SLOT:quote_author}}</p>
-    <p class="mt-2 break-words body-lead-24 caption-max">{{SLOT:insight_line}}</p>
+    <h1 class="heading-quote flow-after-kicker content-limit text-balance word-safe">{{SLOT:quote_text}}</h1>
+    <p class="body-quote-attribution flow-after-heading caption-limit word-safe">- {{SLOT:quote_author}}</p>
+    <p class="body-secondary flow-after-subheading caption-limit word-safe">{{SLOT:insight_line}}</p>
     {{FOOTER}}
   </div>
 </div>

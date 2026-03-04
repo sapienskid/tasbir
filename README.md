@@ -15,12 +15,12 @@ This project is fully config-driven:
 - runtime reads generated assets from `src/generated/template-assets.ts`
 
 No template rendering logic is hardcoded per design.
-`design_system` in `config/pipeline/design.yaml` is the canonical source; build-time projection keeps legacy keys compatible.
+Templates are structural skeletons; visual design is centralized in `src/styles/template.css` via design tokens.
 
 ## What You Get
 
 - AI-generated social copy (`instagram_caption`, `twitter_caption`, `linkedin_caption`)
-- AI-selected `template_style`, `post_archetype`, and `font_profile`
+- Template-planned `template_style`, `post_archetype`, and `font_profile` (LLM fills content slots only)
 - Slot-based template filling (`slot_content` + user overrides)
 - Optional background-image sourcing (feature/stock/AI/custom) with HTML-based decorative layers
 - PNG rendering through Cloudflare Browser Rendering + upload to R2
@@ -36,15 +36,16 @@ Use `.html` templates.
 ## Project Layout
 
 - `config/pipeline.config.yaml`: composed config entrypoint (`extends` fragments)
-- `config/pipeline/design.yaml`: central `design_system` (tokens, render presets, styles, formats, templates)
+- `config/pipeline/templates.yaml`: template registry, style options, format dimensions, typography defaults
 - `config/pipeline/content.yaml`: archetypes, slot schema, generation prompts/limits
 - `config/pipeline/runtime.yaml`: runtime, feature flags, security, storage
+- `src/styles/template.css`: central design tokens + semantic component classes
 - `templates/**/*.html`: visual templates using token and slot placeholders
-- `scripts/embed-template-assets.mjs`: validates YAML + embeds template files into generated TypeScript
+- `scripts/embed-template-assets.mjs`: validates YAML + embeds templates + CSS into generated TypeScript
 - `src/generated/template-assets.ts`: generated runtime config/template bundle (do not edit manually)
 - `src/index.ts`: Worker routes + orchestration pipeline
 - `src/templates.ts`: template selection, token interpolation, slot resolution
-- `src/design-system.ts`: typography, color tokens, and render controls
+- `src/template-theme.ts`: typography, color tokens, and render controls
 
 ## Prerequisites
 
@@ -115,7 +116,7 @@ curl -X POST http://127.0.0.1:8787/generate-from-content \
 
 You should receive:
 
-- `llm_output` (captions, hashtags, style/archetype/font, slots)
+- `llm_output` (captions, hashtags, image prompt, slots)
 - `assets` keys for each format
 - optional public URLs if `R2_PUBLIC_BASE_URL` is configured
 

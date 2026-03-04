@@ -8,7 +8,7 @@ import {
   type BrandTokenOverrides,
   type TemplateControlSet,
   type TemplateFormatKey
-} from "./design-system";
+} from "./template-theme";
 import { PIPELINE_CONFIG, TEMPLATE_FILES } from "./generated/template-assets";
 
 export type { BrandTokenOverrides, TemplateControlSet };
@@ -71,6 +71,45 @@ export interface CarouselTemplateParams extends BaseTemplateParams {
 }
 
 const TEMPLATE_DEFINITIONS = PIPELINE_CONFIG.templates as readonly TemplateDefinition[];
+const TEMPLATE_SLOT_KEY_CACHE = new Map<string, string[]>();
+const SLOT_TOKEN_PATTERN = /\{\{\s*SLOT:([A-Za-z0-9_:-]+)\s*\}\}/gi;
+
+const CAPTION_WIDTH_RULES: Partial<Record<TemplateKind, { add: number; max: number }>> = {
+  "instagram-post": { add: 20, max: 960 },
+  "instagram-story": { add: 30, max: 980 },
+  "carousel-slide": { add: 30, max: 980 },
+  "twitter-card": { add: 40, max: 1020 },
+  "linkedin-post": { add: 40, max: 1020 }
+};
+
+const META_LEFT_LABELS: Partial<Record<TemplateKind, string>> = {
+  "instagram-post": "Instagram",
+  "instagram-story": "Story",
+  "twitter-card": "X / Twitter",
+  "linkedin-post": "LinkedIn",
+  "carousel-slide": ""
+};
+
+const META_RIGHT_LABELS: Partial<Record<TemplateKind, string>> = {
+  "instagram-post": "",
+  "instagram-story": "",
+  "twitter-card": "",
+  "linkedin-post": "",
+  "carousel-slide": ""
+};
+
+const DEFAULT_VISUAL_LAYERS = {
+  useBackgroundImageOnly: true,
+  useHtmlDecorLayers: true,
+  styleProfile: "soft-orbital"
+} as const;
+
+const FRAME_DECOR_DEFAULTS = {
+  borderAlphaPercent: 22,
+  grainDotColor: "rgba(255, 255, 255, 0.28)",
+  grainDotSizePx: 0.6,
+  grainBgSizePx: 3
+} as const;
 
 export function listTemplateKinds(): TemplateKind[] {
   return Object.keys(PIPELINE_CONFIG.formats) as TemplateKind[];
@@ -147,11 +186,29 @@ export function listPostArchetypes(): PostArchetypeOption[] {
 export function listSlotHints(): SlotHintOption[] {
   const hints = PIPELINE_CONFIG.slot_schema.slot_hints as Record<string, string>;
   const defaults = PIPELINE_CONFIG.slot_schema.defaults as Record<string, string>;
-  return Object.entries(hints).map(([id, hint]) => ({
-    id,
-    hint,
-    defaultValue: defaults[id] ?? ""
-  }));
+  const slotKeys = new Set<string>([
+    ...Object.keys(defaults),
+    ...Object.keys(hints),
+    ...listAllTemplateSlotKeys()
+  ]);
+
+  return [...slotKeys]
+    .map((rawKey) => normalizeSlotKey(rawKey))
+    .filter(Boolean)
+    .map((id) => ({
+      id,
+      hint: hints[id] ?? `Template slot used by one or more layouts: ${id.replaceAll("_", " ")}`,
+      defaultValue: defaults[id] ?? ""
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export function listRequiredSlotKeys(
+  kind: TemplateKind,
+  options?: { templateStyle?: string; templateId?: string; templateArchetype?: string }
+): string[] {
+  const templateId = resolveTemplateId(kind, options);
+  return listTemplateSlotKeys(templateId);
 }
 
 export function resolveTemplateId(kind: TemplateKind, options?: { templateStyle?: string; templateId?: string; templateArchetype?: string }): string {
@@ -163,7 +220,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const requestedTemplateStyle = normalizeTemplateStyle(params.templateStyle);
   const selectedTemplate = selectTemplateDefinition(kind, requestedTemplateStyle, params.templateId, params.templateArchetype);
   const resolvedTemplateStyle = resolveTemplateStyleForTemplate(selectedTemplate, requestedTemplateStyle);
-  const control = resolveTemplateControl(kind, params.design, resolvedTemplateStyle);
+  const control = resolveTemplateControl(kind, params.design);
   const normalizedArchetype = normalizePostArchetype(params.templateArchetype);
   const fontProfileId = resolveFontProfileId({
     requested: params.fontProfile,
@@ -180,7 +237,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const footer = renderMetaFooter(kind, control, defaultMetaLeft(kind), defaultMetaRight(kind));
   const kicker =
     kind === "carousel-slide" && control.showTitleKicker
-      ? `<p class="kicker content-max">${escapeHtml(params.title)}</p>`
+      ? `<p class="kicker content-limit">${escapeHtml(params.title)}</p>`
       : "";
 
   const slotValues = resolveSlotValues(kind, params);
@@ -462,24 +519,68 @@ function normalizeSlotKey(input: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
+function listAllTemplateSlotKeys(): string[] {
+  const keySet = new Set<string>();
+  for (const template of TEMPLATE_DEFINITIONS) {
+    for (const key of listTemplateSlotKeys(template.id)) {
+      keySet.add(key);
+    }
+  }
+  return [...keySet];
+}
+
+function listTemplateSlotKeys(templateId: string): string[] {
+  const cached = TEMPLATE_SLOT_KEY_CACHE.get(templateId);
+  if (cached) {
+    return cached;
+  }
+
+  const templateMarkup = loadTemplateMarkup(templateId);
+  const keySet = new Set<string>();
+  let match = SLOT_TOKEN_PATTERN.exec(templateMarkup);
+  while (match) {
+    const normalized = normalizeSlotKey(match[1] ?? "");
+    if (normalized) {
+      keySet.add(normalized);
+    }
+    match = SLOT_TOKEN_PATTERN.exec(templateMarkup);
+  }
+  SLOT_TOKEN_PATTERN.lastIndex = 0;
+
+  const keys = [...keySet];
+  TEMPLATE_SLOT_KEY_CACHE.set(templateId, keys);
+  return keys;
+}
+
 function captionMaxWidth(kind: TemplateKind, contentMaxWidth: number): number {
-  const rules = PIPELINE_CONFIG.render.caption_width_rules[kind];
+  const rules = CAPTION_WIDTH_RULES[kind] ?? { add: 30, max: 980 };
   return Math.min(Number(rules.max), contentMaxWidth + Number(rules.add));
 }
 
-function styleClassForTemplateStyle(templateStyle: string): string {
-  const normalized = normalizeTemplateStyle(templateStyle);
-  const styleClassMap: Record<string, string> = {
-    editorial: "style-editorial",
-    illustration: "style-illustration",
-    minimal: "style-minimal",
-    bold: "style-bold",
-    data: "style-data",
-    "monochrome-swiss": "style-monochrome-swiss",
-    brutal: "style-brutal"
-  };
+function frameDecorTokens(): {
+  borderAlphaPercent: number;
+  grainDotColor: string;
+  grainDotSizePx: number;
+  grainBgSizePx: number;
+} {
+  const renderConfig = (PIPELINE_CONFIG as unknown as {
+    render?: {
+      frame_decor?: {
+        border_alpha_percent?: number;
+        grain_dot_color?: string;
+        grain_dot_size_px?: number;
+        grain_bg_size_px?: number;
+      };
+    };
+  }).render;
 
-  return styleClassMap[normalized] ?? "style-default";
+  const frameDecor = renderConfig?.frame_decor;
+  return {
+    borderAlphaPercent: frameDecor?.border_alpha_percent ?? FRAME_DECOR_DEFAULTS.borderAlphaPercent,
+    grainDotColor: frameDecor?.grain_dot_color ?? FRAME_DECOR_DEFAULTS.grainDotColor,
+    grainDotSizePx: frameDecor?.grain_dot_size_px ?? FRAME_DECOR_DEFAULTS.grainDotSizePx,
+    grainBgSizePx: frameDecor?.grain_bg_size_px ?? FRAME_DECOR_DEFAULTS.grainBgSizePx
+  };
 }
 
 function renderFrame(
@@ -507,12 +608,12 @@ function renderFrame(
   const layoutScale = Math.max(0.55, Math.min(1.9, Math.min(widthScale, heightScale)));
   const contentMax = args.control.contentMaxWidth;
   const captionMax = captionMaxWidth(args.kind, contentMax);
-  const styleClass = styleClassForTemplateStyle(templateStyle);
+  const frameDecor = frameDecorTokens();
 
   const safeTitle = escapeHtml(args.params.title);
   const safeImageUrl = escapeHtml(args.params.imageUrl.trim());
   const hasImage = safeImageUrl.length > 0;
-  const visualLayers = resolveVisualLayerSettings(templateStyle);
+  const visualLayers = resolveVisualLayerSettings();
   const shouldRenderBackgroundImage = hasImage && visualLayers.useBackgroundImageOnly;
   const isDataImage = safeImageUrl.startsWith("data:image/");
   const imageFilter = isDataImage ? "blur(1.8px) saturate(0.88)" : "none";
@@ -549,22 +650,22 @@ function renderFrame(
     <html>
       ${renderTemplateHead({ safeTitle, width: args.width, height: args.height, theme, fontProfileId: args.fontProfileId })}
       <body>
-        <div class="relative isolate overflow-hidden ${styleClass}" data-template-id="${escapeHtml(templateId)}" data-template-style="${escapeHtml(templateStyle)}" data-template-archetype="${escapeHtml(templateArchetype)}" style="${rootStyle}">
-          <div class="absolute inset-0" style="background: var(--frame-bg);"></div>
+        <div class="frame" data-template-id="${escapeHtml(templateId)}" data-template-style="${escapeHtml(templateStyle)}" data-template-archetype="${escapeHtml(templateArchetype)}" style="${rootStyle}">
+          <div class="frame-layer" style="background: var(--frame-bg);"></div>
 
           ${
             shouldRenderBackgroundImage
-              ? `<div class="absolute inset-0 bg-cover bg-center" style="background-image: url('${safeImageUrl}'); opacity: var(--frame-image-opacity); filter: ${imageFilter}; transform: ${imageTransform};"></div>`
+              ? `<div class="frame-layer frame-layer--image" style="background-image: url('${safeImageUrl}'); opacity: var(--frame-image-opacity); filter: ${imageFilter}; transform: ${imageTransform};"></div>`
               : ""
           }
           ${decorLayerMarkup}
 
-          <div class="absolute inset-0" style="opacity: ${overlayOpacity}; background: ${overlayBackground};"></div>
-          <div class="absolute inset-0" style="background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: ${accentSweepOpacity};"></div>
+          <div class="frame-layer" style="opacity: ${overlayOpacity}; background: ${overlayBackground};"></div>
+          <div class="frame-layer" style="background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: ${accentSweepOpacity};"></div>
 
-          <div class="absolute inset-0" style="opacity: var(--frame-grain-opacity); background-image: radial-gradient(${PIPELINE_CONFIG.render.frame_decor.grain_dot_color} ${PIPELINE_CONFIG.render.frame_decor.grain_dot_size_px}px, transparent ${PIPELINE_CONFIG.render.frame_decor.grain_dot_size_px}px); background-size: ${PIPELINE_CONFIG.render.frame_decor.grain_bg_size_px}px ${PIPELINE_CONFIG.render.frame_decor.grain_bg_size_px}px;"></div>
+          <div class="frame-layer" style="opacity: var(--frame-grain-opacity); background-image: radial-gradient(${frameDecor.grainDotColor} ${frameDecor.grainDotSizePx}px, transparent ${frameDecor.grainDotSizePx}px); background-size: ${frameDecor.grainBgSizePx}px ${frameDecor.grainBgSizePx}px;"></div>
 
-          <div class="absolute inset-0 border" style="border-color: color-mix(in srgb, var(--color-border-subtle) ${PIPELINE_CONFIG.render.frame_decor.border_alpha_percent}%, transparent);"></div>
+          <div class="frame-layer frame-layer--border" style="border-color: color-mix(in srgb, var(--color-border-subtle) ${frameDecor.borderAlphaPercent}%, transparent);"></div>
 
           ${args.content}
         </div>
@@ -579,28 +680,33 @@ interface VisualLayerSettings {
   styleProfile: string;
 }
 
-function resolveVisualLayerSettings(templateStyle: string): VisualLayerSettings {
+function resolveVisualLayerSettings(): VisualLayerSettings {
   const defaults: VisualLayerSettings = {
-    useBackgroundImageOnly: true,
-    useHtmlDecorLayers: true,
-    styleProfile: "soft-orbital"
+    useBackgroundImageOnly: DEFAULT_VISUAL_LAYERS.useBackgroundImageOnly,
+    useHtmlDecorLayers: DEFAULT_VISUAL_LAYERS.useHtmlDecorLayers,
+    styleProfile: DEFAULT_VISUAL_LAYERS.styleProfile
   };
 
-  const renderConfig = PIPELINE_CONFIG.render as unknown as {
-    visual_layers?: {
-      use_background_image_only?: boolean;
-      use_html_decor_layers?: boolean;
-      style_profiles?: Record<string, string>;
+  const renderConfig = (PIPELINE_CONFIG as unknown as {
+    render?: {
+      visual_layers?: {
+        use_background_image_only?: boolean;
+        use_html_decor_layers?: boolean;
+        style_profile?: string;
+        style_profiles?: Record<string, string>;
+      };
     };
-  };
-  const visual = renderConfig.visual_layers;
+  }).render;
+  const visual = renderConfig?.visual_layers;
   if (!visual) {
     return defaults;
   }
 
   const styleProfiles = visual.style_profiles ?? {};
-  const normalizedStyle = normalizeTemplateStyle(templateStyle);
-  const styleProfile = styleProfiles[normalizedStyle] ?? styleProfiles[getDefaultTemplateStyle()] ?? defaults.styleProfile;
+  const styleProfile =
+    visual.style_profile?.trim() ??
+    styleProfiles[getDefaultTemplateStyle()] ??
+    defaults.styleProfile;
 
   return {
     useBackgroundImageOnly: visual.use_background_image_only ?? defaults.useBackgroundImageOnly,
@@ -689,7 +795,7 @@ function renderTopBar(
     return "";
   }
 
-  return `<div class="flex w-full items-center justify-between gap-5">${left}<span class="ml-auto">${right}</span></div>`;
+  return `<div class="top-bar">${left}<span class="top-bar-right">${right}</span></div>`;
 }
 
 function renderMetaFooter(
@@ -714,11 +820,17 @@ function renderMetaFooter(
 }
 
 function defaultMetaLeft(kind: TemplateKind): string {
-  return PIPELINE_CONFIG.render.meta_left_labels[kind] ?? "";
+  const renderConfig = (PIPELINE_CONFIG as unknown as {
+    render?: { meta_left_labels?: Partial<Record<TemplateKind, string>> };
+  }).render;
+  return renderConfig?.meta_left_labels?.[kind] ?? META_LEFT_LABELS[kind] ?? "";
 }
 
 function defaultMetaRight(_kind: TemplateKind): string {
-  return PIPELINE_CONFIG.render.meta_right_labels[_kind] ?? "";
+  const renderConfig = (PIPELINE_CONFIG as unknown as {
+    render?: { meta_right_labels?: Partial<Record<TemplateKind, string>> };
+  }).render;
+  return renderConfig?.meta_right_labels?.[_kind] ?? META_RIGHT_LABELS[_kind] ?? "";
 }
 
 function renderBrandPill(label: string): string {

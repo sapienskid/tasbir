@@ -1,0 +1,215 @@
+brand:
+  default_name: Tasbir Blog
+  default_color: "#1f7a8c"
+
+typography:
+  default_font_profile: editorial-serif
+  profiles:
+    editorial-serif:
+      label: Editorial Serif
+      llm_hint: Elegant and expressive for thought pieces.
+      google_fonts_css2_query: family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800;9..144,900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800
+      display_font_css: '"Fraunces", serif'
+      body_font_css: '"Plus Jakarta Sans", sans-serif'
+    modern-sans:
+      label: Modern Sans
+      llm_hint: Clean and neutral for tutorials and checklists.
+      google_fonts_css2_query: family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800
+      display_font_css: '"Sora", sans-serif'
+      body_font_css: '"Inter", sans-serif'
+    data-mono:
+      label: Data Mono
+      llm_hint: Structured and analytical for metrics and benchmark posts.
+      google_fonts_css2_query: family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700
+      display_font_css: '"Space Grotesk", sans-serif'
+      body_font_css: '"IBM Plex Mono", monospace'
+    bold-campaign:
+      label: Bold Campaign
+      llm_hint: High-impact voice for promo and launch posts.
+      google_fonts_css2_query: family=Bebas+Neue&family=Manrope:wght@400;500;600;700;800
+      display_font_css: '"Bebas Neue", sans-serif'
+      body_font_css: '"Manrope", sans-serif'
+  selection:
+    by_style:
+      editorial: editorial-serif
+      illustration: modern-sans
+      minimal: modern-sans
+      bold: bold-campaign
+      data: data-mono
+      monochrome-swiss: data-mono
+      brutal: bold-campaign
+    by_archetype:
+      insight: editorial-serif
+      metric: data-mono
+      quote: editorial-serif
+      checklist: modern-sans
+      timeline: modern-sans
+      promo: bold-campaign
+
+template_styles:
+  default_style: editorial
+  styles:
+    editorial:
+      label: Editorial
+      description: Magazine-like layouts with clean typography and elevated contrast.
+      llm_hint: Best for thoughtful, narrative, and opinion posts.
+    illustration:
+      label: Illustration
+      description: Abstract shapes, soft gradients, and illustrative decorative elements.
+      llm_hint: Best for conceptual explainers and creative storytelling.
+    minimal:
+      label: Minimal
+      description: Calm whitespace, low ornamentation, and direct readability.
+      llm_hint: Best for tutorials, checklists, and straightforward instructions.
+    bold:
+      label: Bold
+      description: Strong color blocks and high-impact hierarchy for short statements.
+      llm_hint: Best for announcements and strong takes.
+    data:
+      label: Data
+      description: Structured accents that resemble charts, grids, and insight strips.
+      llm_hint: Best for metrics, benchmarks, and evidence-heavy posts.
+    monochrome-swiss:
+      label: Monochrome Swiss
+      description: High-contrast monochrome hierarchy with restrained geometry and grid discipline.
+      llm_hint: Best for minimalist thought leadership and typographic clarity.
+    brutal:
+      label: Brutal
+      description: Aggressive composition, loud contrast, and campaign-grade visual impact.
+      llm_hint: Best for bold announcements, manifestos, and sharp opinions.
+
+formats:
+  instagram-post:
+    width: 1080
+    height: 1080
+    caption_source: instagram_caption
+    hashtag_count: 3
+    default_template_id: core/editorial-base
+  instagram-story:
+    width: 1080
+    height: 1920
+    caption_source: instagram_caption
+    hashtag_count: 2
+    default_template_id: core/editorial-base
+  carousel-slide:
+    width: 1080
+    height: 1080
+    caption_source: carousel_slides
+    hashtag_count: 0
+    default_template_id: core/editorial-base
+  twitter-card:
+    width: 1200
+    height: 630
+    caption_source: twitter_caption
+    hashtag_count: 0
+    default_template_id: core/bold-base
+  linkedin-post:
+    width: 1200
+    height: 627
+    caption_source: linkedin_caption
+    hashtag_count: 0
+    default_template_id: core/editorial-base
+
+preview_defaults:
+  title: Sample Blog Post Title
+  caption: Sample caption for a social media image preview.
+  heading: Key idea goes here
+  body: One concise sentence that explains the idea for this slide.
+  slide_number: 1
+  total_slides: 5
+
+templates:
+  - id: core/editorial-base
+    styles:
+      - editorial
+      - minimal
+      - monochrome-swiss
+    label: Core Editorial Base
+    default_for_style: true
+    archetypes:
+      - insight
+      - quote
+      - checklist
+      - timeline
+    file: ../templates/editorial-base.html
+  - id: core/illustration-base
+    styles:
+      - illustration
+    label: Core Illustration Base
+    default_for_style: true
+    archetypes:
+      - insight
+      - quote
+    file: ../templates/illustration-base.html
+  - id: core/bold-base
+    styles:
+      - bold
+      - brutal
+    label: Core Bold Base
+    default_for_style: true
+    archetypes:
+      - promo
+      - insight
+    file: ../templates/bold-base.html
+  - id: core/data-base
+    styles:
+      - data
+    label: Core Data Base
+    default_for_style: true
+    archetypes:
+      - metric
+      - insight
+    file: ../templates/data-base.html
+  - id: core/quote-focus
+    styles:
+      - editorial
+      - illustration
+      - minimal
+      - bold
+      - data
+      - monochrome-swiss
+      - brutal
+    label: Core Quote Focus
+    archetypes:
+      - quote
+    file: ../templates/quote-focus.html
+  - id: core/checklist-stack
+    styles:
+      - editorial
+      - illustration
+      - minimal
+      - bold
+      - data
+      - monochrome-swiss
+      - brutal
+    label: Core Checklist Stack
+    archetypes:
+      - checklist
+      - timeline
+    file: ../templates/checklist-stack.html
+  - id: core/metric-split
+    styles:
+      - editorial
+      - illustration
+      - minimal
+      - bold
+      - data
+      - monochrome-swiss
+      - brutal
+    label: Core Metric Split
+    archetypes:
+      - metric
+    file: ../templates/metric-split.html
+  - id: core/promo-pill
+    styles:
+      - editorial
+      - illustration
+      - minimal
+      - bold
+      - data
+      - monochrome-swiss
+      - brutal
+    label: Core Promo Pill
+    archetypes:
+      - promo
+    file: ../templates/promo-pill.html

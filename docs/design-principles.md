@@ -6,7 +6,7 @@ These principles explain how the project is intended to evolve.
 
 ## 1. Config First, Code Second
 
-Behavior should be controlled through config fragments (`config/pipeline/design.yaml`, `config/pipeline/content.yaml`, `config/pipeline/runtime.yaml`) whenever possible.
+Behavior should be controlled through config fragments (`config/pipeline/templates.yaml`, `config/pipeline/content.yaml`, `config/pipeline/runtime.yaml`) whenever possible.
 
 Examples:
 

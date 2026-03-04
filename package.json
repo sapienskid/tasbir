@@ -7,15 +7,13 @@
     "dev": "wrangler dev --remote",
     "deploy": "wrangler deploy",
     "check": "tsc --noEmit",
-    "build:styles": "tailwindcss -i ./src/styles/tailwind.input.css -o ./src/styles/tailwind.generated.css --minify && node ./scripts/embed-tailwind-css.mjs",
+    "build:styles": "echo 'No separate style build needed. template.css is embedded by build:templates.'",
     "build:templates": "node ./scripts/embed-template-assets.mjs",
-    "build:assets": "pnpm run build:styles && pnpm run build:templates",
+    "build:assets": "pnpm run build:templates",
     "test": "vitest run"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
-    "@tailwindcss/cli": "^4.2.0",
-    "tailwindcss": "^4.2.0",
     "typescript": "latest",
     "vitest": "^3.2.4",
     "wrangler": "latest",
