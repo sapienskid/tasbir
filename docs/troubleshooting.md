@@ -1,6 +1,6 @@
 # Troubleshooting
 
-This guide covers common failures and how to fix them quickly.
+Common issues and fast fixes.
 
 ## Build-Time Errors
 
@@ -8,191 +8,194 @@ This guide covers common failures and how to fix them quickly.
 
 Cause:
 
-- two entries in `templates:` share same `id`
+- two template entries in `templates.yaml` share the same `id`
 
 Fix:
 
-- make all template IDs unique
+- make IDs unique
 - rerun `pnpm run build:templates`
 
-### `Template <id> references unknown format/style/archetype`
+### `Template <id> references unknown format`
 
 Cause:
 
-- typo or missing key in `formats`, `template_styles.styles`, or `post_archetypes.archetypes`
+- template `format`/`formats` contains unsupported format key
 
 Fix:
 
-- correct reference names
-- ensure archetype/style/format exists before template entry
+- use one of: `instagram-post`, `instagram-story`, `carousel-slide`, `twitter-card`, `linkedin-post`
 
 ### `Format <name> points to missing default_template_id`
 
 Cause:
 
-- format default points to template ID not present in registry
+- `formats.<name>.default_template_id` does not exist in template registry
 
 Fix:
 
-- set `formats.<name>.default_template_id` to valid template ID
+- set it to a valid template ID
 
 ### `Format <name> default_template_id does not support this format`
 
 Cause:
 
-- default template exists, but its `format`/`formats` constraints do not include the current format
+- default template is format-restricted and does not include that format
 
 Fix:
 
-- add the format to `templates[].formats`, or remove format restriction for that template
+- add format to `templates[].formats` or change default template
 
-## Runtime Errors
-
-### `Missing env var GHOST_API_URL` or `GHOST_CONTENT_API_KEY`
+### Missing system shell error
 
 Cause:
 
-- required env vars not set
+- required system templates are missing:
+- `templates/system/head-shell.html`
+- `templates/system/frame-shell.html`
 
 Fix:
 
-- set values in `.dev.vars` (local) and Worker environment (deployed)
+- restore missing file(s)
+- rerun build
 
-### `/template/*` returns 403
+## Auth and Security Errors
+
+### 401 on protected routes
 
 Cause:
 
-- preview route disabled by `features.enable_template_preview`
+- missing/invalid API key
 
 Fix:
 
-- set `features.enable_template_preview: true`
-- run `pnpm run build:templates`
+- set `API_KEYS`
+- send `x-api-key` or Bearer token
 
-### Protected routes return 401
+### 403 on `/template/*`
 
 Cause:
 
-- missing or invalid API key header
+- `features.enable_template_preview` is disabled
 
 Fix:
 
-- set `API_KEYS` in Worker env
-- send `x-api-key: <key>` or `Authorization: Bearer <key>`
+- set it to `true` and rebuild assets
 
-### `/webhook/ghost` returns 500 missing token
+### 429 responses
 
 Cause:
 
-- `GHOST_WEBHOOK_TOKEN` is not configured
+- rate limit exceeded (`security.rate_limit`)
 
 Fix:
 
-- set `GHOST_WEBHOOK_TOKEN` in local and deployed env
+- throttle caller
+- tune rate limit config for expected traffic
 
-### `/generate-from-content` returns `title is required` or `content is required`
+### 413 responses
 
 Cause:
 
-- request body is missing required fields
+- request body exceeds `security.request_limits.max_json_body_bytes`
 
 Fix:
 
-- provide both `title` and `content` (or `body`)
+- reduce payload size or increase limit
 
-### Request returns 413
+## Input/Validation Errors
+
+### `/generate` says slug/url required
 
 Cause:
 
-- JSON payload exceeds configured `security.request_limits.max_json_body_bytes`
+- request body has neither `slug` nor `url`
 
 Fix:
 
-- reduce payload size or raise limit in config and rebuild assets
+- provide one of them
 
-### Request returns 429
+### `/generate-from-content` says title/content required
 
 Cause:
 
-- route exceeded configured `security.rate_limit.max_requests_per_window`
+- missing required direct-content fields
 
 Fix:
 
-- throttle caller retries, or tune `security.rate_limit` for your traffic profile
+- provide `title` and one of `content`/`body`
 
-### Ghost fetch errors
+### `templateIds.<format> references unknown template`
 
-Symptoms:
+Cause:
 
-- 404 for slug not found
-- non-200 API response with Ghost details
+- template ID not available for that format
 
 Fix:
 
-- verify `slug` exists in Ghost
-- verify `GHOST_API_URL` and `GHOST_CONTENT_API_KEY`
-- verify Content API endpoint includes `/ghost/api/content`
+- check `/template-catalog`
+- use valid template ID for target format
 
-## Rendering and Style Issues
+## Template/Rendering Issues
 
-### Template not selected as expected
+### Wrong template selected
 
 Check in order:
 
 1. request `templateIds` override
-2. request/model style and archetype values
-3. template `archetypes` restrictions
-4. format `default_template_id`
+2. LLM planner output
+3. format default template
 
-Debug tip:
+Debug steps:
 
-- preview with explicit `templateId` first
-- inspect output HTML data attributes (`data-template-id`, `data-template-style`, `data-template-archetype`)
+- call `/template-catalog`
+- preview with explicit `templateId`
+- verify selected IDs in response `template_plan.template_ids`
 
-### Slots are empty
-
-Cause:
-
-- slot key mismatch or no fallback for that slot
-
-Fix:
-
-- ensure template uses `{{SLOT:key}}` with key present in `slot_schema.defaults` or request/model slot data
-- use preview query like `slot.key=value` to verify quickly
-
-### Font not changing
+### Slots look empty
 
 Cause:
 
-- invalid `fontProfile` ID or style/archetype map points to unknown profile
+- slot key mismatch between template and payload
 
 Fix:
 
-- ensure profile exists in `typography.profiles`
-- verify mapping values in `typography.selection`
+- verify template uses `{{SLOT:key}}`
+- verify keys in `slotOverrides`/LLM output match normalized slot names
+- test with preview query `slot.key=value`
 
-### Colors look wrong
+### Preview HTML renders but looks unstyled
 
 Cause:
 
-- invalid hex values or unexpected token overrides
+- stale generated assets or CSS not rebuilt
 
 Fix:
 
-- use full hex color form `#RRGGBB`
-- test without token overrides to isolate issue
+- run `pnpm run build:assets`
+- restart dev server
 
-## Image Source Issues
-
-### Stock image fallback never used
+### Unexpected colors/contrast
 
 Cause:
 
-- `features.enable_stock_image_search` disabled, missing `PEXELS_API_KEY`, or topic keyword check not matching
+- invalid token override values or extreme brand/input colors
 
 Fix:
 
-- enable flag
+- use valid hex colors (`#RRGGBB`)
+- retest without token overrides
+
+## Image Issues
+
+### Stock image fallback never runs
+
+Cause:
+
+- stock feature disabled, missing `PEXELS_API_KEY`, or no keyword match
+
+Fix:
+
+- enable `features.enable_stock_image_search`
 - set `PEXELS_API_KEY`
 - review `generation.stock_topic_keywords`
 
@@ -200,52 +203,54 @@ Fix:
 
 Cause:
 
-- `features.enable_ai_image_generation` disabled or model call failure
+- feature disabled or model invocation fails
 
 Fix:
 
-- enable flag
-- verify `AI` binding and model access
+- enable `features.enable_ai_image_generation`
+- verify `AI` binding and model availability
 
-### Only feature image is used
+### Always using feature image
 
 Cause:
 
-- `features.prefer_feature_image` true and model returns `use_feature_image: true`
+- feature image preferred and available
 
 Fix:
 
-- set `prefer_feature_image: false` if you want stock/AI to be preferred
+- set `features.prefer_feature_image: false`
+- or use explicit request `image.mode`
 
 ## Storage and URL Issues
 
-### `url` fields are `null`
+### Asset `url` fields are `null`
 
 Cause:
 
-- `R2_PUBLIC_BASE_URL` not configured
+- `R2_PUBLIC_BASE_URL` is not set
 
 Fix:
 
-- set `R2_PUBLIC_BASE_URL` to your public R2 domain
+- configure public base URL for bucket
 
-### Unexpected R2 key paths
+### Unexpected R2 keys
 
 Cause:
 
-- storage mode or prefix overrides in request/env
+- `storage` overrides or env prefix overrides
 
 Fix:
 
-- verify request `storage` options
-- verify `R2_KEY_PREFIX`
-- verify `config.storage` defaults
+- inspect request `storage`
+- inspect `R2_KEY_PREFIX`
+- inspect `config.storage`
 
-## Quick Recovery Checklist
+## Fast Recovery Checklist
 
-1. run `pnpm run build:assets`
-2. run `pnpm run check`
-3. run `pnpm run test`
-4. test `GET /health`
-5. test `GET /template/<format>` with explicit `templateId`
-6. test `POST /generate-from-content` with minimal payload
+1. `pnpm run build:assets`
+2. `pnpm run check`
+3. `pnpm run test`
+4. `GET /health`
+5. `GET /template-catalog`
+6. preview one template with explicit `templateId`
+7. run minimal `POST /generate-from-content`

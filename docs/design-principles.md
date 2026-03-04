@@ -2,94 +2,76 @@
 
 Validated on March 4, 2026.
 
-These principles explain how the project is intended to evolve.
+These principles define how this system should evolve.
 
-## 1. Config First, Code Second
+## 1. Templates Are Structure, CSS Is Design
 
-Behavior should be controlled through config fragments (`config/pipeline/templates.yaml`, `config/pipeline/content.yaml`, `config/pipeline/runtime.yaml`) whenever possible.
+- `templates/*.html` define layout skeletons and slot contracts.
+- `src/styles/template.css` is the visual source of truth.
+- avoid scattering design logic across TypeScript files.
 
-Examples:
+## 2. One Design System, Token-Driven
 
-- adding archetypes
-- changing default styles/fonts
-- adjusting generation limits
-- changing output dimensions
+- use semantic token aliases (`--token-*`, `--color-*`, `--radius-*`)
+- keep typography, spacing, color, and radii centrally controlled
+- avoid per-template hardcoded visual systems
 
-Only add TypeScript logic when config cannot express the requirement.
+## 3. Runtime Must Be Template-Driven
 
-## 2. Templates Are Product Surface Area
+- template requirements come from actual `{{SLOT:key}}` placeholders
+- LLM content generation must satisfy selected template slot requirements
+- avoid hardcoded post archetype/style taxonomies
 
-All visual layout lives in `templates/**/*.html`.
+## 4. Dynamic Template Registry
 
-Renderer code should remain generic:
+- templates are discovered from `templates.yaml`
+- adding a template should not require runtime code edits
+- selection should stay valid even as template set changes frequently
 
-- select template
-- resolve tokens and slots
-- apply design system
-- render output
+## 5. Clear Separation of Concerns
 
-Avoid creating format-specific custom renderer branches.
+- config controls behavior and limits
+- templates control structure
+- CSS controls visuals
+- TypeScript orchestrates and validates
 
-## 3. Style and Intent Are Separate Axes
+## 6. Deterministic Build Output
 
-- style = how it looks (`template_style`)
-- archetype = what kind of message it is (`post_archetype`)
-
-Keeping these independent allows one intent to be rendered in multiple visual languages.
-
-## 4. Slot Contracts Over Hardcoded Fields
-
-Templates should use semantic slots (`headline`, `quote_text`, `metric_value`, etc.) so content can adapt across layouts.
-
-Use slot defaults in config and let model/output overrides refine values.
-
-## 5. Deterministic Runtime
-
-Worker should not read filesystem assets at runtime.
-
-All config/templates are compiled into `src/generated/template-assets.ts` during build. This keeps runtime behavior deterministic and deploy-friendly.
-
-## 6. Safe Fallbacks Everywhere
-
-Pipeline should continue producing usable output when model fields are missing.
-
-Fallback strategy includes:
-
-- caption truncation
-- slide count enforcement
-- slot defaults
-- template/style/archetype defaults
-- image source fallback chain
+- runtime should not read filesystem templates directly
+- compile config/templates/CSS into generated assets at build time
+- fail early on invalid template registry references
 
 ## 7. Explicit Override Precedence
 
-When multiple sources provide values, precedence is deterministic and documented.
+When multiple value sources exist, precedence must remain deterministic.
 
-Typical precedence pattern:
+Typical pattern:
 
-1. request payload
+1. request overrides
 2. model output
 3. config defaults
+4. code fallbacks
 
-This keeps behavior predictable for automation and manual use.
+## 8. Safe Fallbacks
 
-## 8. One Build Step Validates Everything
+Even with imperfect model output, rendering should succeed:
 
-`pnpm run build:templates` should fail fast for config/template inconsistencies.
+- normalize captions and slides
+- infer missing slot values
+- fallback template and image paths
+- enforce bounded lengths
 
-A broken template registry must be caught before deploy.
-
-## 9. Observability-Friendly APIs
-
-Responses include normalized `llm_output`, selected image source, and asset keys so callers can inspect actual decisions made by the pipeline.
-
-## 10. Extend by Adding, Not Rewriting
+## 9. Extend by Adding, Not Rewriting
 
 Preferred extension path:
 
-1. add config entries
-2. add templates
-3. rebuild assets
-4. test via preview and generation routes
+1. add/update template
+2. register in YAML
+3. adjust CSS tokens/classes if needed
+4. rebuild assets
+5. verify via preview and generation routes
 
-This keeps long-term maintenance simple and prevents renderer sprawl.
+## 10. Documentation Is Part of the System
+
+Architecture/API/config docs must be updated with each structural change.
+Outdated docs create incorrect integrations faster than code bugs.

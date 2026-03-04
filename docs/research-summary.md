@@ -2,91 +2,108 @@
 
 Validated on March 4, 2026.
 
-This document records the design decisions behind the current architecture.
+This summary records why the current architecture is structured this way.
 
-## 1) Template File Format: `.html` vs `htmlx`
+## 1) Template Format Choice
 
 Decision:
 
-- use standard `.html` files
+- use standard `.html` templates
 
-Reasoning:
+Why:
 
-- `.html` is universal and tool-friendly
-- no special loader is required
-- `htmlx` is not a web-standard template format
-- if the intention is `htmx`, it still uses regular `.html`
+- universal tooling support
+- no proprietary template parser required
+- easy for non-TS contributors to edit
 
 References:
 
 - https://developer.mozilla.org/en-US/docs/Web/HTML
 - https://html.spec.whatwg.org/
-- https://htmx.org/docs/
 
-## 2) Configuration Strategy
-
-Decision:
-
-- maintain one composed YAML control plane via `config/pipeline.config.yaml` with focused fragments in `config/pipeline/*.yaml`
-
-Reasoning:
-
-- human-readable, nested structure fits this domain
-- easy to review in pull requests
-- keeps style/archetype/font/template policies centralized while reducing single-file complexity
-
-Reference:
-
-- https://yaml.org/spec/1.2.2/
-
-## 3) Worker Runtime Determinism
+## 2) Build-Time Asset Embedding
 
 Decision:
 
-- compile YAML + HTML into TypeScript at build time
+- compile config + template HTML + CSS into generated runtime JSON
 
-Reasoning:
+Why:
 
-- Cloudflare Worker runtime should not depend on local filesystem reads
-- generated asset module makes deploy behavior deterministic
-- validation failures happen at build time, not after deploy
+- Cloudflare Worker runtime should be deterministic
+- avoids runtime filesystem dependencies
+- catches template/config errors during build, not at request time
 
 References:
 
 - https://developers.cloudflare.com/workers/
 - https://developers.cloudflare.com/workers/runtime-apis/nodejs/
 
-## 4) Stack Choices Retained
+## 3) Template-Driven Content Contract
+
+Decision:
+
+- derive required slot keys from selected templates (`{{SLOT:key}}`)
+
+Why:
+
+- keeps LLM output contract coupled to real template requirements
+- enables frequent template changes without rewriting schema by hand
+- removes dependence on fixed archetype/slot-schema taxonomies
+
+## 4) Single CSS Design System
+
+Decision:
+
+- keep design tokens and semantic classes in one stylesheet: `src/styles/template.css`
+
+Why:
+
+- central visual control
+- easier maintenance and theming
+- avoids style spread across YAML and TS
+
+## 5) Dynamic Template Selection
+
+Decision:
+
+- LLM selects template IDs from current registry candidates per format
+
+Why:
+
+- template set is not static
+- selection remains adaptive as new templates are added
+- explicit request `templateIds` still allows deterministic overrides
+
+## 6) Platform Stack
 
 Ghost Content API:
 
-- source-of-truth blog content ingestion
+- source content ingestion for `/generate` and webhook flow
 - https://docs.ghost.org/content-api/posts
-- https://docs.ghost.org/content-api/parameters
 
 Workers AI:
 
-- structured JSON output for captions/slots/style/archetype/font
-- image generation fallback
+- JSON-schema-constrained generation
+- template assignment planning
+- optional image prompt/model generation
 - https://developers.cloudflare.com/workers-ai/features/json-mode/
-- https://developers.cloudflare.com/workers-ai/models/gpt-oss-120b/
-- https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/
 
 Browser Rendering:
 
-- deterministic HTML -> PNG capture
+- deterministic HTML -> PNG screenshot pipeline
 - https://developers.cloudflare.com/browser-rendering/get-started/screenshots/
 
 R2:
 
-- output asset storage and optional public URL serving
+- generated asset storage and serving
 - https://developers.cloudflare.com/r2/api/workers/workers-api-reference/
 
-## 5) Outcome
+## 7) Practical Outcome
 
-The resulting architecture supports broad template expansion with minimal code changes:
+The system can evolve primarily by editing:
 
-- add/edit HTML templates
-- register behavior in YAML
-- rebuild assets
-- render through one generic runtime pipeline
+- templates (`templates/*.html`)
+- design tokens/classes (`src/styles/template.css`)
+- config (`config/pipeline/*.yaml`)
+
+Core runtime logic remains stable while content and visual output evolve quickly.
