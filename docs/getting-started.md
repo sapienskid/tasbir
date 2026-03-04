@@ -1,31 +1,31 @@
 # Getting Started
 
-This guide gets you from clone to first generated assets with minimum guesswork.
+This guide takes you from clone to first generated assets.
 
-## 1. Install Requirements
+## 1. Requirements
 
 - Node.js 20+
 - pnpm 9+
-- Cloudflare account
-- Workers AI access
-- Browser Rendering enabled
-- an R2 bucket
+- Cloudflare account with:
+- Workers AI
+- Browser Rendering
+- R2 bucket
 
-Install dependencies:
+Install deps:
 
 ```bash
 pnpm install
 ```
 
-## 2. Verify Wrangler Bindings
+## 2. Configure Wrangler Bindings
 
-Check `wrangler.jsonc` has these bindings:
+Check `wrangler.jsonc` contains bindings used by runtime:
 
-- `ai.binding = "AI"`
-- `browser.binding = "BROWSER"`
-- `r2_buckets` includes `binding = "OUTPUT_BUCKET"`
+- `AI`
+- `BROWSER`
+- `OUTPUT_BUCKET`
 
-If you change bucket names or bindings, keep names consistent with `src/index.ts`.
+Keep binding names aligned with `src/index.ts`.
 
 ## 3. Configure Environment Variables
 
@@ -35,35 +35,40 @@ Create local env file:
 cp .dev.vars.example .dev.vars
 ```
 
-Required values:
+Required for all protected routes:
+
+- `API_KEYS`
+
+Required for Ghost-backed flow (`/generate`, `/webhook/ghost`):
 
 - `GHOST_API_URL`
 - `GHOST_CONTENT_API_KEY`
-- `API_KEYS` (comma-separated accepted API keys)
+- `GHOST_WEBHOOK_TOKEN` (webhook route)
 
-Optional but common:
+Common optional values:
 
-- `R2_PUBLIC_BASE_URL` for public URLs in API response
-- `PEXELS_API_KEY` for stock-photo fallback
-- `GHOST_WEBHOOK_TOKEN` (required for `/webhook/ghost`)
-- `NOTIFY_WEBHOOK_URL` for completion callbacks
-- `NOTIFY_HOST_ALLOWLIST` to restrict callback hosts
-- `IMAGE_HOST_ALLOWLIST` to restrict external image hosts
+- `R2_PUBLIC_BASE_URL`
+- `PEXELS_API_KEY`
+- `DEFAULT_BRAND_COLOR`
+- `BRAND_NAME`
+- `LLM_MODEL`
+- `IMAGE_MODEL`
 
-## 4. Build Generated Assets
+## 4. Build Generated Runtime Assets
 
-This project compiles config and templates into runtime files.
+Run after any change in:
 
-Run before local dev, and after any template/config/style changes:
+- `config/pipeline/*.yaml`
+- `templates/**/*.html`
+- `src/styles/template.css`
+
+Command:
 
 ```bash
 pnpm run build:assets
 ```
 
-What this does:
-
-- validates merged config from `config/pipeline.config.yaml` + `config/pipeline/*.yaml`
-- embeds all template HTML + `src/styles/template.css` into `src/generated/template-assets.ts`
+This regenerates `src/generated/template-assets.json`.
 
 ## 5. Run Locally
 
@@ -77,33 +82,16 @@ Health check:
 curl http://127.0.0.1:8787/health
 ```
 
-Expected response:
-
-```json
-{
-  "ok": true
-}
-```
-
-## 6. Preview a Template in Browser
-
-Quick visual check without running full generation:
+## 6. Preview a Template
 
 ```bash
-curl "http://127.0.0.1:8787/template/instagram-post?templateStyle=data&archetype=metric&slot.metric_value=84%25&slot.metric_label=Retention&slot.headline=Signal%20over%20noise" \
-  -H "x-api-key: your-api-key"
+curl "http://127.0.0.1:8787/template/instagram-post?templateId=core/promo-pill&slot.headline=Launch%20Week&slot.supporting_line=One%20guide%2C%20all%20platforms&slot.cta_text=Read%20Now" \
+  -H 'x-api-key: your-api-key'
 ```
 
-You can pass:
-
-- `templateStyle`, `templateId`, `archetype` / `templateArchetype`
-- `fontProfile`
-- `slot.<name>=...` values
-- design controls like `textAlign`, `imageOpacity`
+Preview is useful for verifying layout and slot behavior without full generation.
 
 ## 7. Generate From Direct Content
-
-Use this while developing, so Ghost is not required in every test run:
 
 ```bash
 curl -X POST http://127.0.0.1:8787/generate-from-content \
@@ -111,20 +99,16 @@ curl -X POST http://127.0.0.1:8787/generate-from-content \
   -H 'content-type: application/json' \
   -d '{
     "title": "Build a Repeatable Content Engine",
-    "content": "Use one source article to generate multi-platform assets with consistent design and copy.",
-    "templateStyle": "minimal",
-    "postArchetype": "checklist",
-    "slotOverrides": {
-      "headline": "Build a repeatable engine",
-      "step_1": "Extract key ideas",
-      "step_2": "Map by platform",
-      "step_3": "Render and review",
-      "step_4": "Publish and measure"
+    "content": "Use one source article to generate platform-ready social assets.",
+    "prompt": "Practical tone, no buzzwords.",
+    "output": {
+      "formats": ["instagram-post", "twitter-card", "linkedin-post"],
+      "postCount": 2
     }
   }'
 ```
 
-## 8. Generate From Ghost Slug
+## 8. Generate From Ghost
 
 ```bash
 curl -X POST http://127.0.0.1:8787/generate \
@@ -133,41 +117,24 @@ curl -X POST http://127.0.0.1:8787/generate \
   -d '{"slug":"your-post-slug"}'
 ```
 
-## 9. Understand Output Paths
+You can also pass `url` instead of `slug`.
 
-By default, assets are written to:
+## 9. Add a New Template
 
-- `social-assets/<slug>/instagram-post.png`
-- `social-assets/<slug>/instagram-story.png`
-- `social-assets/<slug>/twitter-card.png`
-- `social-assets/<slug>/linkedin-post.png`
-- `social-assets/<slug>/carousel-slide-1.png` ...
+1. Create HTML file in `templates/`.
+2. Register it in `config/pipeline/templates.yaml`.
+3. Run:
 
-Storage behavior can be changed with request-level `storage` or `config.storage`.
+```bash
+pnpm run build:templates
+```
 
-Use request-level `output.formats` to generate only selected formats, for example `["twitter-card"]`.
+4. Verify:
 
-## 10. Common Edit Workflows
+- `GET /template-catalog`
+- `GET /template/<format>?templateId=<new-id>`
 
-Change brand defaults:
-
-- edit `brand.default_name` and `brand.default_color` in `config/pipeline/templates.yaml`
-- run `pnpm run build:assets`
-
-Add new template:
-
-1. create a new `.html` file under `templates/`
-2. add a template record under `templates:` in `config/pipeline/templates.yaml`
-3. run `pnpm run build:templates`
-4. preview via `GET /template/<format>?templateId=<new-id>`
-
-Tune AI behavior:
-
-- update `generation.llm.system_prompt` in `config/pipeline/content.yaml`
-- update `generation.llm.user_instructions` in `config/pipeline/content.yaml`
-- adjust `generation.limits` in `config/pipeline/content.yaml`
-
-## 11. Validate Before Commit
+## 10. Validate Before Commit
 
 ```bash
 pnpm run build:assets
@@ -177,7 +144,8 @@ pnpm run test
 
 ## Next Docs
 
+- [Architecture](architecture.md)
 - [Template System](template-system.md)
-- [Config Reference](config-reference.md)
+- [Configuration Reference](config-reference.md)
 - [API Reference](api-reference.md)
 - [Troubleshooting](troubleshooting.md)

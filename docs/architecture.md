@@ -1,13 +1,13 @@
 # Architecture
 
-This document explains how requests move through the pipeline from source content to final PNG assets.
+This document describes how the pipeline works from input content to final PNG assets.
 
 ## High-Level Flow
 
 ```mermaid
 flowchart TD
-    A[Author config and templates] --> B[pnpm run build:assets]
-    B --> C[src/generated/template-assets.ts]
+    A[Author templates + config + CSS] --> B[pnpm run build:assets]
+    B --> C[src/generated/template-assets.json]
     C --> D[Worker runtime]
 
     D --> E{Input route}
@@ -15,147 +15,102 @@ flowchart TD
     E -->|POST /generate-from-content| G[Build in-memory post]
     E -->|POST /webhook/ghost| F
 
-    F --> H[Generate structured LLM output]
+    F --> H[Build template candidates]
     G --> H
 
-    H --> I[Normalize style/archetype/font/slots]
-    I --> J[Choose image source]
-    J --> K[Render HTML per format]
-    K --> L[Screenshot to PNG]
-    L --> M[Store in R2]
-    M --> N[Return JSON response]
-    N --> O[Optional notification webhook]
+    H --> I[LLM template assignment per format]
+    I --> J[Extract required SLOT keys]
+    J --> K[LLM structured copy generation]
+    K --> L[Normalize slot/caption output]
+    L --> M[Choose image source]
+    M --> N[Render HTML per format]
+    N --> O[Screenshot to PNG]
+    O --> P[Store in R2]
+    P --> Q[Return JSON response]
+    Q --> R[Optional notify webhook]
 ```
 
-## Build-Time Architecture
+## Build-Time System
 
-Build-time compilation keeps Worker runtime deterministic.
+`pnpm run build:assets` runs `scripts/embed-template-assets.mjs`, which:
 
-Inputs:
+1. Loads and merges config from `config/pipeline.config.yaml` and fragments.
+2. Validates template registry and format defaults.
+3. Loads all `templates/*.html` and `templates/system/*.html`.
+4. Loads `src/styles/template.css`.
+5. Emits `src/generated/template-assets.json`.
 
-- `config/pipeline.config.yaml`
-- `config/pipeline/templates.yaml`
-- `config/pipeline/content.yaml`
-- `config/pipeline/runtime.yaml`
-- `templates/**/*.html`
-- `src/styles/template.css`
-
-Outputs:
-
-- `src/generated/template-assets.ts`
-
-Commands:
-
-- `pnpm run build:templates`
-- `pnpm run build:assets`
-
-`build:templates` validates config and embeds templates + stylesheet for runtime rendering.
+`src/generated/template-assets.ts` is a typed wrapper around that JSON.
 
 ## Runtime Components
 
-- `src/index.ts`: routes and orchestration
-- `src/templates.ts`: template selection and interpolation
-- `src/template-theme.ts`: theming, font, and visual controls
-- Cloudflare Workers AI (`AI` binding)
-- Cloudflare Browser Rendering (`BROWSER` binding)
-- Cloudflare R2 (`OUTPUT_BUCKET` binding)
+- `src/index.ts`: routes, request validation, orchestration
+- `src/ai.ts`: template planner + structured content generation
+- `src/templates.ts`: template resolution, slot extraction, HTML assembly
+- `src/template-theme.ts`: brand token derivation and render controls
+- Cloudflare Workers AI (`AI`)
+- Cloudflare Browser Rendering (`BROWSER`)
+- Cloudflare R2 (`OUTPUT_BUCKET`)
 
-## Request Routes
+## Route Layers
 
 - `GET /health`
-- `GET /template/<format>` preview only
+- `GET /template/<format>` preview renderer
+- `GET /template-catalog` template and format catalog
 - `POST /generate` Ghost-backed generation
 - `POST /generate-from-content` direct-content generation
-- `POST /webhook/ghost` token-protected webhook trigger
+- `POST /webhook/ghost` webhook-triggered generation
 
-## Pipeline Stages
+## Template and Slot Model
 
-### 1) Content ingestion
+Templates are pure skeletons with placeholders:
 
-- `/generate`: resolves `slug` from body (`slug` or `url`) and fetches Ghost post
-- `/generate-from-content`: creates internal post object from provided fields
-- `/webhook/ghost`: extracts slug from webhook payload and fetches Ghost post
+- regular tokens like `{{HEADING}}`, `{{BODY}}`, `{{HEADER}}`
+- slot tokens like `{{SLOT:headline}}`, `{{SLOT:metric_value}}`
 
-### 2) Structured copy generation
+For selected templates, the runtime computes `required_slot_keys` by scanning `{{SLOT:key}}` placeholders. That list is enforced in the LLM JSON schema.
 
-Worker sends prompt to Workers AI and expects strict JSON schema:
+## Template Selection
 
-- social captions
-- carousel slides
-- hashtags
-- image prompt
-- slot content
+Per requested format:
 
-### 3) Normalization and fallback
+1. If request provides `templateIds[format]`, that is used.
+2. Otherwise `chooseTemplateAssignments` asks the LLM to pick from current candidate template IDs only.
+3. Runtime validates selected ID and falls back to format default if needed.
 
-Worker normalizes and constrains model output using `generation.limits` and `generation.fallbacks`.
+This keeps selection dynamic and aligned with whatever templates are currently registered.
 
-- caption length limits
-- exact carousel slide count
-- hashtag normalization and bounds
-- slot key/value normalization
+## Design System Boundaries
 
-### 4) Style/archetype/font resolution
+- CSS source of truth: `src/styles/template.css`
+- Shared wrappers: `templates/system/head-shell.html` and `templates/system/frame-shell.html`
+- Optional shared fragments (top bar, kicker, footer): `templates/system/*.html`
+- Brand/design overrides are injected as CSS variables and render controls
 
-- style: request override -> config default
-- archetype: request override -> config default
-- font: request override -> style/archetype mapping -> default
+No CSS or full HTML layouts are hardcoded inside TypeScript modules.
 
-### 5) Image source selection
+## Image Source Selection
 
-Order:
+Runtime chooses image source by mode/settings and availability:
 
-1. feature image (if preferred and model approves)
-2. stock image search (if enabled + topic keywords + API key)
-3. AI image generation (if enabled)
-4. fallback feature image
-5. no image
+- `custom`
+- `feature`
+- `stock` (if enabled + key available)
+- `ai` (if enabled)
+- `none`
 
-### 6) Template selection and render
+`auto` mode follows configured preferences and fallbacks.
 
-Per format, resolver chooses template based on explicit ID, style/archetype compatibility, and configured defaults.
+## Asset Rendering and Storage
 
-HTML render includes:
+- HTML is rendered using Browser Rendering (Puppeteer) at format dimensions.
+- PNG assets are uploaded to R2.
+- Storage path is derived from `storage` config and request overrides.
+- `output.postCount > 1` produces `variants[]` with versioned storage behavior for non-primary variants.
 
-- template-theme tokens and render defaults
-- Google Fonts profile CSS import
-- token + slot interpolation
-- final frame metadata attributes (`data-template-id`, `data-template-style`, `data-template-archetype`)
+## Determinism and Safety
 
-### 7) Screenshot and storage
-
-- each HTML output is rendered in Browser Rendering (Puppeteer)
-- PNG is uploaded to R2 with `runtime.asset_cache_control`
-- key prefix resolved from `storage` request options and config defaults
-
-### 8) Response and optional notify
-
-Response contains:
-
-- final normalized `llm_output`
-- selected image source
-- R2 keys and optional public URLs
-
-If notifications are enabled, Worker posts full response payload to notify URL.
-
-## Storage Path Behavior
-
-Controlled by `storage.default_mode` and request-level `storage` object.
-
-- `overwrite`: `prefix/slug/<asset>.png`
-- `versioned`: `prefix/slug[/YYYY-MM-DD]/runId/<asset>.png`
-
-`runId` is sanitized and length-limited.
-
-## Extension Points
-
-The easiest extension points are config/template-driven:
-
-- add archetypes in `post_archetypes`
-- add styles in `template_styles`
-- add templates in `templates`
-- tune typography in `typography`
-- tune rendering defaults in `render`
-- tune generation prompts/limits in `generation`
-
-No new route or renderer function is needed for most changes.
+- No filesystem reads at Worker runtime.
+- Request limits and security controls enforced from config.
+- LLM output is normalized and bounded by generation limits.
+- Missing fields fallback to safe defaults so rendering still succeeds.
