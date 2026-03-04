@@ -301,6 +301,7 @@ Slug can be extracted from:
 `image.mode` supports:
 
 - `auto` (default chain)
+- `none` (HTML-only visual layers, no background image)
 - `feature`
 - `stock`
 - `ai`

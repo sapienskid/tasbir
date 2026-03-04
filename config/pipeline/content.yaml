@@ -137,12 +137,14 @@ generation:
       - "- each carousel body: one complete sentence, max <carousel_body_max_chars> characters, plain text only."
       - "- each carousel slide must add new information; avoid repeated headings or repeated body sentences."
       - "- hashtags: <hashtag_min_count>-<hashtag_max_count> relevant tags, each beginning with #, no spaces inside a tag."
-      - "- image_prompt: vivid but realistic marketing art direction aligned with selected template_style and post_archetype."
+      - "- image_prompt: optional BACKGROUND-ONLY art direction aligned with selected template_style and post_archetype (no text, no UI, no logos)."
       - "- use_feature_image: boolean, true only if feature image is present and contextually aligned."
       - "- template_style: choose one style id from <available_template_styles>."
       - "- post_archetype: choose one archetype id from <available_post_archetypes>."
       - "- font_profile: choose one font profile id from <available_font_profiles>."
       - "- slot_content: object of string values using the most relevant keys from <available_slot_keys>."
+      - "- apply these design-system composition directives exactly:"
+      - "<design_system_directives>"
       - "Output JSON only."
   image:
     default_model: "@cf/black-forest-labs/flux-1-schnell"
@@ -172,4 +174,3 @@ generation:
       - "Avoid generic stock-photo look; keep visual identity distinct."
       - "Do not render any typography, captions, labels, symbols, glyphs, or watermarks."
       - "Avoid signage, billboards, screens, packaging text, and posters with words."
-

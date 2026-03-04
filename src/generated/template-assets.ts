@@ -2,6 +2,937 @@
 // Do not edit manually.
 
 export const PIPELINE_CONFIG = {
+  "design_system": {
+    "version": 2,
+    "purpose": "Central design system contract. Runtime projects these values into legacy top-level keys.",
+    "brand": {
+      "default_name": "Tasbir Blog",
+      "default_color": "#1f7a8c"
+    },
+    "typography": {
+      "default_font_profile": "editorial-serif",
+      "profiles": {
+        "editorial-serif": {
+          "label": "Editorial Serif",
+          "llm_hint": "Elegant and expressive for thought pieces.",
+          "google_fonts_css2_query": "family=Fraunces:opsz,wght@9..144,500;9..144,700;9..144,800;9..144,900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800",
+          "display_font_css": "\"Fraunces\", serif",
+          "body_font_css": "\"Plus Jakarta Sans\", sans-serif"
+        },
+        "modern-sans": {
+          "label": "Modern Sans",
+          "llm_hint": "Clean and neutral for tutorials and checklists.",
+          "google_fonts_css2_query": "family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800",
+          "display_font_css": "\"Sora\", sans-serif",
+          "body_font_css": "\"Inter\", sans-serif"
+        },
+        "data-mono": {
+          "label": "Data Mono",
+          "llm_hint": "Structured and analytical for metrics and benchmark posts.",
+          "google_fonts_css2_query": "family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700",
+          "display_font_css": "\"Space Grotesk\", sans-serif",
+          "body_font_css": "\"IBM Plex Mono\", monospace"
+        },
+        "bold-campaign": {
+          "label": "Bold Campaign",
+          "llm_hint": "High-impact voice for promo and launch posts.",
+          "google_fonts_css2_query": "family=Bebas+Neue&family=Manrope:wght@400;500;600;700;800",
+          "display_font_css": "\"Bebas Neue\", sans-serif",
+          "body_font_css": "\"Manrope\", sans-serif"
+        }
+      },
+      "selection": {
+        "by_style": {
+          "editorial": "editorial-serif",
+          "illustration": "modern-sans",
+          "minimal": "modern-sans",
+          "bold": "bold-campaign",
+          "data": "data-mono",
+          "monochrome-swiss": "data-mono",
+          "brutal": "bold-campaign"
+        },
+        "by_archetype": {
+          "insight": "editorial-serif",
+          "metric": "data-mono",
+          "quote": "editorial-serif",
+          "checklist": "modern-sans",
+          "timeline": "modern-sans",
+          "promo": "bold-campaign"
+        }
+      }
+    },
+    "theming": {
+      "readable_light_text": "#edf4ff",
+      "readable_dark_text": "#07101d",
+      "color_engine": {
+        "surface_base_mix_target": "#05080f",
+        "surface_base_mix_ratio_from_target": 0.84,
+        "surface_base_fallback": "#0a111b",
+        "surface_elevated_mix_target": "#0e1a2a",
+        "surface_elevated_mix_ratio_from_target": 0.68,
+        "surface_elevated_fallback": "#101d2f",
+        "border_subtle_mix_target": "#9ec7ff",
+        "border_subtle_mix_ratio_from_target": 0.42,
+        "border_subtle_fallback": "#5a7da9",
+        "secondary_text_mix_target": "#8ea3c0",
+        "secondary_text_mix_ratio_from_target": 0.45,
+        "secondary_text_fallback": "#c8d8ee",
+        "muted_text_mix_target": "#607797",
+        "muted_text_mix_ratio_from_target": 0.5,
+        "muted_text_fallback": "#9bb1cc",
+        "accent_glow_mix_target": "#ffffff",
+        "accent_glow_mix_ratio_from_target": 0.34,
+        "overlay_strong_mix_target": "#01040a",
+        "overlay_strong_mix_ratio_from_target": 0.6,
+        "shadow_color_mix_target": "#000000",
+        "shadow_color_mix_ratio_from_target": 0.72,
+        "primary_text_min_contrast": 4.5,
+        "secondary_text_min_contrast": 3.8,
+        "muted_text_min_contrast": 3,
+        "border_subtle_min_contrast": 1.5,
+        "accent_foreground_min_contrast": 4
+      },
+      "radius": {
+        "card": "28px",
+        "pill": "999px"
+      }
+    },
+    "tokens": {
+      "aliases": {
+        "render.preset.minimal.container-background": "radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--color-brand-glow) 24%, transparent) 0%, transparent 44%), linear-gradient(165deg, color-mix(in srgb, var(--color-brand-accent) 12%, var(--color-surface-base)), var(--color-surface-base))",
+        "render.preset.minimal.overlay-top": "linear-gradient(170deg, rgba(2, 7, 14, 0.04), color-mix(in srgb, var(--color-overlay-strong) 52%, transparent) 76%)",
+        "render.preset.minimal.overlay-bottom": "linear-gradient(18deg, color-mix(in srgb, var(--color-brand-accent) 22%, transparent) 0%, transparent 58%)",
+        "render.preset.minimal.vignette": "radial-gradient(circle at 50% 76%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 52%, transparent) 98%)",
+        "render.preset.minimal.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 52%, transparent)",
+        "render.preset.minimal.brand-pill-border": "color-mix(in srgb, var(--color-border-subtle) 74%, transparent)",
+        "render.preset.minimal.brand-pill-text": "var(--color-text-primary)",
+        "render.preset.minimal.title-shadow": "0 10px 24px rgba(0, 0, 0, 0.18)",
+        "render.preset.minimal.caption-shadow": "0 6px 18px rgba(0, 0, 0, 0.14)",
+        "render.preset.illustration.container-background": "radial-gradient(circle at 16% 14%, color-mix(in srgb, var(--color-brand-glow) 48%, transparent) 0%, transparent 46%), linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 18%, var(--color-surface-base)), color-mix(in srgb, var(--color-surface-base) 86%, #0b1524))",
+        "render.preset.illustration.overlay-top": "linear-gradient(170deg, rgba(3, 8, 14, 0.02), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 78%)",
+        "render.preset.illustration.overlay-bottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 20%, transparent), transparent 64%)",
+        "render.preset.illustration.vignette": "radial-gradient(circle at 52% 86%, transparent 36%, color-mix(in srgb, var(--color-overlay-strong) 30%, transparent) 98%)",
+        "render.preset.illustration.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 44%, transparent)",
+        "render.preset.illustration.brand-pill-border": "color-mix(in srgb, var(--color-border-subtle) 58%, transparent)",
+        "render.preset.illustration.brand-pill-text": "var(--color-text-primary)",
+        "render.preset.illustration.title-shadow": "0 8px 22px rgba(0, 0, 0, 0.12)",
+        "render.preset.illustration.caption-shadow": "0 4px 16px rgba(0, 0, 0, 0.1)",
+        "render.preset.editorial.container-background": "radial-gradient(circle at 13% 12%, color-mix(in srgb, var(--color-brand-glow) 54%, transparent) 0%, transparent 50%), linear-gradient(162deg, color-mix(in srgb, var(--color-brand-accent) 24%, var(--color-surface-base)), var(--color-surface-base))",
+        "render.preset.editorial.overlay-top": "linear-gradient(168deg, rgba(2, 7, 14, 0.08), color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 72%)",
+        "render.preset.editorial.overlay-bottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 46%, transparent) 0%, transparent 52%)",
+        "render.preset.editorial.vignette": "radial-gradient(circle at 54% 82%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 98%)",
+        "render.preset.editorial.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 70%, transparent)",
+        "render.preset.editorial.brand-pill-border": "var(--color-border-subtle)",
+        "render.preset.editorial.brand-pill-text": "var(--color-text-primary)",
+        "render.preset.editorial.title-shadow": "0 16px 34px rgba(0, 0, 0, 0.24)",
+        "render.preset.editorial.caption-shadow": "0 8px 24px rgba(0, 0, 0, 0.18)",
+        "render.preset.spotlight.container-background": "radial-gradient(circle at 72% 10%, color-mix(in srgb, var(--color-brand-accent) 54%, transparent) 0%, transparent 42%), linear-gradient(150deg, color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-base)), var(--color-surface-base))",
+        "render.preset.spotlight.overlay-top": "linear-gradient(180deg, rgba(1, 5, 10, 0.06), color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 70%)",
+        "render.preset.spotlight.overlay-bottom": "linear-gradient(0deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent) 0%, transparent 58%)",
+        "render.preset.spotlight.vignette": "radial-gradient(circle at 50% 92%, transparent 22%, color-mix(in srgb, var(--color-overlay-strong) 60%, transparent) 98%)",
+        "render.preset.spotlight.brand-pill-background": "color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-elevated))",
+        "render.preset.spotlight.brand-pill-border": "color-mix(in srgb, var(--color-brand-accent) 72%, var(--color-border-subtle))",
+        "render.preset.spotlight.brand-pill-text": "var(--color-text-primary)",
+        "render.preset.spotlight.title-shadow": "0 18px 38px rgba(0, 0, 0, 0.24)",
+        "render.preset.spotlight.caption-shadow": "0 10px 26px rgba(0, 0, 0, 0.2)",
+        "render.preset.bold.container-background": "linear-gradient(145deg, color-mix(in srgb, var(--color-brand-accent) 44%, #050812), var(--color-surface-base))",
+        "render.preset.bold.overlay-top": "linear-gradient(170deg, rgba(0, 0, 0, 0.04), color-mix(in srgb, var(--color-overlay-strong) 48%, transparent) 74%)",
+        "render.preset.bold.overlay-bottom": "linear-gradient(16deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent) 0%, transparent 50%)",
+        "render.preset.bold.vignette": "radial-gradient(circle at 88% 88%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 48%), radial-gradient(circle at 50% 76%, transparent 34%, color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 98%)",
+        "render.preset.bold.brand-pill-background": "color-mix(in srgb, var(--color-brand-accent) 34%, var(--color-surface-elevated))",
+        "render.preset.bold.brand-pill-border": "color-mix(in srgb, var(--color-brand-accent) 88%, var(--color-border-subtle))",
+        "render.preset.bold.brand-pill-text": "var(--color-brand-accent-foreground)",
+        "render.preset.bold.title-shadow": "0 16px 32px rgba(0, 0, 0, 0.24)",
+        "render.preset.bold.caption-shadow": "0 8px 22px rgba(0, 0, 0, 0.18)",
+        "render.preset.clean.container-background": "linear-gradient(160deg, color-mix(in srgb, var(--color-brand-accent) 16%, #0a1320), #0a1320 50%, color-mix(in srgb, var(--color-brand-accent) 8%, #0b1119))",
+        "render.preset.clean.overlay-top": "linear-gradient(170deg, rgba(2, 8, 14, 0.03), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 82%)",
+        "render.preset.clean.overlay-bottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 16%, transparent), transparent 62%)",
+        "render.preset.clean.vignette": "radial-gradient(circle at 50% 76%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%)",
+        "render.preset.clean.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 42%, transparent)",
+        "render.preset.clean.brand-pill-border": "color-mix(in srgb, var(--color-border-subtle) 52%, transparent)",
+        "render.preset.clean.brand-pill-text": "var(--color-text-secondary)",
+        "render.preset.clean.title-shadow": "0 10px 20px rgba(0, 0, 0, 0.12)",
+        "render.preset.clean.caption-shadow": "0 4px 14px rgba(0, 0, 0, 0.1)",
+        "render.preset.swiss-mono.container-background": "linear-gradient(180deg, color-mix(in srgb, var(--color-surface-base) 88%, #020509), color-mix(in srgb, var(--color-surface-base) 70%, #0f1a2b))",
+        "render.preset.swiss-mono.overlay-top": "linear-gradient(180deg, color-mix(in srgb, #ffffff 3%, transparent), color-mix(in srgb, var(--color-overlay-strong) 24%, transparent) 72%)",
+        "render.preset.swiss-mono.overlay-bottom": "linear-gradient(0deg, color-mix(in srgb, #ffffff 5%, transparent) 0%, transparent 64%)",
+        "render.preset.swiss-mono.vignette": "radial-gradient(circle at 50% 78%, transparent 44%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%)",
+        "render.preset.swiss-mono.brand-pill-background": "color-mix(in srgb, var(--color-surface-elevated) 40%, transparent)",
+        "render.preset.swiss-mono.brand-pill-border": "color-mix(in srgb, #ffffff 48%, transparent)",
+        "render.preset.swiss-mono.brand-pill-text": "var(--color-text-primary)",
+        "render.preset.swiss-mono.title-shadow": "0 6px 14px rgba(0, 0, 0, 0.1)",
+        "render.preset.swiss-mono.caption-shadow": "0 2px 10px rgba(0, 0, 0, 0.08)",
+        "render.preset.brutal.container-background": "linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 54%, #05070c), #05070c 58%, color-mix(in srgb, var(--color-brand-accent) 42%, #111827))",
+        "render.preset.brutal.overlay-top": "linear-gradient(165deg, rgba(0, 0, 0, 0.06), color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 76%)",
+        "render.preset.brutal.overlay-bottom": "linear-gradient(10deg, color-mix(in srgb, var(--color-brand-accent) 62%, transparent) 0%, transparent 48%)",
+        "render.preset.brutal.vignette": "radial-gradient(circle at 84% 84%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 38%), radial-gradient(circle at 20% 18%, color-mix(in srgb, #ffffff 14%, transparent) 0%, transparent 30%), radial-gradient(circle at 50% 74%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 99%)",
+        "render.preset.brutal.brand-pill-background": "color-mix(in srgb, var(--color-brand-accent) 46%, var(--color-surface-elevated))",
+        "render.preset.brutal.brand-pill-border": "color-mix(in srgb, #ffffff 72%, transparent)",
+        "render.preset.brutal.brand-pill-text": "var(--color-brand-accent-foreground)",
+        "render.preset.brutal.title-shadow": "0 18px 34px rgba(0, 0, 0, 0.24)",
+        "render.preset.brutal.caption-shadow": "0 8px 22px rgba(0, 0, 0, 0.18)"
+      }
+    },
+    "ai_contract": {
+      "planner_directives": [
+        "Act as a campaign strategist that selects the best template style and archetype before writing copy.",
+        "Treat HTML/CSS/SVG layers as the primary composition system; keep generated images background-only and optional.",
+        "Optimize copy for conversion intent while preserving brand voice and audience trust.",
+        "Use slot content as modular layer inputs that can be stitched by deterministic templates."
+      ],
+      "rendering_constraints": [
+        "Never ask the image model to render any text, logos, UI components, or layout copy.",
+        "Assume final typography, hierarchy, and layout are handled by the HTML renderer and template slots."
+      ]
+    },
+    "render": {
+      "control_defaults": {
+        "showBrandBadge": true,
+        "showSlideBadge": false,
+        "showMetaFooter": false,
+        "showTitleKicker": true,
+        "showDecorLayers": true,
+        "textAlign": "left"
+      },
+      "format_control_defaults": {
+        "instagram-post": {
+          "default_preset": "editorial",
+          "contentMaxWidth": 1020,
+          "contentInset": 68,
+          "textAlign": "left"
+        },
+        "instagram-story": {
+          "default_preset": "spotlight",
+          "contentMaxWidth": 930,
+          "contentInset": 82,
+          "textAlign": "left"
+        },
+        "carousel-slide": {
+          "default_preset": "minimal",
+          "contentMaxWidth": 1020,
+          "contentInset": 68,
+          "textAlign": "left"
+        },
+        "twitter-card": {
+          "default_preset": "bold",
+          "contentMaxWidth": 1020,
+          "contentInset": 48,
+          "textAlign": "left"
+        },
+        "linkedin-post": {
+          "default_preset": "clean",
+          "contentMaxWidth": 1020,
+          "contentInset": 48,
+          "textAlign": "left"
+        }
+      },
+      "style_preset_map": {
+        "editorial": "editorial",
+        "illustration": "illustration",
+        "minimal": "clean",
+        "bold": "bold",
+        "data": "clean",
+        "monochrome-swiss": "swiss-mono",
+        "brutal": "brutal"
+      },
+      "visual_layers": {
+        "use_background_image_only": true,
+        "use_html_decor_layers": true,
+        "style_profiles": {
+          "editorial": "soft-orbital",
+          "illustration": "playful-blobs",
+          "minimal": "subtle-grid",
+          "bold": "angular-burst",
+          "data": "metric-grid",
+          "monochrome-swiss": "swiss-grid",
+          "brutal": "cutout-noise"
+        }
+      },
+      "preset_styles": {
+        "minimal": {
+          "containerBackground": "@render.preset.minimal.container-background",
+          "overlayTop": "@render.preset.minimal.overlay-top",
+          "overlayBottom": "@render.preset.minimal.overlay-bottom",
+          "vignette": "@render.preset.minimal.vignette",
+          "brandPillBackground": "@render.preset.minimal.brand-pill-background",
+          "brandPillBorder": "@render.preset.minimal.brand-pill-border",
+          "brandPillText": "@render.preset.minimal.brand-pill-text",
+          "titleShadow": "@render.preset.minimal.title-shadow",
+          "captionShadow": "@render.preset.minimal.caption-shadow",
+          "grainOpacity": 0.05,
+          "imageOpacity": 0.48,
+          "typeScale": 0.96,
+          "spaceScale": 0.94
+        },
+        "illustration": {
+          "containerBackground": "@render.preset.illustration.container-background",
+          "overlayTop": "@render.preset.illustration.overlay-top",
+          "overlayBottom": "@render.preset.illustration.overlay-bottom",
+          "vignette": "@render.preset.illustration.vignette",
+          "brandPillBackground": "@render.preset.illustration.brand-pill-background",
+          "brandPillBorder": "@render.preset.illustration.brand-pill-border",
+          "brandPillText": "@render.preset.illustration.brand-pill-text",
+          "titleShadow": "@render.preset.illustration.title-shadow",
+          "captionShadow": "@render.preset.illustration.caption-shadow",
+          "grainOpacity": 0.03,
+          "imageOpacity": 0.54,
+          "typeScale": 1.02,
+          "spaceScale": 1
+        },
+        "editorial": {
+          "containerBackground": "@render.preset.editorial.container-background",
+          "overlayTop": "@render.preset.editorial.overlay-top",
+          "overlayBottom": "@render.preset.editorial.overlay-bottom",
+          "vignette": "@render.preset.editorial.vignette",
+          "brandPillBackground": "@render.preset.editorial.brand-pill-background",
+          "brandPillBorder": "@render.preset.editorial.brand-pill-border",
+          "brandPillText": "@render.preset.editorial.brand-pill-text",
+          "titleShadow": "@render.preset.editorial.title-shadow",
+          "captionShadow": "@render.preset.editorial.caption-shadow",
+          "grainOpacity": 0.07,
+          "imageOpacity": 0.5,
+          "typeScale": 1,
+          "spaceScale": 1
+        },
+        "spotlight": {
+          "containerBackground": "@render.preset.spotlight.container-background",
+          "overlayTop": "@render.preset.spotlight.overlay-top",
+          "overlayBottom": "@render.preset.spotlight.overlay-bottom",
+          "vignette": "@render.preset.spotlight.vignette",
+          "brandPillBackground": "@render.preset.spotlight.brand-pill-background",
+          "brandPillBorder": "@render.preset.spotlight.brand-pill-border",
+          "brandPillText": "@render.preset.spotlight.brand-pill-text",
+          "titleShadow": "@render.preset.spotlight.title-shadow",
+          "captionShadow": "@render.preset.spotlight.caption-shadow",
+          "grainOpacity": 0.08,
+          "imageOpacity": 0.52,
+          "typeScale": 1.08,
+          "spaceScale": 1.08
+        },
+        "bold": {
+          "containerBackground": "@render.preset.bold.container-background",
+          "overlayTop": "@render.preset.bold.overlay-top",
+          "overlayBottom": "@render.preset.bold.overlay-bottom",
+          "vignette": "@render.preset.bold.vignette",
+          "brandPillBackground": "@render.preset.bold.brand-pill-background",
+          "brandPillBorder": "@render.preset.bold.brand-pill-border",
+          "brandPillText": "@render.preset.bold.brand-pill-text",
+          "titleShadow": "@render.preset.bold.title-shadow",
+          "captionShadow": "@render.preset.bold.caption-shadow",
+          "grainOpacity": 0.06,
+          "imageOpacity": 0.46,
+          "typeScale": 1.04,
+          "spaceScale": 1.02
+        },
+        "clean": {
+          "containerBackground": "@render.preset.clean.container-background",
+          "overlayTop": "@render.preset.clean.overlay-top",
+          "overlayBottom": "@render.preset.clean.overlay-bottom",
+          "vignette": "@render.preset.clean.vignette",
+          "brandPillBackground": "@render.preset.clean.brand-pill-background",
+          "brandPillBorder": "@render.preset.clean.brand-pill-border",
+          "brandPillText": "@render.preset.clean.brand-pill-text",
+          "titleShadow": "@render.preset.clean.title-shadow",
+          "captionShadow": "@render.preset.clean.caption-shadow",
+          "grainOpacity": 0.04,
+          "imageOpacity": 0.52,
+          "typeScale": 0.95,
+          "spaceScale": 0.92
+        },
+        "swiss-mono": {
+          "containerBackground": "@render.preset.swiss-mono.container-background",
+          "overlayTop": "@render.preset.swiss-mono.overlay-top",
+          "overlayBottom": "@render.preset.swiss-mono.overlay-bottom",
+          "vignette": "@render.preset.swiss-mono.vignette",
+          "brandPillBackground": "@render.preset.swiss-mono.brand-pill-background",
+          "brandPillBorder": "@render.preset.swiss-mono.brand-pill-border",
+          "brandPillText": "@render.preset.swiss-mono.brand-pill-text",
+          "titleShadow": "@render.preset.swiss-mono.title-shadow",
+          "captionShadow": "@render.preset.swiss-mono.caption-shadow",
+          "grainOpacity": 0.02,
+          "imageOpacity": 0.44,
+          "typeScale": 0.9,
+          "spaceScale": 0.86
+        },
+        "brutal": {
+          "containerBackground": "@render.preset.brutal.container-background",
+          "overlayTop": "@render.preset.brutal.overlay-top",
+          "overlayBottom": "@render.preset.brutal.overlay-bottom",
+          "vignette": "@render.preset.brutal.vignette",
+          "brandPillBackground": "@render.preset.brutal.brand-pill-background",
+          "brandPillBorder": "@render.preset.brutal.brand-pill-border",
+          "brandPillText": "@render.preset.brutal.brand-pill-text",
+          "titleShadow": "@render.preset.brutal.title-shadow",
+          "captionShadow": "@render.preset.brutal.caption-shadow",
+          "grainOpacity": 0.07,
+          "imageOpacity": 0.5,
+          "typeScale": 1.14,
+          "spaceScale": 1.1
+        }
+      },
+      "caption_width_rules": {
+        "instagram-post": {
+          "add": 20,
+          "max": 960
+        },
+        "instagram-story": {
+          "add": 30,
+          "max": 980
+        },
+        "carousel-slide": {
+          "add": 30,
+          "max": 980
+        },
+        "twitter-card": {
+          "add": 40,
+          "max": 1020
+        },
+        "linkedin-post": {
+          "add": 40,
+          "max": 1020
+        }
+      },
+      "meta_left_labels": {
+        "instagram-post": "Instagram",
+        "instagram-story": "Story",
+        "twitter-card": "X / Twitter",
+        "linkedin-post": "LinkedIn",
+        "carousel-slide": ""
+      },
+      "meta_right_labels": {
+        "instagram-post": "",
+        "instagram-story": "",
+        "twitter-card": "",
+        "linkedin-post": "",
+        "carousel-slide": ""
+      },
+      "frame_decor": {
+        "border_alpha_percent": 22,
+        "grain_dot_color": "rgba(255, 255, 255, 0.28)",
+        "grain_dot_size_px": 0.6,
+        "grain_bg_size_px": 3
+      }
+    },
+    "template_styles": {
+      "default_style": "editorial",
+      "styles": {
+        "editorial": {
+          "label": "Editorial",
+          "description": "Magazine-like layouts with clean typography and elevated contrast.",
+          "llm_hint": "Best for thoughtful, narrative, and opinion posts."
+        },
+        "illustration": {
+          "label": "Illustration",
+          "description": "Abstract shapes, soft gradients, and illustrative decorative elements.",
+          "llm_hint": "Best for conceptual explainers and creative storytelling."
+        },
+        "minimal": {
+          "label": "Minimal",
+          "description": "Calm whitespace, low ornamentation, and direct readability.",
+          "llm_hint": "Best for tutorials, checklists, and straightforward instructions."
+        },
+        "bold": {
+          "label": "Bold",
+          "description": "Strong color blocks and high-impact hierarchy for short statements.",
+          "llm_hint": "Best for announcements and strong takes."
+        },
+        "data": {
+          "label": "Data",
+          "description": "Structured accents that resemble charts, grids, and insight strips.",
+          "llm_hint": "Best for metrics, benchmarks, and evidence-heavy posts."
+        },
+        "monochrome-swiss": {
+          "label": "Monochrome Swiss",
+          "description": "High-contrast monochrome hierarchy with restrained geometry and grid discipline.",
+          "llm_hint": "Best for minimalist thought leadership and typographic clarity."
+        },
+        "brutal": {
+          "label": "Brutal",
+          "description": "Aggressive composition, loud contrast, and campaign-grade visual impact.",
+          "llm_hint": "Best for bold announcements, manifestos, and sharp opinions."
+        }
+      }
+    },
+    "formats": {
+      "instagram-post": {
+        "width": 1080,
+        "height": 1080,
+        "caption_source": "instagram_caption",
+        "hashtag_count": 3,
+        "default_template_id": "core/editorial-base"
+      },
+      "instagram-story": {
+        "width": 1080,
+        "height": 1920,
+        "caption_source": "instagram_caption",
+        "hashtag_count": 2,
+        "default_template_id": "core/editorial-base"
+      },
+      "carousel-slide": {
+        "width": 1080,
+        "height": 1080,
+        "caption_source": "carousel_slides",
+        "hashtag_count": 0,
+        "default_template_id": "core/editorial-base"
+      },
+      "twitter-card": {
+        "width": 1200,
+        "height": 630,
+        "caption_source": "twitter_caption",
+        "hashtag_count": 0,
+        "default_template_id": "core/bold-base"
+      },
+      "linkedin-post": {
+        "width": 1200,
+        "height": 627,
+        "caption_source": "linkedin_caption",
+        "hashtag_count": 0,
+        "default_template_id": "core/editorial-base"
+      }
+    },
+    "preview_defaults": {
+      "title": "Sample Blog Post Title",
+      "caption": "Sample caption for a social media image preview.",
+      "heading": "Key idea goes here",
+      "body": "One concise sentence that explains the idea for this slide.",
+      "slide_number": 1,
+      "total_slides": 5
+    },
+    "templates": [
+      {
+        "id": "core/editorial-base",
+        "styles": [
+          "editorial",
+          "minimal",
+          "monochrome-swiss"
+        ],
+        "label": "Core Editorial Base",
+        "default_for_style": true,
+        "file": "templates/editorial-base.html",
+        "formats": [
+          "instagram-post",
+          "instagram-story",
+          "carousel-slide",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "style": "editorial"
+      },
+      {
+        "id": "core/illustration-base",
+        "styles": [
+          "illustration"
+        ],
+        "label": "Core Illustration Base",
+        "default_for_style": true,
+        "file": "templates/illustration-base.html",
+        "formats": [
+          "instagram-post",
+          "instagram-story",
+          "carousel-slide",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "style": "illustration"
+      },
+      {
+        "id": "core/bold-base",
+        "styles": [
+          "bold",
+          "brutal"
+        ],
+        "label": "Core Bold Base",
+        "default_for_style": true,
+        "file": "templates/bold-base.html",
+        "formats": [
+          "instagram-post",
+          "instagram-story",
+          "carousel-slide",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "style": "bold"
+      },
+      {
+        "id": "core/data-base",
+        "styles": [
+          "data"
+        ],
+        "label": "Core Data Base",
+        "default_for_style": true,
+        "file": "templates/data-base.html",
+        "formats": [
+          "instagram-post",
+          "instagram-story",
+          "carousel-slide",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "style": "data"
+      },
+      {
+        "id": "core/quote-focus",
+        "styles": [
+          "editorial",
+          "illustration",
+          "minimal",
+          "bold",
+          "data",
+          "monochrome-swiss",
+          "brutal"
+        ],
+        "label": "Core Quote Focus",
+        "archetypes": [
+          "quote"
+        ],
+        "file": "templates/quote-focus.html",
+        "formats": [
+          "instagram-post",
+          "instagram-story",
+          "carousel-slide",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "style": "editorial"
+      },
+      {
+        "id": "core/checklist-stack",
+        "styles": [
+          "editorial",
+          "illustration",
+          "minimal",
+          "bold",
+          "data",
+          "monochrome-swiss",
+          "brutal"
+        ],
+        "label": "Core Checklist Stack",
+        "archetypes": [
+          "checklist",
+          "timeline"
+        ],
+        "file": "templates/checklist-stack.html",
+        "formats": [
+          "instagram-post",
+          "instagram-story",
+          "carousel-slide",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "style": "editorial"
+      },
+      {
+        "id": "core/metric-split",
+        "styles": [
+          "editorial",
+          "illustration",
+          "minimal",
+          "bold",
+          "data",
+          "monochrome-swiss",
+          "brutal"
+        ],
+        "label": "Core Metric Split",
+        "archetypes": [
+          "metric"
+        ],
+        "file": "templates/metric-split.html",
+        "formats": [
+          "instagram-post",
+          "instagram-story",
+          "carousel-slide",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "style": "editorial"
+      },
+      {
+        "id": "core/promo-pill",
+        "styles": [
+          "editorial",
+          "illustration",
+          "minimal",
+          "bold",
+          "data",
+          "monochrome-swiss",
+          "brutal"
+        ],
+        "label": "Core Promo Pill",
+        "archetypes": [
+          "promo"
+        ],
+        "file": "templates/promo-pill.html",
+        "formats": [
+          "instagram-post",
+          "instagram-story",
+          "carousel-slide",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "style": "editorial"
+      }
+    ]
+  },
+  "post_archetypes": {
+    "default_archetype": "insight",
+    "archetypes": {
+      "insight": {
+        "label": "Insight",
+        "description": "Single powerful idea with supporting context.",
+        "llm_hint": "Best for educational or opinion posts with one core takeaway."
+      },
+      "metric": {
+        "label": "Metric",
+        "description": "Data-led post centered around one number and meaning.",
+        "llm_hint": "Best when there are statistics, growth numbers, or benchmarks."
+      },
+      "quote": {
+        "label": "Quote",
+        "description": "Memorable sentence with attribution and short interpretation.",
+        "llm_hint": "Best for thought leadership and voice-driven content."
+      },
+      "checklist": {
+        "label": "Checklist",
+        "description": "Actionable steps and tactical lists.",
+        "llm_hint": "Best for tutorials, frameworks, and practical execution advice."
+      },
+      "timeline": {
+        "label": "Timeline",
+        "description": "Sequenced process over time or ordered milestones.",
+        "llm_hint": "Best for roadmaps, process breakdowns, and progress stories."
+      },
+      "promo": {
+        "label": "Promo",
+        "description": "Campaign-style copy with CTA and urgency.",
+        "llm_hint": "Best for launches, announcements, and offers."
+      }
+    }
+  },
+  "slot_schema": {
+    "defaults": {
+      "headline": "{{TITLE}}",
+      "subheadline": "{{CAPTION}}",
+      "short_hook": "{{TITLE}}",
+      "supporting_line": "{{CAPTION}}",
+      "insight_line": "{{CAPTION}}",
+      "metric_value": "2.4K",
+      "metric_label": "Weekly readers",
+      "quote_text": "{{CAPTION}}",
+      "quote_author": "{{BRAND_NAME}}",
+      "cta_text": "Read more",
+      "kicker": "INSIGHT",
+      "step_1": "Define your objective",
+      "step_2": "Map one focused action",
+      "step_3": "Review and iterate",
+      "step_4": "Ship and measure"
+    },
+    "slot_hints": {
+      "headline": "Primary title line used in hero sections.",
+      "subheadline": "Secondary line to clarify or expand the headline.",
+      "short_hook": "Very short opener phrase for compact cards.",
+      "supporting_line": "Supporting sentence under the hook.",
+      "insight_line": "Single-sentence core insight.",
+      "metric_value": "Main KPI value such as 84% or 2.4K.",
+      "metric_label": "Context for the KPI value.",
+      "quote_text": "Short quote body, usually one sentence.",
+      "quote_author": "Who said or owns the quote.",
+      "cta_text": "Call-to-action phrase such as Read now.",
+      "kicker": "Small uppercase label over titles.",
+      "step_1": "First checklist or sequence step.",
+      "step_2": "Second checklist or sequence step.",
+      "step_3": "Third checklist or sequence step.",
+      "step_4": "Fourth checklist or sequence step."
+    }
+  },
+  "generation": {
+    "carousel_required_slides": 5,
+    "stock_topic_keywords": [
+      "travel",
+      "food",
+      "recipe",
+      "restaurant",
+      "coffee",
+      "city",
+      "beach",
+      "mountain",
+      "tech",
+      "software",
+      "app",
+      "gadget",
+      "camera",
+      "fitness",
+      "fashion",
+      "workspace",
+      "laptop",
+      "phone",
+      "coding"
+    ],
+    "limits": {
+      "post_text_max_chars": 5000,
+      "direct_excerpt_default_max_chars": 220,
+      "input_tags_max_count": 8,
+      "stock_query_term_max_count": 6,
+      "storage_run_id_max_chars": 64,
+      "instagram_caption_max_chars": 150,
+      "twitter_caption_max_chars": 240,
+      "linkedin_caption_max_chars": 300,
+      "carousel_heading_max_chars": 48,
+      "carousel_body_max_chars": 140,
+      "image_prompt_max_chars": 400,
+      "hashtag_min_count": 5,
+      "hashtag_max_count": 8,
+      "hashtag_min_token_chars": 3,
+      "title_keyword_min_chars": 3,
+      "fallback_keyword_min_chars": 4,
+      "caption_with_hashtags_max_chars": 320,
+      "slot_text_max_chars": 200,
+      "slot_fallback_line_max_chars": 180,
+      "slot_headline_max_chars": 110,
+      "single_sentence_max_chars": 140
+    },
+    "fallbacks": {
+      "carousel_heading": "Key Point",
+      "carousel_heading_prefix": "Insight",
+      "stock_search_query": "technology lifestyle",
+      "untitled_text": "Untitled",
+      "default_quote_author": "Editorial Team"
+    },
+    "llm": {
+      "default_model": "@cf/openai/gpt-oss-120b",
+      "temperature": 0.2,
+      "max_tokens": 1400,
+      "system_prompt": [
+        "You are a senior social growth strategist and marketing copywriter for a personal tech/lifestyle brand.",
+        "Write persuasive but credible platform-native copy with a clear value proposition.",
+        "Use concrete benefits, audience pain points, and action-oriented language.",
+        "Do not invent facts that are not present in the source material.",
+        "Always respond with strict JSON matching the required schema."
+      ],
+      "user_instructions": [
+        "Create platform-ready marketing copy for the blog post below.",
+        "Primary goal: convert attention into intent (read, save, share, click, or follow).",
+        "Constraints:",
+        "- keep one unified campaign angle across all platforms, adapted to native tone per platform.",
+        "- instagram_caption: emotionally engaging hook + concrete value + soft CTA, max <instagram_caption_max_chars> characters.",
+        "- twitter_caption: concise high-signal insight + tangible payoff + quick CTA, max <twitter_caption_max_chars> characters.",
+        "- linkedin_caption: problem -> insight -> action structure in a professional tone, max <linkedin_caption_max_chars> characters.",
+        "- all captions must be plain text only: no markdown headings, no bullet list markers, and no leading #.",
+        "- captions should feel human and specific, not robotic or generic.",
+        "- avoid generic phrases such as game changer, unlock potential, next level, or in today's world.",
+        "- carousel_slides: exactly <required_carousel_slides> items with a narrative arc.",
+        "- carousel narrative shape: slide 1 = hook/intro, middle slides = distinct supporting points, final slide = conclusion with practical next step.",
+        "- each carousel heading: specific 2-6 words, max <carousel_heading_max_chars> characters, never placeholders like Insight 1 / Slide 2 / Key Point.",
+        "- each carousel body: one complete sentence, max <carousel_body_max_chars> characters, plain text only.",
+        "- each carousel slide must add new information; avoid repeated headings or repeated body sentences.",
+        "- hashtags: <hashtag_min_count>-<hashtag_max_count> relevant tags, each beginning with #, no spaces inside a tag.",
+        "- image_prompt: optional BACKGROUND-ONLY art direction aligned with selected template_style and post_archetype (no text, no UI, no logos).",
+        "- use_feature_image: boolean, true only if feature image is present and contextually aligned.",
+        "- template_style: choose one style id from <available_template_styles>.",
+        "- post_archetype: choose one archetype id from <available_post_archetypes>.",
+        "- font_profile: choose one font profile id from <available_font_profiles>.",
+        "- slot_content: object of string values using the most relevant keys from <available_slot_keys>.",
+        "- apply these design-system composition directives exactly:",
+        "<design_system_directives>",
+        "Output JSON only."
+      ]
+    },
+    "image": {
+      "default_model": "@cf/black-forest-labs/flux-1-schnell",
+      "prompt_prefix": [
+        "Create one campaign-quality social background image that can be reused across square, portrait, and landscape crops.",
+        "Use one clear focal subject, intentional negative space for headline placement, and brand-safe composition.",
+        "No text, no letters, no numbers, no logos, no UI elements, no watermarks.",
+        "Avoid heavy black gradients unless dramatic contrast is explicitly requested."
+      ],
+      "style_guidance": {
+        "editorial": "photorealistic editorial scene, nuanced depth, premium natural textures, balanced highlights",
+        "illustration": "stylized but realistic environment, softer tones, creative shapes, playful but polished composition",
+        "minimal": "clean modern scene with simple geometry, fewer objects, calm neutral palette, high readability space",
+        "bold": "high-contrast campaign scene with strong directional light and decisive composition",
+        "data": "analytical modern environment with structured visual rhythm, subtle grid-like cues, precise composition",
+        "monochrome-swiss": "precise monochrome environment, disciplined composition, generous negative space, typographic poster sensibility",
+        "brutal": "high-contrast graphic environment with sharp geometry, punchy framing, and poster-like visual tension"
+      },
+      "archetype_guidance": {
+        "insight": "focus on clarity and thoughtful discovery",
+        "metric": "include context that suggests measurement, growth, or benchmark thinking",
+        "quote": "focus on emotion and narrative symbolism",
+        "checklist": "focus on process, order, and practical execution",
+        "timeline": "focus on progression, milestones, and forward movement",
+        "promo": "focus on urgency, launch energy, and commercial intent"
+      },
+      "negative_clauses": [
+        "Avoid muddy shadows and overly dark vignette overlays.",
+        "Avoid cluttered scenes that reduce text readability.",
+        "Avoid generic stock-photo look; keep visual identity distinct.",
+        "Do not render any typography, captions, labels, symbols, glyphs, or watermarks.",
+        "Avoid signage, billboards, screens, packaging text, and posters with words."
+      ]
+    }
+  },
+  "runtime": {
+    "browser_keep_alive_ms": 60000,
+    "page_set_content_wait_until": "networkidle0",
+    "asset_cache_control": "public, max-age=31536000, immutable",
+    "ghost_error_preview_chars": 300
+  },
+  "features": {
+    "enable_template_preview": true,
+    "enable_stock_image_search": true,
+    "enable_ai_image_generation": true,
+    "prefer_feature_image": true,
+    "enable_notifications": true
+  },
+  "security": {
+    "api_auth": {
+      "enabled": true,
+      "header_name": "x-api-key",
+      "require_for_preview": true,
+      "require_for_generate": true,
+      "require_for_direct_content": true,
+      "require_for_webhook": false
+    },
+    "cors": {
+      "enabled": true,
+      "allowed_origins": [
+        "*"
+      ],
+      "allowed_headers": [
+        "content-type",
+        "authorization",
+        "x-api-key",
+        "x-webhook-token"
+      ],
+      "allowed_methods": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ],
+      "allow_credentials": false,
+      "max_age_seconds": 86400
+    },
+    "request_limits": {
+      "max_json_body_bytes": 256000,
+      "slot_overrides_max_keys": 40,
+      "template_ids_max_keys": 5
+    },
+    "rate_limit": {
+      "enabled": true,
+      "window_seconds": 60,
+      "max_requests_per_window": 30
+    },
+    "outbound": {
+      "allow_private_network_targets": false,
+      "allowed_notify_hosts": [],
+      "allowed_image_hosts": []
+    }
+  },
+  "storage": {
+    "default_key_prefix": "social-assets",
+    "default_mode": "overwrite",
+    "versioned_include_date": true
+  },
+  "schema_version": 1,
   "brand": {
     "default_name": "Tasbir Blog",
     "default_color": "#1f7a8c"
@@ -100,6 +1031,7 @@ export const PIPELINE_CONFIG = {
       "showSlideBadge": false,
       "showMetaFooter": false,
       "showTitleKicker": true,
+      "showDecorLayers": true,
       "textAlign": "left"
     },
     "format_control_defaults": {
@@ -143,122 +1075,135 @@ export const PIPELINE_CONFIG = {
       "monochrome-swiss": "swiss-mono",
       "brutal": "brutal"
     },
+    "visual_layers": {
+      "use_background_image_only": true,
+      "use_html_decor_layers": true,
+      "style_profiles": {
+        "editorial": "soft-orbital",
+        "illustration": "playful-blobs",
+        "minimal": "subtle-grid",
+        "bold": "angular-burst",
+        "data": "metric-grid",
+        "monochrome-swiss": "swiss-grid",
+        "brutal": "cutout-noise"
+      }
+    },
     "preset_styles": {
       "minimal": {
-        "containerBackground": "radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--color-brand-glow) 24%, transparent) 0%, transparent 44%), linear-gradient(165deg, color-mix(in srgb, var(--color-brand-accent) 12%, var(--color-surface-base)), var(--color-surface-base))",
-        "overlayTop": "linear-gradient(170deg, rgba(2, 7, 14, 0.04), color-mix(in srgb, var(--color-overlay-strong) 52%, transparent) 76%)",
-        "overlayBottom": "linear-gradient(18deg, color-mix(in srgb, var(--color-brand-accent) 22%, transparent) 0%, transparent 58%)",
-        "vignette": "radial-gradient(circle at 50% 76%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 52%, transparent) 98%)",
-        "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 52%, transparent)",
-        "brandPillBorder": "color-mix(in srgb, var(--color-border-subtle) 74%, transparent)",
-        "brandPillText": "var(--color-text-primary)",
-        "titleShadow": "0 10px 24px rgba(0, 0, 0, 0.18)",
-        "captionShadow": "0 6px 18px rgba(0, 0, 0, 0.14)",
+        "containerBackground": "@render.preset.minimal.container-background",
+        "overlayTop": "@render.preset.minimal.overlay-top",
+        "overlayBottom": "@render.preset.minimal.overlay-bottom",
+        "vignette": "@render.preset.minimal.vignette",
+        "brandPillBackground": "@render.preset.minimal.brand-pill-background",
+        "brandPillBorder": "@render.preset.minimal.brand-pill-border",
+        "brandPillText": "@render.preset.minimal.brand-pill-text",
+        "titleShadow": "@render.preset.minimal.title-shadow",
+        "captionShadow": "@render.preset.minimal.caption-shadow",
         "grainOpacity": 0.05,
         "imageOpacity": 0.48,
         "typeScale": 0.96,
         "spaceScale": 0.94
       },
       "illustration": {
-        "containerBackground": "radial-gradient(circle at 16% 14%, color-mix(in srgb, var(--color-brand-glow) 48%, transparent) 0%, transparent 46%), linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 18%, var(--color-surface-base)), color-mix(in srgb, var(--color-surface-base) 86%, #0b1524))",
-        "overlayTop": "linear-gradient(170deg, rgba(3, 8, 14, 0.02), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 78%)",
-        "overlayBottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 20%, transparent), transparent 64%)",
-        "vignette": "radial-gradient(circle at 52% 86%, transparent 36%, color-mix(in srgb, var(--color-overlay-strong) 30%, transparent) 98%)",
-        "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 44%, transparent)",
-        "brandPillBorder": "color-mix(in srgb, var(--color-border-subtle) 58%, transparent)",
-        "brandPillText": "var(--color-text-primary)",
-        "titleShadow": "0 8px 22px rgba(0, 0, 0, 0.12)",
-        "captionShadow": "0 4px 16px rgba(0, 0, 0, 0.1)",
+        "containerBackground": "@render.preset.illustration.container-background",
+        "overlayTop": "@render.preset.illustration.overlay-top",
+        "overlayBottom": "@render.preset.illustration.overlay-bottom",
+        "vignette": "@render.preset.illustration.vignette",
+        "brandPillBackground": "@render.preset.illustration.brand-pill-background",
+        "brandPillBorder": "@render.preset.illustration.brand-pill-border",
+        "brandPillText": "@render.preset.illustration.brand-pill-text",
+        "titleShadow": "@render.preset.illustration.title-shadow",
+        "captionShadow": "@render.preset.illustration.caption-shadow",
         "grainOpacity": 0.03,
         "imageOpacity": 0.54,
         "typeScale": 1.02,
         "spaceScale": 1
       },
       "editorial": {
-        "containerBackground": "radial-gradient(circle at 13% 12%, color-mix(in srgb, var(--color-brand-glow) 54%, transparent) 0%, transparent 50%), linear-gradient(162deg, color-mix(in srgb, var(--color-brand-accent) 24%, var(--color-surface-base)), var(--color-surface-base))",
-        "overlayTop": "linear-gradient(168deg, rgba(2, 7, 14, 0.08), color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 72%)",
-        "overlayBottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 46%, transparent) 0%, transparent 52%)",
-        "vignette": "radial-gradient(circle at 54% 82%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 98%)",
-        "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 70%, transparent)",
-        "brandPillBorder": "var(--color-border-subtle)",
-        "brandPillText": "var(--color-text-primary)",
-        "titleShadow": "0 16px 34px rgba(0, 0, 0, 0.24)",
-        "captionShadow": "0 8px 24px rgba(0, 0, 0, 0.18)",
+        "containerBackground": "@render.preset.editorial.container-background",
+        "overlayTop": "@render.preset.editorial.overlay-top",
+        "overlayBottom": "@render.preset.editorial.overlay-bottom",
+        "vignette": "@render.preset.editorial.vignette",
+        "brandPillBackground": "@render.preset.editorial.brand-pill-background",
+        "brandPillBorder": "@render.preset.editorial.brand-pill-border",
+        "brandPillText": "@render.preset.editorial.brand-pill-text",
+        "titleShadow": "@render.preset.editorial.title-shadow",
+        "captionShadow": "@render.preset.editorial.caption-shadow",
         "grainOpacity": 0.07,
         "imageOpacity": 0.5,
         "typeScale": 1,
         "spaceScale": 1
       },
       "spotlight": {
-        "containerBackground": "radial-gradient(circle at 72% 10%, color-mix(in srgb, var(--color-brand-accent) 54%, transparent) 0%, transparent 42%), linear-gradient(150deg, color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-base)), var(--color-surface-base))",
-        "overlayTop": "linear-gradient(180deg, rgba(1, 5, 10, 0.06), color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 70%)",
-        "overlayBottom": "linear-gradient(0deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent) 0%, transparent 58%)",
-        "vignette": "radial-gradient(circle at 50% 92%, transparent 22%, color-mix(in srgb, var(--color-overlay-strong) 60%, transparent) 98%)",
-        "brandPillBackground": "color-mix(in srgb, var(--color-brand-accent) 30%, var(--color-surface-elevated))",
-        "brandPillBorder": "color-mix(in srgb, var(--color-brand-accent) 72%, var(--color-border-subtle))",
-        "brandPillText": "var(--color-text-primary)",
-        "titleShadow": "0 18px 38px rgba(0, 0, 0, 0.24)",
-        "captionShadow": "0 10px 26px rgba(0, 0, 0, 0.2)",
+        "containerBackground": "@render.preset.spotlight.container-background",
+        "overlayTop": "@render.preset.spotlight.overlay-top",
+        "overlayBottom": "@render.preset.spotlight.overlay-bottom",
+        "vignette": "@render.preset.spotlight.vignette",
+        "brandPillBackground": "@render.preset.spotlight.brand-pill-background",
+        "brandPillBorder": "@render.preset.spotlight.brand-pill-border",
+        "brandPillText": "@render.preset.spotlight.brand-pill-text",
+        "titleShadow": "@render.preset.spotlight.title-shadow",
+        "captionShadow": "@render.preset.spotlight.caption-shadow",
         "grainOpacity": 0.08,
         "imageOpacity": 0.52,
         "typeScale": 1.08,
         "spaceScale": 1.08
       },
       "bold": {
-        "containerBackground": "linear-gradient(145deg, color-mix(in srgb, var(--color-brand-accent) 44%, #050812), var(--color-surface-base))",
-        "overlayTop": "linear-gradient(170deg, rgba(0, 0, 0, 0.04), color-mix(in srgb, var(--color-overlay-strong) 48%, transparent) 74%)",
-        "overlayBottom": "linear-gradient(16deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent) 0%, transparent 50%)",
-        "vignette": "radial-gradient(circle at 88% 88%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 48%), radial-gradient(circle at 50% 76%, transparent 34%, color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 98%)",
-        "brandPillBackground": "color-mix(in srgb, var(--color-brand-accent) 34%, var(--color-surface-elevated))",
-        "brandPillBorder": "color-mix(in srgb, var(--color-brand-accent) 88%, var(--color-border-subtle))",
-        "brandPillText": "var(--color-brand-accent-foreground)",
-        "titleShadow": "0 16px 32px rgba(0, 0, 0, 0.24)",
-        "captionShadow": "0 8px 22px rgba(0, 0, 0, 0.18)",
+        "containerBackground": "@render.preset.bold.container-background",
+        "overlayTop": "@render.preset.bold.overlay-top",
+        "overlayBottom": "@render.preset.bold.overlay-bottom",
+        "vignette": "@render.preset.bold.vignette",
+        "brandPillBackground": "@render.preset.bold.brand-pill-background",
+        "brandPillBorder": "@render.preset.bold.brand-pill-border",
+        "brandPillText": "@render.preset.bold.brand-pill-text",
+        "titleShadow": "@render.preset.bold.title-shadow",
+        "captionShadow": "@render.preset.bold.caption-shadow",
         "grainOpacity": 0.06,
         "imageOpacity": 0.46,
         "typeScale": 1.04,
         "spaceScale": 1.02
       },
       "clean": {
-        "containerBackground": "linear-gradient(160deg, color-mix(in srgb, var(--color-brand-accent) 16%, #0a1320), #0a1320 50%, color-mix(in srgb, var(--color-brand-accent) 8%, #0b1119))",
-        "overlayTop": "linear-gradient(170deg, rgba(2, 8, 14, 0.03), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 82%)",
-        "overlayBottom": "linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 16%, transparent), transparent 62%)",
-        "vignette": "radial-gradient(circle at 50% 76%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%)",
-        "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 42%, transparent)",
-        "brandPillBorder": "color-mix(in srgb, var(--color-border-subtle) 52%, transparent)",
-        "brandPillText": "var(--color-text-secondary)",
-        "titleShadow": "0 10px 20px rgba(0, 0, 0, 0.12)",
-        "captionShadow": "0 4px 14px rgba(0, 0, 0, 0.1)",
+        "containerBackground": "@render.preset.clean.container-background",
+        "overlayTop": "@render.preset.clean.overlay-top",
+        "overlayBottom": "@render.preset.clean.overlay-bottom",
+        "vignette": "@render.preset.clean.vignette",
+        "brandPillBackground": "@render.preset.clean.brand-pill-background",
+        "brandPillBorder": "@render.preset.clean.brand-pill-border",
+        "brandPillText": "@render.preset.clean.brand-pill-text",
+        "titleShadow": "@render.preset.clean.title-shadow",
+        "captionShadow": "@render.preset.clean.caption-shadow",
         "grainOpacity": 0.04,
         "imageOpacity": 0.52,
         "typeScale": 0.95,
         "spaceScale": 0.92
       },
       "swiss-mono": {
-        "containerBackground": "linear-gradient(180deg, color-mix(in srgb, var(--color-surface-base) 88%, #020509), color-mix(in srgb, var(--color-surface-base) 70%, #0f1a2b))",
-        "overlayTop": "linear-gradient(180deg, color-mix(in srgb, #ffffff 3%, transparent), color-mix(in srgb, var(--color-overlay-strong) 24%, transparent) 72%)",
-        "overlayBottom": "linear-gradient(0deg, color-mix(in srgb, #ffffff 5%, transparent) 0%, transparent 64%)",
-        "vignette": "radial-gradient(circle at 50% 78%, transparent 44%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%)",
-        "brandPillBackground": "color-mix(in srgb, var(--color-surface-elevated) 40%, transparent)",
-        "brandPillBorder": "color-mix(in srgb, #ffffff 48%, transparent)",
-        "brandPillText": "var(--color-text-primary)",
-        "titleShadow": "0 6px 14px rgba(0, 0, 0, 0.1)",
-        "captionShadow": "0 2px 10px rgba(0, 0, 0, 0.08)",
+        "containerBackground": "@render.preset.swiss-mono.container-background",
+        "overlayTop": "@render.preset.swiss-mono.overlay-top",
+        "overlayBottom": "@render.preset.swiss-mono.overlay-bottom",
+        "vignette": "@render.preset.swiss-mono.vignette",
+        "brandPillBackground": "@render.preset.swiss-mono.brand-pill-background",
+        "brandPillBorder": "@render.preset.swiss-mono.brand-pill-border",
+        "brandPillText": "@render.preset.swiss-mono.brand-pill-text",
+        "titleShadow": "@render.preset.swiss-mono.title-shadow",
+        "captionShadow": "@render.preset.swiss-mono.caption-shadow",
         "grainOpacity": 0.02,
         "imageOpacity": 0.44,
         "typeScale": 0.9,
         "spaceScale": 0.86
       },
       "brutal": {
-        "containerBackground": "linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 54%, #05070c), #05070c 58%, color-mix(in srgb, var(--color-brand-accent) 42%, #111827))",
-        "overlayTop": "linear-gradient(165deg, rgba(0, 0, 0, 0.06), color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 76%)",
-        "overlayBottom": "linear-gradient(10deg, color-mix(in srgb, var(--color-brand-accent) 62%, transparent) 0%, transparent 48%)",
-        "vignette": "radial-gradient(circle at 84% 84%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 38%), radial-gradient(circle at 20% 18%, color-mix(in srgb, #ffffff 14%, transparent) 0%, transparent 30%), radial-gradient(circle at 50% 74%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 99%)",
-        "brandPillBackground": "color-mix(in srgb, var(--color-brand-accent) 46%, var(--color-surface-elevated))",
-        "brandPillBorder": "color-mix(in srgb, #ffffff 72%, transparent)",
-        "brandPillText": "var(--color-brand-accent-foreground)",
-        "titleShadow": "0 18px 34px rgba(0, 0, 0, 0.24)",
-        "captionShadow": "0 8px 22px rgba(0, 0, 0, 0.18)",
+        "containerBackground": "@render.preset.brutal.container-background",
+        "overlayTop": "@render.preset.brutal.overlay-top",
+        "overlayBottom": "@render.preset.brutal.overlay-bottom",
+        "vignette": "@render.preset.brutal.vignette",
+        "brandPillBackground": "@render.preset.brutal.brand-pill-background",
+        "brandPillBorder": "@render.preset.brutal.brand-pill-border",
+        "brandPillText": "@render.preset.brutal.brand-pill-text",
+        "titleShadow": "@render.preset.brutal.title-shadow",
+        "captionShadow": "@render.preset.brutal.caption-shadow",
         "grainOpacity": 0.07,
         "imageOpacity": 0.5,
         "typeScale": 1.14,
@@ -566,276 +1511,18 @@ export const PIPELINE_CONFIG = {
       ],
       "style": "editorial"
     }
-  ],
-  "post_archetypes": {
-    "default_archetype": "insight",
-    "archetypes": {
-      "insight": {
-        "label": "Insight",
-        "description": "Single powerful idea with supporting context.",
-        "llm_hint": "Best for educational or opinion posts with one core takeaway."
-      },
-      "metric": {
-        "label": "Metric",
-        "description": "Data-led post centered around one number and meaning.",
-        "llm_hint": "Best when there are statistics, growth numbers, or benchmarks."
-      },
-      "quote": {
-        "label": "Quote",
-        "description": "Memorable sentence with attribution and short interpretation.",
-        "llm_hint": "Best for thought leadership and voice-driven content."
-      },
-      "checklist": {
-        "label": "Checklist",
-        "description": "Actionable steps and tactical lists.",
-        "llm_hint": "Best for tutorials, frameworks, and practical execution advice."
-      },
-      "timeline": {
-        "label": "Timeline",
-        "description": "Sequenced process over time or ordered milestones.",
-        "llm_hint": "Best for roadmaps, process breakdowns, and progress stories."
-      },
-      "promo": {
-        "label": "Promo",
-        "description": "Campaign-style copy with CTA and urgency.",
-        "llm_hint": "Best for launches, announcements, and offers."
-      }
-    }
-  },
-  "slot_schema": {
-    "defaults": {
-      "headline": "{{TITLE}}",
-      "subheadline": "{{CAPTION}}",
-      "short_hook": "{{TITLE}}",
-      "supporting_line": "{{CAPTION}}",
-      "insight_line": "{{CAPTION}}",
-      "metric_value": "2.4K",
-      "metric_label": "Weekly readers",
-      "quote_text": "{{CAPTION}}",
-      "quote_author": "{{BRAND_NAME}}",
-      "cta_text": "Read more",
-      "kicker": "INSIGHT",
-      "step_1": "Define your objective",
-      "step_2": "Map one focused action",
-      "step_3": "Review and iterate",
-      "step_4": "Ship and measure"
-    },
-    "slot_hints": {
-      "headline": "Primary title line used in hero sections.",
-      "subheadline": "Secondary line to clarify or expand the headline.",
-      "short_hook": "Very short opener phrase for compact cards.",
-      "supporting_line": "Supporting sentence under the hook.",
-      "insight_line": "Single-sentence core insight.",
-      "metric_value": "Main KPI value such as 84% or 2.4K.",
-      "metric_label": "Context for the KPI value.",
-      "quote_text": "Short quote body, usually one sentence.",
-      "quote_author": "Who said or owns the quote.",
-      "cta_text": "Call-to-action phrase such as Read now.",
-      "kicker": "Small uppercase label over titles.",
-      "step_1": "First checklist or sequence step.",
-      "step_2": "Second checklist or sequence step.",
-      "step_3": "Third checklist or sequence step.",
-      "step_4": "Fourth checklist or sequence step."
-    }
-  },
-  "generation": {
-    "carousel_required_slides": 5,
-    "stock_topic_keywords": [
-      "travel",
-      "food",
-      "recipe",
-      "restaurant",
-      "coffee",
-      "city",
-      "beach",
-      "mountain",
-      "tech",
-      "software",
-      "app",
-      "gadget",
-      "camera",
-      "fitness",
-      "fashion",
-      "workspace",
-      "laptop",
-      "phone",
-      "coding"
-    ],
-    "limits": {
-      "post_text_max_chars": 5000,
-      "direct_excerpt_default_max_chars": 220,
-      "input_tags_max_count": 8,
-      "stock_query_term_max_count": 6,
-      "storage_run_id_max_chars": 64,
-      "instagram_caption_max_chars": 150,
-      "twitter_caption_max_chars": 240,
-      "linkedin_caption_max_chars": 300,
-      "carousel_heading_max_chars": 48,
-      "carousel_body_max_chars": 140,
-      "image_prompt_max_chars": 400,
-      "hashtag_min_count": 5,
-      "hashtag_max_count": 8,
-      "hashtag_min_token_chars": 3,
-      "title_keyword_min_chars": 3,
-      "fallback_keyword_min_chars": 4,
-      "caption_with_hashtags_max_chars": 320,
-      "slot_text_max_chars": 200,
-      "slot_fallback_line_max_chars": 180,
-      "slot_headline_max_chars": 110,
-      "single_sentence_max_chars": 140
-    },
-    "fallbacks": {
-      "carousel_heading": "Key Point",
-      "carousel_heading_prefix": "Insight",
-      "stock_search_query": "technology lifestyle",
-      "untitled_text": "Untitled",
-      "default_quote_author": "Editorial Team"
-    },
-    "llm": {
-      "default_model": "@cf/openai/gpt-oss-120b",
-      "temperature": 0.2,
-      "max_tokens": 1400,
-      "system_prompt": [
-        "You are a senior social growth strategist and marketing copywriter for a personal tech/lifestyle brand.",
-        "Write persuasive but credible platform-native copy with a clear value proposition.",
-        "Use concrete benefits, audience pain points, and action-oriented language.",
-        "Do not invent facts that are not present in the source material.",
-        "Always respond with strict JSON matching the required schema."
-      ],
-      "user_instructions": [
-        "Create platform-ready marketing copy for the blog post below.",
-        "Primary goal: convert attention into intent (read, save, share, click, or follow).",
-        "Constraints:",
-        "- keep one unified campaign angle across all platforms, adapted to native tone per platform.",
-        "- instagram_caption: emotionally engaging hook + concrete value + soft CTA, max <instagram_caption_max_chars> characters.",
-        "- twitter_caption: concise high-signal insight + tangible payoff + quick CTA, max <twitter_caption_max_chars> characters.",
-        "- linkedin_caption: problem -> insight -> action structure in a professional tone, max <linkedin_caption_max_chars> characters.",
-        "- all captions must be plain text only: no markdown headings, no bullet list markers, and no leading #.",
-        "- captions should feel human and specific, not robotic or generic.",
-        "- avoid generic phrases such as game changer, unlock potential, next level, or in today's world.",
-        "- carousel_slides: exactly <required_carousel_slides> items with a narrative arc.",
-        "- carousel narrative shape: slide 1 = hook/intro, middle slides = distinct supporting points, final slide = conclusion with practical next step.",
-        "- each carousel heading: specific 2-6 words, max <carousel_heading_max_chars> characters, never placeholders like Insight 1 / Slide 2 / Key Point.",
-        "- each carousel body: one complete sentence, max <carousel_body_max_chars> characters, plain text only.",
-        "- each carousel slide must add new information; avoid repeated headings or repeated body sentences.",
-        "- hashtags: <hashtag_min_count>-<hashtag_max_count> relevant tags, each beginning with #, no spaces inside a tag.",
-        "- image_prompt: vivid but realistic marketing art direction aligned with selected template_style and post_archetype.",
-        "- use_feature_image: boolean, true only if feature image is present and contextually aligned.",
-        "- template_style: choose one style id from <available_template_styles>.",
-        "- post_archetype: choose one archetype id from <available_post_archetypes>.",
-        "- font_profile: choose one font profile id from <available_font_profiles>.",
-        "- slot_content: object of string values using the most relevant keys from <available_slot_keys>.",
-        "Output JSON only."
-      ]
-    },
-    "image": {
-      "default_model": "@cf/black-forest-labs/flux-1-schnell",
-      "prompt_prefix": [
-        "Create one campaign-quality social background image that can be reused across square, portrait, and landscape crops.",
-        "Use one clear focal subject, intentional negative space for headline placement, and brand-safe composition.",
-        "No text, no letters, no numbers, no logos, no UI elements, no watermarks.",
-        "Avoid heavy black gradients unless dramatic contrast is explicitly requested."
-      ],
-      "style_guidance": {
-        "editorial": "photorealistic editorial scene, nuanced depth, premium natural textures, balanced highlights",
-        "illustration": "stylized but realistic environment, softer tones, creative shapes, playful but polished composition",
-        "minimal": "clean modern scene with simple geometry, fewer objects, calm neutral palette, high readability space",
-        "bold": "high-contrast campaign scene with strong directional light and decisive composition",
-        "data": "analytical modern environment with structured visual rhythm, subtle grid-like cues, precise composition",
-        "monochrome-swiss": "precise monochrome environment, disciplined composition, generous negative space, typographic poster sensibility",
-        "brutal": "high-contrast graphic environment with sharp geometry, punchy framing, and poster-like visual tension"
-      },
-      "archetype_guidance": {
-        "insight": "focus on clarity and thoughtful discovery",
-        "metric": "include context that suggests measurement, growth, or benchmark thinking",
-        "quote": "focus on emotion and narrative symbolism",
-        "checklist": "focus on process, order, and practical execution",
-        "timeline": "focus on progression, milestones, and forward movement",
-        "promo": "focus on urgency, launch energy, and commercial intent"
-      },
-      "negative_clauses": [
-        "Avoid muddy shadows and overly dark vignette overlays.",
-        "Avoid cluttered scenes that reduce text readability.",
-        "Avoid generic stock-photo look; keep visual identity distinct.",
-        "Do not render any typography, captions, labels, symbols, glyphs, or watermarks.",
-        "Avoid signage, billboards, screens, packaging text, and posters with words."
-      ]
-    }
-  },
-  "runtime": {
-    "browser_keep_alive_ms": 60000,
-    "page_set_content_wait_until": "networkidle0",
-    "asset_cache_control": "public, max-age=31536000, immutable",
-    "ghost_error_preview_chars": 300
-  },
-  "features": {
-    "enable_template_preview": true,
-    "enable_stock_image_search": true,
-    "enable_ai_image_generation": true,
-    "prefer_feature_image": true,
-    "enable_notifications": true
-  },
-  "security": {
-    "api_auth": {
-      "enabled": true,
-      "header_name": "x-api-key",
-      "require_for_preview": true,
-      "require_for_generate": true,
-      "require_for_direct_content": true,
-      "require_for_webhook": false
-    },
-    "cors": {
-      "enabled": true,
-      "allowed_origins": [
-        "*"
-      ],
-      "allowed_headers": [
-        "content-type",
-        "authorization",
-        "x-api-key",
-        "x-webhook-token"
-      ],
-      "allowed_methods": [
-        "GET",
-        "POST",
-        "OPTIONS"
-      ],
-      "allow_credentials": false,
-      "max_age_seconds": 86400
-    },
-    "request_limits": {
-      "max_json_body_bytes": 256000,
-      "slot_overrides_max_keys": 40,
-      "template_ids_max_keys": 5
-    },
-    "rate_limit": {
-      "enabled": true,
-      "window_seconds": 60,
-      "max_requests_per_window": 30
-    },
-    "outbound": {
-      "allow_private_network_targets": false,
-      "allowed_notify_hosts": [],
-      "allowed_image_hosts": []
-    }
-  },
-  "storage": {
-    "default_key_prefix": "social-assets",
-    "default_mode": "overwrite",
-    "versioned_include_date": true
-  },
-  "schema_version": 1
+  ]
 } as const;
 
 export const TEMPLATE_FILES = {
-  "core/editorial-base": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(40px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(66px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.02; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(29px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.34; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/illustration-base": "<div class=\"absolute -left-[6%] top-[6%] rounded-full\" style=\"width: calc(320px * var(--layout-scale)); height: calc(320px * var(--layout-scale)); background: color-mix(in srgb, var(--color-brand-glow) 48%, transparent);\"></div>\n<div class=\"absolute right-[7%] bottom-[9%] rounded-[30%]\" style=\"width: calc(240px * var(--layout-scale)); height: calc(240px * var(--layout-scale)); background: color-mix(in srgb, var(--color-brand-accent) 36%, transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(38px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(68px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.01; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(29px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.34; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/bold-base": "<div class=\"absolute inset-y-0 left-0\" style=\"width: 42%; background: linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 42%, transparent), transparent);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(64px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(27px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.3; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/data-base": "<div class=\"absolute inset-x-0 top-0\" style=\"height: calc(46px * var(--layout-scale)); background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 26%, transparent) 0 30px, color-mix(in srgb, var(--color-surface-elevated) 68%, transparent) 30px 60px);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); padding-top: calc(({{CONTENT_INSET}}px + 18px) * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(61px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.02; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(27px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.32; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/quote-focus": "<div class=\"absolute left-[8%] top-[7%] text-[var(--color-brand-accent)]\" style=\"font-family: var(--font-display); font-size: calc(148px * var(--layout-scale) * var(--frame-type-scale)); line-height: 0.8; opacity: 0.22;\">“</div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(60px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.03; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:quote_text}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.22; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">- {{SLOT:quote_author}}</p>\n    <p class=\"mt-2 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.32; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:insight_line}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/checklist-stack": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(32px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-3 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(58px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.03; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n    <div class=\"mt-4 flex flex-col\" style=\"gap: calc(10px * var(--layout-scale) * var(--frame-space-scale)); max-width: {{CAPTION_MAX_WIDTH}}px;\">\n      <div class=\"rounded-xl border\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">1. {{SLOT:step_1}}</div>\n      <div class=\"rounded-xl border\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">2. {{SLOT:step_2}}</div>\n      <div class=\"rounded-xl border\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">3. {{SLOT:step_3}}</div>\n      <div class=\"rounded-xl border\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);\">4. {{SLOT:step_4}}</div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/metric-split": "<div class=\"absolute inset-x-0 top-0\" style=\"height: calc(46px * var(--layout-scale)); background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0 30px, transparent 30px 60px);\"></div>\n<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); padding-top: calc(({{CONTENT_INSET}}px + 14px) * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(30px * var(--layout-scale) * var(--frame-space-scale));\">\n    <div class=\"flex items-start justify-between\" style=\"gap: calc(18px * var(--layout-scale) * var(--frame-space-scale));\">\n      <div style=\"max-width: calc({{CONTENT_MAX_WIDTH}}px - calc(220px * var(--layout-scale)));\">\n        {{KICKER}}\n        <h1 class=\"mt-2 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(58px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.02; letter-spacing: -0.02em; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n        <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(26px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.32; max-width: calc({{CAPTION_MAX_WIDTH}}px - calc(220px * var(--layout-scale))); text-shadow: var(--frame-caption-shadow);\">{{SLOT:insight_line}}</p>\n      </div>\n      <div class=\"rounded-2xl border\" style=\"min-width: calc(220px * var(--layout-scale)); padding: calc(14px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale)); border-color: color-mix(in srgb, var(--color-brand-accent) 80%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);\">\n        <p class=\"tabular-nums\" style=\"font-family: var(--font-display); font-size: calc(66px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1;\">{{SLOT:metric_value}}</p>\n        <p class=\"mt-1 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(20px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.2;\">{{SLOT:metric_label}}</p>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
-  "core/promo-pill": "<div class=\"relative z-10 flex h-full w-full flex-col\" style=\"padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}\">\n  {{HEADER}}\n  <div class=\"mt-auto\" style=\"padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));\">\n    {{KICKER}}\n    <h1 class=\"mt-3 text-balance break-words\" style=\"font-family: var(--font-display); font-size: calc(62px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);\">{{SLOT:headline}}</h1>\n    <p class=\"mt-3 break-words text-[var(--color-text-secondary)]\" style=\"font-size: calc(26px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.3; max-width: {{CAPTION_MAX_WIDTH}}px; text-shadow: var(--frame-caption-shadow);\">{{SLOT:supporting_line}}</p>\n    <div class=\"mt-6 inline-flex w-fit items-center rounded-full\" style=\"padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(24px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale)); font-weight: 700; background: var(--color-brand-accent); color: var(--color-brand-accent-foreground);\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n"
+  "core/editorial-base": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-40\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-66 content-max\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words body-lead-29 caption-max\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/illustration-base": "<div class=\"absolute -left-[6%] top-[6%] illustration-left-orb\"></div>\n<div class=\"absolute right-[7%] bottom-[9%] illustration-right-blob\"></div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-38\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-68 content-max\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words body-lead-29 caption-max\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/bold-base": "<div class=\"absolute inset-y-0 left-0 bold-left-wash\"></div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-34\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-64 content-max\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words body-lead-27 caption-max\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/data-base": "<div class=\"absolute inset-x-0 top-0 data-top-band\"></div>\n<div class=\"content-shell content-shell--data-topband {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-34\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-61 content-max\">{{HEADING}}</h1>\n    <p class=\"mt-3 break-words body-lead-27 caption-max\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/quote-focus": "<div class=\"absolute left-[8%] top-[7%] quote-mark\">“</div>\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-34\">\n    {{KICKER}}\n    <h1 class=\"mt-2 text-balance break-words heading-display-60 content-max\">{{SLOT:quote_text}}</h1>\n    <p class=\"mt-3 break-words body-lead-24 caption-max\">- {{SLOT:quote_author}}</p>\n    <p class=\"mt-2 break-words body-lead-24 caption-max\">{{SLOT:insight_line}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/checklist-stack": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-32\">\n    {{KICKER}}\n    <h1 class=\"mt-3 text-balance break-words heading-display-58 content-max\">{{SLOT:headline}}</h1>\n    <div class=\"mt-4 flex flex-col checklist-items caption-max\">\n      <div class=\"check-item\">1. {{SLOT:step_1}}</div>\n      <div class=\"check-item\">2. {{SLOT:step_2}}</div>\n      <div class=\"check-item\">3. {{SLOT:step_3}}</div>\n      <div class=\"check-item\">4. {{SLOT:step_4}}</div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/metric-split": "<div class=\"absolute inset-x-0 top-0 metric-top-band\"></div>\n<div class=\"content-shell content-shell--metric-topband {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-30\">\n    <div class=\"flex items-start justify-between panel-gap-18\">\n      <div class=\"content-max-minus-metric\">\n        {{KICKER}}\n        <h1 class=\"mt-2 text-balance break-words heading-display-58\">{{SLOT:headline}}</h1>\n        <p class=\"mt-3 break-words body-lead-26 caption-max-minus-metric\">{{SLOT:insight_line}}</p>\n      </div>\n      <div class=\"metric-card\">\n        <p class=\"tabular-nums metric-value\">{{SLOT:metric_value}}</p>\n        <p class=\"mt-1 break-words metric-label\">{{SLOT:metric_label}}</p>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+  "core/promo-pill": "<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"mt-auto panel-pad-34\">\n    {{KICKER}}\n    <h1 class=\"mt-3 text-balance break-words heading-display-62 content-max\">{{SLOT:headline}}</h1>\n    <p class=\"mt-3 break-words body-lead-26 caption-max\">{{SLOT:supporting_line}}</p>\n    <div class=\"mt-6 cta-pill\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n"
 } as const;
 
 export type PipelineConfig = typeof PIPELINE_CONFIG;

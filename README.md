@@ -15,13 +15,14 @@ This project is fully config-driven:
 - runtime reads generated assets from `src/generated/template-assets.ts`
 
 No template rendering logic is hardcoded per design.
+`design_system` in `config/pipeline/design.yaml` is the canonical source; build-time projection keeps legacy keys compatible.
 
 ## What You Get
 
 - AI-generated social copy (`instagram_caption`, `twitter_caption`, `linkedin_caption`)
 - AI-selected `template_style`, `post_archetype`, and `font_profile`
 - Slot-based template filling (`slot_content` + user overrides)
-- Optional stock image lookup and AI image generation fallback
+- Optional background-image sourcing (feature/stock/AI/custom) with HTML-based decorative layers
 - PNG rendering through Cloudflare Browser Rendering + upload to R2
 
 ## HTML vs `htmlx`
@@ -35,7 +36,7 @@ Use `.html` templates.
 ## Project Layout
 
 - `config/pipeline.config.yaml`: composed config entrypoint (`extends` fragments)
-- `config/pipeline/design.yaml`: design system, styles, formats, templates
+- `config/pipeline/design.yaml`: central `design_system` (tokens, render presets, styles, formats, templates)
 - `config/pipeline/content.yaml`: archetypes, slot schema, generation prompts/limits
 - `config/pipeline/runtime.yaml`: runtime, feature flags, security, storage
 - `templates/**/*.html`: visual templates using token and slot placeholders
@@ -222,7 +223,7 @@ You can override generation behavior in request payload:
 - `storage` (overwrite/versioned path behavior)
 - `output` (choose `formats` and `carouselSlides`)
 - `llm` (system prompt/instructions/temperature/maxTokens overrides)
-- `image` (choose `auto|feature|stock|ai|custom`, plus `customUrl` and prompt controls)
+- `image` (choose `auto|none|feature|stock|ai|custom`, plus `customUrl` and prompt controls)
 
 ## Environment Variables
 

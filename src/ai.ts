@@ -1,4 +1,4 @@
-import { listFontProfiles, normalizeFontProfileId } from "./design-system";
+import { listDesignSystemPromptDirectives, listFontProfiles, normalizeFontProfileId } from "./design-system";
 import {
   listPostArchetypes,
   listSlotHints,
@@ -128,6 +128,10 @@ export async function generateStructuredCopy(args: {
     .join(" | ");
 
   const limits = PIPELINE_CONFIG.generation.limits;
+  const designSystemPromptHints = listDesignSystemPromptDirectives()
+    .slice(0, 12)
+    .map((line) => `- ${line}`)
+    .join("\n");
   const userInstructionsTemplate = buildPromptTemplate(
     args.llmOverrides?.userInstructions,
     PIPELINE_CONFIG.generation.llm.user_instructions
@@ -144,7 +148,8 @@ export async function generateStructuredCopy(args: {
     .replace("<available_template_styles>", styleHints)
     .replace("<available_post_archetypes>", archetypeHints)
     .replace("<available_font_profiles>", fontHints)
-    .replace("<available_slot_keys>", slotHints);
+    .replace("<available_slot_keys>", slotHints)
+    .replace("<design_system_directives>", designSystemPromptHints || "- Use deterministic HTML template composition.");
   const appendedInstructions = normalizePromptAppend(args.llmOverrides?.userInstructionsAppend);
   const mergedInstructions = appendedInstructions ? `${userInstructions}\n${appendedInstructions}` : userInstructions;
   const systemPrompt = buildPromptTemplate(args.llmOverrides?.systemPrompt, PIPELINE_CONFIG.generation.llm.system_prompt);

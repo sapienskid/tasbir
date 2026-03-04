@@ -21,6 +21,7 @@ export interface TemplateControl {
   showSlideBadge?: boolean;
   showMetaFooter?: boolean;
   showTitleKicker?: boolean;
+  showDecorLayers?: boolean;
   textAlign?: "left" | "center";
   imageOpacity?: number;
   contentMaxWidth?: number;
@@ -76,8 +77,9 @@ interface ResolvedTemplateControl {
   showSlideBadge: boolean;
   showMetaFooter: boolean;
   showTitleKicker: boolean;
+  showDecorLayers: boolean;
   textAlign: "left" | "center";
-  imageOpacity: number;
+  imageOpacity?: number;
   contentMaxWidth: number;
   contentInset: number;
   metaLeftText?: string;
@@ -98,8 +100,141 @@ interface FontProfile {
   body_font_css: string;
 }
 
+interface TypographyConfig {
+  default_font_profile: string;
+  profiles: Record<string, FontProfile>;
+  selection: {
+    by_style: Record<string, string>;
+    by_archetype: Record<string, string>;
+  };
+}
+
+interface ThemingConfig {
+  readable_light_text: string;
+  readable_dark_text: string;
+  color_engine: {
+    surface_base_mix_target: string;
+    surface_base_mix_ratio_from_target: number;
+    surface_base_fallback: string;
+    surface_elevated_mix_target: string;
+    surface_elevated_mix_ratio_from_target: number;
+    surface_elevated_fallback: string;
+    border_subtle_mix_target: string;
+    border_subtle_mix_ratio_from_target: number;
+    border_subtle_fallback: string;
+    secondary_text_mix_target: string;
+    secondary_text_mix_ratio_from_target: number;
+    secondary_text_fallback: string;
+    muted_text_mix_target: string;
+    muted_text_mix_ratio_from_target: number;
+    muted_text_fallback: string;
+    accent_glow_mix_target: string;
+    accent_glow_mix_ratio_from_target: number;
+    overlay_strong_mix_target: string;
+    overlay_strong_mix_ratio_from_target: number;
+    shadow_color_mix_target: string;
+    shadow_color_mix_ratio_from_target: number;
+    primary_text_min_contrast: number;
+    secondary_text_min_contrast?: number;
+    muted_text_min_contrast?: number;
+    border_subtle_min_contrast?: number;
+    accent_foreground_min_contrast: number;
+  };
+  radius: {
+    card: string;
+    pill: string;
+  };
+}
+
+interface RenderConfig {
+  control_defaults: {
+    showBrandBadge: boolean;
+    showSlideBadge: boolean;
+    showMetaFooter: boolean;
+    showTitleKicker: boolean;
+    showDecorLayers?: boolean;
+    textAlign?: string;
+  };
+  format_control_defaults: Record<
+    TemplateFormatKey,
+    {
+      default_preset: string;
+      contentMaxWidth: number;
+      contentInset: number;
+      textAlign?: string;
+    }
+  >;
+  style_preset_map?: Record<string, string>;
+  preset_styles: Record<string, TemplatePresetStyle>;
+}
+
+interface BrandConfig {
+  default_name: string;
+  default_color: string;
+}
+
+interface DesignSystemConfig {
+  brand?: BrandConfig;
+  typography?: TypographyConfig;
+  theming?: ThemingConfig;
+  render?: RenderConfig;
+  tokens?: {
+    aliases?: Record<string, string | number>;
+  };
+  ai_contract?: {
+    planner_directives?: string[];
+    rendering_constraints?: string[];
+  };
+}
+
+const DESIGN_SYSTEM = ((PIPELINE_CONFIG as unknown as { design_system?: DesignSystemConfig }).design_system ??
+  {}) as DesignSystemConfig;
+
+function brandConfig(): BrandConfig {
+  return (DESIGN_SYSTEM.brand ??
+    (PIPELINE_CONFIG as unknown as { brand?: BrandConfig }).brand ?? {
+      default_name: "Brand",
+      default_color: "#1f7a8c"
+    }) as BrandConfig;
+}
+
+function typographyConfig(): TypographyConfig {
+  return (DESIGN_SYSTEM.typography ?? PIPELINE_CONFIG.typography) as TypographyConfig;
+}
+
+function themingConfig(): ThemingConfig {
+  return (DESIGN_SYSTEM.theming ?? PIPELINE_CONFIG.theming) as ThemingConfig;
+}
+
+function renderConfig(): RenderConfig {
+  return (DESIGN_SYSTEM.render ?? PIPELINE_CONFIG.render) as RenderConfig;
+}
+
+function presetStyleMap(): Record<string, TemplatePresetStyle> {
+  return renderConfig().preset_styles as Record<string, TemplatePresetStyle>;
+}
+
+function designTokenAliases(): Record<string, string | number> {
+  return (DESIGN_SYSTEM.tokens?.aliases ?? {}) as Record<string, string | number>;
+}
+
+export function listDesignSystemPromptDirectives(): string[] {
+  const planner = Array.isArray(DESIGN_SYSTEM.ai_contract?.planner_directives)
+    ? DESIGN_SYSTEM.ai_contract?.planner_directives
+    : [];
+  const constraints = Array.isArray(DESIGN_SYSTEM.ai_contract?.rendering_constraints)
+    ? DESIGN_SYSTEM.ai_contract?.rendering_constraints
+    : [];
+
+  return [...planner, ...constraints].map((line) => line.trim()).filter(Boolean);
+}
+
+export function listPresetIds(): string[] {
+  return Object.keys(presetStyleMap());
+}
+
 export function listFontProfiles(): FontProfileOption[] {
-  const profiles = PIPELINE_CONFIG.typography.profiles as Record<string, FontProfile>;
+  const profiles = typographyConfig().profiles as Record<string, FontProfile>;
   return Object.entries(profiles).map(([id, profile]) => ({
     id,
     label: profile.label,
@@ -108,8 +243,9 @@ export function listFontProfiles(): FontProfileOption[] {
 }
 
 export function normalizeFontProfileId(value: string | undefined | null): string {
-  const profiles = PIPELINE_CONFIG.typography.profiles as Record<string, FontProfile>;
-  const fallback = PIPELINE_CONFIG.typography.default_font_profile;
+  const typography = typographyConfig();
+  const profiles = typography.profiles as Record<string, FontProfile>;
+  const fallback = typography.default_font_profile;
 
   if (!value) {
     return fallback;
@@ -132,8 +268,9 @@ export function resolveFontProfileId(args: {
     return normalizeFontProfileId(args.requested);
   }
 
-  const byStyle = PIPELINE_CONFIG.typography.selection.by_style as Record<string, string>;
-  const byArchetype = PIPELINE_CONFIG.typography.selection.by_archetype as Record<string, string>;
+  const typography = typographyConfig();
+  const byStyle = typography.selection.by_style as Record<string, string>;
+  const byArchetype = typography.selection.by_archetype as Record<string, string>;
 
   const style = args.style?.trim().toLowerCase() || "";
   const archetype = args.archetype?.trim().toLowerCase() || "";
@@ -146,11 +283,11 @@ export function resolveFontProfileId(args: {
     return normalizeFontProfileId(byArchetype[archetype]);
   }
 
-  return normalizeFontProfileId(PIPELINE_CONFIG.typography.default_font_profile);
+  return normalizeFontProfileId(typography.default_font_profile);
 }
 
 function getFontProfile(fontProfileId: string): FontProfile {
-  const profiles = PIPELINE_CONFIG.typography.profiles as Record<string, FontProfile>;
+  const profiles = typographyConfig().profiles as Record<string, FontProfile>;
   const normalized = normalizeFontProfileId(fontProfileId);
   return profiles[normalized];
 }
@@ -160,11 +297,12 @@ export function createBrandTheme(args: {
   brandColor: string;
   overrides?: BrandTokenOverrides;
 }): BrandTheme {
-  const engine = PIPELINE_CONFIG.theming.color_engine;
-  const lightText = PIPELINE_CONFIG.theming.readable_light_text;
-  const darkText = PIPELINE_CONFIG.theming.readable_dark_text;
+  const theming = themingConfig();
+  const engine = theming.color_engine;
+  const lightText = theming.readable_light_text;
+  const darkText = theming.readable_dark_text;
 
-  const accent = normalizeHexColor(args.overrides?.accent ?? args.brandColor, PIPELINE_CONFIG.brand.default_color);
+  const accent = normalizeHexColor(args.overrides?.accent ?? args.brandColor, brandConfig().default_color);
   const surfaceBase = normalizeHexColor(
     args.overrides?.surfaceBase ??
       mixHex(accent, engine.surface_base_mix_target, engine.surface_base_mix_ratio_from_target),
@@ -249,8 +387,8 @@ export function createBrandTheme(args: {
     accentGlow: mixHex(accent, engine.accent_glow_mix_target, engine.accent_glow_mix_ratio_from_target),
     overlayStrong: mixHex(surfaceBase, engine.overlay_strong_mix_target, engine.overlay_strong_mix_ratio_from_target),
     shadowColor: mixHex(accent, engine.shadow_color_mix_target, engine.shadow_color_mix_ratio_from_target),
-    radiusCard: PIPELINE_CONFIG.theming.radius.card,
-    radiusPill: PIPELINE_CONFIG.theming.radius.pill
+    radiusCard: theming.radius.card,
+    radiusPill: theming.radius.pill
   };
 
   return {
@@ -264,15 +402,14 @@ export function resolveTemplateControl(
   set?: TemplateControlSet,
   templateStyle?: string
 ): ResolvedTemplateControl {
-  const baseDefaults = PIPELINE_CONFIG.render.control_defaults;
-  const formatDefaults = PIPELINE_CONFIG.render.format_control_defaults[kind];
+  const render = renderConfig();
+  const baseDefaults = render.control_defaults;
+  const formatDefaults = render.format_control_defaults[kind];
   const formatPreset = parsePreset(formatDefaults.default_preset) ?? firstPreset();
-  const stylePresetMap = ((PIPELINE_CONFIG.render as unknown as { style_preset_map?: Record<string, string> }).style_preset_map ??
-    {}) as Record<string, string>;
+  const stylePresetMap = (render.style_preset_map ?? {}) as Record<string, string>;
   const normalizedStyle = templateStyle?.trim().toLowerCase() ?? "";
   const stylePreset = normalizedStyle ? parsePreset(stylePresetMap[normalizedStyle]) : undefined;
   const basePreset = stylePreset ?? formatPreset;
-  const presetStyle = getPresetStyle(basePreset);
 
   const base: ResolvedTemplateControl = {
     preset: basePreset,
@@ -280,8 +417,8 @@ export function resolveTemplateControl(
     showSlideBadge: baseDefaults.showSlideBadge,
     showMetaFooter: baseDefaults.showMetaFooter,
     showTitleKicker: baseDefaults.showTitleKicker,
+    showDecorLayers: baseDefaults.showDecorLayers ?? true,
     textAlign: parseTextAlign(formatDefaults.textAlign) ?? parseTextAlign(baseDefaults.textAlign) ?? "left",
-    imageOpacity: presetStyle.imageOpacity,
     contentMaxWidth: Number(formatDefaults.contentMaxWidth),
     contentInset: Number(formatDefaults.contentInset)
   };
@@ -293,18 +430,75 @@ export function resolveTemplateControl(
   return {
     ...mergedFormat,
     preset: resolvedPreset,
-    imageOpacity: clamp(mergedFormat.imageOpacity, 0, 1)
+    imageOpacity:
+      typeof mergedFormat.imageOpacity === "number" ? clamp(mergedFormat.imageOpacity, 0, 1) : undefined
   };
 }
 
 export function getPresetStyle(preset: TemplatePreset): TemplatePresetStyle {
-  const presetStyles = PIPELINE_CONFIG.render.preset_styles as Record<string, TemplatePresetStyle>;
-  const resolved = presetStyles[preset] ?? presetStyles[firstPreset()];
+  const presetStyles = presetStyleMap();
+  const resolved = (presetStyles[preset] ?? presetStyles[firstPreset()] ?? {}) as Partial<TemplatePresetStyle>;
   return {
-    ...resolved,
-    typeScale: typeof resolved.typeScale === "number" ? resolved.typeScale : 1,
-    spaceScale: typeof resolved.spaceScale === "number" ? resolved.spaceScale : 1
+    containerBackground: resolvePresetString(resolved.containerBackground, "var(--color-surface-base)"),
+    overlayTop: resolvePresetString(resolved.overlayTop, "linear-gradient(180deg, transparent, transparent)"),
+    overlayBottom: resolvePresetString(resolved.overlayBottom, "linear-gradient(0deg, transparent, transparent)"),
+    vignette: resolvePresetString(resolved.vignette, "radial-gradient(circle at 50% 50%, transparent 0%, transparent 100%)"),
+    brandPillBackground: resolvePresetString(resolved.brandPillBackground, "color-mix(in srgb, var(--color-surface-elevated) 52%, transparent)"),
+    brandPillBorder: resolvePresetString(resolved.brandPillBorder, "color-mix(in srgb, var(--color-border-subtle) 70%, transparent)"),
+    brandPillText: resolvePresetString(resolved.brandPillText, "var(--color-text-primary)"),
+    titleShadow: resolvePresetString(resolved.titleShadow, "0 12px 28px rgba(0, 0, 0, 0.18)"),
+    captionShadow: resolvePresetString(resolved.captionShadow, "0 6px 16px rgba(0, 0, 0, 0.12)"),
+    grainOpacity: resolvePresetNumber(resolved.grainOpacity, 0.05),
+    imageOpacity: resolvePresetNumber(resolved.imageOpacity, 0.5),
+    typeScale: resolvePresetNumber(resolved.typeScale, 1),
+    spaceScale: resolvePresetNumber(resolved.spaceScale, 1)
   };
+}
+
+function resolvePresetString(value: unknown, fallback: string): string {
+  const resolved = resolveDesignTokenReference(value);
+  if (typeof resolved === "string" && resolved.trim()) {
+    return resolved;
+  }
+  return fallback;
+}
+
+function resolvePresetNumber(value: unknown, fallback: number): number {
+  const resolved = resolveDesignTokenReference(value);
+  if (typeof resolved === "number" && Number.isFinite(resolved)) {
+    return resolved;
+  }
+  if (typeof resolved === "string") {
+    const numeric = Number(resolved.trim());
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+  }
+  return fallback;
+}
+
+function resolveDesignTokenReference(value: unknown, seen: Set<string> = new Set()): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const match = value.trim().match(/^@([a-z0-9._-]+)$/i);
+  if (!match?.[1]) {
+    return value;
+  }
+
+  const alias = match[1];
+  if (seen.has(alias)) {
+    return value;
+  }
+  seen.add(alias);
+
+  const aliases = designTokenAliases();
+  if (!(alias in aliases)) {
+    return value;
+  }
+
+  return resolveDesignTokenReference(aliases[alias], seen);
 }
 
 export function renderTemplateHead(args: {
@@ -316,7 +510,7 @@ export function renderTemplateHead(args: {
 }): string {
   const t = args.theme.tokens;
   const safeTailwind = TAILWIND_CSS.replaceAll("</style", "<\\/style");
-  const fontProfile = getFontProfile(args.fontProfileId ?? PIPELINE_CONFIG.typography.default_font_profile);
+  const fontProfile = getFontProfile(args.fontProfileId ?? typographyConfig().default_font_profile);
   const fontHref = `https://fonts.googleapis.com/css2?${fontProfile.google_fonts_css2_query}&display=swap`;
 
   return `
@@ -405,6 +599,7 @@ export function templateControlSetFromQuery(searchParams: URLSearchParams): Temp
     showSlideBadge: parseBoolean(searchParams.get("showSlideBadge")),
     showMetaFooter: parseBoolean(searchParams.get("showMetaFooter")),
     showTitleKicker: parseBoolean(searchParams.get("showTitleKicker")),
+    showDecorLayers: parseBoolean(searchParams.get("showDecorLayers")),
     textAlign: parseTextAlign(searchParams.get("textAlign")),
     imageOpacity: parseNumber(searchParams.get("imageOpacity")),
     contentMaxWidth: parseNumber(searchParams.get("contentMaxWidth")),
@@ -429,6 +624,7 @@ function mergeControl(base: ResolvedTemplateControl, override?: TemplateControl)
     showSlideBadge: override.showSlideBadge ?? base.showSlideBadge,
     showMetaFooter: override.showMetaFooter ?? base.showMetaFooter,
     showTitleKicker: override.showTitleKicker ?? base.showTitleKicker,
+    showDecorLayers: override.showDecorLayers ?? base.showDecorLayers,
     textAlign: parseTextAlign(override.textAlign) ?? base.textAlign,
     imageOpacity: override.imageOpacity ?? base.imageOpacity,
     contentMaxWidth: override.contentMaxWidth ?? base.contentMaxWidth,
@@ -444,12 +640,12 @@ function parsePreset(value: string | null | undefined): TemplatePreset | undefin
   }
 
   const normalized = value.trim();
-  const presets = PIPELINE_CONFIG.render.preset_styles as Record<string, unknown>;
+  const presets = presetStyleMap() as Record<string, unknown>;
   return (presets[normalized] ? normalized : undefined) as TemplatePreset | undefined;
 }
 
 function firstPreset(): TemplatePreset {
-  const presets = Object.keys(PIPELINE_CONFIG.render.preset_styles);
+  const presets = Object.keys(presetStyleMap());
   return presets[0] as TemplatePreset;
 }
 

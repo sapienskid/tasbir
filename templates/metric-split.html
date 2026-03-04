@@ -1,16 +1,16 @@
-<div class="absolute inset-x-0 top-0" style="height: calc(46px * var(--layout-scale)); background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0 30px, transparent 30px 60px);"></div>
-<div class="relative z-10 flex h-full w-full flex-col" style="padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); padding-top: calc(({{CONTENT_INSET}}px + 14px) * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}">
+<div class="absolute inset-x-0 top-0 metric-top-band"></div>
+<div class="content-shell content-shell--metric-topband {{ALIGN_CLASS}}">
   {{HEADER}}
-  <div class="mt-auto" style="padding: calc(30px * var(--layout-scale) * var(--frame-space-scale));">
-    <div class="flex items-start justify-between" style="gap: calc(18px * var(--layout-scale) * var(--frame-space-scale));">
-      <div style="max-width: calc({{CONTENT_MAX_WIDTH}}px - calc(220px * var(--layout-scale)));">
+  <div class="mt-auto panel-pad-30">
+    <div class="flex items-start justify-between panel-gap-18">
+      <div class="content-max-minus-metric">
         {{KICKER}}
-        <h1 class="mt-2 text-balance break-words" style="font-family: var(--font-display); font-size: calc(58px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.02; letter-spacing: -0.02em; text-shadow: var(--frame-title-shadow);">{{SLOT:headline}}</h1>
-        <p class="mt-3 break-words text-[var(--color-text-secondary)]" style="font-size: calc(26px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.32; max-width: calc({{CAPTION_MAX_WIDTH}}px - calc(220px * var(--layout-scale))); text-shadow: var(--frame-caption-shadow);">{{SLOT:insight_line}}</p>
+        <h1 class="mt-2 text-balance break-words heading-display-58">{{SLOT:headline}}</h1>
+        <p class="mt-3 break-words body-lead-26 caption-max-minus-metric">{{SLOT:insight_line}}</p>
       </div>
-      <div class="rounded-2xl border" style="min-width: calc(220px * var(--layout-scale)); padding: calc(14px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale)); border-color: color-mix(in srgb, var(--color-brand-accent) 80%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);">
-        <p class="tabular-nums" style="font-family: var(--font-display); font-size: calc(66px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1;">{{SLOT:metric_value}}</p>
-        <p class="mt-1 break-words text-[var(--color-text-secondary)]" style="font-size: calc(20px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.2;">{{SLOT:metric_label}}</p>
+      <div class="metric-card">
+        <p class="tabular-nums metric-value">{{SLOT:metric_value}}</p>
+        <p class="mt-1 break-words metric-label">{{SLOT:metric_label}}</p>
       </div>
     </div>
     {{FOOTER}}

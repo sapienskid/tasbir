@@ -1,6 +1,5 @@
 import {
   createBrandTheme,
-  getPresetStyle,
   renderTemplateHead,
   resolveFontProfileId,
   resolveTemplateControl,
@@ -181,7 +180,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const footer = renderMetaFooter(kind, control, defaultMetaLeft(kind), defaultMetaRight(kind));
   const kicker =
     kind === "carousel-slide" && control.showTitleKicker
-      ? `<p class="text-[24px] font-semibold uppercase tracking-[0.12em] text-[var(--color-text-muted)]" style="max-width: ${control.contentMaxWidth}px;">${escapeHtml(params.title)}</p>`
+      ? `<p class="kicker content-max">${escapeHtml(params.title)}</p>`
       : "";
 
   const slotValues = resolveSlotValues(kind, params);
@@ -196,10 +195,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     HEADER: header,
     FOOTER: footer,
     KICKER: kicker,
-    CONTENT_INSET: String(control.contentInset),
-    CONTENT_MAX_WIDTH: String(control.contentMaxWidth),
-    CAPTION_MAX_WIDTH: String(captionMaxWidth(kind, control.contentMaxWidth)),
-    ALIGNMENT_STYLE: alignmentContainerStyle(control.textAlign)
+    ALIGN_CLASS: alignmentClassName(control.textAlign)
   };
 
   const templateMarkup = loadTemplateMarkup(selectedTemplate.id);
@@ -471,6 +467,21 @@ function captionMaxWidth(kind: TemplateKind, contentMaxWidth: number): number {
   return Math.min(Number(rules.max), contentMaxWidth + Number(rules.add));
 }
 
+function styleClassForTemplateStyle(templateStyle: string): string {
+  const normalized = normalizeTemplateStyle(templateStyle);
+  const styleClassMap: Record<string, string> = {
+    editorial: "style-editorial",
+    illustration: "style-illustration",
+    minimal: "style-minimal",
+    bold: "style-bold",
+    data: "style-data",
+    "monochrome-swiss": "style-monochrome-swiss",
+    brutal: "style-brutal"
+  };
+
+  return styleClassMap[normalized] ?? "style-default";
+}
+
 function renderFrame(
   args: {
     kind: TemplateKind;
@@ -491,54 +502,65 @@ function renderFrame(
     overrides: args.params.brandTokens
   });
 
-  const preset = getPresetStyle(args.control.preset);
   const widthScale = args.width / 1080;
   const heightScale = args.height / 1080;
   const layoutScale = Math.max(0.55, Math.min(1.9, Math.min(widthScale, heightScale)));
+  const contentMax = args.control.contentMaxWidth;
+  const captionMax = captionMaxWidth(args.kind, contentMax);
+  const styleClass = styleClassForTemplateStyle(templateStyle);
 
   const safeTitle = escapeHtml(args.params.title);
   const safeImageUrl = escapeHtml(args.params.imageUrl.trim());
   const hasImage = safeImageUrl.length > 0;
+  const visualLayers = resolveVisualLayerSettings(templateStyle);
+  const shouldRenderBackgroundImage = hasImage && visualLayers.useBackgroundImageOnly;
   const isDataImage = safeImageUrl.startsWith("data:image/");
   const imageFilter = isDataImage ? "blur(1.8px) saturate(0.88)" : "none";
   const imageTransform = isDataImage ? "scale(1.04)" : "none";
-  const overlayOpacity = hasImage ? (isDataImage ? 0.84 : 0.72) : 1;
+  const overlayOpacity = shouldRenderBackgroundImage ? (isDataImage ? 0.84 : 0.72) : 0.56;
+  const overlayBackground = shouldRenderBackgroundImage
+    ? "var(--frame-overlay-top), var(--frame-overlay-bottom), var(--frame-vignette)"
+    : "var(--frame-overlay-top), var(--frame-vignette)";
+  const accentSweepOpacity = shouldRenderBackgroundImage ? 0.42 : 0.16;
+  const decorLayerMarkup =
+    args.control.showDecorLayers && visualLayers.useHtmlDecorLayers
+      ? renderDecorativeHtmlLayers({
+          profile: visualLayers.styleProfile,
+          kind: args.kind,
+          hasBackgroundImage: shouldRenderBackgroundImage
+        })
+      : "";
 
   const rootVars = [
-    `--frame-bg:${preset.containerBackground}`,
-    `--frame-overlay-top:${preset.overlayTop}`,
-    `--frame-overlay-bottom:${preset.overlayBottom}`,
-    `--frame-vignette:${preset.vignette}`,
-    `--frame-brand-pill-bg:${preset.brandPillBackground}`,
-    `--frame-brand-pill-border:${preset.brandPillBorder}`,
-    `--frame-brand-pill-text:${preset.brandPillText}`,
-    `--frame-title-shadow:${preset.titleShadow}`,
-    `--frame-caption-shadow:${preset.captionShadow}`,
-    `--frame-grain-opacity:${preset.grainOpacity}`,
-    `--frame-image-opacity:${args.control.imageOpacity}`,
-    `--frame-type-scale:${preset.typeScale}`,
-    `--frame-space-scale:${preset.spaceScale}`,
+    `--content-inset:${args.control.contentInset}px`,
+    `--content-max-width:${contentMax}px`,
+    `--caption-max-width:${captionMax}px`,
     `--layout-scale:${layoutScale.toFixed(4)}`,
     `--layout-width-scale:${widthScale.toFixed(4)}`,
     `--layout-height-scale:${heightScale.toFixed(4)}`
-  ].join(";");
+  ];
+  if (typeof args.control.imageOpacity === "number") {
+    rootVars.push(`--frame-image-opacity:${args.control.imageOpacity}`);
+  }
+  const rootStyle = `width: ${args.width}px; height: ${args.height}px; ${rootVars.join(";")}`;
 
   return `
     <!doctype html>
     <html>
       ${renderTemplateHead({ safeTitle, width: args.width, height: args.height, theme, fontProfileId: args.fontProfileId })}
       <body>
-        <div class="relative isolate overflow-hidden" data-template-id="${escapeHtml(templateId)}" data-template-style="${escapeHtml(templateStyle)}" data-template-archetype="${escapeHtml(templateArchetype)}" style="width: ${args.width}px; height: ${args.height}px; ${rootVars}">
+        <div class="relative isolate overflow-hidden ${styleClass}" data-template-id="${escapeHtml(templateId)}" data-template-style="${escapeHtml(templateStyle)}" data-template-archetype="${escapeHtml(templateArchetype)}" style="${rootStyle}">
           <div class="absolute inset-0" style="background: var(--frame-bg);"></div>
 
           ${
-            hasImage
+            shouldRenderBackgroundImage
               ? `<div class="absolute inset-0 bg-cover bg-center" style="background-image: url('${safeImageUrl}'); opacity: var(--frame-image-opacity); filter: ${imageFilter}; transform: ${imageTransform};"></div>`
               : ""
           }
+          ${decorLayerMarkup}
 
-          <div class="absolute inset-0" style="opacity: ${overlayOpacity}; background: var(--frame-overlay-top), var(--frame-overlay-bottom), var(--frame-vignette);"></div>
-          <div class="absolute inset-0" style="background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: ${hasImage ? 0.42 : 0.28};"></div>
+          <div class="absolute inset-0" style="opacity: ${overlayOpacity}; background: ${overlayBackground};"></div>
+          <div class="absolute inset-0" style="background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: ${accentSweepOpacity};"></div>
 
           <div class="absolute inset-0" style="opacity: var(--frame-grain-opacity); background-image: radial-gradient(${PIPELINE_CONFIG.render.frame_decor.grain_dot_color} ${PIPELINE_CONFIG.render.frame_decor.grain_dot_size_px}px, transparent ${PIPELINE_CONFIG.render.frame_decor.grain_dot_size_px}px); background-size: ${PIPELINE_CONFIG.render.frame_decor.grain_bg_size_px}px ${PIPELINE_CONFIG.render.frame_decor.grain_bg_size_px}px;"></div>
 
@@ -548,6 +570,108 @@ function renderFrame(
         </div>
       </body>
     </html>
+  `;
+}
+
+interface VisualLayerSettings {
+  useBackgroundImageOnly: boolean;
+  useHtmlDecorLayers: boolean;
+  styleProfile: string;
+}
+
+function resolveVisualLayerSettings(templateStyle: string): VisualLayerSettings {
+  const defaults: VisualLayerSettings = {
+    useBackgroundImageOnly: true,
+    useHtmlDecorLayers: true,
+    styleProfile: "soft-orbital"
+  };
+
+  const renderConfig = PIPELINE_CONFIG.render as unknown as {
+    visual_layers?: {
+      use_background_image_only?: boolean;
+      use_html_decor_layers?: boolean;
+      style_profiles?: Record<string, string>;
+    };
+  };
+  const visual = renderConfig.visual_layers;
+  if (!visual) {
+    return defaults;
+  }
+
+  const styleProfiles = visual.style_profiles ?? {};
+  const normalizedStyle = normalizeTemplateStyle(templateStyle);
+  const styleProfile = styleProfiles[normalizedStyle] ?? styleProfiles[getDefaultTemplateStyle()] ?? defaults.styleProfile;
+
+  return {
+    useBackgroundImageOnly: visual.use_background_image_only ?? defaults.useBackgroundImageOnly,
+    useHtmlDecorLayers: visual.use_html_decor_layers ?? defaults.useHtmlDecorLayers,
+    styleProfile: styleProfile.trim() || defaults.styleProfile
+  };
+}
+
+function renderDecorativeHtmlLayers(args: {
+  profile: string;
+  kind: TemplateKind;
+  hasBackgroundImage: boolean;
+}): string {
+  const opacityBoost = args.hasBackgroundImage ? 0.76 : 1;
+  const profile = args.profile.trim().toLowerCase();
+
+  if (profile === "playful-blobs") {
+    return `
+      <div class="absolute inset-0" style="opacity: ${0.62 * opacityBoost};">
+        <div class="absolute" style="left: -14%; top: -8%; width: calc(560px * var(--layout-scale)); height: calc(560px * var(--layout-scale)); border-radius: 42% 58% 38% 62%; background: radial-gradient(circle at 28% 32%, color-mix(in srgb, var(--color-brand-glow) 68%, transparent), transparent 64%);"></div>
+        <div class="absolute" style="right: -10%; bottom: -12%; width: calc(460px * var(--layout-scale)); height: calc(460px * var(--layout-scale)); border-radius: 62% 38% 58% 42%; background: radial-gradient(circle at 56% 44%, color-mix(in srgb, var(--color-brand-accent) 56%, transparent), transparent 62%);"></div>
+      </div>
+    `;
+  }
+
+  if (profile === "subtle-grid") {
+    return `
+      <div class="absolute inset-0" style="opacity: ${0.42 * opacityBoost}; background-image: linear-gradient(to right, color-mix(in srgb, var(--color-border-subtle) 28%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--color-border-subtle) 24%, transparent) 1px, transparent 1px); background-size: calc(78px * var(--layout-scale)) calc(78px * var(--layout-scale));"></div>
+      <div class="absolute inset-0" style="opacity: ${0.24 * opacityBoost}; background: radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--color-brand-accent) 22%, transparent), transparent 48%);"></div>
+    `;
+  }
+
+  if (profile === "angular-burst") {
+    return `
+      <div class="absolute inset-0" style="opacity: ${0.64 * opacityBoost};">
+        <div class="absolute" style="right: -16%; top: -18%; width: calc(680px * var(--layout-scale)); height: calc(560px * var(--layout-scale)); background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 46%, transparent), transparent 68%); transform: rotate(-14deg);"></div>
+        <div class="absolute" style="left: -18%; bottom: -20%; width: calc(560px * var(--layout-scale)); height: calc(420px * var(--layout-scale)); background: linear-gradient(28deg, color-mix(in srgb, var(--color-brand-glow) 40%, transparent), transparent 72%); transform: rotate(8deg);"></div>
+      </div>
+    `;
+  }
+
+  if (profile === "metric-grid") {
+    const vertical = args.kind === "instagram-story" ? 16 : 10;
+    return `
+      <div class="absolute inset-0" style="opacity: ${0.5 * opacityBoost}; background-image: linear-gradient(to right, color-mix(in srgb, var(--color-border-subtle) 32%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--color-border-subtle) 26%, transparent) 1px, transparent 1px); background-size: calc(88px * var(--layout-scale)) calc(88px * var(--layout-scale));"></div>
+      <div class="absolute inset-0" style="opacity: ${0.34 * opacityBoost}; background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 28%, transparent) 0 calc(${vertical}px * var(--layout-scale)), transparent calc(${vertical}px * var(--layout-scale)) calc(${vertical * 2}px * var(--layout-scale)));"></div>
+    `;
+  }
+
+  if (profile === "swiss-grid") {
+    return `
+      <div class="absolute inset-0" style="opacity: ${0.34 * opacityBoost}; background-image: linear-gradient(to right, color-mix(in srgb, #ffffff 30%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, #ffffff 24%, transparent) 1px, transparent 1px); background-size: calc(70px * var(--layout-scale)) calc(70px * var(--layout-scale));"></div>
+      <div class="absolute" style="left: 0; top: 50%; width: 100%; height: 1px; opacity: ${0.32 * opacityBoost}; background: color-mix(in srgb, #ffffff 36%, transparent);"></div>
+      <div class="absolute" style="left: 50%; top: 0; width: 1px; height: 100%; opacity: ${0.32 * opacityBoost}; background: color-mix(in srgb, #ffffff 36%, transparent);"></div>
+    `;
+  }
+
+  if (profile === "cutout-noise") {
+    return `
+      <div class="absolute inset-0" style="opacity: ${0.62 * opacityBoost};">
+        <div class="absolute" style="left: -12%; top: 12%; width: calc(520px * var(--layout-scale)); height: calc(180px * var(--layout-scale)); background: linear-gradient(102deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent), transparent 72%); transform: rotate(-8deg);"></div>
+        <div class="absolute" style="right: -14%; bottom: 14%; width: calc(580px * var(--layout-scale)); height: calc(210px * var(--layout-scale)); background: linear-gradient(284deg, color-mix(in srgb, #ffffff 26%, transparent), transparent 70%); transform: rotate(9deg);"></div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="absolute inset-0" style="opacity: ${0.52 * opacityBoost};">
+      <div class="absolute" style="left: -10%; top: -14%; width: calc(540px * var(--layout-scale)); height: calc(540px * var(--layout-scale)); border-radius: 999px; background: radial-gradient(circle at 42% 34%, color-mix(in srgb, var(--color-brand-glow) 52%, transparent), transparent 66%);"></div>
+      <div class="absolute" style="right: -16%; bottom: -18%; width: calc(620px * var(--layout-scale)); height: calc(620px * var(--layout-scale)); border-radius: 999px; background: radial-gradient(circle at 46% 48%, color-mix(in srgb, var(--color-brand-accent) 34%, transparent), transparent 68%);"></div>
+    </div>
   `;
 }
 
@@ -582,7 +706,7 @@ function renderMetaFooter(
   const right = control.metaRightText ?? defaultRight;
 
   return `
-    <div class="mt-auto flex w-full items-center justify-between text-[18px] font-semibold uppercase tracking-[0.08em] text-[var(--color-text-muted)]">
+    <div class="meta-footer">
       <span>${escapeHtml(left)}</span>
       <span>${escapeHtml(right)}</span>
     </div>
@@ -598,14 +722,14 @@ function defaultMetaRight(_kind: TemplateKind): string {
 }
 
 function renderBrandPill(label: string): string {
-  return `<span class="inline-flex w-fit items-center rounded-full border px-4 py-2 text-[16px] font-semibold uppercase tracking-[0.08em]" style="border-color: var(--frame-brand-pill-border); color: var(--frame-brand-pill-text); background: var(--frame-brand-pill-bg);">${escapeHtml(label)}</span>`;
+  return `<span class="brand-pill">${escapeHtml(label)}</span>`;
 }
 
-function alignmentContainerStyle(alignment: "left" | "center"): string {
+function alignmentClassName(alignment: "left" | "center"): string {
   if (alignment === "center") {
-    return "align-items: center; text-align: center;";
+    return "align-center";
   }
-  return "align-items: flex-start; text-align: left;";
+  return "align-left";
 }
 
 function escapeHtml(value: string): string {

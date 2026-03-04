@@ -8,6 +8,9 @@ Main config file:
 `pipeline.config.yaml` is now a lightweight entrypoint that composes the fragment files through `extends`.
 Most behavior changes should be done in the fragment YAML files, not in `src/*.ts`.
 
+`config/pipeline/design.yaml` now uses a single `design_system` root as the source of truth.
+During `build:templates`, the embed script projects `design_system` sections into legacy top-level keys for backward compatibility.
+
 ## How Config Is Loaded
 
 1. `scripts/embed-template-assets.mjs` reads `config/pipeline.config.yaml`
@@ -25,6 +28,7 @@ pnpm run build:templates
 ## Top-Level Sections
 
 - `schema_version`
+- `design_system`
 - `brand`
 - `typography`
 - `theming`
@@ -40,6 +44,26 @@ pnpm run build:templates
 - `formats`
 - `preview_defaults`
 - `templates`
+
+`brand`/`typography`/`theming`/`render`/`template_styles`/`formats`/`preview_defaults`/`templates` are compatibility projections when `design_system` is present.
+Edit `design_system` first.
+
+## `design_system`
+
+Central design contract used by renderer + prompts.
+
+Key areas:
+
+- `brand`
+- `typography`
+- `theming`
+- `tokens.aliases` (alias-based design tokens, e.g. preset gradients/shadows)
+- `render` (controls, visual layers, preset styles)
+- `template_styles`
+- `formats`
+- `preview_defaults`
+- `templates`
+- `ai_contract` (prompt directives injected into copy generation)
 
 ## `schema_version`
 
@@ -149,6 +173,17 @@ Shared frame styling:
 - border alpha
 - grain dot color/size
 - grain background spacing
+
+### `visual_layers`
+
+Simplified visual-layer policy for hybrid rendering:
+
+- `use_background_image_only`
+  - when true, any external/generated image is treated strictly as a background layer
+- `use_html_decor_layers`
+  - when true, decorative accents are generated as HTML/CSS layers in the renderer
+- `style_profiles`
+  - maps `template_style` -> decorative profile (for example: `soft-orbital`, `metric-grid`)
 
 ## `runtime`
 

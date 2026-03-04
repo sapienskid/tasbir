@@ -85,7 +85,7 @@ describe("social pipeline worker", () => {
     expect(html).toContain('--font-body: "IBM Plex Mono", monospace;');
   });
 
-  it("applies preset mapping based on resolved template style", async () => {
+  it("applies css style class based on resolved template style", async () => {
     const response = await worker.fetch(
       authorizedRequest(
         "https://worker.test/template/twitter-card?templateStyle=data&templateId=core/data-base&title=Data+Story&caption=Signal+beats+noise"
@@ -97,7 +97,7 @@ describe("social pipeline worker", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain('data-template-style="data"');
-    expect(html).toContain("--frame-image-opacity:0.52");
+    expect(html).toContain("style-data");
   });
 
   it("returns template catalog with styles and template versions", async () => {
@@ -279,6 +279,76 @@ describe("social pipeline worker", () => {
     expect(body.assets.instagram_story).toBeNull();
     expect(body.assets.linkedin_post).toBeNull();
     expect(body.assets.carousel).toHaveLength(0);
+  });
+
+  it("supports html-only visuals by disabling background image with image.mode none", async () => {
+    launchMock.mockResolvedValue(fakeBrowser());
+
+    const env = {
+      AI: {
+        run: vi.fn(async () => ({
+          response: JSON.stringify({
+            instagram_caption: "Quick practical update for your workflow.",
+            twitter_caption: "Actionable workflow update in one pass.",
+            linkedin_caption: "A clear process to streamline your content pipeline.",
+            carousel_slides: [
+              { heading: "Start", body: "Define your post objective before drafting." },
+              { heading: "Extract", body: "Pull key points from the source article." },
+              { heading: "Design", body: "Map each point into a visual format." },
+              { heading: "Render", body: "Generate every platform dimension automatically." },
+              { heading: "Ship", body: "Publish and review performance outcomes." }
+            ],
+            hashtags: ["#workflow", "#contentops", "#socialmedia", "#cloudflare", "#automation", "#creator", "#pipeline", "#growth"],
+            image_prompt: "A clean workspace with a laptop and notes, editorial style",
+            use_feature_image: true,
+            template_style: "editorial",
+            post_archetype: "insight",
+            font_profile: "editorial-serif",
+            slot_content: {
+              headline: "Build repeatable systems",
+              insight_line: "Consistency compounds when your process is simple."
+            }
+          })
+        }))
+      },
+      BROWSER: {},
+      OUTPUT_BUCKET: {
+        put: vi.fn(async () => null)
+      },
+      API_KEYS: TEST_API_KEY,
+      DEFAULT_BRAND_COLOR: "#1f7a8c",
+      BRAND_NAME: "Tasbir Blog",
+      R2_KEY_PREFIX: "social-assets"
+    } as never;
+
+    const response = await worker.fetch(
+      authorizedRequest("https://worker.test/generate-from-content", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "HTML-Only Visual Mode",
+          content: "Use pure HTML decorative layers and skip external background images.",
+          feature_image: "https://example.com/feature.jpg",
+          image: {
+            mode: "none"
+          },
+          output: {
+            formats: ["instagram-post"]
+          }
+        })
+      }),
+      env,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      image_source: { source: string };
+      assets: { instagram_post: { key: string } | null };
+    };
+
+    expect(body.image_source.source).toBe("none");
+    expect(body.assets.instagram_post?.key).toContain("instagram-post.png");
   });
 
   it("normalizes markdown captions and generic carousel headings", async () => {

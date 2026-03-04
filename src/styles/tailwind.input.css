@@ -6,3 +6,425 @@
 @utility text-balance {
   text-wrap: balance;
 }
+
+@layer components {
+  .content-shell {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    height: 100%;
+    width: 100%;
+    flex-direction: column;
+    padding: calc(var(--content-inset) * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .content-shell--data-topband {
+    padding-top: calc((var(--content-inset) + 18px) * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .content-shell--metric-topband {
+    padding-top: calc((var(--content-inset) + 14px) * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .align-left {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .align-center {
+    align-items: center;
+    text-align: center;
+  }
+
+  .content-max {
+    max-width: var(--content-max-width);
+  }
+
+  .caption-max {
+    max-width: var(--caption-max-width);
+  }
+
+  .content-max-minus-metric {
+    max-width: calc(var(--content-max-width) - (220px * var(--layout-scale)));
+  }
+
+  .caption-max-minus-metric {
+    max-width: calc(var(--caption-max-width) - (220px * var(--layout-scale)));
+  }
+
+  .kicker {
+    margin-top: calc(8px * var(--layout-scale) * var(--frame-space-scale));
+    font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale));
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    max-width: var(--content-max-width);
+  }
+
+  .heading-display-58 {
+    font-family: var(--font-display);
+    font-size: calc(58px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.03;
+    letter-spacing: -0.02em;
+    text-shadow: var(--frame-title-shadow);
+  }
+
+  .heading-display-60 {
+    font-family: var(--font-display);
+    font-size: calc(60px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.03;
+    letter-spacing: -0.02em;
+    text-shadow: var(--frame-title-shadow);
+  }
+
+  .heading-display-61 {
+    font-family: var(--font-display);
+    font-size: calc(61px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    text-shadow: var(--frame-title-shadow);
+  }
+
+  .heading-display-62 {
+    font-family: var(--font-display);
+    font-size: calc(62px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-shadow: var(--frame-title-shadow);
+  }
+
+  .heading-display-64 {
+    font-family: var(--font-display);
+    font-size: calc(64px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-shadow: var(--frame-title-shadow);
+  }
+
+  .heading-display-66 {
+    font-family: var(--font-display);
+    font-size: calc(66px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    text-shadow: var(--frame-title-shadow);
+  }
+
+  .heading-display-68 {
+    font-family: var(--font-display);
+    font-size: calc(68px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.01;
+    letter-spacing: -0.02em;
+    text-shadow: var(--frame-title-shadow);
+  }
+
+  .body-lead-24 {
+    font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.32;
+    color: var(--color-text-secondary);
+    text-shadow: var(--frame-caption-shadow);
+  }
+
+  .body-lead-26 {
+    font-size: calc(26px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.32;
+    color: var(--color-text-secondary);
+    text-shadow: var(--frame-caption-shadow);
+  }
+
+  .body-lead-27 {
+    font-size: calc(27px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.32;
+    color: var(--color-text-secondary);
+    text-shadow: var(--frame-caption-shadow);
+  }
+
+  .body-lead-29 {
+    font-size: calc(29px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.34;
+    color: var(--color-text-secondary);
+    text-shadow: var(--frame-caption-shadow);
+  }
+
+  .panel-pad-30 {
+    padding: calc(30px * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .panel-pad-32 {
+    padding: calc(32px * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .panel-pad-34 {
+    padding: calc(34px * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .panel-pad-38 {
+    padding: calc(38px * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .panel-pad-40 {
+    padding: calc(40px * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .panel-gap-18 {
+    gap: calc(18px * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .checklist-items {
+    gap: calc(10px * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .quote-mark {
+    font-family: var(--font-display);
+    font-size: calc(148px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 0.8;
+    opacity: 0.22;
+    color: var(--color-brand-accent);
+  }
+
+  .check-item {
+    border-radius: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--color-border-subtle) 76%, transparent);
+    background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);
+    padding: calc(12px * var(--layout-scale) * var(--frame-space-scale))
+      calc(14px * var(--layout-scale) * var(--frame-space-scale));
+    font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.25;
+    color: var(--color-text-primary);
+  }
+
+  .metric-card {
+    min-width: calc(220px * var(--layout-scale));
+    border-radius: 1rem;
+    border: 1px solid color-mix(in srgb, var(--color-brand-accent) 80%, transparent);
+    background: color-mix(in srgb, var(--color-surface-elevated) 76%, transparent);
+    padding: calc(14px * var(--layout-scale) * var(--frame-space-scale))
+      calc(16px * var(--layout-scale) * var(--frame-space-scale));
+  }
+
+  .metric-value {
+    font-family: var(--font-display);
+    font-size: calc(66px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1;
+    color: var(--color-text-primary);
+  }
+
+  .metric-label {
+    font-size: calc(20px * var(--layout-scale) * var(--frame-type-scale));
+    line-height: 1.2;
+    color: var(--color-text-secondary);
+  }
+
+  .cta-pill {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    border-radius: 999px;
+    background: var(--color-brand-accent);
+    color: var(--color-brand-accent-foreground);
+    padding: calc(12px * var(--layout-scale) * var(--frame-space-scale))
+      calc(24px * var(--layout-scale) * var(--frame-space-scale));
+    font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale));
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .data-top-band {
+    height: calc(46px * var(--layout-scale));
+    background: repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-brand-accent) 26%, transparent) 0 30px,
+      color-mix(in srgb, var(--color-surface-elevated) 68%, transparent) 30px 60px
+    );
+  }
+
+  .metric-top-band {
+    height: calc(46px * var(--layout-scale));
+    background: repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0 30px,
+      transparent 30px 60px
+    );
+  }
+
+  .illustration-left-orb {
+    width: calc(320px * var(--layout-scale));
+    height: calc(320px * var(--layout-scale));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-brand-glow) 48%, transparent);
+  }
+
+  .illustration-right-blob {
+    width: calc(240px * var(--layout-scale));
+    height: calc(240px * var(--layout-scale));
+    border-radius: 30%;
+    background: color-mix(in srgb, var(--color-brand-accent) 36%, transparent);
+  }
+
+  .bold-left-wash {
+    width: 42%;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--color-brand-accent) 42%, transparent), transparent);
+  }
+
+  .brand-pill {
+    display: inline-flex;
+    width: fit-content;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid var(--frame-brand-pill-border);
+    background: var(--frame-brand-pill-bg);
+    color: var(--frame-brand-pill-text);
+    padding: calc(8px * var(--layout-scale) * var(--frame-space-scale))
+      calc(16px * var(--layout-scale) * var(--frame-space-scale));
+    font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.1;
+  }
+
+  .meta-footer {
+    margin-top: auto;
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--color-text-muted);
+    font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1.2;
+  }
+}
+
+@layer components {
+  .style-editorial {
+    --frame-bg: radial-gradient(circle at 13% 12%, color-mix(in srgb, var(--color-brand-glow) 54%, transparent) 0%, transparent 50%), linear-gradient(162deg, color-mix(in srgb, var(--color-brand-accent) 24%, var(--color-surface-base)), var(--color-surface-base));
+    --frame-overlay-top: linear-gradient(168deg, rgba(2, 7, 14, 0.08), color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 72%);
+    --frame-overlay-bottom: linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 46%, transparent) 0%, transparent 52%);
+    --frame-vignette: radial-gradient(circle at 54% 82%, transparent 30%, color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 98%);
+    --frame-brand-pill-bg: color-mix(in srgb, var(--color-surface-elevated) 70%, transparent);
+    --frame-brand-pill-border: var(--color-border-subtle);
+    --frame-brand-pill-text: var(--color-text-primary);
+    --frame-title-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
+    --frame-caption-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    --frame-grain-opacity: 0.07;
+    --frame-image-opacity: 0.5;
+    --frame-type-scale: 1;
+    --frame-space-scale: 1;
+  }
+
+  .style-illustration {
+    --frame-bg: radial-gradient(circle at 16% 14%, color-mix(in srgb, var(--color-brand-glow) 48%, transparent) 0%, transparent 46%), linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 18%, var(--color-surface-base)), color-mix(in srgb, var(--color-surface-base) 86%, #0b1524));
+    --frame-overlay-top: linear-gradient(170deg, rgba(3, 8, 14, 0.02), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 78%);
+    --frame-overlay-bottom: linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 20%, transparent), transparent 64%);
+    --frame-vignette: radial-gradient(circle at 52% 86%, transparent 36%, color-mix(in srgb, var(--color-overlay-strong) 30%, transparent) 98%);
+    --frame-brand-pill-bg: color-mix(in srgb, var(--color-surface-elevated) 44%, transparent);
+    --frame-brand-pill-border: color-mix(in srgb, var(--color-border-subtle) 58%, transparent);
+    --frame-brand-pill-text: var(--color-text-primary);
+    --frame-title-shadow: 0 8px 22px rgba(0, 0, 0, 0.12);
+    --frame-caption-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    --frame-grain-opacity: 0.03;
+    --frame-image-opacity: 0.54;
+    --frame-type-scale: 1.02;
+    --frame-space-scale: 1;
+  }
+
+  .style-minimal {
+    --frame-bg: linear-gradient(160deg, color-mix(in srgb, var(--color-brand-accent) 16%, #0a1320), #0a1320 50%, color-mix(in srgb, var(--color-brand-accent) 8%, #0b1119));
+    --frame-overlay-top: linear-gradient(170deg, rgba(2, 8, 14, 0.03), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 82%);
+    --frame-overlay-bottom: linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 16%, transparent), transparent 62%);
+    --frame-vignette: radial-gradient(circle at 50% 76%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%);
+    --frame-brand-pill-bg: color-mix(in srgb, var(--color-surface-elevated) 42%, transparent);
+    --frame-brand-pill-border: color-mix(in srgb, var(--color-border-subtle) 52%, transparent);
+    --frame-brand-pill-text: var(--color-text-secondary);
+    --frame-title-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+    --frame-caption-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+    --frame-grain-opacity: 0.04;
+    --frame-image-opacity: 0.52;
+    --frame-type-scale: 0.95;
+    --frame-space-scale: 0.92;
+  }
+
+  .style-bold {
+    --frame-bg: linear-gradient(145deg, color-mix(in srgb, var(--color-brand-accent) 44%, #050812), var(--color-surface-base));
+    --frame-overlay-top: linear-gradient(170deg, rgba(0, 0, 0, 0.04), color-mix(in srgb, var(--color-overlay-strong) 48%, transparent) 74%);
+    --frame-overlay-bottom: linear-gradient(16deg, color-mix(in srgb, var(--color-brand-accent) 56%, transparent) 0%, transparent 50%);
+    --frame-vignette: radial-gradient(circle at 88% 88%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 48%), radial-gradient(circle at 50% 76%, transparent 34%, color-mix(in srgb, var(--color-overlay-strong) 58%, transparent) 98%);
+    --frame-brand-pill-bg: color-mix(in srgb, var(--color-brand-accent) 34%, var(--color-surface-elevated));
+    --frame-brand-pill-border: color-mix(in srgb, var(--color-brand-accent) 88%, var(--color-border-subtle));
+    --frame-brand-pill-text: var(--color-brand-accent-foreground);
+    --frame-title-shadow: 0 16px 32px rgba(0, 0, 0, 0.24);
+    --frame-caption-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+    --frame-grain-opacity: 0.06;
+    --frame-image-opacity: 0.46;
+    --frame-type-scale: 1.04;
+    --frame-space-scale: 1.02;
+  }
+
+  .style-data {
+    --frame-bg: linear-gradient(160deg, color-mix(in srgb, var(--color-brand-accent) 16%, #0a1320), #0a1320 50%, color-mix(in srgb, var(--color-brand-accent) 8%, #0b1119));
+    --frame-overlay-top: linear-gradient(170deg, rgba(2, 8, 14, 0.03), color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 82%);
+    --frame-overlay-bottom: linear-gradient(14deg, color-mix(in srgb, var(--color-brand-accent) 16%, transparent), transparent 62%);
+    --frame-vignette: radial-gradient(circle at 50% 76%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%);
+    --frame-brand-pill-bg: color-mix(in srgb, var(--color-surface-elevated) 42%, transparent);
+    --frame-brand-pill-border: color-mix(in srgb, var(--color-border-subtle) 52%, transparent);
+    --frame-brand-pill-text: var(--color-text-secondary);
+    --frame-title-shadow: 0 10px 20px rgba(0, 0, 0, 0.12);
+    --frame-caption-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+    --frame-grain-opacity: 0.04;
+    --frame-image-opacity: 0.52;
+    --frame-type-scale: 0.95;
+    --frame-space-scale: 0.92;
+  }
+
+  .style-monochrome-swiss {
+    --frame-bg: linear-gradient(180deg, color-mix(in srgb, var(--color-surface-base) 88%, #020509), color-mix(in srgb, var(--color-surface-base) 70%, #0f1a2b));
+    --frame-overlay-top: linear-gradient(180deg, color-mix(in srgb, #ffffff 3%, transparent), color-mix(in srgb, var(--color-overlay-strong) 24%, transparent) 72%);
+    --frame-overlay-bottom: linear-gradient(0deg, color-mix(in srgb, #ffffff 5%, transparent) 0%, transparent 64%);
+    --frame-vignette: radial-gradient(circle at 50% 78%, transparent 44%, color-mix(in srgb, var(--color-overlay-strong) 34%, transparent) 99%);
+    --frame-brand-pill-bg: color-mix(in srgb, var(--color-surface-elevated) 40%, transparent);
+    --frame-brand-pill-border: color-mix(in srgb, #ffffff 48%, transparent);
+    --frame-brand-pill-text: var(--color-text-primary);
+    --frame-title-shadow: 0 6px 14px rgba(0, 0, 0, 0.1);
+    --frame-caption-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    --frame-grain-opacity: 0.02;
+    --frame-image-opacity: 0.44;
+    --frame-type-scale: 0.9;
+    --frame-space-scale: 0.86;
+  }
+
+  .style-brutal {
+    --frame-bg: linear-gradient(155deg, color-mix(in srgb, var(--color-brand-accent) 54%, #05070c), #05070c 58%, color-mix(in srgb, var(--color-brand-accent) 42%, #111827));
+    --frame-overlay-top: linear-gradient(165deg, rgba(0, 0, 0, 0.06), color-mix(in srgb, var(--color-overlay-strong) 64%, transparent) 76%);
+    --frame-overlay-bottom: linear-gradient(10deg, color-mix(in srgb, var(--color-brand-accent) 62%, transparent) 0%, transparent 48%);
+    --frame-vignette: radial-gradient(circle at 84% 84%, color-mix(in srgb, var(--color-brand-accent) 24%, transparent) 0%, transparent 38%), radial-gradient(circle at 20% 18%, color-mix(in srgb, #ffffff 14%, transparent) 0%, transparent 30%), radial-gradient(circle at 50% 74%, transparent 40%, color-mix(in srgb, var(--color-overlay-strong) 62%, transparent) 99%);
+    --frame-brand-pill-bg: color-mix(in srgb, var(--color-brand-accent) 46%, var(--color-surface-elevated));
+    --frame-brand-pill-border: color-mix(in srgb, #ffffff 72%, transparent);
+    --frame-brand-pill-text: var(--color-brand-accent-foreground);
+    --frame-title-shadow: 0 18px 34px rgba(0, 0, 0, 0.24);
+    --frame-caption-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+    --frame-grain-opacity: 0.07;
+    --frame-image-opacity: 0.5;
+    --frame-type-scale: 1.14;
+    --frame-space-scale: 1.1;
+  }
+
+  .style-default {
+    --frame-bg: var(--color-surface-base);
+    --frame-overlay-top: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 46%, transparent));
+    --frame-overlay-bottom: linear-gradient(0deg, transparent, transparent);
+    --frame-vignette: radial-gradient(circle at 50% 72%, transparent 36%, color-mix(in srgb, var(--color-overlay-strong) 42%, transparent) 100%);
+    --frame-brand-pill-bg: color-mix(in srgb, var(--color-surface-elevated) 52%, transparent);
+    --frame-brand-pill-border: color-mix(in srgb, var(--color-border-subtle) 72%, transparent);
+    --frame-brand-pill-text: var(--color-text-primary);
+    --frame-title-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+    --frame-caption-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+    --frame-grain-opacity: 0.05;
+    --frame-image-opacity: 0.5;
+    --frame-type-scale: 1;
+    --frame-space-scale: 1;
+  }
+}

@@ -1,13 +1,13 @@
-<div class="relative z-10 flex h-full w-full flex-col" style="padding: calc({{CONTENT_INSET}}px * var(--layout-scale) * var(--frame-space-scale)); {{ALIGNMENT_STYLE}}">
+<div class="content-shell {{ALIGN_CLASS}}">
   {{HEADER}}
-  <div class="mt-auto" style="padding: calc(32px * var(--layout-scale) * var(--frame-space-scale));">
+  <div class="mt-auto panel-pad-32">
     {{KICKER}}
-    <h1 class="mt-3 text-balance break-words" style="font-family: var(--font-display); font-size: calc(58px * var(--layout-scale) * var(--frame-type-scale)); line-height: 1.03; letter-spacing: -0.02em; max-width: {{CONTENT_MAX_WIDTH}}px; text-shadow: var(--frame-title-shadow);">{{SLOT:headline}}</h1>
-    <div class="mt-4 flex flex-col" style="gap: calc(10px * var(--layout-scale) * var(--frame-space-scale)); max-width: {{CAPTION_MAX_WIDTH}}px;">
-      <div class="rounded-xl border" style="padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);">1. {{SLOT:step_1}}</div>
-      <div class="rounded-xl border" style="padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);">2. {{SLOT:step_2}}</div>
-      <div class="rounded-xl border" style="padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);">3. {{SLOT:step_3}}</div>
-      <div class="rounded-xl border" style="padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale)); font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale)); border-color: color-mix(in srgb, var(--color-border-subtle) 76%, transparent); background: color-mix(in srgb, var(--color-surface-elevated) 74%, transparent);">4. {{SLOT:step_4}}</div>
+    <h1 class="mt-3 text-balance break-words heading-display-58 content-max">{{SLOT:headline}}</h1>
+    <div class="mt-4 flex flex-col checklist-items caption-max">
+      <div class="check-item">1. {{SLOT:step_1}}</div>
+      <div class="check-item">2. {{SLOT:step_2}}</div>
+      <div class="check-item">3. {{SLOT:step_3}}</div>
+      <div class="check-item">4. {{SLOT:step_4}}</div>
     </div>
     {{FOOTER}}
   </div>

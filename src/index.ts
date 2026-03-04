@@ -1,6 +1,6 @@
 import puppeteer from "@cloudflare/puppeteer";
 import { generateStructuredCopy, normalizeSourceContent, type LlmOutput, type LlmPromptOverrides } from "./ai";
-import { listFontProfiles, normalizeFontProfileId } from "./design-system";
+import { listFontProfiles, listPresetIds, normalizeFontProfileId } from "./design-system";
 import {
   getTemplateDimensions,
   isTemplateKind,
@@ -45,7 +45,7 @@ interface Env {
 }
 
 interface ImageGenerationOptions {
-  mode?: "auto" | "feature" | "stock" | "ai" | "custom";
+  mode?: "auto" | "none" | "feature" | "stock" | "ai" | "custom";
   customUrl?: string;
   prompt?: string;
   allowStock?: boolean;
@@ -249,7 +249,7 @@ const STOCK_TOPIC_PATTERN = createTopicKeywordPattern(PIPELINE_CONFIG.generation
 const DEFAULT_CAROUSEL_SLIDES = PIPELINE_CONFIG.generation.carousel_required_slides;
 const TEMPLATE_KINDS = listTemplateKinds();
 const TEMPLATE_KIND_SET = new Set(TEMPLATE_KINDS);
-const PRESET_SET = new Set(Object.keys(PIPELINE_CONFIG.render.preset_styles));
+const PRESET_SET = new Set(listPresetIds());
 const TEMPLATE_IDS_BY_FORMAT: Record<TemplateKind, Set<string>> = TEMPLATE_KINDS.reduce(
   (acc, format) => {
     acc[format] = new Set(
@@ -1103,6 +1103,13 @@ async function chooseImageSource(
   const preferFeature = options?.preferFeature ?? PIPELINE_CONFIG.features.prefer_feature_image;
   const allowStock = options?.allowStock ?? PIPELINE_CONFIG.features.enable_stock_image_search;
   const allowAi = options?.allowAi ?? PIPELINE_CONFIG.features.enable_ai_image_generation;
+
+  if (mode === "none") {
+    return {
+      source: "none",
+      imageUrl: ""
+    };
+  }
 
   if (mode === "custom") {
     if (!options?.customUrl) {
@@ -2185,8 +2192,8 @@ function parseImageOptions(input: unknown): ImageGenerationOptions | undefined {
   }
   const object = requireObject(input, "image");
   const mode = optionalString(object.mode, "image.mode", 16);
-  if (mode && !["auto", "feature", "stock", "ai", "custom"].includes(mode)) {
-    throw new HttpError(400, "image.mode must be one of auto, feature, stock, ai, custom");
+  if (mode && !["auto", "none", "feature", "stock", "ai", "custom"].includes(mode)) {
+    throw new HttpError(400, "image.mode must be one of auto, none, feature, stock, ai, custom");
   }
   const parsed: ImageGenerationOptions = {
     mode: mode as ImageGenerationOptions["mode"],
