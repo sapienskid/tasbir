@@ -1,10 +1,15 @@
 import {
+  brandConfig,
   createBrandTheme,
+  layoutDefaultsForFormat,
   renderTemplateHead,
   resolveTemplateControl,
   templateControlSetFromQuery,
   tokenOverridesFromQuery,
+  type BrandIconPosition,
   type BrandTokenOverrides,
+  type ContentPosition,
+  type ResolvedTemplateControl,
   type TemplateControlSet,
   type TemplateFormatKey
 } from "./template-theme";
@@ -14,18 +19,28 @@ export type { BrandTokenOverrides, TemplateControlSet };
 
 export type TemplateKind = TemplateFormatKey;
 
+export interface TemplateFieldDeclaration {
+  key: string;
+  type: "text" | "image_url" | "icon_url" | "number";
+  hint: string;
+  default: string;
+}
+
 interface TemplateDefinition {
   id: string;
   format?: TemplateKind;
   formats?: readonly TemplateKind[];
   label: string;
+  description?: string;
   file: string;
+  fields?: TemplateFieldDeclaration[];
 }
 
 type FrameTone = "default" | "dark";
 
 export interface SlotHintOption {
   id: string;
+  type: string;
   hint: string;
   defaultValue: string;
 }
@@ -51,33 +66,8 @@ export interface CarouselTemplateParams extends BaseTemplateParams {
 
 const TEMPLATE_DEFINITIONS = PIPELINE_CONFIG.templates as readonly TemplateDefinition[];
 const TEMPLATE_SLOT_KEY_CACHE = new Map<string, string[]>();
+const TEMPLATE_FIELD_CACHE = new Map<string, TemplateFieldDeclaration[]>();
 const SLOT_TOKEN_PATTERN = /\{\{\s*SLOT:([A-Za-z0-9_:-]+)\s*\}\}/gi;
-
-const CAPTION_WIDTH_RULES: Partial<Record<TemplateKind, { add: number; max: number }>> = {
-  "instagram-portrait": { add: 20, max: 960 },
-  "instagram-square": { add: 20, max: 960 },
-  "instagram-story": { add: 30, max: 980 },
-  "carousel-post": { add: 30, max: 980 },
-  "twitter-card": { add: 40, max: 1020 },
-  "linkedin-post": { add: 40, max: 1020 }
-};
-
-const META_LEFT_LABELS: Partial<Record<TemplateKind, string>> = {
-  "instagram-portrait": "Instagram",
-  "instagram-square": "Instagram",
-  "instagram-story": "Story",
-  "twitter-card": "X / Twitter",
-  "linkedin-post": "LinkedIn",
-  "carousel-post": ""
-};
-
-const META_RIGHT_LABELS: Partial<Record<TemplateKind, string>> = {
-  "instagram-post": "",
-  "instagram-story": "",
-  "twitter-card": "",
-  "linkedin-post": "",
-  "carousel-slide": ""
-};
 
 const DEFAULT_VISUAL_LAYERS = {
   useBackgroundImageOnly: true,
@@ -108,19 +98,47 @@ export function getTemplateDimensions(kind: TemplateKind): { width: number; heig
 }
 
 export function listSlotHints(): SlotHintOption[] {
-  const slotKeys = new Set<string>([
+  const keySet = new Set<string>([
     ...listAllTemplateSlotKeys()
   ]);
 
-  return [...slotKeys]
+  return [...keySet]
     .map((rawKey) => normalizeSlotKey(rawKey))
     .filter(Boolean)
-    .map((id) => ({
-      id,
-      hint: `Template slot used by one or more layouts: ${id.replaceAll("_", " ")}`,
-      defaultValue: ""
-    }))
+    .map((id) => {
+      const field = findFieldDeclaration(id);
+      return {
+        id,
+        type: field?.type ?? "text",
+        hint: field?.hint ?? `Template slot used by one or more layouts: ${id.replaceAll("_", " ")}`,
+        defaultValue: field?.default ?? ""
+      };
+    })
     .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+export function listTemplateFields(templateId: string): TemplateFieldDeclaration[] {
+  const cached = TEMPLATE_FIELD_CACHE.get(templateId);
+  if (cached) {
+    return cached;
+  }
+
+  const definition = TEMPLATE_DEFINITIONS.find((d) => d.id === templateId);
+  if (definition?.fields && definition.fields.length > 0) {
+    TEMPLATE_FIELD_CACHE.set(templateId, definition.fields);
+    return definition.fields;
+  }
+
+  // Auto-discover from slot tokens in HTML
+  const slotKeys = listTemplateSlotKeys(templateId);
+  const autoFields: TemplateFieldDeclaration[] = slotKeys.map((key) => ({
+    key,
+    type: "text" as const,
+    hint: `Template slot: ${key.replaceAll("_", " ")}`,
+    default: ""
+  }));
+  TEMPLATE_FIELD_CACHE.set(templateId, autoFields);
+  return autoFields;
 }
 
 export function listRequiredSlotKeys(
@@ -149,7 +167,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const footer = renderMetaFooter(kind, control, defaultMetaLeft(kind), defaultMetaRight(kind));
   const kicker = renderKicker(kind, control, params.title);
 
-  const slotValues = resolveSlotValues(kind, params);
+  const slotValues = resolveSlotValues(kind, params, selectedTemplate.id);
 
   const tokens: Record<string, string> = {
     TITLE: escapeHtml(params.title),
@@ -160,7 +178,8 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     HEADER: header,
     FOOTER: footer,
     KICKER: kicker,
-    ALIGN_CLASS: alignmentClassName(control.textAlign)
+    ALIGN_CLASS: alignmentClassName(control.textAlign),
+    POSITION_CLASS: positionClassName(control.contentPosition)
   };
 
   const templateMarkup = loadTemplateMarkup(selectedTemplate.id);
@@ -185,39 +204,27 @@ function selectTemplateDefinition(
   kind: TemplateKind,
   requestedTemplateId?: string
 ): TemplateDefinition {
-  const byFormat = TEMPLATE_DEFINITIONS.filter((definition) => templateSupportsFormat(definition, kind));
-  if (byFormat.length === 0) {
-    throw new Error(`No templates configured for format ${kind}`);
+  if (TEMPLATE_DEFINITIONS.length === 0) {
+    throw new Error(`No templates found. Add HTML files to the templates/ directory.`);
   }
 
+  // If user/AI explicitly requests a template by ID, honour it
   if (requestedTemplateId) {
-    const direct = byFormat.find((definition) => definition.id === requestedTemplateId.trim());
-    if (direct) {
-      return direct;
-    }
+    const direct = TEMPLATE_DEFINITIONS.find((d) => d.id === requestedTemplateId.trim());
+    if (direct) return direct;
+    // Unknown ID — fall through to format default (don't 404)
+    console.warn(`Unknown templateId "${requestedTemplateId}" — falling back to format default`);
   }
 
+  // Use the format's configured default
   const defaultId = PIPELINE_CONFIG.formats[kind].default_template_id;
-  const defaultTemplate = byFormat.find((definition) => definition.id === defaultId);
-  if (defaultTemplate) {
-    return defaultTemplate;
-  }
+  const defaultTemplate = TEMPLATE_DEFINITIONS.find((d) => d.id === defaultId);
+  if (defaultTemplate) return defaultTemplate;
 
-  return byFormat[0];
+  // Ultimate fallback: first template in the list
+  return TEMPLATE_DEFINITIONS[0];
 }
 
-function templateSupportsFormat(definition: TemplateDefinition, kind: TemplateKind): boolean {
-  const formats = definition.formats?.map((format) => format.trim()).filter(Boolean) ?? [];
-  if (formats.length > 0) {
-    return formats.includes(kind);
-  }
-
-  if (definition.format) {
-    return definition.format === kind;
-  }
-
-  return true;
-}
 
 function loadTemplateMarkup(templateId: string): string {
   const key = templateId as keyof typeof TEMPLATE_FILES;
@@ -246,9 +253,41 @@ function interpolateTemplate(template: string, tokens: Record<string, string>, s
   });
 }
 
-function resolveSlotValues(kind: TemplateKind, params: BaseTemplateParams | CarouselTemplateParams): Record<string, string> {
+function resolveSlotValues(
+  kind: TemplateKind,
+  params: BaseTemplateParams | CarouselTemplateParams,
+  templateId: string
+): Record<string, string> {
   const resolved: Record<string, string> = {};
 
+  // 1. Apply field defaults from template declaration
+  const fields = listTemplateFields(templateId);
+  for (const field of fields) {
+    const normalizedKey = normalizeSlotKey(field.key);
+    if (normalizedKey && field.default) {
+      resolved[normalizedKey] = field.default;
+    }
+  }
+
+  // 2. Apply structural fallbacks (heading/body/headline/subheadline)
+  resolved.headline = params.title;
+  resolved.subheadline = params.caption;
+  resolved.short_hook = params.title;
+  resolved.supporting_line = params.caption;
+  resolved.insight_line = params.caption;
+  resolved.heading = params.title;
+  resolved.body = params.caption;
+
+  // 3. Apply carousel-specific overrides
+  if (kind === "carousel-post") {
+    const carouselParams = params as CarouselTemplateParams;
+    resolved.headline = carouselParams.heading;
+    resolved.body = carouselParams.body;
+    resolved.step_number = String(carouselParams.slideNumber);
+    resolved.step_total = String(carouselParams.totalSlides);
+  }
+
+  // 4. Apply user-provided slot overrides (highest priority)
   if (params.slots) {
     for (const [slotKey, slotValue] of Object.entries(params.slots)) {
       const normalizedKey = normalizeSlotKey(slotKey);
@@ -258,22 +297,6 @@ function resolveSlotValues(kind: TemplateKind, params: BaseTemplateParams | Caro
       }
       resolved[normalizedKey] = value;
     }
-  }
-
-  resolved.headline = resolved.headline || params.title;
-  resolved.subheadline = resolved.subheadline || params.caption;
-  resolved.short_hook = resolved.short_hook || params.title;
-  resolved.supporting_line = resolved.supporting_line || params.caption;
-  resolved.insight_line = resolved.insight_line || params.caption;
-  resolved.heading = resolved.heading || params.title;
-  resolved.body = resolved.body || params.caption;
-
-  if (kind === "carousel-post") {
-    const carouselParams = params as CarouselTemplateParams;
-    resolved.headline = carouselParams.heading;
-    resolved.body = carouselParams.body;
-    resolved.step_number = resolved.step_number || String(carouselParams.slideNumber);
-    resolved.step_total = resolved.step_total || String(carouselParams.totalSlides);
   }
 
   return resolved;
@@ -286,6 +309,21 @@ function normalizeSlotKey(input: string): string {
     .replace(/[^a-z0-9_]/g, "_")
     .replace(/_+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+function findFieldDeclaration(slotKey: string): TemplateFieldDeclaration | undefined {
+  const normalizedTarget = normalizeSlotKey(slotKey);
+  for (const def of TEMPLATE_DEFINITIONS) {
+    if (!def.fields) {
+      continue;
+    }
+    for (const field of def.fields) {
+      if (normalizeSlotKey(field.key) === normalizedTarget) {
+        return field;
+      }
+    }
+  }
+  return undefined;
 }
 
 function listAllTemplateSlotKeys(): string[] {
@@ -322,8 +360,8 @@ function listTemplateSlotKeys(templateId: string): string[] {
 }
 
 function captionMaxWidth(kind: TemplateKind, contentMaxWidth: number): number {
-  const rules = CAPTION_WIDTH_RULES[kind] ?? { add: 30, max: 980 };
-  return Math.min(Number(rules.max), contentMaxWidth + Number(rules.add));
+  const layout = layoutDefaultsForFormat(kind);
+  return Math.min(Number(layout.captionWidthMax), contentMaxWidth + Number(layout.captionWidthAdd));
 }
 
 function frameDecorTokens(): {
@@ -358,7 +396,7 @@ function renderFrame(
     width: number;
     height: number;
     params: BaseTemplateParams;
-    control: ReturnType<typeof resolveTemplateControl>;
+    control: ResolvedTemplateControl;
     content: string;
     frameTone: FrameTone;
   },
@@ -395,6 +433,14 @@ function renderFrame(
     : "";
   const imageVisibilityClass = shouldRenderBackgroundImage ? "" : "is-hidden";
 
+  // Brand icon corner
+  const brandIconUrl = escapeHtml(args.control.brandIconUrl.trim());
+  const hasBrandIcon = brandIconUrl.length > 0;
+  const brandIconCornerClass = hasBrandIcon
+    ? brandIconCornerClassName(args.control.brandIconPosition)
+    : "is-hidden";
+  const brandIconCornerStyle = "";
+
   const rootVars = [
     `--content-inset:${args.control.contentInset}px`,
     `--content-max-width:${contentMax}px`,
@@ -429,6 +475,9 @@ function renderFrame(
       GRAIN_DOT_SIZE: frameDecor.grainDotSizePx.toString(),
       GRAIN_BG_SIZE: frameDecor.grainBgSizePx.toString(),
       BORDER_ALPHA_PERCENT: frameDecor.borderAlphaPercent.toString(),
+      BRAND_ICON_CORNER_CLASS: brandIconCornerClass,
+      BRAND_ICON_CORNER_STYLE: brandIconCornerStyle,
+      BRAND_ICON_URL: brandIconUrl,
       CONTENT: args.content
     },
     {}
@@ -467,26 +516,30 @@ function resolveVisualLayerSettings(): VisualLayerSettings {
 
 function renderTopBar(
   kind: TemplateKind,
-  control: ReturnType<typeof resolveTemplateControl>,
+  control: ResolvedTemplateControl,
   brandName: string,
   slideLabel?: string
 ): string {
   const showLeft = control.showBrandBadge;
   const showRight = kind === "carousel-slide" && control.showSlideBadge && Boolean(slideLabel?.trim());
   const showTopBar = showLeft || showRight;
+  const brandIconUrl = escapeHtml(control.brandIconUrl.trim());
+  const hasBrandIcon = brandIconUrl.length > 0;
 
   return renderSystemFragment("@system/top-bar-shell", {
     TOP_BAR_VISIBILITY_CLASS: showTopBar ? "" : "is-hidden",
     LEFT_PILL_VISIBILITY_CLASS: showLeft ? "" : "is-hidden",
     RIGHT_PILL_VISIBILITY_CLASS: showRight ? "" : "is-hidden",
     LEFT_LABEL: escapeHtml(brandName),
-    RIGHT_LABEL: escapeHtml(slideLabel ?? "")
+    RIGHT_LABEL: escapeHtml(slideLabel ?? ""),
+    BRAND_ICON_VISIBILITY_CLASS: hasBrandIcon ? "" : "is-hidden",
+    BRAND_ICON_URL: brandIconUrl
   });
 }
 
 function renderMetaFooter(
   kind: TemplateKind,
-  control: ReturnType<typeof resolveTemplateControl>,
+  control: ResolvedTemplateControl,
   defaultLeft: string,
   defaultRight: string
 ): string {
@@ -502,7 +555,7 @@ function renderMetaFooter(
 
 function renderKicker(
   kind: TemplateKind,
-  control: ReturnType<typeof resolveTemplateControl>,
+  control: ResolvedTemplateControl,
   title: string
 ): string {
   const shouldShowKicker = kind === "carousel-post" && control.showTitleKicker;
@@ -513,17 +566,13 @@ function renderKicker(
 }
 
 function defaultMetaLeft(kind: TemplateKind): string {
-  const renderConfig = (PIPELINE_CONFIG as unknown as {
-    render?: { meta_left_labels?: Partial<Record<TemplateKind, string>> };
-  }).render;
-  return renderConfig?.meta_left_labels?.[kind] ?? META_LEFT_LABELS[kind] ?? "";
+  const formatConfig = PIPELINE_CONFIG.formats?.[kind] as { meta_left_label?: string } | undefined;
+  return formatConfig?.meta_left_label ?? "";
 }
 
-function defaultMetaRight(_kind: TemplateKind): string {
-  const renderConfig = (PIPELINE_CONFIG as unknown as {
-    render?: { meta_right_labels?: Partial<Record<TemplateKind, string>> };
-  }).render;
-  return renderConfig?.meta_right_labels?.[_kind] ?? META_RIGHT_LABELS[_kind] ?? "";
+function defaultMetaRight(kind: TemplateKind): string {
+  const formatConfig = PIPELINE_CONFIG.formats?.[kind] as { meta_right_label?: string } | undefined;
+  return formatConfig?.meta_right_label ?? "";
 }
 
 function alignmentClassName(alignment: "left" | "center" | "justify"): string {
@@ -534,6 +583,31 @@ function alignmentClassName(alignment: "left" | "center" | "justify"): string {
     return "align-justify";
   }
   return "align-left";
+}
+
+function positionClassName(position: ContentPosition): string {
+  if (position === "top") {
+    return "push-start";
+  }
+  if (position === "center") {
+    return "push-center";
+  }
+  return "push-end";
+}
+
+function brandIconCornerClassName(position: BrandIconPosition): string {
+  switch (position) {
+    case "top-left":
+      return "corner-top-left";
+    case "top-right":
+      return "corner-top-right";
+    case "bottom-left":
+      return "corner-bottom-left";
+    case "bottom-right":
+      return "corner-bottom-right";
+    default:
+      return "corner-top-left";
+  }
 }
 
 function renderSystemFragment(templateId: string, tokens: Record<string, string>): string {
