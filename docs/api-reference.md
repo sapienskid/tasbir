@@ -34,9 +34,10 @@ Returns preview HTML for one format.
 
 Formats:
 
-- `instagram-post`
+- `instagram-portrait`
+- `instagram-square`
 - `instagram-story`
-- `carousel-slide`
+- `carousel-post`
 - `twitter-card`
 - `linkedin-post`
 
@@ -70,12 +71,15 @@ Design controls:
 - `showMetaFooter`
 - `showTitleKicker`
 - `showDecorLayers`
-- `textAlign` (`left` or `center`)
+- `textAlign` (`left`, `center`, or `justify`)
+- `contentPosition` (`top`, `center`, or `bottom`)
 - `imageOpacity` (`0..1`)
 - `contentMaxWidth`
 - `contentInset`
 - `metaLeftText`
 - `metaRightText`
+- `brandIconUrl`
+- `brandIconPosition`
 
 Brand token overrides:
 
@@ -91,7 +95,7 @@ Brand token overrides:
 ### Example
 
 ```bash
-curl "http://127.0.0.1:8787/template/instagram-post?templateId=core/metric-split&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context" \
+curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context" \
   -H 'x-api-key: your-api-key'
 ```
 
@@ -111,19 +115,18 @@ Returns current template registry and format metadata.
   },
   "formats": [
     {
-      "id": "instagram-post",
+      "id": "instagram-square",
       "width": 1080,
       "height": 1080,
       "caption_source": "instagram_caption",
       "hashtag_count": 3,
-      "default_template_id": "core/editorial-base"
+      "default_template_id": "layout/editorial-classic"
     }
   ],
   "templates": [
     {
-      "id": "core/editorial-base",
-      "format": "instagram-post",
-      "formats": ["instagram-post", "twitter-card"],
+      "id": "layout/editorial-classic",
+      "formats": ["instagram-square", "twitter-card", "linkedin-post"],
       "label": "Core Editorial Base",
       "description": "...",
       "file": "templates/editorial-base.html",
@@ -131,7 +134,7 @@ Returns current template registry and format metadata.
     }
   ],
   "templates_by_format": {
-    "instagram-post": ["core/editorial-base"]
+    "instagram-square": ["layout/editorial-classic"]
   }
 }
 ```
@@ -158,6 +161,7 @@ Optional:
 - `llm`
 - `image`
 - `output`
+- `campaign`
 
 ### Minimal Example
 
@@ -174,8 +178,8 @@ Optional:
   "url": "https://blog.example.com/future-of-content-ops/",
   "prompt": "Practical tone for technical founders.",
   "templateIds": {
-    "instagram-post": "core/metric-split",
-    "twitter-card": "core/data-base"
+    "instagram-square": "layout/single-metric-focus",
+    "twitter-card": "layout/statement-cta"
   },
   "slotOverrides": {
     "metric_value": "2.4K",
@@ -198,6 +202,15 @@ Optional:
     "formats": ["twitter-card", "linkedin-post"],
     "carouselSlides": 4,
     "postCount": 2
+  },
+  "campaign": {
+    "platforms": ["instagram-square", "twitter-card", "linkedin-post"],
+    "counts": {
+      "instagram-square": 2,
+      "twitter-card": 3,
+      "linkedin-post": 1
+    },
+    "strategy": "template-rotation-angle-presets"
   }
 }
 ```
@@ -232,7 +245,14 @@ Supports the same optional overrides as `/generate`.
   "content": "Start from one source and split into platform-native assets.",
   "prompt": "Clear and no-fluff tone.",
   "output": {
-    "formats": ["instagram-post", "linkedin-post"]
+    "formats": ["instagram-square", "linkedin-post"]
+  },
+  "campaign": {
+    "platforms": ["instagram-square", "linkedin-post"],
+    "counts": {
+      "instagram-square": 2,
+      "linkedin-post": 1
+    }
   }
 }
 ```
@@ -263,6 +283,8 @@ Top-level response contains:
 - `image_source`
 - `template_plan`
 - `llm_output`
+- `campaign_plan` (present when `campaign` is provided)
+- `campaign_outputs` (present when `campaign` is provided)
 - `assets`
 - `variants` (present when `output.postCount > 1`)
 
@@ -273,7 +295,8 @@ Top-level response contains:
 
 `assets` includes:
 
-- `instagram_post`
+- `instagram_portrait`
+- `instagram_square`
 - `instagram_story`
 - `twitter_card`
 - `linkedin_post`

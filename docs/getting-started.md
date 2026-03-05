@@ -85,7 +85,7 @@ curl http://127.0.0.1:8787/health
 ## 6. Preview a Template
 
 ```bash
-curl "http://127.0.0.1:8787/template/instagram-post?templateId=core/promo-pill&slot.headline=Launch%20Week&slot.supporting_line=One%20guide%2C%20all%20platforms&slot.cta_text=Read%20Now" \
+curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/statement-cta&slot.headline=Launch%20Week&slot.supporting_line=One%20guide%2C%20all%20platforms&slot.cta_text=Read%20Now" \
   -H 'x-api-key: your-api-key'
 ```
 
@@ -102,8 +102,31 @@ curl -X POST http://127.0.0.1:8787/generate-from-content \
     "content": "Use one source article to generate platform-ready social assets.",
     "prompt": "Practical tone, no buzzwords.",
     "output": {
-      "formats": ["instagram-post", "twitter-card", "linkedin-post"],
+      "formats": ["instagram-square", "twitter-card", "linkedin-post"],
       "postCount": 2
+    }
+  }'
+```
+
+Campaign-planned request (preferred):
+
+```bash
+curl -X POST http://127.0.0.1:8787/generate-from-content \
+  -H 'x-api-key: your-api-key' \
+  -H 'content-type: application/json' \
+  -d '{
+    "title": "Build a Repeatable Content Engine",
+    "content": "Use one source article to generate platform-ready social assets.",
+    "campaign": {
+      "platforms": ["instagram-square", "twitter-card", "linkedin-post"],
+      "counts": {
+        "instagram-square": 2,
+        "twitter-card": 2,
+        "linkedin-post": 1
+      }
+    },
+    "image": {
+      "mode": "none"
     }
   }'
 ```
@@ -122,7 +145,7 @@ You can also pass `url` instead of `slug`.
 ## 9. Add a New Template
 
 1. Create HTML file in `templates/`.
-2. Register it in `config/pipeline/templates.yaml`.
+2. Optional: declare `@formats: twitter-card,linkedin-post` in front-matter.
 3. Run:
 
 ```bash

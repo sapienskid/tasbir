@@ -8,7 +8,7 @@ Common issues and fast fixes.
 
 Cause:
 
-- two template entries in `templates.yaml` share the same `id`
+- two template files declare the same `@id`
 
 Fix:
 
@@ -23,7 +23,7 @@ Cause:
 
 Fix:
 
-- use one of: `instagram-post`, `instagram-story`, `carousel-slide`, `twitter-card`, `linkedin-post`
+- use one of: `instagram-portrait`, `instagram-square`, `instagram-story`, `carousel-post`, `twitter-card`, `linkedin-post`
 
 ### `Format <name> points to missing default_template_id`
 

@@ -56,20 +56,15 @@ Per format:
 2. otherwise ask LLM planner to select from candidate template IDs
 3. validate and fallback to format default template if needed
 
-Candidate list is always derived from the current `templates.yaml` registry.
+Candidate list is auto-derived from template files discovered under `templates/` and filtered by optional `@formats` constraints.
 
 ## Add a New Template
 
 1. Create file under `templates/`, for example `templates/feature-spotlight.html`.
-2. Add entry in `config/pipeline/templates.yaml`:
-
-```yaml
-- id: core/feature-spotlight
-  label: Core Feature Spotlight
-  description: Hero layout for feature highlights.
-  file: ../templates/feature-spotlight.html
-```
-
+2. Optional front-matter directives:
+- `@id`, `@label`, `@description`
+- `@formats: twitter-card,linkedin-post` to constrain compatibility
+- `@slot` metadata for slot hints/defaults
 3. Rebuild assets:
 
 ```bash
@@ -79,7 +74,7 @@ pnpm run build:templates
 4. Verify:
 
 - `GET /template-catalog`
-- `GET /template/<format>?templateId=core/feature-spotlight`
+- `GET /template/<format>?templateId=layout/grid-item-card`
 
 ## Add a New Shared System Fragment
 
@@ -94,24 +89,24 @@ pnpm run build:templates
 Direct template preview:
 
 ```text
-/template/twitter-card?templateId=core/bold-base
+/template/twitter-card?templateId=layout/statement-cta
 ```
 
 Slot override preview:
 
 ```text
-/template/instagram-post?templateId=core/promo-pill&slot.headline=Ship%20Faster&slot.supporting_line=One%20pipeline%20for%20all%20formats&slot.cta_text=Read%20Guide
+/template/instagram-square?templateId=layout/statement-cta&slot.headline=Ship%20Faster&slot.supporting_line=One%20pipeline%20for%20all%20formats&slot.cta_text=Read%20Guide
 ```
 
 Design-control preview:
 
 ```text
-/template/linkedin-post?templateId=core/editorial-base&showMetaFooter=true&textAlign=left&imageOpacity=0.45
+/template/linkedin-post?templateId=layout/editorial-classic&showMetaFooter=true&textAlign=left&imageOpacity=0.45
 ```
 
 ## Troubleshooting Quick Checks
 
-1. confirm template entry exists in `templates.yaml`
+1. confirm template file exists under `templates/`
 2. run `pnpm run build:templates`
 3. verify `default_template_id` for target format
 4. test direct preview with `templateId`

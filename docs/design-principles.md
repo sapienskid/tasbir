@@ -24,7 +24,7 @@ These principles define how this system should evolve.
 
 ## 4. Dynamic Template Registry
 
-- templates are discovered from `templates.yaml`
+- templates are auto-discovered from `templates/*.html`
 - adding a template should not require runtime code edits
 - selection should stay valid even as template set changes frequently
 
@@ -66,7 +66,7 @@ Even with imperfect model output, rendering should succeed:
 Preferred extension path:
 
 1. add/update template
-2. register in YAML
+2. optionally define `@formats` in front-matter for compatibility
 3. adjust CSS tokens/classes if needed
 4. rebuild assets
 5. verify via preview and generation routes

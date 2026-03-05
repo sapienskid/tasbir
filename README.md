@@ -9,9 +9,10 @@ A Cloudflare Worker that turns source content into multi-platform social outputs
 
 Supported output formats:
 
-- `instagram-post` (1080x1080)
+- `instagram-portrait` (1080x1350)
+- `instagram-square` (1080x1080)
 - `instagram-story` (1080x1920)
-- `carousel-slide` (1080x1080)
+- `carousel-post` (1080x1350)
 - `twitter-card` (1200x630)
 - `linkedin-post` (1200x627)
 
@@ -32,7 +33,7 @@ No Tailwind runtime, no style/archetype/font-profile matrix.
 - `POST /generate` (Ghost slug/url)
 - `POST /generate-from-content` (direct content)
 - `POST /webhook/ghost`
-2. Worker builds template candidates from current `templates.yaml`.
+2. Worker builds template candidates from discovered `templates/*.html` files.
 3. LLM chooses template IDs per requested format (unless forced via `templateIds`).
 4. Required slot keys are extracted from selected template `{{SLOT:key}}` placeholders.
 5. LLM generates structured output (captions, slides, hashtags, image prompt, slot content).
@@ -43,7 +44,7 @@ No Tailwind runtime, no style/archetype/font-profile matrix.
 ## Project Layout
 
 - `config/pipeline.config.yaml`: composed config entrypoint (`extends`)
-- `config/pipeline/templates.yaml`: formats + template registry
+- `config/pipeline/templates.yaml`: brand, format, and preview defaults
 - `config/pipeline/content.yaml`: generation prompts/limits/fallbacks
 - `config/pipeline/runtime.yaml`: runtime, features, security, storage
 - `templates/*.html`: format-agnostic content skeletons
@@ -110,8 +111,31 @@ curl -X POST http://127.0.0.1:8787/generate-from-content \
     "content": "Turn one long article into platform-native assets with a reusable template pipeline.",
     "prompt": "Practical, confident tone for solo founders.",
     "output": {
-      "formats": ["instagram-post", "twitter-card", "linkedin-post"],
+      "formats": ["instagram-square", "twitter-card", "linkedin-post"],
       "postCount": 2
+    }
+  }'
+```
+
+Campaign-planned generation (preferred):
+
+```bash
+curl -X POST http://127.0.0.1:8787/generate-from-content \
+  -H 'x-api-key: your-api-key' \
+  -H 'content-type: application/json' \
+  -d '{
+    "title": "Ship Better Content Systems",
+    "content": "Turn one long article into platform-native assets with a reusable template pipeline.",
+    "campaign": {
+      "platforms": ["instagram-square", "twitter-card", "linkedin-post"],
+      "counts": {
+        "instagram-square": 2,
+        "twitter-card": 3,
+        "linkedin-post": 1
+      }
+    },
+    "image": {
+      "mode": "none"
     }
   }'
 ```
@@ -121,7 +145,7 @@ curl -X POST http://127.0.0.1:8787/generate-from-content \
 Render preview HTML without running full generation:
 
 ```bash
-curl "http://127.0.0.1:8787/template/instagram-post?templateId=core/metric-split&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context" \
+curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context" \
   -H 'x-api-key: your-api-key'
 ```
 
@@ -148,7 +172,7 @@ Catalog includes:
 ## How New Templates Are Recognized
 
 1. Add a new file under `templates/`.
-2. Register it in `config/pipeline/templates.yaml`.
+2. Optional: add `@formats: format-a,format-b` in template front-matter to constrain compatibility.
 3. Run `pnpm run build:templates`.
 4. New template appears in `/template-catalog` and planner candidates automatically.
 

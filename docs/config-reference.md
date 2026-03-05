@@ -17,8 +17,9 @@ Composed fragments:
 `pnpm run build:templates`:
 
 1. merges config fragments
-2. validates template registry
-3. embeds templates + CSS into `src/generated/template-assets.json`
+2. auto-discovers templates from `templates/*.html`
+3. validates template compatibility/defaults
+4. embeds templates + CSS into `src/generated/template-assets.json`
 
 Run this after any config, template, or CSS change.
 
@@ -78,7 +79,7 @@ formats:
     height: 630
     caption_source: twitter_caption
     hashtag_count: 0
-    default_template_id: core/bold-base
+    default_template_id: layout/statement-cta
 ```
 
 ## `preview_defaults`
@@ -87,7 +88,7 @@ Fallback values for `GET /template/<format>` when query params are missing.
 
 ## `templates`
 
-Template registry.
+Auto-generated template registry.
 
 Each item supports:
 
@@ -97,17 +98,7 @@ Each item supports:
 - `file` (required)
 - `format` or `formats` (optional format restrictions)
 
-Example:
-
-```yaml
-templates:
-  - id: core/promo-pill
-    label: Core Promo Pill
-    description: Promotional layout with CTA emphasis.
-    file: ../templates/promo-pill.html
-```
-
-When `format`/`formats` are omitted, template is treated as compatible with all formats.
+`templates` is generated from template front-matter. To constrain compatibility, add `@formats: format-a,format-b` in template HTML comments.
 
 ## `generation`
 
@@ -116,10 +107,6 @@ Generation behavior and limits.
 ### `carousel_required_slides`
 
 Default required carousel slide count.
-
-### `stock_topic_keywords`
-
-Topic keywords used for stock-image heuristics.
 
 ### `limits`
 
