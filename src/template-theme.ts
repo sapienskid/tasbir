@@ -2,6 +2,9 @@ import { PIPELINE_CONFIG, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/templ
 
 export type TemplateFormatKey = string;
 
+export type ContentPosition = "top" | "center" | "bottom";
+export type BrandIconPosition = "top-left" | "top-right" | "bottom-left" | "bottom-right";
+
 export interface BrandTokenOverrides {
   primaryText?: string;
   secondaryText?: string;
@@ -20,11 +23,14 @@ export interface TemplateControl {
   showTitleKicker?: boolean;
   showDecorLayers?: boolean;
   textAlign?: "left" | "center" | "justify";
+  contentPosition?: ContentPosition;
   imageOpacity?: number;
   contentMaxWidth?: number;
   contentInset?: number;
   metaLeftText?: string;
   metaRightText?: string;
+  brandIconUrl?: string;
+  brandIconPosition?: BrandIconPosition;
 }
 
 export interface TemplateControlSet extends TemplateControl {
@@ -52,18 +58,21 @@ export interface BrandTheme {
   tokens: BrandTokens;
 }
 
-interface ResolvedTemplateControl {
+export interface ResolvedTemplateControl {
   showBrandBadge: boolean;
   showSlideBadge: boolean;
   showMetaFooter: boolean;
   showTitleKicker: boolean;
   showDecorLayers: boolean;
   textAlign: "left" | "center" | "justify";
+  contentPosition: ContentPosition;
   imageOpacity?: number;
   contentMaxWidth: number;
   contentInset: number;
   metaLeftText?: string;
   metaRightText?: string;
+  brandIconUrl: string;
+  brandIconPosition: BrandIconPosition;
 }
 
 interface ThemingConfig {
@@ -106,17 +115,21 @@ interface ThemingConfig {
 interface BrandConfig {
   default_name: string;
   default_color: string;
+  default_icon?: string;
 }
 
 interface LayoutControlDefaults {
   contentMaxWidth: number;
   contentInset: number;
   textAlign: "left" | "center" | "justify";
+  captionWidthAdd: number;
+  captionWidthMax: number;
 }
 
 const DEFAULT_BRAND: BrandConfig = {
   default_name: "Brand",
-  default_color: "#000000"
+  default_color: "#000000",
+  default_icon: ""
 };
 
 const FALLBACK_THEME: ThemingConfig = {
@@ -162,40 +175,17 @@ const CONTROL_DEFAULTS = {
   showMetaFooter: false,
   showTitleKicker: true,
   showDecorLayers: false,
-  textAlign: "justify" as const
+  textAlign: "justify" as const,
+  contentPosition: "bottom" as ContentPosition,
+  brandIconPosition: "top-left" as BrandIconPosition
 };
 
-const FORMAT_LAYOUT_DEFAULTS: Partial<Record<TemplateFormatKey, LayoutControlDefaults>> = {
-  "instagram-portrait": {
-    contentMaxWidth: 1020,
-    contentInset: 68,
-    textAlign: "justify"
-  },
-  "instagram-square": {
-    contentMaxWidth: 1020,
-    contentInset: 68,
-    textAlign: "justify"
-  },
-  "instagram-story": {
-    contentMaxWidth: 930,
-    contentInset: 82,
-    textAlign: "justify"
-  },
-  "carousel-post": {
-    contentMaxWidth: 1020,
-    contentInset: 68,
-    textAlign: "justify"
-  },
-  "twitter-card": {
-    contentMaxWidth: 1020,
-    contentInset: 48,
-    textAlign: "justify"
-  },
-  "linkedin-post": {
-    contentMaxWidth: 1020,
-    contentInset: 48,
-    textAlign: "justify"
-  }
+const FALLBACK_LAYOUT_DEFAULTS: LayoutControlDefaults = {
+  contentMaxWidth: 1020,
+  contentInset: 64,
+  textAlign: "justify",
+  captionWidthAdd: 30,
+  captionWidthMax: 980
 };
 
 const DESIGN_PROMPT_DIRECTIVES = [
@@ -205,7 +195,7 @@ const DESIGN_PROMPT_DIRECTIVES = [
   "Keep slot values concise, specific, and directly usable without extra formatting."
 ] as const;
 
-function brandConfig(): BrandConfig {
+export function brandConfig(): BrandConfig {
   return ((PIPELINE_CONFIG as unknown as { brand?: BrandConfig }).brand ?? DEFAULT_BRAND) as BrandConfig;
 }
 
@@ -213,14 +203,22 @@ function themingConfig(): ThemingConfig {
   return ((PIPELINE_CONFIG as unknown as { theming?: ThemingConfig }).theming ?? FALLBACK_THEME) as ThemingConfig;
 }
 
-function layoutDefaultsForFormat(kind: TemplateFormatKey): LayoutControlDefaults {
-  return (
-    FORMAT_LAYOUT_DEFAULTS[kind] ?? {
-      contentMaxWidth: 1020,
-      contentInset: 64,
-      textAlign: "justify"
-    }
-  );
+export function layoutDefaultsForFormat(kind: TemplateFormatKey): LayoutControlDefaults {
+  const formatConfig = PIPELINE_CONFIG.formats?.[kind] as
+    | { layout?: Partial<LayoutControlDefaults & { content_max_width?: number; content_inset?: number; text_align?: string; caption_width_add?: number; caption_width_max?: number }> }
+    | undefined;
+  const layout = formatConfig?.layout;
+  if (!layout) {
+    return { ...FALLBACK_LAYOUT_DEFAULTS };
+  }
+
+  return {
+    contentMaxWidth: layout.content_max_width ?? layout.contentMaxWidth ?? FALLBACK_LAYOUT_DEFAULTS.contentMaxWidth,
+    contentInset: layout.content_inset ?? layout.contentInset ?? FALLBACK_LAYOUT_DEFAULTS.contentInset,
+    textAlign: parseTextAlign(layout.text_align ?? layout.textAlign) ?? FALLBACK_LAYOUT_DEFAULTS.textAlign,
+    captionWidthAdd: layout.caption_width_add ?? layout.captionWidthAdd ?? FALLBACK_LAYOUT_DEFAULTS.captionWidthAdd,
+    captionWidthMax: layout.caption_width_max ?? layout.captionWidthMax ?? FALLBACK_LAYOUT_DEFAULTS.captionWidthMax
+  };
 }
 
 export function listTemplateCompositionDirectives(): string[] {
@@ -337,6 +335,7 @@ export function resolveTemplateControl(
   set?: TemplateControlSet
 ): ResolvedTemplateControl {
   const layout = layoutDefaultsForFormat(kind);
+  const defaultIconUrl = brandConfig().default_icon ?? "";
 
   const base: ResolvedTemplateControl = {
     showBrandBadge: CONTROL_DEFAULTS.showBrandBadge,
@@ -345,8 +344,11 @@ export function resolveTemplateControl(
     showTitleKicker: CONTROL_DEFAULTS.showTitleKicker,
     showDecorLayers: CONTROL_DEFAULTS.showDecorLayers,
     textAlign: layout.textAlign,
+    contentPosition: CONTROL_DEFAULTS.contentPosition,
     contentMaxWidth: layout.contentMaxWidth,
-    contentInset: layout.contentInset
+    contentInset: layout.contentInset,
+    brandIconUrl: defaultIconUrl,
+    brandIconPosition: CONTROL_DEFAULTS.brandIconPosition
   };
 
   const mergedGlobal = mergeControl(base, set);
@@ -412,11 +414,14 @@ export function templateControlSetFromQuery(searchParams: URLSearchParams): Temp
     showTitleKicker: parseBoolean(searchParams.get("showTitleKicker")),
     showDecorLayers: parseBoolean(searchParams.get("showDecorLayers")),
     textAlign: parseTextAlign(searchParams.get("textAlign")),
+    contentPosition: parseContentPosition(searchParams.get("contentPosition")),
     imageOpacity: parseNumber(searchParams.get("imageOpacity")),
     contentMaxWidth: parseNumber(searchParams.get("contentMaxWidth")),
     contentInset: parseNumber(searchParams.get("contentInset")),
     metaLeftText: searchParams.get("metaLeftText") ?? undefined,
-    metaRightText: searchParams.get("metaRightText") ?? undefined
+    metaRightText: searchParams.get("metaRightText") ?? undefined,
+    brandIconUrl: searchParams.get("brandIconUrl") ?? undefined,
+    brandIconPosition: parseBrandIconPosition(searchParams.get("brandIconPosition"))
   };
 
   const hasAny = Object.entries(control).some(([key, value]) => key !== "formatOverrides" && value !== undefined);
@@ -436,11 +441,14 @@ function mergeControl(base: ResolvedTemplateControl, override?: TemplateControl)
     showTitleKicker: override.showTitleKicker ?? base.showTitleKicker,
     showDecorLayers: override.showDecorLayers ?? base.showDecorLayers,
     textAlign: parseTextAlign(override.textAlign) ?? base.textAlign,
+    contentPosition: parseContentPosition(override.contentPosition) ?? base.contentPosition,
     imageOpacity: override.imageOpacity ?? base.imageOpacity,
     contentMaxWidth: override.contentMaxWidth ?? base.contentMaxWidth,
     contentInset: override.contentInset ?? base.contentInset,
     metaLeftText: override.metaLeftText ?? base.metaLeftText,
-    metaRightText: override.metaRightText ?? base.metaRightText
+    metaRightText: override.metaRightText ?? base.metaRightText,
+    brandIconUrl: override.brandIconUrl ?? base.brandIconUrl,
+    brandIconPosition: parseBrandIconPosition(override.brandIconPosition) ?? base.brandIconPosition
   };
 }
 
@@ -452,6 +460,33 @@ function parseTextAlign(value: string | null | undefined): "left" | "center" | "
   const normalized = value.trim().toLowerCase();
   if (normalized === "left" || normalized === "center" || normalized === "justify") {
     return normalized;
+  }
+  return undefined;
+}
+
+function parseContentPosition(value: string | null | undefined): ContentPosition | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "top" || normalized === "center" || normalized === "bottom") {
+    return normalized;
+  }
+  return undefined;
+}
+
+function parseBrandIconPosition(value: string | null | undefined): BrandIconPosition | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "top-left" ||
+    normalized === "top-right" ||
+    normalized === "bottom-left" ||
+    normalized === "bottom-right"
+  ) {
+    return normalized as BrandIconPosition;
   }
   return undefined;
 }
