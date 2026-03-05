@@ -1,6 +1,13 @@
+<!--
+@id: core/carousel-content
+@label: Carousel Content
+@description: Supporting content slide for carousel series with decorative slide index
+
+@slot slide_index | text | Large decorative slide index number
+-->
 <div class="content-shell template-carousel-content {{ALIGN_CLASS}}">
     {{HEADER}}
-    <div class="content-panel push-end">
+    <div class="content-panel {{POSITION_CLASS}}">
         <div class="series-index">{{SLOT:slide_index}}</div>
         <h1 class="heading-secondary flow-after-kicker content-limit text-balance word-safe">{{HEADING}}</h1>
         <div class="rule-line flow-after-heading"></div>

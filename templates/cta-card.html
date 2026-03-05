@@ -1,6 +1,13 @@
+<!--
+@id: core/cta-card
+@label: CTA Card
+@description: Closing statement designed to drive a specific action
+
+@slot cta_text | text | Short call-to-action button label | Learn More
+-->
 <div class="content-shell template-cta {{ALIGN_CLASS}}">
     {{HEADER}}
-    <div class="content-panel push-end">
+    <div class="content-panel {{POSITION_CLASS}}">
         <h1 class="heading-primary content-limit text-balance word-safe">{{HEADING}}</h1>
         <div class="rule-line flow-after-heading"></div>
         <p class="body-primary flow-after-heading caption-limit word-safe" style="font-size: 1.25em;">{{BODY}}</p>

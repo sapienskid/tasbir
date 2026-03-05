@@ -1,12 +1,21 @@
+<!--
+@id: core/metric-card
+@label: Metric Card
+@description: Data-driven slide focusing on one key number or statistic
+
+@slot metric_value | text | The primary metric or number to display prominently
+@slot metric_label | text | Short label describing what the metric measures
+@slot headline | text | Supporting headline text shown below the metric
+-->
 <div class="content-shell template-metric {{ALIGN_CLASS}}">
     {{HEADER}}
-    <div class="content-panel push-end">
+    <div class="content-panel {{POSITION_CLASS}}">
         <div class="metric-container">
             <div class="metric-value tabular-nums">{{SLOT:metric_value}}</div>
             <div class="metric-label">{{SLOT:metric_label}}</div>
         </div>
         <div class="rule-line flow-after-heading"></div>
-        <h1 class="heading-secondary flow-after-heading content-limit text-balance word-safe">{{HEADING}}</h1>
+        <h1 class="heading-secondary flow-after-heading content-limit text-balance word-safe">{{SLOT:headline}}</h1>
         <p class="body-secondary flow-after-heading caption-limit word-safe">{{BODY}}</p>
         {{FOOTER}}
     </div>

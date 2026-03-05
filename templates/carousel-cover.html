@@ -1,10 +1,17 @@
+<!--
+@id: core/carousel-cover
+@label: Carousel Cover
+@description: Impactful opening slide for a carousel series
+
+@slot series_label | text | Short series or topic label displayed above the headline
+-->
 <div class="content-shell template-carousel-cover {{ALIGN_CLASS}}">
     {{HEADER}}
-    <div class="content-panel push-end">
+    <div class="content-panel {{POSITION_CLASS}}">
         <div class="series-number">{{SLOT:series_label}}</div>
         <h1 class="heading-primary content-limit text-balance word-safe">{{HEADING}}</h1>
         <div class="rule-line rule-line--thick flow-after-heading" style="width: 80px;"></div>
-        <p class="body-primary flow-after-heading caption-limit word-safe">{{BODY}}</p>
+        <p class="body-secondary flow-after-heading caption-limit word-safe">{{BODY}}</p>
         {{FOOTER}}
     </div>
 </div>

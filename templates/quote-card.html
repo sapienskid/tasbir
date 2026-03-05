@@ -1,7 +1,16 @@
+<!--
+@id: core/quote-card
+@label: Quote Card
+@description: Elegant pull-quote layout with attribution line
+
+@slot quote_text | text | The quote or pull-quote text to display prominently
+@slot quote_author | text | Name of the person being quoted | Editorial Team
+@slot author_role | text | Role or title of the quoted person
+-->
 <div class="quote-mark">"</div>
 <div class="content-shell template-quote {{ALIGN_CLASS}}">
     {{HEADER}}
-    <div class="content-panel push-end">
+    <div class="content-panel {{POSITION_CLASS}}">
         <h1 class="heading-quote flow-after-kicker content-limit text-balance word-safe">{{SLOT:quote_text}}</h1>
         <div class="rule-line flow-after-heading" style="width: 60px;"></div>
         <div class="author-block">
