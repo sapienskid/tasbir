@@ -1,6 +1,7 @@
 brand:
   default_name: Tasbir Blog
   default_color: "#000000"
+  default_icon: ""
 
 theming:
   readable_light_text: "#ffffff"
@@ -43,36 +44,84 @@ formats:
     caption_source: instagram_caption
     hashtag_count: 3
     default_template_id: core/editorial-base
+    meta_left_label: "Instagram"
+    meta_right_label: ""
+    layout:
+      content_max_width: 1020
+      content_inset: 68
+      text_align: justify
+      caption_width_add: 20
+      caption_width_max: 960
   instagram-square:
     width: 1080
     height: 1080
     caption_source: instagram_caption
     hashtag_count: 3
     default_template_id: core/editorial-base
+    meta_left_label: "Instagram"
+    meta_right_label: ""
+    layout:
+      content_max_width: 1020
+      content_inset: 68
+      text_align: justify
+      caption_width_add: 20
+      caption_width_max: 960
   instagram-story:
     width: 1080
     height: 1920
     caption_source: instagram_caption
     hashtag_count: 2
     default_template_id: core/editorial-base
+    meta_left_label: "Story"
+    meta_right_label: ""
+    layout:
+      content_max_width: 930
+      content_inset: 82
+      text_align: justify
+      caption_width_add: 30
+      caption_width_max: 980
   carousel-post:
     width: 1080
     height: 1350
     caption_source: carousel_slides
     hashtag_count: 0
     default_template_id: core/carousel-cover
+    meta_left_label: ""
+    meta_right_label: ""
+    layout:
+      content_max_width: 1020
+      content_inset: 68
+      text_align: justify
+      caption_width_add: 30
+      caption_width_max: 980
   twitter-card:
     width: 1200
     height: 630
     caption_source: twitter_caption
     hashtag_count: 0
     default_template_id: core/bold-base
+    meta_left_label: "X / Twitter"
+    meta_right_label: ""
+    layout:
+      content_max_width: 1020
+      content_inset: 48
+      text_align: justify
+      caption_width_add: 40
+      caption_width_max: 1020
   linkedin-post:
     width: 1200
     height: 627
     caption_source: linkedin_caption
     hashtag_count: 0
     default_template_id: core/editorial-base
+    meta_left_label: "LinkedIn"
+    meta_right_label: ""
+    layout:
+      content_max_width: 1020
+      content_inset: 48
+      text_align: justify
+      caption_width_add: 40
+      caption_width_max: 1020
 
 preview_defaults:
   title: Building a Monochromatic Swiss Content Engine That Scales Across Every Platform
@@ -81,37 +130,3 @@ preview_defaults:
   body: Templates stay skeletal while one centralized tokenized CSS system controls color, typography, spacing, and tone so every output remains cohesive as your template library evolves.
   slide_number: 1
   total_slides: 5
-
-templates:
-  - id: core/editorial-base
-    label: Editorial Base
-    description: Clean Swiss editorial layout with bold serif headline and justified body text.
-    file: ../templates/editorial-base.html
-  - id: core/bold-base
-    label: Bold Base (Light)
-    description: High-contrast statement layout with CTA.
-    file: ../templates/bold-base.html
-  - id: core/statement-dark
-    label: Statement (Dark)
-    description: Inverted monochromatic layout for strong visual contrast.
-    file: ../templates/statement-dark.html
-  - id: core/quote-card
-    label: Quote Card
-    description: Elegant pull-quote layout with attribution.
-    file: ../templates/quote-card.html
-  - id: core/carousel-cover
-    label: Carousel Cover
-    description: Impactful opening slide for carousel series.
-    file: ../templates/carousel-cover.html
-  - id: core/carousel-content
-    label: Carousel Content
-    description: Supporting content slide for carousels with slide index.
-    file: ../templates/carousel-content.html
-  - id: core/metric-card
-    label: Metric Card
-    description: Data-driven slide focusing on one key number.
-    file: ../templates/metric-card.html
-  - id: core/cta-card
-    label: CTA Card
-    description: Closing statement designed intended to drive action.
-    file: ../templates/cta-card.html
