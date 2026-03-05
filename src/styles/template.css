@@ -20,6 +20,8 @@
   --token-radius-pill: var(--radius-pill);
   --token-shadow-title: var(--frame-title-shadow);
   --token-shadow-caption: var(--frame-caption-shadow);
+
+  --heading-max-lines: 5;
 }
 
 * {
@@ -72,16 +74,12 @@ body {
   --color-surface-elevated: #131313;
   --color-border-subtle: #2b2b2b;
   --frame-bg: #050505;
-  --frame-overlay-top: linear-gradient(
-    180deg,
-    color-mix(in srgb, #000000 32%, transparent) 0%,
-    color-mix(in srgb, #000000 60%, transparent) 100%
-  );
-  --frame-overlay-bottom: linear-gradient(
-    0deg,
-    color-mix(in srgb, #000000 22%, transparent) 0%,
-    transparent 62%
-  );
+  --frame-overlay-top: linear-gradient(180deg,
+      color-mix(in srgb, #000000 32%, transparent) 0%,
+      color-mix(in srgb, #000000 60%, transparent) 100%);
+  --frame-overlay-bottom: linear-gradient(0deg,
+      color-mix(in srgb, #000000 22%, transparent) 0%,
+      transparent 62%);
   --frame-brand-pill-bg: color-mix(in srgb, #000000 16%, transparent);
   --frame-brand-pill-border: color-mix(in srgb, #ffffff 24%, transparent);
   --frame-brand-pill-text: var(--color-text-primary);
@@ -226,6 +224,8 @@ body {
   --template-heading-quote-size: 56px;
   --template-body-quote-size: 24px;
   --template-body-secondary-size: 24px;
+  --template-flow-kicker: var(--token-space-sm);
+  --template-flow-heading: var(--token-space-sm);
 }
 
 .template-checklist {
@@ -325,6 +325,16 @@ body {
   padding: calc(var(--template-panel-padding) * var(--layout-scale) * var(--frame-space-scale));
 }
 
+/* Content position utilities */
+.push-start {
+  margin-bottom: auto;
+}
+
+.push-center {
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
 .push-end {
   margin-top: auto;
 }
@@ -374,6 +384,11 @@ body {
   letter-spacing: var(--template-heading-letter-spacing);
   text-shadow: var(--token-shadow-title);
   color: var(--color-text-primary);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--heading-max-lines);
+  line-clamp: var(--heading-max-lines);
 }
 
 .heading-primary {
@@ -467,6 +482,50 @@ body {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   line-height: 1.1;
+}
+
+.brand-icon {
+  height: 1em;
+  width: auto;
+  margin-right: calc(6px * var(--layout-scale));
+  vertical-align: middle;
+  object-fit: contain;
+}
+
+/* ─────────────────────────────────────────
+   Brand Icon Corner (positioned overlay)
+   ───────────────────────────────────────── */
+
+.brand-icon-corner {
+  position: absolute;
+  z-index: 20;
+  padding: calc(24px * var(--layout-scale));
+}
+
+.brand-icon-corner.corner-top-left {
+  top: 0;
+  left: 0;
+}
+
+.brand-icon-corner.corner-top-right {
+  top: 0;
+  right: 0;
+}
+
+.brand-icon-corner.corner-bottom-left {
+  bottom: 0;
+  left: 0;
+}
+
+.brand-icon-corner.corner-bottom-right {
+  bottom: 0;
+  right: 0;
+}
+
+.brand-icon-img {
+  height: calc(32px * var(--layout-scale));
+  width: auto;
+  object-fit: contain;
 }
 
 /* ─────────────────────────────────────────
