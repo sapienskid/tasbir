@@ -64,6 +64,12 @@ interface OutputOptions {
   postCount?: number;
 }
 
+interface CampaignOptions {
+  platforms?: TemplateKind[];
+  counts?: Partial<Record<TemplateKind, number>>;
+  strategy?: "template-rotation-angle-presets";
+}
+
 interface GenerateRequestBody {
   slug?: string;
   url?: string;
@@ -79,6 +85,7 @@ interface GenerateRequestBody {
   llm?: LlmPromptOverrides;
   image?: ImageGenerationOptions;
   output?: OutputOptions;
+  campaign?: CampaignOptions;
 }
 
 interface DirectContentRequestBody {
@@ -103,6 +110,7 @@ interface DirectContentRequestBody {
   llm?: LlmPromptOverrides;
   image?: ImageGenerationOptions;
   output?: OutputOptions;
+  campaign?: CampaignOptions;
 }
 
 interface StorageOptions {
@@ -159,6 +167,40 @@ interface TemplatePlan {
   slotFields: import("./templates").TemplateFieldDeclaration[];
 }
 
+interface CampaignPostPlan {
+  platform: TemplateKind;
+  index: number;
+  template_id: string;
+  angle_preset: string;
+  slot_keys: string[];
+  copy_constraints: {
+    caption_source: string;
+    hashtag_count: number;
+  };
+}
+
+interface CampaignPlatformPlan {
+  platform: TemplateKind;
+  count: number;
+  posts: CampaignPostPlan[];
+}
+
+interface CampaignPlan {
+  strategy: "template-rotation-angle-presets";
+  platforms: CampaignPlatformPlan[];
+}
+
+interface CampaignPostOutput {
+  platform: TemplateKind;
+  index: number;
+  template_id: string;
+  angle_preset: string;
+  required_slot_keys: string[];
+  image_source: SelectedImage;
+  llm_output: LlmOutput;
+  assets: StoredAsset[];
+}
+
 interface GenerationResult {
   ok: true;
   slug: string;
@@ -170,6 +212,8 @@ interface GenerationResult {
     template_ids: Partial<Record<TemplateKind, string>>;
   };
   llm_output: LlmOutput;
+  campaign_plan?: CampaignPlan;
+  campaign_outputs?: CampaignPostOutput[];
   assets: {
     instagram_portrait: StoredAsset | null;
     instagram_square: StoredAsset | null;
@@ -247,7 +291,7 @@ const SECURITY_DEFAULTS: SecurityConfig = {
   request_limits: {
     max_json_body_bytes: 256_000,
     slot_overrides_max_keys: 40,
-    template_ids_max_keys: 5
+    template_ids_max_keys: 20
   },
   rate_limit: {
     enabled: true,
@@ -272,15 +316,41 @@ const TEMPLATE_REGISTRY = PIPELINE_CONFIG.templates as ReadonlyArray<{
   id: string;
   label: string;
   description?: string;
+  format?: TemplateKind;
+  formats?: TemplateKind[];
 }>;
-// All discovered templates support all formats
-const ALL_TEMPLATE_IDS = new Set(TEMPLATE_REGISTRY.map((t) => t.id));
 const TEMPLATE_IDS_BY_FORMAT: Record<TemplateKind, Set<string>> = TEMPLATE_KINDS.reduce(
   (acc, format) => {
-    acc[format] = ALL_TEMPLATE_IDS;
+    acc[format] = new Set(
+      TEMPLATE_REGISTRY.filter((template) => templateSupportsFormat(template, format)).map((template) => template.id)
+    );
     return acc;
   },
   {} as Record<TemplateKind, Set<string>>
+);
+
+const ANGLE_PRESETS_BY_PLATFORM: Record<TemplateKind, string[]> = TEMPLATE_KINDS.reduce(
+  (acc, platform) => {
+    if (platform === "twitter-card") {
+      acc[platform] = ["signal-first insight", "contrarian angle", "fast actionable takeaway"];
+      return acc;
+    }
+    if (platform === "linkedin-post") {
+      acc[platform] = ["problem insight action", "operator lesson", "framework breakdown"];
+      return acc;
+    }
+    if (platform === "carousel-post") {
+      acc[platform] = ["step-by-step narrative", "myth-to-method", "before-after-process"];
+      return acc;
+    }
+    if (platform === "instagram-story") {
+      acc[platform] = ["quick hook", "single punchy lesson", "cta-forward highlight"];
+      return acc;
+    }
+    acc[platform] = ["benefit-led hook", "proof-backed claim", "outcome-focused insight"];
+    return acc;
+  },
+  {} as Record<TemplateKind, string[]>
 );
 
 export default {
@@ -412,6 +482,8 @@ function handleTemplateCatalog(): Response {
     label: string;
     description?: string;
     file: string;
+    format?: TemplateKind;
+    formats?: TemplateKind[];
   }>).map((template) => {
     const templateMarkup = templateFileMap[template.id] ?? "";
     const fields = listTemplateFields(template.id);
@@ -420,16 +492,17 @@ function handleTemplateCatalog(): Response {
       label: template.label,
       description: template.description ?? "",
       file: template.file,
+      format: template.format,
+      formats: template.formats,
       fields,
       required_slot_keys: fields.map((f) => f.key),
       version: stableShortHash(`${template.id}:${templateMarkup}`)
     };
   });
 
-  // All templates support all formats in the auto-discovery model
   const templatesByFormat = allKinds.reduce(
     (acc, kind) => {
-      acc[kind] = templates.map((t) => t.id);
+      acc[kind] = templates.filter((template) => templateSupportsFormat(template, kind)).map((t) => t.id);
       return acc;
     },
     {} as Record<TemplateKind, string[]>
@@ -467,6 +540,19 @@ function handleTemplateCatalog(): Response {
 function matchTemplateKind(pathname: string): TemplateKind | null {
   const candidate = pathname.replace(/^\/template\//, "").replace(/\/+$/, "").trim();
   return isTemplateKind(candidate) ? candidate : null;
+}
+
+function templateSupportsFormat(
+  template: { format?: TemplateKind; formats?: TemplateKind[] },
+  format: TemplateKind
+): boolean {
+  if (template.format) {
+    return template.format === format;
+  }
+  if (Array.isArray(template.formats) && template.formats.length > 0) {
+    return template.formats.includes(format);
+  }
+  return true;
 }
 
 
@@ -781,24 +867,31 @@ async function runPipeline(input: GenerateRequestBody, env: Env, security: Resol
   return runPipelineFromPost(post, env, input, security);
 }
 
+interface PipelineRunInput {
+  brandingColor?: string;
+  brandName?: string;
+  prompt?: string;
+  templateIds?: Partial<Record<TemplateKind, string>>;
+  slotOverrides?: Record<string, string>;
+  brandTokens?: BrandTokenOverrides;
+  design?: TemplateControlSet;
+  storage?: StorageOptions;
+  llm?: LlmPromptOverrides;
+  image?: ImageGenerationOptions;
+  output?: OutputOptions;
+  campaign?: CampaignOptions;
+}
+
 async function runPipelineFromPost(
   post: GhostPost,
   env: Env,
-  brandInput: {
-    brandingColor?: string;
-    brandName?: string;
-    prompt?: string;
-    templateIds?: Partial<Record<TemplateKind, string>>;
-    slotOverrides?: Record<string, string>;
-    brandTokens?: BrandTokenOverrides;
-    design?: TemplateControlSet;
-    storage?: StorageOptions;
-    llm?: LlmPromptOverrides;
-    image?: ImageGenerationOptions;
-    output?: OutputOptions;
-  },
+  brandInput: PipelineRunInput,
   security: ResolvedSecurityConfig
 ): Promise<GenerationResult> {
+  if (brandInput.campaign) {
+    return runCampaignPipelineFromPost(post, env, brandInput, security);
+  }
+
   const outputPlan = resolveOutputPlan(brandInput.output);
   const brandColor = brandInput.brandingColor ?? env.DEFAULT_BRAND_COLOR ?? PIPELINE_CONFIG.brand.default_color;
   const brandName = brandInput.brandName ?? env.BRAND_NAME ?? PIPELINE_CONFIG.brand.default_name;
@@ -889,6 +982,318 @@ async function runPipelineFromPost(
     assets: primaryVariant.assets,
     variants: outputPlan.postCount > 1 ? variants : undefined
   };
+}
+
+async function runCampaignPipelineFromPost(
+  post: GhostPost,
+  env: Env,
+  brandInput: PipelineRunInput,
+  security: ResolvedSecurityConfig
+): Promise<GenerationResult> {
+  const outputPlan = resolveOutputPlan(brandInput.output);
+  const campaignPlan = buildCampaignPlan({
+    post,
+    campaign: brandInput.campaign,
+    output: brandInput.output,
+    templateIds: brandInput.templateIds
+  });
+  const brandColor = brandInput.brandingColor ?? env.DEFAULT_BRAND_COLOR ?? PIPELINE_CONFIG.brand.default_color;
+  const brandName = brandInput.brandName ?? env.BRAND_NAME ?? PIPELINE_CONFIG.brand.default_name;
+  const deterministicImageOptions = enforceDeterministicImagePolicy(brandInput.image);
+  const campaignOutputs: CampaignPostOutput[] = [];
+  const legacyAssets = emptyLegacyAssetSet();
+  const templateIdsByPlatform: Partial<Record<TemplateKind, string>> = {};
+  const requiredSlotKeySet = new Set<string>();
+
+  for (const platformPlan of campaignPlan.platforms) {
+    if (platformPlan.posts[0]) {
+      templateIdsByPlatform[platformPlan.platform] = platformPlan.posts[0].template_id;
+    }
+
+    for (const postPlan of platformPlan.posts) {
+      for (const slotKey of postPlan.slot_keys) {
+        const normalized = normalizeSlotKey(slotKey);
+        if (normalized) requiredSlotKeySet.add(normalized);
+      }
+
+      const perPostPrompt = [
+        brandInput.prompt?.trim(),
+        `Platform: ${postPlan.platform}.`,
+        `Angle preset: ${postPlan.angle_preset}.`,
+        `Write native copy for ${postPlan.platform} only.`
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const llmOutput = await generateStructuredCopy({
+        ai: env.AI,
+        llmModel: env.LLM_MODEL,
+        post,
+        requiredCarouselSlides: outputPlan.carouselSlides,
+        requiredSlotKeys: postPlan.slot_keys,
+        slotFields: listTemplateFields(postPlan.template_id),
+        userPrompt: perPostPrompt,
+        llmOverrides: brandInput.llm,
+        normalizeSlotContent
+      });
+
+      const mergedSlotContent = mergeSlotContent(
+        llmOutput.slot_content,
+        normalizeSlotContent(brandInput.slotOverrides, {
+          title: post.title,
+          fallbackText: post.custom_excerpt || post.excerpt || post.plaintext || "",
+          requiredSlotKeys: postPlan.slot_keys
+        })
+      );
+
+      const selectedImage = await chooseImageSource(env, post, llmOutput, deterministicImageOptions, security);
+      const renderAssets = await renderAndStoreAssets(env, {
+        slug: post.slug,
+        postTitle: post.title,
+        imageUrl: selectedImage.imageUrl,
+        llmOutput: {
+          ...llmOutput,
+          slot_content: mergedSlotContent
+        },
+        brandColor,
+        brandName,
+        templateIds: {
+          [postPlan.platform]: postPlan.template_id
+        },
+        requiredSlotKeys: postPlan.slot_keys,
+        slotContent: mergedSlotContent,
+        brandTokens: brandInput.brandTokens,
+        design: brandInput.design,
+        storage: storageForCampaignPost(brandInput.storage, postPlan.platform, postPlan.index),
+        requestedFormats: new Set([postPlan.platform])
+      });
+
+      const assetsForPlatform = extractAssetsForPlatform(postPlan.platform, renderAssets);
+      campaignOutputs.push({
+        platform: postPlan.platform,
+        index: postPlan.index,
+        template_id: postPlan.template_id,
+        angle_preset: postPlan.angle_preset,
+        required_slot_keys: [...postPlan.slot_keys],
+        image_source: selectedImage,
+        llm_output: {
+          ...llmOutput,
+          slot_content: mergedSlotContent
+        },
+        assets: assetsForPlatform
+      });
+
+      applyLegacyAssetFallback(legacyAssets, postPlan.platform, renderAssets);
+    }
+  }
+
+  const primaryPost = campaignOutputs[0];
+  if (!primaryPost) {
+    throw new HttpError(500, "Campaign planning did not produce any post outputs");
+  }
+
+  return {
+    ok: true,
+    slug: post.slug,
+    post_url: post.url,
+    requested_formats: campaignPlan.platforms.map((platform) => platform.platform),
+    image_source: primaryPost.image_source,
+    template_plan: {
+      required_slot_keys: [...requiredSlotKeySet],
+      template_ids: templateIdsByPlatform
+    },
+    llm_output: primaryPost.llm_output,
+    campaign_plan: campaignPlan,
+    campaign_outputs: campaignOutputs,
+    assets: legacyAssets
+  };
+}
+
+function enforceDeterministicImagePolicy(options: ImageGenerationOptions | undefined): ImageGenerationOptions {
+  const mode = (options?.mode ?? "auto").toLowerCase() as NonNullable<ImageGenerationOptions["mode"]>;
+  if (mode === "stock" || mode === "ai") {
+    throw new HttpError(400, "campaign mode only supports image.mode auto, feature, custom, or none");
+  }
+  return {
+    ...options,
+    mode,
+    allowStock: false,
+    allowAi: false,
+    preferFeature: options?.preferFeature ?? true
+  };
+}
+
+function buildCampaignPlan(args: {
+  post: GhostPost;
+  campaign?: CampaignOptions;
+  output?: OutputOptions;
+  templateIds?: Partial<Record<TemplateKind, string>>;
+}): CampaignPlan {
+  const strategy = "template-rotation-angle-presets" as const;
+  const requestedPlatforms =
+    args.campaign?.platforms && args.campaign.platforms.length > 0
+      ? args.campaign.platforms
+      : args.output?.formats && args.output.formats.length > 0
+        ? args.output.formats
+        : TEMPLATE_KINDS;
+
+  const platforms = [...new Set(requestedPlatforms.filter((platform) => TEMPLATE_KIND_SET.has(platform)))];
+  if (platforms.length === 0) {
+    throw new HttpError(400, "campaign.platforms must include at least one supported platform");
+  }
+
+  const fallbackCount = Math.round(clampNumber(args.output?.postCount, 1, 10, 1));
+  const platformPlans: CampaignPlatformPlan[] = [];
+
+  for (const platform of platforms) {
+    const count = Math.round(clampNumber(args.campaign?.counts?.[platform], 1, 10, fallbackCount));
+    const templateSequence = buildTemplateSequence({
+      platform,
+      count,
+      forcedTemplateId: args.templateIds?.[platform],
+      seed: `${args.post.slug}:${platform}:${count}`
+    });
+
+    const posts: CampaignPostPlan[] = templateSequence.map((templateId, index) => ({
+      platform,
+      index: index + 1,
+      template_id: templateId,
+      angle_preset: resolveAnglePreset(platform, index),
+      slot_keys: listRequiredSlotKeys(platform, { templateId }),
+      copy_constraints: {
+        caption_source: String(PIPELINE_CONFIG.formats[platform].caption_source),
+        hashtag_count: Number(PIPELINE_CONFIG.formats[platform].hashtag_count)
+      }
+    }));
+
+    platformPlans.push({
+      platform,
+      count,
+      posts
+    });
+  }
+
+  return {
+    strategy,
+    platforms: platformPlans
+  };
+}
+
+function buildTemplateSequence(args: {
+  platform: TemplateKind;
+  count: number;
+  forcedTemplateId?: string;
+  seed: string;
+}): string[] {
+  if (args.count <= 0) {
+    return [];
+  }
+
+  if (args.forcedTemplateId) {
+    const resolved = resolveTemplateId(args.platform, { templateId: args.forcedTemplateId });
+    return Array.from({ length: args.count }, () => resolved);
+  }
+
+  const candidateIds = [...(TEMPLATE_IDS_BY_FORMAT[args.platform] ?? new Set())];
+  if (candidateIds.length === 0) {
+    throw new HttpError(400, `No compatible templates found for platform: ${args.platform}`);
+  }
+
+  const offset = deterministicOffset(args.seed, candidateIds.length);
+  return Array.from({ length: args.count }, (_unused, index) => candidateIds[(offset + index) % candidateIds.length]);
+}
+
+function deterministicOffset(seed: string, modulo: number): number {
+  if (modulo <= 1) {
+    return 0;
+  }
+  const hashHex = stableShortHash(seed);
+  const numeric = Number.parseInt(hashHex, 16);
+  if (!Number.isFinite(numeric)) {
+    return 0;
+  }
+  return Math.abs(numeric) % modulo;
+}
+
+function resolveAnglePreset(platform: TemplateKind, index: number): string {
+  const presets = ANGLE_PRESETS_BY_PLATFORM[platform] ?? ["benefit-led hook"];
+  if (presets.length === 0) {
+    return "benefit-led hook";
+  }
+  return presets[index % presets.length];
+}
+
+function storageForCampaignPost(
+  storage: StorageOptions | undefined,
+  platform: TemplateKind,
+  index: number
+): StorageOptions {
+  const existing = sanitizeRunId(storage?.runId) ?? "campaign";
+  return {
+    mode: "versioned",
+    includeDate: storage?.includeDate,
+    runId: `${existing}-${platform}-p${index}`
+  };
+}
+
+function emptyLegacyAssetSet(): GenerationResult["assets"] {
+  return {
+    instagram_portrait: null,
+    instagram_square: null,
+    instagram_story: null,
+    twitter_card: null,
+    linkedin_post: null,
+    carousel: []
+  };
+}
+
+function applyLegacyAssetFallback(
+  target: GenerationResult["assets"],
+  platform: TemplateKind,
+  assets: GenerationResult["assets"]
+): void {
+  if (platform === "instagram-portrait" && !target.instagram_portrait && assets.instagram_portrait) {
+    target.instagram_portrait = assets.instagram_portrait;
+    return;
+  }
+  if (platform === "instagram-square" && !target.instagram_square && assets.instagram_square) {
+    target.instagram_square = assets.instagram_square;
+    return;
+  }
+  if (platform === "instagram-story" && !target.instagram_story && assets.instagram_story) {
+    target.instagram_story = assets.instagram_story;
+    return;
+  }
+  if (platform === "twitter-card" && !target.twitter_card && assets.twitter_card) {
+    target.twitter_card = assets.twitter_card;
+    return;
+  }
+  if (platform === "linkedin-post" && !target.linkedin_post && assets.linkedin_post) {
+    target.linkedin_post = assets.linkedin_post;
+    return;
+  }
+  if (platform === "carousel-post" && target.carousel.length === 0 && assets.carousel.length > 0) {
+    target.carousel = assets.carousel;
+  }
+}
+
+function extractAssetsForPlatform(platform: TemplateKind, assets: GenerationResult["assets"]): StoredAsset[] {
+  if (platform === "instagram-portrait") {
+    return assets.instagram_portrait ? [assets.instagram_portrait] : [];
+  }
+  if (platform === "instagram-square") {
+    return assets.instagram_square ? [assets.instagram_square] : [];
+  }
+  if (platform === "instagram-story") {
+    return assets.instagram_story ? [assets.instagram_story] : [];
+  }
+  if (platform === "twitter-card") {
+    return assets.twitter_card ? [assets.twitter_card] : [];
+  }
+  if (platform === "linkedin-post") {
+    return assets.linkedin_post ? [assets.linkedin_post] : [];
+  }
+  return assets.carousel;
 }
 
 function storageForVariant(storage: StorageOptions | undefined, index: number, totalCount: number): StorageOptions | undefined {
@@ -1003,8 +1408,8 @@ async function buildTemplatePlan(args: {
 function buildTemplateCandidates(formats: TemplateKind[]): Record<string, TemplateChoiceCandidate[]> {
   const candidates: Record<string, TemplateChoiceCandidate[]> = {};
   for (const format of formats) {
-    // All templates are available for all formats — pass the full list as candidates
-    candidates[format] = TEMPLATE_REGISTRY.map((template) => ({
+    const compatibleTemplates = TEMPLATE_REGISTRY.filter((template) => templateSupportsFormat(template, format));
+    candidates[format] = compatibleTemplates.map((template) => ({
       id: template.id,
       label: template.label,
       description: template.description,
@@ -2058,11 +2463,12 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
   const templateIds = parseTemplateIds(body.templateIds, security);
   const slotOverrides = parseSlotOverrides(body.slotOverrides, security);
   const brandTokens = parseBrandTokens(body.brandTokens);
-  const design = parseDesignOverrides(body.design);
+  const design = parseDesignOverrides(body.design, security);
   const storage = parseStorageOptions(body.storage);
   const llm = parseLlmOverrides(body.llm);
   const image = parseImageOptions(body.image);
   const output = parseOutputOptions(body.output);
+  const campaign = parseCampaignOptions(body.campaign);
 
   return {
     slug: optionalString(body.slug, "slug", 200),
@@ -2078,7 +2484,8 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
     llm,
     image,
-    output
+    output,
+    campaign
   };
 }
 
@@ -2112,12 +2519,13 @@ function validateDirectContentRequestBody(input: unknown, security: ResolvedSecu
     templateIds: parseTemplateIds(body.templateIds, security),
     slotOverrides: parseSlotOverrides(body.slotOverrides, security),
     brandTokens: parseBrandTokens(body.brandTokens),
-    design: parseDesignOverrides(body.design),
+    design: parseDesignOverrides(body.design, security),
     storage: parseStorageOptions(body.storage),
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
     llm: parseLlmOverrides(body.llm),
     image: parseImageOptions(body.image),
-    output: parseOutputOptions(body.output)
+    output: parseOutputOptions(body.output),
+    campaign: parseCampaignOptions(body.campaign)
   } satisfies DirectContentRequestBody;
 
   return request;
@@ -2235,7 +2643,7 @@ function parseBrandTokens(input: unknown): BrandTokenOverrides | undefined {
   return Object.keys(parsed).length > 0 ? parsed : undefined;
 }
 
-function parseDesignOverrides(input: unknown): TemplateControlSet | undefined {
+function parseDesignOverrides(input: unknown, security?: ResolvedSecurityConfig): TemplateControlSet | undefined {
   if (input === undefined) {
     return undefined;
   }
@@ -2259,10 +2667,17 @@ function parseDesignOverrides(input: unknown): TemplateControlSet | undefined {
   }
   if (object.textAlign !== undefined) {
     const textAlign = optionalString(object.textAlign, "design.textAlign", 20);
-    if (textAlign && textAlign !== "left" && textAlign !== "center") {
-      throw new HttpError(400, "design.textAlign must be either left or center");
+    if (textAlign && textAlign !== "left" && textAlign !== "center" && textAlign !== "justify") {
+      throw new HttpError(400, "design.textAlign must be left, center, or justify");
     }
     parsed.textAlign = textAlign as TemplateControlSet["textAlign"];
+  }
+  if (object.contentPosition !== undefined) {
+    const contentPosition = optionalString(object.contentPosition, "design.contentPosition", 20);
+    if (contentPosition && contentPosition !== "top" && contentPosition !== "center" && contentPosition !== "bottom") {
+      throw new HttpError(400, "design.contentPosition must be top, center, or bottom");
+    }
+    parsed.contentPosition = contentPosition as TemplateControlSet["contentPosition"];
   }
   if (object.imageOpacity !== undefined) {
     parsed.imageOpacity = clampNumber(
@@ -2284,6 +2699,25 @@ function parseDesignOverrides(input: unknown): TemplateControlSet | undefined {
   }
   parsed.metaLeftText = optionalString(object.metaLeftText, "design.metaLeftText", 120);
   parsed.metaRightText = optionalString(object.metaRightText, "design.metaRightText", 120);
+  if (object.brandIconUrl !== undefined) {
+    const rawBrandIconUrl = optionalString(object.brandIconUrl, "design.brandIconUrl", 2_000);
+    parsed.brandIconUrl = rawBrandIconUrl
+      ? security
+        ? sanitizeImageUrl(rawBrandIconUrl, security, "design.brandIconUrl", {
+          allowDataUrl: false,
+          requireAllowedHost: false
+        })
+        : rawBrandIconUrl
+      : undefined;
+  }
+  if (object.brandIconPosition !== undefined) {
+    const brandIconPosition = optionalString(object.brandIconPosition, "design.brandIconPosition", 20);
+    const allowedPositions = new Set(["top-left", "top-right", "bottom-left", "bottom-right"]);
+    if (brandIconPosition && !allowedPositions.has(brandIconPosition)) {
+      throw new HttpError(400, "design.brandIconPosition must be top-left, top-right, bottom-left, or bottom-right");
+    }
+    parsed.brandIconPosition = brandIconPosition as TemplateControlSet["brandIconPosition"];
+  }
 
   const formatOverridesRaw = object.formatOverrides;
   if (formatOverridesRaw !== undefined) {
@@ -2293,7 +2727,7 @@ function parseDesignOverrides(input: unknown): TemplateControlSet | undefined {
       if (!isTemplateKind(rawFormat)) {
         throw new HttpError(400, `design.formatOverrides contains unsupported format: ${rawFormat}`);
       }
-      formatOverrides[rawFormat] = parseDesignOverrides(rawControl) ?? {};
+      formatOverrides[rawFormat] = parseDesignOverrides(rawControl, security) ?? {};
     }
     parsed.formatOverrides = formatOverrides;
   }
@@ -2422,6 +2856,63 @@ function parseOutputOptions(input: unknown): OutputOptions | undefined {
     formats,
     carouselSlides,
     postCount
+  };
+  return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
+}
+
+function parseCampaignOptions(input: unknown): CampaignOptions | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+
+  const object = requireObject(input, "campaign");
+  let platforms: TemplateKind[] | undefined;
+  const platformsRaw = object.platforms;
+  if (platformsRaw !== undefined) {
+    if (!Array.isArray(platformsRaw)) {
+      throw new HttpError(400, "campaign.platforms must be an array");
+    }
+    const unique = new Set<TemplateKind>();
+    for (const [index, value] of platformsRaw.entries()) {
+      const item = optionalString(value, `campaign.platforms[${index}]`, 40);
+      if (!item) {
+        continue;
+      }
+      if (!isTemplateKind(item)) {
+        throw new HttpError(400, `Unsupported campaign platform: ${item}`);
+      }
+      unique.add(item);
+    }
+    platforms = [...unique];
+    if (platforms.length === 0) {
+      throw new HttpError(400, "campaign.platforms cannot be empty");
+    }
+  }
+
+  let counts: Partial<Record<TemplateKind, number>> | undefined;
+  if (object.counts !== undefined) {
+    const rawCounts = requireObject(object.counts, "campaign.counts");
+    const parsedCounts: Partial<Record<TemplateKind, number>> = {};
+    for (const [rawPlatform, rawCount] of Object.entries(rawCounts)) {
+      if (!isTemplateKind(rawPlatform)) {
+        throw new HttpError(400, `campaign.counts contains unsupported platform: ${rawPlatform}`);
+      }
+      parsedCounts[rawPlatform] = Math.round(
+        clampNumber(requiredNumber(rawCount, `campaign.counts.${rawPlatform}`), 1, 10, 1)
+      );
+    }
+    counts = Object.keys(parsedCounts).length > 0 ? parsedCounts : undefined;
+  }
+
+  const strategy = optionalString(object.strategy, "campaign.strategy", 80);
+  if (strategy && strategy !== "template-rotation-angle-presets") {
+    throw new HttpError(400, "campaign.strategy must be template-rotation-angle-presets");
+  }
+
+  const parsed: CampaignOptions = {
+    platforms,
+    counts,
+    strategy: strategy as CampaignOptions["strategy"]
   };
   return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
 }

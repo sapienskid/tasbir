@@ -82,7 +82,7 @@ console.log(
  * Front-matter format (HTML comment at the very top of the file):
  *
  *   <!--
- *   @id: core/my-template
+ *   @id: layout/my-template
  *   @label: My Template
  *   @description: A one-line description
  *
@@ -122,7 +122,8 @@ async function discoverTemplates(dir, systemDir) {
     }
 
     const relFile = toPosix(relative(projectRoot, filePath));
-    templates.push({ ...meta, file: relFile, html, formats: formatKeys });
+    const compatibleFormats = Array.isArray(meta.formats) && meta.formats.length > 0 ? meta.formats : formatKeys;
+    templates.push({ ...meta, file: relFile, html, formats: compatibleFormats });
   }
 
   // Sort for stable output
@@ -164,7 +165,7 @@ function parseTemplateFrontMatter(html, filePath, templatesDir) {
   const fallbackId = toPosix(relPath.replace(/\.html$/i, ""));
   const fallbackLabel = humanizeFilename(basename(filePath, ".html"));
 
-  const defaults = { id: fallbackId, label: fallbackLabel, description: "", fields: [] };
+  const defaults = { id: fallbackId, label: fallbackLabel, description: "", fields: [], formats: undefined };
 
   // Match the first HTML comment block (must start at or near the top)
   const preamble = html.slice(0, 2048); // only scan the first 2 KB
@@ -187,6 +188,19 @@ function parseTemplateFrontMatter(html, filePath, templatesDir) {
 
   const descMatch = comment.match(/^[ \t]*@description[ \t]*:[ \t]*(.+)$/m);
   if (descMatch?.[1]?.trim()) result.description = descMatch[1].trim();
+
+  const formatsMatch = comment.match(/^[ \t]*@formats[ \t]*:[ \t]*(.+)$/m);
+  if (formatsMatch?.[1]?.trim()) {
+    const parsedFormats = formatsMatch[1]
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .filter((entry, index, list) => list.indexOf(entry) === index)
+      .filter((entry) => formatKeys.includes(entry));
+    if (parsedFormats.length > 0) {
+      result.formats = parsedFormats;
+    }
+  }
 
   // Parse @slot directives: @slot key | type | hint | default
   const slotPattern = /^[ \t]*@slot[ \t]+(.+)$/gm;

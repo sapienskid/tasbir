@@ -253,6 +253,21 @@ export async function chooseTemplateAssignments(args: {
       ? `\n<user_brief>${args.userPrompt.trim()}</user_brief>`
       : "";
 
+  const plannerInstructions = [
+    ...PIPELINE_CONFIG.generation.llm.template_planner.user_instructions,
+    "",
+    "Requested formats and candidate templates:",
+    promptLines.join("\n\n"),
+    "",
+    "Source content:",
+    `<title>${args.post.title.trim()}</title>`,
+    `<excerpt>${excerpt || "(none)"}</excerpt>`,
+    "<body>",
+    postText,
+    "</body>",
+    userBrief
+  ].join("\n");
+
   try {
     const raw = await args.ai.run(textModel, {
       messages: [
@@ -262,20 +277,7 @@ export async function chooseTemplateAssignments(args: {
         },
         {
           role: "user",
-          content: buildPromptTemplate(args.userPrompt, [
-            ...PIPELINE_CONFIG.generation.llm.template_planner.user_instructions,
-            "",
-            "Requested formats and candidate templates:",
-            promptLines.join("\n\n"),
-            "",
-            "Source content:",
-            `<title>${args.post.title.trim()}</title>`,
-            `<excerpt>${excerpt || "(none)"}</excerpt>`,
-            "<body>",
-            postText,
-            "</body>",
-            userBrief
-          ])
+          content: plannerInstructions
         }
       ],
       response_format: {

@@ -6,8 +6,8 @@ runtime:
 
 features:
   enable_template_preview: true
-  enable_stock_image_search: true
-  enable_ai_image_generation: true
+  enable_stock_image_search: false
+  enable_ai_image_generation: false
   prefer_feature_image: true
   enable_notifications: true
 
@@ -37,7 +37,7 @@ security:
   request_limits:
     max_json_body_bytes: 256000
     slot_overrides_max_keys: 40
-    template_ids_max_keys: 5
+    template_ids_max_keys: 20
   rate_limit:
     enabled: true
     window_seconds: 60
@@ -51,4 +51,3 @@ storage:
   default_key_prefix: "social-assets"
   default_mode: "overwrite"
   versioned_include_date: true
-

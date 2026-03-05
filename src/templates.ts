@@ -210,7 +210,9 @@ function selectTemplateDefinition(
 
   // If user/AI explicitly requests a template by ID, honour it
   if (requestedTemplateId) {
-    const direct = TEMPLATE_DEFINITIONS.find((d) => d.id === requestedTemplateId.trim());
+    const direct = TEMPLATE_DEFINITIONS.find(
+      (d) => d.id === requestedTemplateId.trim() && templateSupportsFormat(d, kind)
+    );
     if (direct) return direct;
     // Unknown ID — fall through to format default (don't 404)
     console.warn(`Unknown templateId "${requestedTemplateId}" — falling back to format default`);
@@ -218,11 +220,25 @@ function selectTemplateDefinition(
 
   // Use the format's configured default
   const defaultId = PIPELINE_CONFIG.formats[kind].default_template_id;
-  const defaultTemplate = TEMPLATE_DEFINITIONS.find((d) => d.id === defaultId);
+  const defaultTemplate = TEMPLATE_DEFINITIONS.find((d) => d.id === defaultId && templateSupportsFormat(d, kind));
   if (defaultTemplate) return defaultTemplate;
 
-  // Ultimate fallback: first template in the list
+  // Ultimate fallback: first template compatible with this format
+  const compatible = TEMPLATE_DEFINITIONS.find((definition) => templateSupportsFormat(definition, kind));
+  if (compatible) {
+    return compatible;
+  }
   return TEMPLATE_DEFINITIONS[0];
+}
+
+function templateSupportsFormat(definition: TemplateDefinition, kind: TemplateKind): boolean {
+  if (definition.format) {
+    return definition.format === kind;
+  }
+  if (Array.isArray(definition.formats) && definition.formats.length > 0) {
+    return definition.formats.includes(kind);
+  }
+  return true;
 }
 
 
@@ -277,12 +293,17 @@ function resolveSlotValues(
   resolved.insight_line = params.caption;
   resolved.heading = params.title;
   resolved.body = params.caption;
+  resolved.item_title = params.title;
+  resolved.item_body = params.caption;
+  resolved.item_meta = "";
 
   // 3. Apply carousel-specific overrides
   if (kind === "carousel-post") {
     const carouselParams = params as CarouselTemplateParams;
     resolved.headline = carouselParams.heading;
     resolved.body = carouselParams.body;
+    resolved.item_title = carouselParams.heading;
+    resolved.item_body = carouselParams.body;
     resolved.step_number = String(carouselParams.slideNumber);
     resolved.step_total = String(carouselParams.totalSlides);
   }
@@ -521,7 +542,7 @@ function renderTopBar(
   slideLabel?: string
 ): string {
   const showLeft = control.showBrandBadge;
-  const showRight = kind === "carousel-slide" && control.showSlideBadge && Boolean(slideLabel?.trim());
+  const showRight = kind === "carousel-post" && control.showSlideBadge && Boolean(slideLabel?.trim());
   const showTopBar = showLeft || showRight;
   const brandIconUrl = escapeHtml(control.brandIconUrl.trim());
   const hasBrandIcon = brandIconUrl.length > 0;
