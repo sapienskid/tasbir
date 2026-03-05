@@ -47,7 +47,7 @@
         "height": 1350,
         "caption_source": "instagram_caption",
         "hashtag_count": 3,
-        "default_template_id": "core/editorial-base",
+        "default_template_id": "layout/editorial-mosaic-hero",
         "meta_left_label": "Instagram",
         "meta_right_label": "",
         "layout": {
@@ -63,7 +63,7 @@
         "height": 1080,
         "caption_source": "instagram_caption",
         "hashtag_count": 3,
-        "default_template_id": "core/editorial-base",
+        "default_template_id": "layout/concept-explainer-callout",
         "meta_left_label": "Instagram",
         "meta_right_label": "",
         "layout": {
@@ -79,7 +79,7 @@
         "height": 1920,
         "caption_source": "instagram_caption",
         "hashtag_count": 2,
-        "default_template_id": "core/editorial-base",
+        "default_template_id": "layout/split-copy-media",
         "meta_left_label": "Story",
         "meta_right_label": "",
         "layout": {
@@ -95,7 +95,7 @@
         "height": 1350,
         "caption_source": "carousel_slides",
         "hashtag_count": 0,
-        "default_template_id": "core/carousel-cover",
+        "default_template_id": "layout/carousel-cover-hero",
         "meta_left_label": "",
         "meta_right_label": "",
         "layout": {
@@ -111,7 +111,7 @@
         "height": 630,
         "caption_source": "twitter_caption",
         "hashtag_count": 0,
-        "default_template_id": "core/bold-base",
+        "default_template_id": "layout/statement-cta",
         "meta_left_label": "X / Twitter",
         "meta_right_label": "",
         "layout": {
@@ -127,7 +127,7 @@
         "height": 627,
         "caption_source": "linkedin_caption",
         "hashtag_count": 0,
-        "default_template_id": "core/editorial-base",
+        "default_template_id": "layout/editorial-classic",
         "meta_left_label": "LinkedIn",
         "meta_right_label": "",
         "layout": {
@@ -263,8 +263,8 @@
     },
     "features": {
       "enable_template_preview": true,
-      "enable_stock_image_search": true,
-      "enable_ai_image_generation": true,
+      "enable_stock_image_search": false,
+      "enable_ai_image_generation": false,
       "prefer_feature_image": true,
       "enable_notifications": true
     },
@@ -299,7 +299,7 @@
       "request_limits": {
         "max_json_body_bytes": 256000,
         "slot_overrides_max_keys": 40,
-        "template_ids_max_keys": 5
+        "template_ids_max_keys": 20
       },
       "rate_limit": {
         "enabled": true,
@@ -320,53 +320,94 @@
     "schema_version": 1,
     "templates": [
       {
-        "id": "core/bold-base",
-        "label": "Bold Base",
-        "description": "High-contrast statement layout with CTA link",
+        "id": "layout/card-deck-grid",
+        "label": "Card Deck Grid",
+        "description": "Structured 2x3 deck where each card can be swapped as an independent content item",
         "fields": [
           {
-            "key": "cta_text",
+            "key": "deck_01_title",
             "type": "text",
-            "hint": "Short call-to-action button label",
-            "default": "Read More"
-          }
-        ],
-        "file": "templates/bold-base.html",
-        "formats": [
-          "instagram-portrait",
-          "instagram-square",
-          "instagram-story",
-          "carousel-post",
-          "twitter-card",
-          "linkedin-post"
-        ]
-      },
-      {
-        "id": "core/carousel-content",
-        "label": "Carousel Content",
-        "description": "Supporting content slide for carousel series with decorative slide index",
-        "fields": [
+            "hint": "Card 1 primary text",
+            "default": ""
+          },
           {
-            "key": "slide_index",
+            "key": "deck_01_note",
             "type": "text",
-            "hint": "Large decorative slide index number",
+            "hint": "Card 1 note text",
+            "default": ""
+          },
+          {
+            "key": "deck_02_title",
+            "type": "text",
+            "hint": "Card 2 primary text",
+            "default": ""
+          },
+          {
+            "key": "deck_02_note",
+            "type": "text",
+            "hint": "Card 2 note text",
+            "default": ""
+          },
+          {
+            "key": "deck_03_title",
+            "type": "text",
+            "hint": "Card 3 primary text",
+            "default": ""
+          },
+          {
+            "key": "deck_03_note",
+            "type": "text",
+            "hint": "Card 3 note text",
+            "default": ""
+          },
+          {
+            "key": "deck_04_title",
+            "type": "text",
+            "hint": "Card 4 primary text",
+            "default": ""
+          },
+          {
+            "key": "deck_04_note",
+            "type": "text",
+            "hint": "Card 4 note text",
+            "default": ""
+          },
+          {
+            "key": "deck_05_title",
+            "type": "text",
+            "hint": "Card 5 primary text",
+            "default": ""
+          },
+          {
+            "key": "deck_05_note",
+            "type": "text",
+            "hint": "Card 5 note text",
+            "default": ""
+          },
+          {
+            "key": "deck_06_title",
+            "type": "text",
+            "hint": "Card 6 primary text",
+            "default": ""
+          },
+          {
+            "key": "deck_06_note",
+            "type": "text",
+            "hint": "Card 6 note text",
             "default": ""
           }
         ],
-        "file": "templates/carousel-content.html",
         "formats": [
-          "instagram-portrait",
           "instagram-square",
-          "instagram-story",
           "carousel-post",
-          "twitter-card",
           "linkedin-post"
-        ]
+        ],
+        "file": "templates/card-deck-grid.html"
       },
       {
-        "id": "core/carousel-cover",
-        "label": "Carousel Cover",
-        "description": "Impactful opening slide for a carousel series",
+        "id": "layout/carousel-cover-hero",
+        "label": "Carousel Cover Hero",
+        "description": "Opening slide structure for carousel narrative series",
         "fields": [
           {
             "key": "series_label",
@@ -375,7 +416,77 @@
             "default": ""
           }
         ],
-        "file": "templates/carousel-cover.html",
+        "formats": [
+          "carousel-post"
+        ],
+        "file": "templates/carousel-cover.html"
+      },
+      {
+        "id": "layout/carousel-step-content",
+        "label": "Carousel Step Content",
+        "description": "Middle carousel slide for supporting steps and narrative points",
+        "fields": [
+          {
+            "key": "slide_index",
+            "type": "text",
+            "hint": "Large decorative slide index number",
+            "default": ""
+          }
+        ],
+        "formats": [
+          "carousel-post"
+        ],
+        "file": "templates/carousel-content.html"
+      },
+      {
+        "id": "layout/concept-explainer-callout",
+        "label": "Concept Explainer Callout",
+        "description": "Definition-style educational card with topic tag and callout explanation box",
+        "fields": [
+          {
+            "key": "topic_label",
+            "type": "text",
+            "hint": "Topic/category chip text",
+            "default": "Biology"
+          },
+          {
+            "key": "callout_text",
+            "type": "text",
+            "hint": "Main callout box explanation text",
+            "default": ""
+          },
+          {
+            "key": "support_note",
+            "type": "text",
+            "hint": "Supporting note below callout",
+            "default": "Add one practical example."
+          },
+          {
+            "key": "corner_item_top",
+            "type": "text",
+            "hint": "Top-right circular item label",
+            "default": "Field sample"
+          },
+          {
+            "key": "corner_item_bottom",
+            "type": "text",
+            "hint": "Bottom-right circular item label",
+            "default": "Lab culture"
+          }
+        ],
+        "formats": [
+          "instagram-square",
+          "instagram-portrait",
+          "carousel-post",
+          "linkedin-post"
+        ],
+        "file": "templates/concept-explainer-callout.html"
+      },
+      {
+        "id": "layout/editorial-classic",
+        "label": "Editorial Classic",
+        "description": "Classic editorial single-column headline and summary block",
+        "fields": [],
         "formats": [
           "instagram-portrait",
           "instagram-square",
@@ -383,12 +494,80 @@
           "carousel-post",
           "twitter-card",
           "linkedin-post"
-        ]
+        ],
+        "file": "templates/editorial-base.html"
       },
       {
-        "id": "core/cta-card",
-        "label": "CTA Card",
-        "description": "Closing statement designed to drive a specific action",
+        "id": "layout/editorial-mosaic-hero",
+        "label": "Editorial Mosaic Hero",
+        "description": "Mosaic lead visuals above a long-form headline and deck for magazine-style storytelling",
+        "fields": [
+          {
+            "key": "mosaic_item_01",
+            "type": "text",
+            "hint": "Top-left mosaic tile content",
+            "default": "Orbital study"
+          },
+          {
+            "key": "mosaic_item_02",
+            "type": "text",
+            "hint": "Top-center mosaic tile content",
+            "default": "Flight path"
+          },
+          {
+            "key": "mosaic_item_03",
+            "type": "text",
+            "hint": "Top-right mosaic tile content",
+            "default": "Seismic signal"
+          },
+          {
+            "key": "mosaic_item_04",
+            "type": "text",
+            "hint": "Middle-left mosaic tile content",
+            "default": "Bridge model"
+          },
+          {
+            "key": "mosaic_item_05",
+            "type": "text",
+            "hint": "Middle-right mosaic tile content",
+            "default": "Data cube"
+          },
+          {
+            "key": "mosaic_item_06",
+            "type": "text",
+            "hint": "Bottom mosaic tile content",
+            "default": "Gravity map"
+          },
+          {
+            "key": "dek_line",
+            "type": "text",
+            "hint": "Supporting subheading/dek line below headline",
+            "default": ""
+          },
+          {
+            "key": "byline",
+            "type": "text",
+            "hint": "Author/byline text",
+            "default": "By Research Desk"
+          },
+          {
+            "key": "publish_date",
+            "type": "text",
+            "hint": "Publish date text",
+            "default": "January 2026"
+          }
+        ],
+        "formats": [
+          "instagram-portrait",
+          "instagram-square",
+          "linkedin-post"
+        ],
+        "file": "templates/editorial-mosaic-hero.html"
+      },
+      {
+        "id": "layout/final-cta-card",
+        "label": "Final CTA Card",
+        "description": "Closing card structure to drive one next action",
         "fields": [
           {
             "key": "cta_text",
@@ -397,7 +576,6 @@
             "default": "Learn More"
           }
         ],
-        "file": "templates/cta-card.html",
         "formats": [
           "instagram-portrait",
           "instagram-square",
@@ -405,61 +583,142 @@
           "carousel-post",
           "twitter-card",
           "linkedin-post"
-        ]
+        ],
+        "file": "templates/cta-card.html"
       },
       {
-        "id": "core/editorial-base",
-        "label": "Editorial Base",
-        "description": "Clean Swiss editorial layout with bold serif headline and justified body text",
-        "fields": [],
-        "file": "templates/editorial-base.html",
-        "formats": [
-          "instagram-portrait",
-          "instagram-square",
-          "instagram-story",
-          "carousel-post",
-          "twitter-card",
-          "linkedin-post"
-        ]
-      },
-      {
-        "id": "core/metric-card",
-        "label": "Metric Card",
-        "description": "Data-driven slide focusing on one key number or statistic",
+        "id": "layout/grid-item-card",
+        "label": "Grid Item Card",
+        "description": "Single reusable grid item card for building external boards and collages",
         "fields": [
           {
-            "key": "metric_value",
+            "key": "item_tag",
             "type": "text",
-            "hint": "The primary metric or number to display prominently",
+            "hint": "Small category or section label",
+            "default": "Insight"
+          },
+          {
+            "key": "item_title",
+            "type": "text",
+            "hint": "Card title text",
             "default": ""
           },
           {
-            "key": "metric_label",
+            "key": "item_body",
             "type": "text",
-            "hint": "Short label describing what the metric measures",
+            "hint": "Supporting body text",
             "default": ""
           },
           {
-            "key": "headline",
+            "key": "item_meta",
             "type": "text",
-            "hint": "Supporting headline text shown below the metric",
+            "hint": "Optional byline or source line",
+            "default": "By Editorial Team"
+          }
+        ],
+        "formats": [
+          "instagram-square",
+          "instagram-portrait",
+          "instagram-story",
+          "carousel-post",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "file": "templates/grid-item-card.html"
+      },
+      {
+        "id": "layout/grid-item-feature",
+        "label": "Grid Item Feature",
+        "description": "Emphasis variant of a single reusable grid item card for board compositions",
+        "fields": [
+          {
+            "key": "item_tag",
+            "type": "text",
+            "hint": "Small category or section label",
+            "default": "Feature"
+          },
+          {
+            "key": "item_title",
+            "type": "text",
+            "hint": "Feature card title text",
+            "default": ""
+          },
+          {
+            "key": "item_body",
+            "type": "text",
+            "hint": "Feature supporting text",
+            "default": ""
+          },
+          {
+            "key": "item_meta",
+            "type": "text",
+            "hint": "Optional byline or source line",
+            "default": "By Editorial Team"
+          }
+        ],
+        "formats": [
+          "instagram-square",
+          "instagram-portrait",
+          "instagram-story",
+          "carousel-post",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "file": "templates/grid-item-feature.html"
+      },
+      {
+        "id": "layout/overlap-card-stack",
+        "label": "Overlap Card Stack",
+        "description": "Overlapping card composition where each card is independently swappable",
+        "fields": [
+          {
+            "key": "card_01_title",
+            "type": "text",
+            "hint": "Back card title text",
+            "default": ""
+          },
+          {
+            "key": "card_01_meta",
+            "type": "text",
+            "hint": "Back card byline/meta text",
+            "default": ""
+          },
+          {
+            "key": "card_02_title",
+            "type": "text",
+            "hint": "Middle card title text",
+            "default": ""
+          },
+          {
+            "key": "card_02_meta",
+            "type": "text",
+            "hint": "Middle card byline/meta text",
+            "default": ""
+          },
+          {
+            "key": "card_03_title",
+            "type": "text",
+            "hint": "Front card title text",
+            "default": ""
+          },
+          {
+            "key": "card_03_meta",
+            "type": "text",
+            "hint": "Front card byline/meta text",
             "default": ""
           }
         ],
-        "file": "templates/metric-card.html",
         "formats": [
-          "instagram-portrait",
           "instagram-square",
-          "instagram-story",
-          "carousel-post",
-          "twitter-card",
+          "instagram-portrait",
           "linkedin-post"
-        ]
+        ],
+        "file": "templates/overlap-card-stack.html"
       },
       {
-        "id": "core/quote-card",
-        "label": "Quote Card",
-        "description": "Elegant pull-quote layout with attribution line",
+        "id": "layout/quote-attribution",
+        "label": "Quote Attribution",
+        "description": "Pull-quote layout with author and role attribution",
         "fields": [
           {
             "key": "quote_text",
@@ -480,7 +739,6 @@
             "default": ""
           }
         ],
-        "file": "templates/quote-card.html",
         "formats": [
           "instagram-portrait",
           "instagram-square",
@@ -488,12 +746,79 @@
           "carousel-post",
           "twitter-card",
           "linkedin-post"
-        ]
+        ],
+        "file": "templates/quote-card.html"
       },
       {
-        "id": "core/statement-dark",
-        "label": "Statement Dark",
-        "description": "Inverted monochromatic layout for strong visual contrast",
+        "id": "layout/single-metric-focus",
+        "label": "Single Metric Focus",
+        "description": "Data-focused layout emphasizing one metric and supporting interpretation",
+        "fields": [
+          {
+            "key": "metric_value",
+            "type": "text",
+            "hint": "The primary metric or number to display prominently",
+            "default": ""
+          },
+          {
+            "key": "metric_label",
+            "type": "text",
+            "hint": "Short label describing what the metric measures",
+            "default": ""
+          },
+          {
+            "key": "headline",
+            "type": "text",
+            "hint": "Supporting headline text shown below the metric",
+            "default": ""
+          }
+        ],
+        "formats": [
+          "instagram-portrait",
+          "instagram-square",
+          "instagram-story",
+          "carousel-post",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "file": "templates/metric-card.html"
+      },
+      {
+        "id": "layout/split-copy-media",
+        "label": "Split Copy Media",
+        "description": "Top copy panel with bottom media panel for editorial and story-first posts",
+        "fields": [
+          {
+            "key": "byline",
+            "type": "text",
+            "hint": "Author/byline text",
+            "default": "By Editorial Team"
+          },
+          {
+            "key": "publish_date",
+            "type": "text",
+            "hint": "Publish date text",
+            "default": "January 2026"
+          },
+          {
+            "key": "media_caption",
+            "type": "text",
+            "hint": "Caption or annotation for lower media zone",
+            "default": "Visual context placeholder"
+          }
+        ],
+        "formats": [
+          "instagram-story",
+          "twitter-card",
+          "linkedin-post",
+          "instagram-portrait"
+        ],
+        "file": "templates/split-copy-media.html"
+      },
+      {
+        "id": "layout/statement-cta",
+        "label": "Statement CTA",
+        "description": "High-impact statement layout with a primary CTA block",
         "fields": [
           {
             "key": "cta_text",
@@ -502,7 +827,6 @@
             "default": "Read More"
           }
         ],
-        "file": "templates/statement-dark.html",
         "formats": [
           "instagram-portrait",
           "instagram-square",
@@ -510,24 +834,54 @@
           "carousel-post",
           "twitter-card",
           "linkedin-post"
-        ]
+        ],
+        "file": "templates/bold-base.html"
+      },
+      {
+        "id": "layout/statement-inverse",
+        "label": "Statement Inverse",
+        "description": "Inverted statement layout with CTA and high contrast text block",
+        "fields": [
+          {
+            "key": "cta_text",
+            "type": "text",
+            "hint": "Short call-to-action button label",
+            "default": "Read More"
+          }
+        ],
+        "formats": [
+          "instagram-portrait",
+          "instagram-square",
+          "instagram-story",
+          "carousel-post",
+          "twitter-card",
+          "linkedin-post"
+        ],
+        "file": "templates/statement-dark.html"
       }
     ]
   },
   "template_files": {
-    "core/bold-base": "<!--\n@id: core/bold-base\n@label: Bold Base\n@description: High-contrast statement layout with CTA link\n\n@slot cta_text | text | Short call-to-action button label | Read More\n-->\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <div class=\"rule-line flow-after-heading\"></div>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    <div class=\"cta-pill flow-after-section\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>",
-    "core/carousel-content": "<!--\n@id: core/carousel-content\n@label: Carousel Content\n@description: Supporting content slide for carousel series with decorative slide index\n\n@slot slide_index | text | Large decorative slide index number\n-->\n<div class=\"content-shell template-carousel-content {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <div class=\"series-index\">{{SLOT:slide_index}}</div>\n        <h1 class=\"heading-secondary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line flow-after-heading\"></div>\n        <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        {{FOOTER}}\n    </div>\n</div>",
-    "core/carousel-cover": "<!--\n@id: core/carousel-cover\n@label: Carousel Cover\n@description: Impactful opening slide for a carousel series\n\n@slot series_label | text | Short series or topic label displayed above the headline\n-->\n<div class=\"content-shell template-carousel-cover {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <div class=\"series-number\">{{SLOT:series_label}}</div>\n        <h1 class=\"heading-primary content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line rule-line--thick flow-after-heading\" style=\"width: 80px;\"></div>\n        <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        {{FOOTER}}\n    </div>\n</div>",
-    "core/cta-card": "<!--\n@id: core/cta-card\n@label: CTA Card\n@description: Closing statement designed to drive a specific action\n\n@slot cta_text | text | Short call-to-action button label | Learn More\n-->\n<div class=\"content-shell template-cta {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <h1 class=\"heading-primary content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line flow-after-heading\"></div>\n        <p class=\"body-primary flow-after-heading caption-limit word-safe\" style=\"font-size: 1.25em;\">{{BODY}}</p>\n        <div class=\"cta-pill flow-after-section\">{{SLOT:cta_text}}</div>\n        {{FOOTER}}\n    </div>\n</div>",
-    "core/editorial-base": "<!--\n@id: core/editorial-base\n@label: Editorial Base\n@description: Clean Swiss editorial layout with bold serif headline and justified body text\n-->\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <div class=\"rule-line flow-after-heading\"></div>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>",
-    "core/metric-card": "<!--\n@id: core/metric-card\n@label: Metric Card\n@description: Data-driven slide focusing on one key number or statistic\n\n@slot metric_value | text | The primary metric or number to display prominently\n@slot metric_label | text | Short label describing what the metric measures\n@slot headline | text | Supporting headline text shown below the metric\n-->\n<div class=\"content-shell template-metric {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <div class=\"metric-container\">\n            <div class=\"metric-value tabular-nums\">{{SLOT:metric_value}}</div>\n            <div class=\"metric-label\">{{SLOT:metric_label}}</div>\n        </div>\n        <div class=\"rule-line flow-after-heading\"></div>\n        <h1 class=\"heading-secondary flow-after-heading content-limit text-balance word-safe\">{{SLOT:headline}}</h1>\n        <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        {{FOOTER}}\n    </div>\n</div>",
-    "core/quote-card": "<!--\n@id: core/quote-card\n@label: Quote Card\n@description: Elegant pull-quote layout with attribution line\n\n@slot quote_text | text | The quote or pull-quote text to display prominently\n@slot quote_author | text | Name of the person being quoted | Editorial Team\n@slot author_role | text | Role or title of the quoted person\n-->\n<div class=\"quote-mark\">\"</div>\n<div class=\"content-shell template-quote {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <h1 class=\"heading-quote flow-after-kicker content-limit text-balance word-safe\">{{SLOT:quote_text}}</h1>\n        <div class=\"rule-line flow-after-heading\" style=\"width: 60px;\"></div>\n        <div class=\"author-block\">\n            <p class=\"author-byline\">{{SLOT:quote_author}}</p>\n            <p class=\"author-date\">{{SLOT:author_role}}</p>\n        </div>\n        {{FOOTER}}\n    </div>\n</div>",
-    "core/statement-dark": "<!--\n@id: core/statement-dark\n@label: Statement Dark\n@description: Inverted monochromatic layout for strong visual contrast\n\n@slot cta_text | text | Short call-to-action button label | Read More\n-->\n<div class=\"content-shell template-dark {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        {{KICKER}}\n        <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line rule-line--inverted flow-after-heading\"></div>\n        <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        <div class=\"cta-pill cta-pill--inverted flow-after-section\">{{SLOT:cta_text}}</div>\n        {{FOOTER}}\n    </div>\n</div>",
+    "layout/card-deck-grid": "<!--\n@id: layout/card-deck-grid\n@label: Card Deck Grid\n@description: Structured 2x3 deck where each card can be swapped as an independent content item\n@formats: instagram-square,carousel-post,linkedin-post\n\n@slot deck_01_title | text | Card 1 primary text\n@slot deck_01_note | text | Card 1 note text\n@slot deck_02_title | text | Card 2 primary text\n@slot deck_02_note | text | Card 2 note text\n@slot deck_03_title | text | Card 3 primary text\n@slot deck_03_note | text | Card 3 note text\n@slot deck_04_title | text | Card 4 primary text\n@slot deck_04_note | text | Card 4 note text\n@slot deck_05_title | text | Card 5 primary text\n@slot deck_05_note | text | Card 5 note text\n@slot deck_06_title | text | Card 6 primary text\n@slot deck_06_note | text | Card 6 note text\n-->\n<div class=\"content-shell template-card-deck {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    <div class=\"deck-grid\">\n      <article class=\"deck-card\">\n        <h2 class=\"deck-card-title word-safe\">{{SLOT:deck_01_title}}</h2>\n        <p class=\"deck-card-note word-safe\">{{SLOT:deck_01_note}}</p>\n      </article>\n      <article class=\"deck-card\">\n        <h2 class=\"deck-card-title word-safe\">{{SLOT:deck_02_title}}</h2>\n        <p class=\"deck-card-note word-safe\">{{SLOT:deck_02_note}}</p>\n      </article>\n      <article class=\"deck-card\">\n        <h2 class=\"deck-card-title word-safe\">{{SLOT:deck_03_title}}</h2>\n        <p class=\"deck-card-note word-safe\">{{SLOT:deck_03_note}}</p>\n      </article>\n      <article class=\"deck-card\">\n        <h2 class=\"deck-card-title word-safe\">{{SLOT:deck_04_title}}</h2>\n        <p class=\"deck-card-note word-safe\">{{SLOT:deck_04_note}}</p>\n      </article>\n      <article class=\"deck-card\">\n        <h2 class=\"deck-card-title word-safe\">{{SLOT:deck_05_title}}</h2>\n        <p class=\"deck-card-note word-safe\">{{SLOT:deck_05_note}}</p>\n      </article>\n      <article class=\"deck-card\">\n        <h2 class=\"deck-card-title word-safe\">{{SLOT:deck_06_title}}</h2>\n        <p class=\"deck-card-note word-safe\">{{SLOT:deck_06_note}}</p>\n      </article>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "layout/carousel-cover-hero": "<!--\n@id: layout/carousel-cover-hero\n@label: Carousel Cover Hero\n@description: Opening slide structure for carousel narrative series\n@formats: carousel-post\n\n@slot series_label | text | Short series or topic label displayed above the headline\n-->\n<div class=\"content-shell template-carousel-cover {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <div class=\"series-number\">{{SLOT:series_label}}</div>\n        <h1 class=\"heading-primary content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line rule-line--thick flow-after-heading\" style=\"width: 80px;\"></div>\n        <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        {{FOOTER}}\n    </div>\n</div>\n",
+    "layout/carousel-step-content": "<!--\n@id: layout/carousel-step-content\n@label: Carousel Step Content\n@description: Middle carousel slide for supporting steps and narrative points\n@formats: carousel-post\n\n@slot slide_index | text | Large decorative slide index number\n-->\n<div class=\"content-shell template-carousel-content {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <div class=\"series-index\">{{SLOT:slide_index}}</div>\n        <h1 class=\"heading-secondary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line flow-after-heading\"></div>\n        <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        {{FOOTER}}\n    </div>\n</div>\n",
+    "layout/concept-explainer-callout": "<!--\n@id: layout/concept-explainer-callout\n@label: Concept Explainer Callout\n@description: Definition-style educational card with topic tag and callout explanation box\n@formats: instagram-square,instagram-portrait,carousel-post,linkedin-post\n\n@slot topic_label | text | Topic/category chip text | Biology\n@slot callout_text | text | Main callout box explanation text\n@slot support_note | text | Supporting note below callout | Add one practical example.\n@slot corner_item_top | text | Top-right circular item label | Field sample\n@slot corner_item_bottom | text | Bottom-right circular item label | Lab culture\n-->\n<div class=\"content-shell template-concept-explainer {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    <div class=\"topic-chip\">{{SLOT:topic_label}}</div>\n    <h1 class=\"heading-primary flow-after-heading content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    <div class=\"concept-callout flow-after-section\">\n      <p class=\"body-secondary word-safe\">{{SLOT:callout_text}}</p>\n    </div>\n    <p class=\"concept-support-note flow-after-heading word-safe\">{{SLOT:support_note}}</p>\n    <div class=\"concept-corners\">\n      <span class=\"corner-chip corner-chip--top\">{{SLOT:corner_item_top}}</span>\n      <span class=\"corner-chip corner-chip--bottom\">{{SLOT:corner_item_bottom}}</span>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "layout/editorial-classic": "<!--\n@id: layout/editorial-classic\n@label: Editorial Classic\n@description: Classic editorial single-column headline and summary block\n-->\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <div class=\"rule-line flow-after-heading\"></div>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "layout/editorial-mosaic-hero": "<!--\n@id: layout/editorial-mosaic-hero\n@label: Editorial Mosaic Hero\n@description: Mosaic lead visuals above a long-form headline and deck for magazine-style storytelling\n@formats: instagram-portrait,instagram-square,linkedin-post\n\n@slot mosaic_item_01 | text | Top-left mosaic tile content | Orbital study\n@slot mosaic_item_02 | text | Top-center mosaic tile content | Flight path\n@slot mosaic_item_03 | text | Top-right mosaic tile content | Seismic signal\n@slot mosaic_item_04 | text | Middle-left mosaic tile content | Bridge model\n@slot mosaic_item_05 | text | Middle-right mosaic tile content | Data cube\n@slot mosaic_item_06 | text | Bottom mosaic tile content | Gravity map\n@slot dek_line | text | Supporting subheading/dek line below headline\n@slot byline | text | Author/byline text | By Research Desk\n@slot publish_date | text | Publish date text | January 2026\n-->\n<div class=\"content-shell template-editorial-mosaic {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    <div class=\"mosaic-hero-grid\">\n      <div class=\"mosaic-tile\">{{SLOT:mosaic_item_01}}</div>\n      <div class=\"mosaic-tile mosaic-tile--wide\">{{SLOT:mosaic_item_02}}</div>\n      <div class=\"mosaic-tile\">{{SLOT:mosaic_item_03}}</div>\n      <div class=\"mosaic-tile mosaic-tile--wide\">{{SLOT:mosaic_item_04}}</div>\n      <div class=\"mosaic-tile\">{{SLOT:mosaic_item_05}}</div>\n      <div class=\"mosaic-tile mosaic-tile--wide\">{{SLOT:mosaic_item_06}}</div>\n    </div>\n    <div class=\"editorial-story-block flow-after-section\">\n      <h1 class=\"heading-primary content-limit text-balance word-safe\">{{HEADING}}</h1>\n      <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{SLOT:dek_line}}</p>\n      <div class=\"editorial-meta-row flow-after-section\">\n        <span class=\"editorial-meta\">{{SLOT:byline}}</span>\n        <span class=\"editorial-meta\">{{SLOT:publish_date}}</span>\n      </div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "layout/final-cta-card": "<!--\n@id: layout/final-cta-card\n@label: Final CTA Card\n@description: Closing card structure to drive one next action\n\n@slot cta_text | text | Short call-to-action button label | Learn More\n-->\n<div class=\"content-shell template-cta {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <h1 class=\"heading-primary content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line flow-after-heading\"></div>\n        <p class=\"body-primary flow-after-heading caption-limit word-safe\" style=\"font-size: 1.25em;\">{{BODY}}</p>\n        <div class=\"cta-pill flow-after-section\">{{SLOT:cta_text}}</div>\n        {{FOOTER}}\n    </div>\n</div>\n",
+    "layout/grid-item-card": "<!--\n@id: layout/grid-item-card\n@label: Grid Item Card\n@description: Single reusable grid item card for building external boards and collages\n@formats: instagram-square,instagram-portrait,instagram-story,carousel-post,twitter-card,linkedin-post\n\n@slot item_tag | text | Small category or section label | Insight\n@slot item_title | text | Card title text\n@slot item_body | text | Supporting body text\n@slot item_meta | text | Optional byline or source line | By Editorial Team\n-->\n<div class=\"content-shell template-grid-item-card {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    <article class=\"grid-item-card\">\n      <div class=\"grid-item-tag\">{{SLOT:item_tag}}</div>\n      <h1 class=\"grid-item-title word-safe\">{{SLOT:item_title}}</h1>\n      <p class=\"grid-item-body word-safe\">{{SLOT:item_body}}</p>\n      <p class=\"grid-item-meta word-safe\">{{SLOT:item_meta}}</p>\n    </article>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "layout/grid-item-feature": "<!--\n@id: layout/grid-item-feature\n@label: Grid Item Feature\n@description: Emphasis variant of a single reusable grid item card for board compositions\n@formats: instagram-square,instagram-portrait,instagram-story,carousel-post,twitter-card,linkedin-post\n\n@slot item_tag | text | Small category or section label | Feature\n@slot item_title | text | Feature card title text\n@slot item_body | text | Feature supporting text\n@slot item_meta | text | Optional byline or source line | By Editorial Team\n-->\n<div class=\"content-shell template-grid-item-feature {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    <article class=\"grid-item-card grid-item-card--feature\">\n      <div class=\"grid-item-tag\">{{SLOT:item_tag}}</div>\n      <h1 class=\"grid-item-title grid-item-title--feature word-safe\">{{SLOT:item_title}}</h1>\n      <p class=\"grid-item-body grid-item-body--feature word-safe\">{{SLOT:item_body}}</p>\n      <p class=\"grid-item-meta word-safe\">{{SLOT:item_meta}}</p>\n    </article>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "layout/overlap-card-stack": "<!--\n@id: layout/overlap-card-stack\n@label: Overlap Card Stack\n@description: Overlapping card composition where each card is independently swappable\n@formats: instagram-square,instagram-portrait,linkedin-post\n\n@slot card_01_title | text | Back card title text\n@slot card_01_meta | text | Back card byline/meta text\n@slot card_02_title | text | Middle card title text\n@slot card_02_meta | text | Middle card byline/meta text\n@slot card_03_title | text | Front card title text\n@slot card_03_meta | text | Front card byline/meta text\n-->\n<div class=\"content-shell template-overlap-stack {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    <div class=\"stack-stage\">\n      <article class=\"stack-card stack-card--back\">\n        <h2 class=\"stack-card-title word-safe\">{{SLOT:card_01_title}}</h2>\n        <p class=\"stack-card-meta word-safe\">{{SLOT:card_01_meta}}</p>\n      </article>\n      <article class=\"stack-card stack-card--middle\">\n        <h2 class=\"stack-card-title word-safe\">{{SLOT:card_02_title}}</h2>\n        <p class=\"stack-card-meta word-safe\">{{SLOT:card_02_meta}}</p>\n      </article>\n      <article class=\"stack-card stack-card--front\">\n        <h2 class=\"stack-card-title word-safe\">{{SLOT:card_03_title}}</h2>\n        <p class=\"stack-card-meta word-safe\">{{SLOT:card_03_meta}}</p>\n      </article>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "layout/quote-attribution": "<!--\n@id: layout/quote-attribution\n@label: Quote Attribution\n@description: Pull-quote layout with author and role attribution\n\n@slot quote_text | text | The quote or pull-quote text to display prominently\n@slot quote_author | text | Name of the person being quoted | Editorial Team\n@slot author_role | text | Role or title of the quoted person\n-->\n<div class=\"quote-mark\">\"</div>\n<div class=\"content-shell template-quote {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <h1 class=\"heading-quote flow-after-kicker content-limit text-balance word-safe\">{{SLOT:quote_text}}</h1>\n        <div class=\"rule-line flow-after-heading\" style=\"width: 60px;\"></div>\n        <div class=\"author-block\">\n            <p class=\"author-byline\">{{SLOT:quote_author}}</p>\n            <p class=\"author-date\">{{SLOT:author_role}}</p>\n        </div>\n        {{FOOTER}}\n    </div>\n</div>\n",
+    "layout/single-metric-focus": "<!--\n@id: layout/single-metric-focus\n@label: Single Metric Focus\n@description: Data-focused layout emphasizing one metric and supporting interpretation\n\n@slot metric_value | text | The primary metric or number to display prominently\n@slot metric_label | text | Short label describing what the metric measures\n@slot headline | text | Supporting headline text shown below the metric\n-->\n<div class=\"content-shell template-metric {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        <div class=\"metric-container\">\n            <div class=\"metric-value tabular-nums\">{{SLOT:metric_value}}</div>\n            <div class=\"metric-label\">{{SLOT:metric_label}}</div>\n        </div>\n        <div class=\"rule-line flow-after-heading\"></div>\n        <h1 class=\"heading-secondary flow-after-heading content-limit text-balance word-safe\">{{SLOT:headline}}</h1>\n        <p class=\"body-secondary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        {{FOOTER}}\n    </div>\n</div>\n",
+    "layout/split-copy-media": "<!--\n@id: layout/split-copy-media\n@label: Split Copy Media\n@description: Top copy panel with bottom media panel for editorial and story-first posts\n@formats: instagram-story,twitter-card,linkedin-post,instagram-portrait\n\n@slot byline | text | Author/byline text | By Editorial Team\n@slot publish_date | text | Publish date text | January 2026\n@slot media_caption | text | Caption or annotation for lower media zone | Visual context placeholder\n-->\n<div class=\"content-shell template-split-copy-media {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    <div class=\"split-copy-stack\">\n      <h1 class=\"heading-primary content-limit text-balance word-safe\">{{HEADING}}</h1>\n      <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n      <div class=\"editorial-meta-row flow-after-section\">\n        <span class=\"editorial-meta\">{{SLOT:byline}}</span>\n        <span class=\"editorial-meta\">{{SLOT:publish_date}}</span>\n      </div>\n    </div>\n    <div class=\"split-media-band flow-after-section\">\n      <div class=\"split-media-caption word-safe\">{{SLOT:media_caption}}</div>\n    </div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "layout/statement-cta": "<!--\n@id: layout/statement-cta\n@label: Statement CTA\n@description: High-impact statement layout with a primary CTA block\n\n@slot cta_text | text | Short call-to-action button label | Read More\n-->\n<div class=\"content-shell {{ALIGN_CLASS}}\">\n  {{HEADER}}\n  <div class=\"content-panel {{POSITION_CLASS}}\">\n    {{KICKER}}\n    <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n    <div class=\"rule-line flow-after-heading\"></div>\n    <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n    <div class=\"cta-pill flow-after-section\">{{SLOT:cta_text}}</div>\n    {{FOOTER}}\n  </div>\n</div>\n",
+    "layout/statement-inverse": "<!--\n@id: layout/statement-inverse\n@label: Statement Inverse\n@description: Inverted statement layout with CTA and high contrast text block\n\n@slot cta_text | text | Short call-to-action button label | Read More\n-->\n<div class=\"content-shell template-dark {{ALIGN_CLASS}}\">\n    {{HEADER}}\n    <div class=\"content-panel {{POSITION_CLASS}}\">\n        {{KICKER}}\n        <h1 class=\"heading-primary flow-after-kicker content-limit text-balance word-safe\">{{HEADING}}</h1>\n        <div class=\"rule-line rule-line--inverted flow-after-heading\"></div>\n        <p class=\"body-primary flow-after-heading caption-limit word-safe\">{{BODY}}</p>\n        <div class=\"cta-pill cta-pill--inverted flow-after-section\">{{SLOT:cta_text}}</div>\n        {{FOOTER}}\n    </div>\n</div>\n",
     "@system/frame-shell": "<!doctype html>\n<html>\n{{HEAD_HTML}}\n\n<body>\n  <div class=\"frame {{FRAME_TONE_CLASS}}\" data-template-id=\"{{TEMPLATE_ID}}\" data-template-tone=\"{{FRAME_TONE}}\"\n    style=\"{{ROOT_STYLE}}\">\n    <div class=\"frame-layer\" style=\"background: var(--frame-bg);\"></div>\n    <div class=\"frame-layer frame-layer--image {{IMAGE_VISIBILITY_CLASS}}\" style=\"{{IMAGE_LAYER_STYLE}}\"></div>\n    <div class=\"frame-layer\" style=\"opacity: {{OVERLAY_OPACITY}}; background: {{OVERLAY_BACKGROUND}};\"></div>\n    <div class=\"frame-layer\"\n      style=\"background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: {{ACCENT_SWEEP_OPACITY}};\">\n    </div>\n    <div class=\"frame-layer\"\n      style=\"opacity: var(--frame-grain-opacity); background-image: radial-gradient({{GRAIN_DOT_COLOR}} {{GRAIN_DOT_SIZE}}px, transparent {{GRAIN_DOT_SIZE}}px); background-size: {{GRAIN_BG_SIZE}}px {{GRAIN_BG_SIZE}}px;\">\n    </div>\n    <div class=\"frame-layer frame-layer--border\"\n      style=\"border-color: color-mix(in srgb, var(--color-border-subtle) {{BORDER_ALPHA_PERCENT}}%, transparent);\">\n    </div>\n    <div class=\"brand-icon-corner {{BRAND_ICON_CORNER_CLASS}}\" style=\"{{BRAND_ICON_CORNER_STYLE}}\"><img\n        src=\"{{BRAND_ICON_URL}}\" alt=\"\" class=\"brand-icon-img\" /></div>\n    {{CONTENT}}\n  </div>\n</body>\n\n</html>",
     "@system/head-shell": "<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />\n  <title>{{SAFE_TITLE}}</title>\n  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\" />\n  <link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin />\n  <link\n    href=\"https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Inter:wght@300;400;500;600;700&display=swap\"\n    rel=\"stylesheet\" />\n  <style>{{TEMPLATE_CSS}}</style>\n  <style>\n    :root {\n      --canvas-width: {{CANVAS_WIDTH}}px;\n      --canvas-height: {{CANVAS_HEIGHT}}px;\n\n      --font-display: var(--token-font-display, \"Playfair Display\", Georgia, \"Times New Roman\", serif);\n      --font-body: var(--token-font-body, \"Inter\", \"Helvetica Neue\", Helvetica, Arial, sans-serif);\n      --token-font-heading: var(--font-display);\n      --token-font-body: var(--font-body);\n\n      --color-text-primary: {{TOKEN_PRIMARY_TEXT}};\n      --color-text-secondary: {{TOKEN_SECONDARY_TEXT}};\n      --color-text-muted: {{TOKEN_MUTED_TEXT}};\n      --color-surface-base: {{TOKEN_SURFACE_BASE}};\n      --color-surface-elevated: {{TOKEN_SURFACE_ELEVATED}};\n      --color-border-subtle: {{TOKEN_BORDER_SUBTLE}};\n      --color-brand-accent: {{TOKEN_ACCENT}};\n      --color-brand-accent-foreground: {{TOKEN_ACCENT_FOREGROUND}};\n      --color-brand-glow: {{TOKEN_ACCENT_GLOW}};\n      --color-overlay-strong: {{TOKEN_OVERLAY_STRONG}};\n\n      --token-color-text-primary: {{TOKEN_PRIMARY_TEXT}};\n      --token-color-text-secondary: {{TOKEN_SECONDARY_TEXT}};\n      --token-color-text-muted: {{TOKEN_MUTED_TEXT}};\n      --token-color-surface-base: {{TOKEN_SURFACE_BASE}};\n      --token-color-surface-elevated: {{TOKEN_SURFACE_ELEVATED}};\n      --token-color-border-subtle: {{TOKEN_BORDER_SUBTLE}};\n      --token-color-brand-accent: {{TOKEN_ACCENT}};\n      --token-color-brand-accent-foreground: {{TOKEN_ACCENT_FOREGROUND}};\n\n      --shadow-soft: none;\n      --radius-card: {{TOKEN_RADIUS_CARD}};\n      --radius-pill: {{TOKEN_RADIUS_PILL}};\n      --token-radius-card: {{TOKEN_RADIUS_CARD}};\n      --token-radius-pill: {{TOKEN_RADIUS_PILL}};\n    }\n\n    * {\n      box-sizing: border-box;\n    }\n\n    html,\n    body {\n      margin: 0;\n      width: var(--canvas-width);\n      height: var(--canvas-height);\n      overflow: hidden;\n      font-family: var(--font-body);\n      background: var(--color-surface-base);\n      color: var(--color-text-primary);\n      text-rendering: optimizeLegibility;\n      -webkit-font-smoothing: antialiased;\n    }\n  </style>\n</head>\n",
     "@system/kicker-shell": "<p class=\"kicker content-limit {{KICKER_VISIBILITY_CLASS}}\">{{KICKER_TEXT}}</p>\n",
     "@system/meta-footer-shell": "<div class=\"meta-footer {{META_FOOTER_VISIBILITY_CLASS}}\">\n  <span>{{META_LEFT_LABEL}}</span>\n  <span>{{META_RIGHT_LABEL}}</span>\n</div>\n",
     "@system/top-bar-shell": "<div class=\"top-bar {{TOP_BAR_VISIBILITY_CLASS}}\">\n  <span class=\"brand-pill {{LEFT_PILL_VISIBILITY_CLASS}}\"><img class=\"brand-icon {{BRAND_ICON_VISIBILITY_CLASS}}\"\n      src=\"{{BRAND_ICON_URL}}\" alt=\"\" />{{LEFT_LABEL}}</span>\n  <span class=\"top-bar-right\">\n    <span class=\"brand-pill {{RIGHT_PILL_VISIBILITY_CLASS}}\">{{RIGHT_LABEL}}</span>\n  </span>\n</div>"
   },
-  "template_css": ":root {\n  --token-font-display: \"Playfair Display\", \"Iowan Old Style\", \"Palatino Linotype\", Palatino, Georgia, \"Times New Roman\", serif;\n  --token-font-body: \"Inter\", \"Helvetica Neue\", Helvetica, Arial, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;\n\n  --token-space-2xs: 8px;\n  --token-space-xs: 12px;\n  --token-space-sm: 16px;\n  --token-space-md: 24px;\n  --token-space-lg: 32px;\n  --token-space-xl: 40px;\n  --token-space-2xl: 46px;\n\n  --token-type-kicker: 22px;\n  --token-type-heading: 64px;\n  --token-type-body: 28px;\n  --token-type-metric-value: 66px;\n  --token-type-metric-label: 20px;\n\n  --token-radius-card: var(--radius-card);\n  --token-radius-pill: var(--radius-pill);\n  --token-shadow-title: var(--frame-title-shadow);\n  --token-shadow-caption: var(--frame-caption-shadow);\n\n  --heading-max-lines: 5;\n}\n\n* {\n  box-sizing: border-box;\n}\n\nhtml,\nbody {\n  margin: 0;\n}\n\n.absolute {\n  position: absolute;\n}\n\n.inset-0 {\n  inset: 0;\n}\n\n/* ─────────────────────────────────────────\n   Frame (root canvas)\n   ───────────────────────────────────────── */\n\n.frame {\n  position: relative;\n  isolation: isolate;\n  overflow: hidden;\n\n  --frame-bg: var(--color-surface-base);\n  --frame-overlay-top: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 32%, transparent));\n  --frame-overlay-bottom: linear-gradient(0deg, transparent, transparent);\n  --frame-vignette: none;\n  --frame-brand-pill-bg: transparent;\n  --frame-brand-pill-border: var(--color-border-subtle);\n  --frame-brand-pill-text: var(--color-text-primary);\n  --frame-title-shadow: none;\n  --frame-caption-shadow: none;\n  --frame-grain-opacity: 0;\n  --frame-image-opacity: 0.5;\n  --frame-type-scale: 1;\n  --frame-space-scale: 1;\n}\n\n.frame.frame-tone-dark,\n.frame[data-template-tone=\"dark\"] {\n  --color-text-primary: #f2f2f2;\n  --color-text-secondary: #d1d1d1;\n  --color-text-muted: #9a9a9a;\n  --color-surface-base: #070707;\n  --color-surface-elevated: #131313;\n  --color-border-subtle: #2b2b2b;\n  --frame-bg: #050505;\n  --frame-overlay-top: linear-gradient(180deg,\n      color-mix(in srgb, #000000 32%, transparent) 0%,\n      color-mix(in srgb, #000000 60%, transparent) 100%);\n  --frame-overlay-bottom: linear-gradient(0deg,\n      color-mix(in srgb, #000000 22%, transparent) 0%,\n      transparent 62%);\n  --frame-brand-pill-bg: color-mix(in srgb, #000000 16%, transparent);\n  --frame-brand-pill-border: color-mix(in srgb, #ffffff 24%, transparent);\n  --frame-brand-pill-text: var(--color-text-primary);\n}\n\n.frame-layer {\n  position: absolute;\n  inset: 0;\n}\n\n.frame-layer--image {\n  background-size: cover;\n  background-position: center;\n}\n\n.is-hidden {\n  display: none !important;\n}\n\n.frame-layer--border {\n  border: 1px solid transparent;\n}\n\n/* ─────────────────────────────────────────\n   Top Band (structural rule line)\n   ───────────────────────────────────────── */\n\n.top-band {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: calc(4px * var(--layout-scale));\n}\n\n.top-band--data {\n  background: var(--color-text-primary);\n}\n\n.top-band--metric {\n  background: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Decorative Elements (minimal for Swiss)\n   ───────────────────────────────────────── */\n\n.decor-orb-left {\n  position: absolute;\n  left: 0;\n  top: 0;\n  bottom: 0;\n  width: 1px;\n  height: 100%;\n  border-radius: 0;\n  background: color-mix(in srgb, var(--color-border-subtle) 30%, transparent);\n}\n\n.decor-blob-right {\n  position: absolute;\n  right: calc(48px * var(--layout-scale));\n  top: 0;\n  bottom: 0;\n  width: 1px;\n  height: 100%;\n  border-radius: 0;\n  background: color-mix(in srgb, var(--color-border-subtle) 30%, transparent);\n}\n\n.decor-wash-left {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: calc(4px * var(--layout-scale));\n  width: 100%;\n  background: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Quote mark\n   ───────────────────────────────────────── */\n\n.quote-mark {\n  position: absolute;\n  left: 8%;\n  top: 7%;\n  font-family: var(--font-display);\n  font-size: calc(148px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 0.8;\n  opacity: 0.12;\n  color: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Content Shell\n   ───────────────────────────────────────── */\n\n.content-shell {\n  --template-panel-padding: 34px;\n  --template-heading-size: var(--token-type-heading);\n  --template-heading-secondary-size: var(--template-heading-size);\n  --template-heading-quote-size: var(--template-heading-size);\n  --template-heading-line-height: 1.06;\n  --template-heading-letter-spacing: -0.02em;\n  --template-body-size: var(--token-type-body);\n  --template-body-secondary-size: var(--template-body-size);\n  --template-body-quote-size: var(--template-body-size);\n  --template-body-line-height: 1.38;\n  --template-body-color: var(--color-text-secondary);\n  --template-flow-kicker: var(--token-space-2xs);\n  --template-flow-heading: var(--token-space-xs);\n  --template-flow-subheading: var(--token-space-2xs);\n  --template-flow-section: var(--token-space-md);\n  --template-check-item-size: 22px;\n  --template-metric-value-size: var(--token-type-metric-value);\n  --template-metric-label-size: var(--token-type-metric-label);\n\n  position: relative;\n  z-index: 10;\n  display: flex;\n  width: 100%;\n  height: 100%;\n  flex-direction: column;\n  padding: calc(var(--content-inset) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--data-topband {\n  padding-top: calc((var(--content-inset) + 18px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--metric-topband {\n  padding-top: calc((var(--content-inset) + 14px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n/* ─────────────────────────────────────────\n   Template Variants\n   ───────────────────────────────────────── */\n\n.template-quote {\n  --template-panel-padding: 34px;\n  --template-heading-quote-size: 56px;\n  --template-body-quote-size: 24px;\n  --template-body-secondary-size: 24px;\n  --template-flow-kicker: var(--token-space-sm);\n  --template-flow-heading: var(--token-space-sm);\n}\n\n.template-checklist {\n  --template-panel-padding: 32px;\n  --template-heading-secondary-size: 54px;\n  --template-flow-section: var(--token-space-sm);\n}\n\n.template-metric {\n  --template-panel-padding: 30px;\n  --template-heading-secondary-size: 54px;\n  --template-body-secondary-size: 26px;\n}\n\n.template-promo {\n  --template-panel-padding: 34px;\n  --template-heading-size: 60px;\n  --template-body-secondary-size: 26px;\n}\n\n.template-article {\n  --template-panel-padding: 36px;\n  --template-heading-size: 58px;\n  --template-body-size: 26px;\n  --template-body-line-height: 1.42;\n}\n\n.template-series {\n  --template-panel-padding: 36px;\n  --template-heading-size: 52px;\n  --template-body-size: 26px;\n  --template-body-line-height: 1.42;\n}\n\n.template-dark {\n  --color-text-primary: #f2f2f2;\n  --color-text-secondary: #d1d1d1;\n  --color-text-muted: #9a9a9a;\n  --color-surface-base: #070707;\n  --color-surface-elevated: #131313;\n  --color-border-subtle: #2b2b2b;\n}\n\n.rule-line--inverted {\n  background: #ffffff;\n}\n\n.cta-pill--inverted {\n  background: #ffffff;\n  color: #000000;\n}\n\n.series-index {\n  font-family: var(--font-body);\n  font-size: calc(140px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 700;\n  line-height: 1;\n  color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);\n  position: absolute;\n  right: 0;\n  top: -20px;\n  z-index: -1;\n}\n\n.metric-container {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  margin-bottom: calc(var(--token-space-md) * var(--layout-scale));\n}\n\n\n/* ─────────────────────────────────────────\n   Alignment\n   ───────────────────────────────────────── */\n\n.align-left {\n  align-items: flex-start;\n  text-align: left;\n}\n\n.align-center {\n  align-items: center;\n  text-align: center;\n}\n\n.align-justify {\n  align-items: flex-start;\n  text-align: justify;\n}\n\n/* ─────────────────────────────────────────\n   Content Panel & Limits\n   ───────────────────────────────────────── */\n\n.content-panel {\n  padding: calc(var(--template-panel-padding) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n/* Content position utilities */\n.push-start {\n  margin-bottom: auto;\n}\n\n.push-center {\n  margin-top: auto;\n  margin-bottom: auto;\n}\n\n.push-end {\n  margin-top: auto;\n}\n\n.content-limit {\n  max-width: var(--content-max-width);\n}\n\n.caption-limit {\n  max-width: var(--caption-max-width);\n}\n\n.metric-content {\n  max-width: calc(var(--content-max-width) - (220px * var(--layout-scale)));\n}\n\n.caption-limit-metric {\n  max-width: calc(var(--caption-max-width) - (220px * var(--layout-scale)));\n}\n\n/* ─────────────────────────────────────────\n   Kicker\n   ───────────────────────────────────────── */\n\n.kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(var(--token-type-kicker) * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 500;\n  line-height: 1.1;\n  letter-spacing: 0.14em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n  max-width: var(--content-max-width);\n}\n\n/* ─────────────────────────────────────────\n   Headings (serif display)\n   ───────────────────────────────────────── */\n\n.heading-primary,\n.heading-secondary,\n.heading-quote {\n  font-family: var(--font-display);\n  font-weight: 700;\n  line-height: var(--template-heading-line-height);\n  letter-spacing: var(--template-heading-letter-spacing);\n  text-shadow: var(--token-shadow-title);\n  color: var(--color-text-primary);\n  overflow: hidden;\n  display: -webkit-box;\n  -webkit-box-orient: vertical;\n  -webkit-line-clamp: var(--heading-max-lines);\n  line-clamp: var(--heading-max-lines);\n}\n\n.heading-primary {\n  font-size: calc(var(--template-heading-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-secondary {\n  font-size: calc(var(--template-heading-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-quote {\n  font-size: calc(var(--template-heading-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n  font-style: italic;\n}\n\n/* ─────────────────────────────────────────\n   Body Text\n   ───────────────────────────────────────── */\n\n.body-primary,\n.body-secondary,\n.body-quote-attribution {\n  font-family: var(--font-body);\n  line-height: var(--template-body-line-height);\n  color: var(--template-body-color);\n  text-shadow: var(--token-shadow-caption);\n}\n\n.body-primary {\n  font-size: calc(var(--template-body-size) * var(--layout-scale) * var(--frame-type-scale));\n  font-style: italic;\n}\n\n.body-secondary {\n  font-size: calc(var(--template-body-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.body-quote-attribution {\n  font-size: calc(var(--template-body-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n}\n\n/* ─────────────────────────────────────────\n   Flow (vertical rhythm)\n   ───────────────────────────────────────── */\n\n.flow-after-kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-heading {\n  margin-top: calc(var(--template-flow-heading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-subheading {\n  margin-top: calc(var(--template-flow-subheading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-section {\n  margin-top: calc(var(--template-flow-section) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n/* ─────────────────────────────────────────\n   Top Bar (brand badge row)\n   ───────────────────────────────────────── */\n\n.top-bar {\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  gap: calc(20px * var(--layout-scale));\n}\n\n.top-bar-right {\n  margin-left: auto;\n}\n\n.brand-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: 0;\n  border: 1px solid var(--frame-brand-pill-border);\n  background: var(--frame-brand-pill-bg);\n  color: var(--frame-brand-pill-text);\n  padding: calc(8px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(14px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 500;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  line-height: 1.1;\n}\n\n.brand-icon {\n  height: 1em;\n  width: auto;\n  margin-right: calc(6px * var(--layout-scale));\n  vertical-align: middle;\n  object-fit: contain;\n}\n\n/* ─────────────────────────────────────────\n   Brand Icon Corner (positioned overlay)\n   ───────────────────────────────────────── */\n\n.brand-icon-corner {\n  position: absolute;\n  z-index: 20;\n  padding: calc(24px * var(--layout-scale));\n}\n\n.brand-icon-corner.corner-top-left {\n  top: 0;\n  left: 0;\n}\n\n.brand-icon-corner.corner-top-right {\n  top: 0;\n  right: 0;\n}\n\n.brand-icon-corner.corner-bottom-left {\n  bottom: 0;\n  left: 0;\n}\n\n.brand-icon-corner.corner-bottom-right {\n  bottom: 0;\n  right: 0;\n}\n\n.brand-icon-img {\n  height: calc(32px * var(--layout-scale));\n  width: auto;\n  object-fit: contain;\n}\n\n/* ─────────────────────────────────────────\n   Meta Footer\n   ───────────────────────────────────────── */\n\n.meta-footer {\n  margin-top: auto;\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  color: var(--color-text-muted);\n  font-family: var(--font-body);\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 500;\n  letter-spacing: 0.10em;\n  text-transform: uppercase;\n  line-height: 1.2;\n}\n\n/* ─────────────────────────────────────────\n   Author Attribution Block\n   ───────────────────────────────────────── */\n\n.author-block {\n  margin-top: calc(var(--token-space-sm) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.author-byline {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  color: var(--color-text-primary);\n  line-height: 1.2;\n}\n\n.author-date {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 400;\n  font-style: italic;\n  color: var(--color-text-muted);\n  line-height: 1.3;\n  margin-top: calc(2px * var(--layout-scale));\n}\n\n/* ─────────────────────────────────────────\n   Series Number Badge\n   ───────────────────────────────────────── */\n\n.series-number {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.16em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n  padding-bottom: calc(var(--token-space-xs) * var(--layout-scale));\n  border-bottom: 2px solid var(--color-text-primary);\n  display: inline-block;\n  margin-bottom: calc(var(--token-space-md) * var(--layout-scale));\n}\n\n/* ─────────────────────────────────────────\n   Horizontal Rule\n   ───────────────────────────────────────── */\n\n.rule-line {\n  width: 100%;\n  height: 1px;\n  background: var(--color-border-subtle);\n  margin: calc(var(--token-space-sm) * var(--layout-scale) * var(--frame-space-scale)) 0;\n}\n\n.rule-line--thick {\n  height: 2px;\n  background: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Checklist\n   ───────────────────────────────────────── */\n\n.checklist-list {\n  display: flex;\n  flex-direction: column;\n  gap: calc(10px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.check-item {\n  border-radius: 0;\n  border: 1px solid var(--color-border-subtle);\n  background: var(--color-surface-elevated);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(var(--template-check-item-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.25;\n  color: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Metric\n   ───────────────────────────────────────── */\n\n.metric-layout {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  gap: calc(18px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-card {\n  min-width: calc(220px * var(--layout-scale));\n  border-radius: 0;\n  border: 2px solid var(--color-text-primary);\n  background: var(--color-surface-elevated);\n  padding: calc(14px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-value {\n  font-family: var(--font-display);\n  font-size: calc(var(--template-metric-value-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1;\n  color: var(--color-text-primary);\n}\n\n.metric-label {\n  font-family: var(--font-body);\n  font-size: calc(var(--template-metric-label-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  color: var(--color-text-secondary);\n}\n\n/* ─────────────────────────────────────────\n   CTA Pill\n   ───────────────────────────────────────── */\n\n.cta-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: 0;\n  background: var(--color-text-primary);\n  color: var(--color-surface-base);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(24px * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.06em;\n  text-transform: uppercase;\n  line-height: 1.1;\n}\n\n/* ─────────────────────────────────────────\n   Article Card Image Area\n   ───────────────────────────────────────── */\n\n.article-image-area {\n  position: relative;\n  width: 100%;\n  flex: 1;\n  min-height: 40%;\n  overflow: hidden;\n}\n\n.article-image-area .frame-layer--image {\n  position: absolute;\n  inset: 0;\n  background-size: cover;\n  background-position: center;\n}\n\n/* ─────────────────────────────────────────\n   Utilities\n   ───────────────────────────────────────── */\n\n.text-balance {\n  text-wrap: balance;\n}\n\n.word-safe {\n  overflow-wrap: anywhere;\n  word-break: break-word;\n}\n\n.tabular-nums {\n  font-variant-numeric: tabular-nums;\n}"
+  "template_css": ":root {\n  --token-font-display: \"Playfair Display\", \"Iowan Old Style\", \"Palatino Linotype\", Palatino, Georgia, \"Times New Roman\", serif;\n  --token-font-body: \"Inter\", \"Helvetica Neue\", Helvetica, Arial, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;\n\n  --token-space-2xs: 8px;\n  --token-space-xs: 12px;\n  --token-space-sm: 16px;\n  --token-space-md: 24px;\n  --token-space-lg: 32px;\n  --token-space-xl: 40px;\n  --token-space-2xl: 46px;\n\n  --token-type-kicker: 22px;\n  --token-type-heading: 64px;\n  --token-type-body: 28px;\n  --token-type-metric-value: 66px;\n  --token-type-metric-label: 20px;\n\n  --token-radius-card: var(--radius-card);\n  --token-radius-pill: var(--radius-pill);\n  --token-shadow-title: var(--frame-title-shadow);\n  --token-shadow-caption: var(--frame-caption-shadow);\n\n  --heading-max-lines: 5;\n}\n\n* {\n  box-sizing: border-box;\n}\n\nhtml,\nbody {\n  margin: 0;\n}\n\n.absolute {\n  position: absolute;\n}\n\n.inset-0 {\n  inset: 0;\n}\n\n/* ─────────────────────────────────────────\n   Frame (root canvas)\n   ───────────────────────────────────────── */\n\n.frame {\n  position: relative;\n  isolation: isolate;\n  overflow: hidden;\n\n  --frame-bg: var(--color-surface-base);\n  --frame-overlay-top: linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 32%, transparent));\n  --frame-overlay-bottom: linear-gradient(0deg, transparent, transparent);\n  --frame-vignette: none;\n  --frame-brand-pill-bg: transparent;\n  --frame-brand-pill-border: var(--color-border-subtle);\n  --frame-brand-pill-text: var(--color-text-primary);\n  --frame-title-shadow: none;\n  --frame-caption-shadow: none;\n  --frame-grain-opacity: 0;\n  --frame-image-opacity: 0.5;\n  --frame-type-scale: 1;\n  --frame-space-scale: 1;\n}\n\n.frame.frame-tone-dark,\n.frame[data-template-tone=\"dark\"] {\n  --color-text-primary: #f2f2f2;\n  --color-text-secondary: #d1d1d1;\n  --color-text-muted: #9a9a9a;\n  --color-surface-base: #070707;\n  --color-surface-elevated: #131313;\n  --color-border-subtle: #2b2b2b;\n  --frame-bg: #050505;\n  --frame-overlay-top: linear-gradient(180deg,\n      color-mix(in srgb, #000000 32%, transparent) 0%,\n      color-mix(in srgb, #000000 60%, transparent) 100%);\n  --frame-overlay-bottom: linear-gradient(0deg,\n      color-mix(in srgb, #000000 22%, transparent) 0%,\n      transparent 62%);\n  --frame-brand-pill-bg: color-mix(in srgb, #000000 16%, transparent);\n  --frame-brand-pill-border: color-mix(in srgb, #ffffff 24%, transparent);\n  --frame-brand-pill-text: var(--color-text-primary);\n}\n\n.frame-layer {\n  position: absolute;\n  inset: 0;\n}\n\n.frame-layer--image {\n  background-size: cover;\n  background-position: center;\n}\n\n.is-hidden {\n  display: none !important;\n}\n\n.frame-layer--border {\n  border: 1px solid transparent;\n}\n\n/* ─────────────────────────────────────────\n   Top Band (structural rule line)\n   ───────────────────────────────────────── */\n\n.top-band {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: calc(4px * var(--layout-scale));\n}\n\n.top-band--data {\n  background: var(--color-text-primary);\n}\n\n.top-band--metric {\n  background: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Decorative Elements (minimal for Swiss)\n   ───────────────────────────────────────── */\n\n.decor-orb-left {\n  position: absolute;\n  left: 0;\n  top: 0;\n  bottom: 0;\n  width: 1px;\n  height: 100%;\n  border-radius: 0;\n  background: color-mix(in srgb, var(--color-border-subtle) 30%, transparent);\n}\n\n.decor-blob-right {\n  position: absolute;\n  right: calc(48px * var(--layout-scale));\n  top: 0;\n  bottom: 0;\n  width: 1px;\n  height: 100%;\n  border-radius: 0;\n  background: color-mix(in srgb, var(--color-border-subtle) 30%, transparent);\n}\n\n.decor-wash-left {\n  position: absolute;\n  top: 0;\n  left: 0;\n  right: 0;\n  height: calc(4px * var(--layout-scale));\n  width: 100%;\n  background: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Quote mark\n   ───────────────────────────────────────── */\n\n.quote-mark {\n  position: absolute;\n  left: 8%;\n  top: 7%;\n  font-family: var(--font-display);\n  font-size: calc(148px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 0.8;\n  opacity: 0.12;\n  color: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Content Shell\n   ───────────────────────────────────────── */\n\n.content-shell {\n  --template-panel-padding: 34px;\n  --template-heading-size: var(--token-type-heading);\n  --template-heading-secondary-size: var(--template-heading-size);\n  --template-heading-quote-size: var(--template-heading-size);\n  --template-heading-line-height: 1.06;\n  --template-heading-letter-spacing: -0.02em;\n  --template-body-size: var(--token-type-body);\n  --template-body-secondary-size: var(--template-body-size);\n  --template-body-quote-size: var(--template-body-size);\n  --template-body-line-height: 1.38;\n  --template-body-color: var(--color-text-secondary);\n  --template-flow-kicker: var(--token-space-2xs);\n  --template-flow-heading: var(--token-space-xs);\n  --template-flow-subheading: var(--token-space-2xs);\n  --template-flow-section: var(--token-space-md);\n  --template-check-item-size: 22px;\n  --template-metric-value-size: var(--token-type-metric-value);\n  --template-metric-label-size: var(--token-type-metric-label);\n\n  position: relative;\n  z-index: 10;\n  display: flex;\n  width: 100%;\n  height: 100%;\n  flex-direction: column;\n  padding: calc(var(--content-inset) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--data-topband {\n  padding-top: calc((var(--content-inset) + 18px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.content-shell--metric-topband {\n  padding-top: calc((var(--content-inset) + 14px) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n/* ─────────────────────────────────────────\n   Template Variants\n   ───────────────────────────────────────── */\n\n.template-quote {\n  --template-panel-padding: 34px;\n  --template-heading-quote-size: 56px;\n  --template-body-quote-size: 24px;\n  --template-body-secondary-size: 24px;\n  --template-flow-kicker: var(--token-space-sm);\n  --template-flow-heading: var(--token-space-sm);\n}\n\n.template-checklist {\n  --template-panel-padding: 32px;\n  --template-heading-secondary-size: 54px;\n  --template-flow-section: var(--token-space-sm);\n}\n\n.template-metric {\n  --template-panel-padding: 30px;\n  --template-heading-secondary-size: 54px;\n  --template-body-secondary-size: 26px;\n}\n\n.template-promo {\n  --template-panel-padding: 34px;\n  --template-heading-size: 60px;\n  --template-body-secondary-size: 26px;\n}\n\n.template-article {\n  --template-panel-padding: 36px;\n  --template-heading-size: 58px;\n  --template-body-size: 26px;\n  --template-body-line-height: 1.42;\n}\n\n.template-series {\n  --template-panel-padding: 36px;\n  --template-heading-size: 52px;\n  --template-body-size: 26px;\n  --template-body-line-height: 1.42;\n}\n\n.template-dark {\n  --color-text-primary: #f2f2f2;\n  --color-text-secondary: #d1d1d1;\n  --color-text-muted: #9a9a9a;\n  --color-surface-base: #070707;\n  --color-surface-elevated: #131313;\n  --color-border-subtle: #2b2b2b;\n}\n\n.rule-line--inverted {\n  background: #ffffff;\n}\n\n.cta-pill--inverted {\n  background: #ffffff;\n  color: #000000;\n}\n\n.series-index {\n  font-family: var(--font-body);\n  font-size: calc(140px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 700;\n  line-height: 1;\n  color: color-mix(in srgb, var(--color-text-primary) 10%, transparent);\n  position: absolute;\n  right: 0;\n  top: -20px;\n  z-index: -1;\n}\n\n.metric-container {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  margin-bottom: calc(var(--token-space-md) * var(--layout-scale));\n}\n\n\n/* ─────────────────────────────────────────\n   Alignment\n   ───────────────────────────────────────── */\n\n.align-left {\n  align-items: flex-start;\n  text-align: left;\n}\n\n.align-center {\n  align-items: center;\n  text-align: center;\n}\n\n.align-justify {\n  align-items: flex-start;\n  text-align: justify;\n}\n\n/* ─────────────────────────────────────────\n   Content Panel & Limits\n   ───────────────────────────────────────── */\n\n.content-panel {\n  padding: calc(var(--template-panel-padding) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n/* Content position utilities */\n.push-start {\n  margin-bottom: auto;\n}\n\n.push-center {\n  margin-top: auto;\n  margin-bottom: auto;\n}\n\n.push-end {\n  margin-top: auto;\n}\n\n.content-limit {\n  max-width: var(--content-max-width);\n}\n\n.caption-limit {\n  max-width: var(--caption-max-width);\n}\n\n.metric-content {\n  max-width: calc(var(--content-max-width) - (220px * var(--layout-scale)));\n}\n\n.caption-limit-metric {\n  max-width: calc(var(--caption-max-width) - (220px * var(--layout-scale)));\n}\n\n/* ─────────────────────────────────────────\n   Kicker\n   ───────────────────────────────────────── */\n\n.kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(var(--token-type-kicker) * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 500;\n  line-height: 1.1;\n  letter-spacing: 0.14em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n  max-width: var(--content-max-width);\n}\n\n/* ─────────────────────────────────────────\n   Headings (serif display)\n   ───────────────────────────────────────── */\n\n.heading-primary,\n.heading-secondary,\n.heading-quote {\n  font-family: var(--font-display);\n  font-weight: 700;\n  line-height: var(--template-heading-line-height);\n  letter-spacing: var(--template-heading-letter-spacing);\n  text-shadow: var(--token-shadow-title);\n  color: var(--color-text-primary);\n  overflow: hidden;\n  display: -webkit-box;\n  -webkit-box-orient: vertical;\n  -webkit-line-clamp: var(--heading-max-lines);\n  line-clamp: var(--heading-max-lines);\n}\n\n.heading-primary {\n  font-size: calc(var(--template-heading-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-secondary {\n  font-size: calc(var(--template-heading-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.heading-quote {\n  font-size: calc(var(--template-heading-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n  font-style: italic;\n}\n\n/* ─────────────────────────────────────────\n   Body Text\n   ───────────────────────────────────────── */\n\n.body-primary,\n.body-secondary,\n.body-quote-attribution {\n  font-family: var(--font-body);\n  line-height: var(--template-body-line-height);\n  color: var(--template-body-color);\n  text-shadow: var(--token-shadow-caption);\n}\n\n.body-primary {\n  font-size: calc(var(--template-body-size) * var(--layout-scale) * var(--frame-type-scale));\n  font-style: italic;\n}\n\n.body-secondary {\n  font-size: calc(var(--template-body-secondary-size) * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.body-quote-attribution {\n  font-size: calc(var(--template-body-quote-size) * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n}\n\n/* ─────────────────────────────────────────\n   Flow (vertical rhythm)\n   ───────────────────────────────────────── */\n\n.flow-after-kicker {\n  margin-top: calc(var(--template-flow-kicker) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-heading {\n  margin-top: calc(var(--template-flow-heading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-subheading {\n  margin-top: calc(var(--template-flow-subheading) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.flow-after-section {\n  margin-top: calc(var(--template-flow-section) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n/* ─────────────────────────────────────────\n   Top Bar (brand badge row)\n   ───────────────────────────────────────── */\n\n.top-bar {\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  gap: calc(20px * var(--layout-scale));\n}\n\n.top-bar-right {\n  margin-left: auto;\n}\n\n.brand-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: 0;\n  border: 1px solid var(--frame-brand-pill-border);\n  background: var(--frame-brand-pill-bg);\n  color: var(--frame-brand-pill-text);\n  padding: calc(8px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(14px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 500;\n  letter-spacing: 0.12em;\n  text-transform: uppercase;\n  line-height: 1.1;\n}\n\n.brand-icon {\n  height: 1em;\n  width: auto;\n  margin-right: calc(6px * var(--layout-scale));\n  vertical-align: middle;\n  object-fit: contain;\n}\n\n/* ─────────────────────────────────────────\n   Brand Icon Corner (positioned overlay)\n   ───────────────────────────────────────── */\n\n.brand-icon-corner {\n  position: absolute;\n  z-index: 20;\n  padding: calc(24px * var(--layout-scale));\n}\n\n.brand-icon-corner.corner-top-left {\n  top: 0;\n  left: 0;\n}\n\n.brand-icon-corner.corner-top-right {\n  top: 0;\n  right: 0;\n}\n\n.brand-icon-corner.corner-bottom-left {\n  bottom: 0;\n  left: 0;\n}\n\n.brand-icon-corner.corner-bottom-right {\n  bottom: 0;\n  right: 0;\n}\n\n.brand-icon-img {\n  height: calc(32px * var(--layout-scale));\n  width: auto;\n  object-fit: contain;\n}\n\n/* ─────────────────────────────────────────\n   Meta Footer\n   ───────────────────────────────────────── */\n\n.meta-footer {\n  margin-top: auto;\n  display: flex;\n  width: 100%;\n  align-items: center;\n  justify-content: space-between;\n  color: var(--color-text-muted);\n  font-family: var(--font-body);\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 500;\n  letter-spacing: 0.10em;\n  text-transform: uppercase;\n  line-height: 1.2;\n}\n\n/* ─────────────────────────────────────────\n   Author Attribution Block\n   ───────────────────────────────────────── */\n\n.author-block {\n  margin-top: calc(var(--token-space-sm) * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.author-byline {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  color: var(--color-text-primary);\n  line-height: 1.2;\n}\n\n.author-date {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 400;\n  font-style: italic;\n  color: var(--color-text-muted);\n  line-height: 1.3;\n  margin-top: calc(2px * var(--layout-scale));\n}\n\n/* ─────────────────────────────────────────\n   Series Number Badge\n   ───────────────────────────────────────── */\n\n.series-number {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.16em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n  padding-bottom: calc(var(--token-space-xs) * var(--layout-scale));\n  border-bottom: 2px solid var(--color-text-primary);\n  display: inline-block;\n  margin-bottom: calc(var(--token-space-md) * var(--layout-scale));\n}\n\n/* ─────────────────────────────────────────\n   Horizontal Rule\n   ───────────────────────────────────────── */\n\n.rule-line {\n  width: 100%;\n  height: 1px;\n  background: var(--color-border-subtle);\n  margin: calc(var(--token-space-sm) * var(--layout-scale) * var(--frame-space-scale)) 0;\n}\n\n.rule-line--thick {\n  height: 2px;\n  background: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Checklist\n   ───────────────────────────────────────── */\n\n.checklist-list {\n  display: flex;\n  flex-direction: column;\n  gap: calc(10px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.check-item {\n  border-radius: 0;\n  border: 1px solid var(--color-border-subtle);\n  background: var(--color-surface-elevated);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(14px * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(var(--template-check-item-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.25;\n  color: var(--color-text-primary);\n}\n\n/* ─────────────────────────────────────────\n   Metric\n   ───────────────────────────────────────── */\n\n.metric-layout {\n  display: flex;\n  align-items: flex-start;\n  justify-content: space-between;\n  gap: calc(18px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-card {\n  min-width: calc(220px * var(--layout-scale));\n  border-radius: 0;\n  border: 2px solid var(--color-text-primary);\n  background: var(--color-surface-elevated);\n  padding: calc(14px * var(--layout-scale) * var(--frame-space-scale)) calc(16px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.metric-value {\n  font-family: var(--font-display);\n  font-size: calc(var(--template-metric-value-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1;\n  color: var(--color-text-primary);\n}\n\n.metric-label {\n  font-family: var(--font-body);\n  font-size: calc(var(--template-metric-label-size) * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  color: var(--color-text-secondary);\n}\n\n/* ─────────────────────────────────────────\n   CTA Pill\n   ───────────────────────────────────────── */\n\n.cta-pill {\n  display: inline-flex;\n  width: fit-content;\n  align-items: center;\n  border-radius: 0;\n  background: var(--color-text-primary);\n  color: var(--color-surface-base);\n  padding: calc(12px * var(--layout-scale) * var(--frame-space-scale)) calc(24px * var(--layout-scale) * var(--frame-space-scale));\n  font-family: var(--font-body);\n  font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  letter-spacing: 0.06em;\n  text-transform: uppercase;\n  line-height: 1.1;\n}\n\n/* ─────────────────────────────────────────\n   Article Card Image Area\n   ───────────────────────────────────────── */\n\n.article-image-area {\n  position: relative;\n  width: 100%;\n  flex: 1;\n  min-height: 40%;\n  overflow: hidden;\n}\n\n.article-image-area .frame-layer--image {\n  position: absolute;\n  inset: 0;\n  background-size: cover;\n  background-position: center;\n}\n\n/* ─────────────────────────────────────────\n   Structural Layouts (swap-friendly items)\n   ───────────────────────────────────────── */\n\n.template-editorial-mosaic {\n  --template-heading-size: 56px;\n  --template-body-size: 24px;\n}\n\n.mosaic-hero-grid {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: calc(10px * var(--layout-scale));\n}\n\n.mosaic-tile {\n  min-height: calc(84px * var(--layout-scale));\n  border: 1px solid var(--color-border-subtle);\n  background: color-mix(in srgb, var(--color-surface-elevated) 92%, transparent);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  text-align: center;\n  padding: calc(10px * var(--layout-scale));\n  font-family: var(--font-body);\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  color: var(--color-text-secondary);\n}\n\n.mosaic-tile--wide {\n  grid-column: span 2;\n}\n\n.editorial-story-block {\n  border: 1px solid var(--color-border-subtle);\n  background: color-mix(in srgb, var(--color-surface-base) 94%, transparent);\n  padding: calc(22px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.editorial-meta-row {\n  display: flex;\n  flex-wrap: wrap;\n  gap: calc(10px * var(--layout-scale));\n  align-items: center;\n}\n\n.editorial-meta {\n  font-family: var(--font-body);\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  letter-spacing: 0.03em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n}\n\n.template-split-copy-media {\n  --template-heading-size: 58px;\n  --template-body-size: 28px;\n}\n\n.split-copy-stack {\n  border: 1px solid var(--color-border-subtle);\n  background: color-mix(in srgb, var(--color-surface-base) 92%, transparent);\n  padding: calc(22px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.split-media-band {\n  min-height: calc(200px * var(--layout-scale));\n  border: 1px solid var(--color-border-subtle);\n  background: color-mix(in srgb, var(--color-surface-elevated) 88%, transparent);\n  display: flex;\n  align-items: flex-end;\n  justify-content: flex-start;\n  padding: calc(18px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.split-media-caption {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.3;\n  color: var(--color-text-secondary);\n}\n\n.template-concept-explainer {\n  --template-heading-size: 62px;\n  --template-body-size: 26px;\n}\n\n.topic-chip {\n  display: inline-flex;\n  width: fit-content;\n  padding: calc(8px * var(--layout-scale)) calc(18px * var(--layout-scale));\n  border: 1px solid var(--color-border-subtle);\n  border-radius: 999px;\n  font-family: var(--font-body);\n  font-size: calc(20px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  line-height: 1.1;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  color: var(--color-text-primary);\n  background: color-mix(in srgb, var(--color-surface-elevated) 92%, transparent);\n}\n\n.concept-callout {\n  border: 1px solid var(--color-border-subtle);\n  background: color-mix(in srgb, var(--color-surface-elevated) 95%, transparent);\n  padding: calc(20px * var(--layout-scale) * var(--frame-space-scale));\n}\n\n.concept-support-note {\n  font-family: var(--font-body);\n  font-size: calc(18px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.3;\n  color: var(--color-text-muted);\n}\n\n.concept-corners {\n  position: absolute;\n  inset: 0;\n  pointer-events: none;\n}\n\n.corner-chip {\n  position: absolute;\n  width: calc(120px * var(--layout-scale));\n  height: calc(120px * var(--layout-scale));\n  border-radius: 50%;\n  border: 1px solid var(--color-border-subtle);\n  background: color-mix(in srgb, var(--color-surface-elevated) 92%, transparent);\n  display: inline-flex;\n  align-items: center;\n  justify-content: center;\n  text-align: center;\n  padding: calc(12px * var(--layout-scale));\n  font-family: var(--font-body);\n  font-size: calc(14px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  color: var(--color-text-secondary);\n}\n\n.corner-chip--top {\n  top: calc(20px * var(--layout-scale));\n  right: calc(16px * var(--layout-scale));\n}\n\n.corner-chip--bottom {\n  right: calc(20px * var(--layout-scale));\n  bottom: calc(20px * var(--layout-scale));\n}\n\n.template-grid-item-card,\n.template-grid-item-feature {\n  --template-panel-padding: 26px;\n}\n\n.grid-item-card {\n  min-height: calc(460px * var(--layout-scale));\n  border: 1px solid var(--color-border-subtle);\n  background: color-mix(in srgb, var(--color-surface-elevated) 95%, transparent);\n  padding: calc(20px * var(--layout-scale) * var(--frame-space-scale));\n  display: flex;\n  flex-direction: column;\n  gap: calc(12px * var(--layout-scale));\n}\n\n.grid-item-card--feature {\n  min-height: calc(560px * var(--layout-scale));\n}\n\n.grid-item-tag {\n  font-family: var(--font-body);\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  font-weight: 600;\n  line-height: 1.2;\n  letter-spacing: 0.08em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n}\n\n.grid-item-title {\n  margin: 0;\n  font-family: var(--font-body);\n  font-size: calc(44px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.06;\n  color: var(--color-text-primary);\n}\n\n.grid-item-title--feature {\n  font-size: calc(54px * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.grid-item-body {\n  margin: 0;\n  font-family: var(--font-body);\n  font-size: calc(22px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.26;\n  color: var(--color-text-secondary);\n}\n\n.grid-item-body--feature {\n  font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale));\n}\n\n.grid-item-meta {\n  margin: auto 0 0;\n  font-family: var(--font-body);\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  letter-spacing: 0.06em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n}\n\n.template-overlap-stack {\n  --template-panel-padding: 24px;\n}\n\n.stack-stage {\n  position: relative;\n  min-height: calc(540px * var(--layout-scale));\n}\n\n.stack-card {\n  position: absolute;\n  width: min(72%, calc(var(--content-max-width) * 0.72));\n  border: 1px solid var(--color-border-subtle);\n  background: color-mix(in srgb, var(--color-surface-elevated) 95%, transparent);\n  padding: calc(18px * var(--layout-scale) * var(--frame-space-scale));\n  box-shadow: 0 calc(8px * var(--layout-scale)) calc(28px * var(--layout-scale)) color-mix(in srgb, var(--color-shadow-color, #000000) 10%, transparent);\n}\n\n.stack-card--back {\n  top: calc(20px * var(--layout-scale));\n  left: calc(14px * var(--layout-scale));\n}\n\n.stack-card--middle {\n  top: calc(148px * var(--layout-scale));\n  right: calc(16px * var(--layout-scale));\n}\n\n.stack-card--front {\n  top: calc(286px * var(--layout-scale));\n  left: calc(26px * var(--layout-scale));\n}\n\n.stack-card-title {\n  margin: 0;\n  font-family: var(--font-body);\n  font-size: calc(40px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.08;\n  color: var(--color-text-primary);\n}\n\n.stack-card-meta {\n  margin: calc(14px * var(--layout-scale)) 0 0;\n  font-family: var(--font-body);\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.2;\n  letter-spacing: 0.06em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n}\n\n.template-card-deck {\n  --template-panel-padding: 24px;\n}\n\n.deck-grid {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  gap: calc(14px * var(--layout-scale));\n}\n\n.deck-card {\n  min-height: calc(220px * var(--layout-scale));\n  border: 1px solid var(--color-border-subtle);\n  background: color-mix(in srgb, var(--color-surface-elevated) 95%, transparent);\n  padding: calc(16px * var(--layout-scale) * var(--frame-space-scale));\n  display: flex;\n  flex-direction: column;\n  justify-content: space-between;\n  gap: calc(10px * var(--layout-scale));\n}\n\n.deck-card-title {\n  margin: 0;\n  font-family: var(--font-body);\n  font-size: calc(24px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.16;\n  color: var(--color-text-primary);\n}\n\n.deck-card-note {\n  margin: 0;\n  font-family: var(--font-body);\n  font-size: calc(16px * var(--layout-scale) * var(--frame-type-scale));\n  line-height: 1.24;\n  color: var(--color-text-muted);\n}\n\n@media (max-width: 980px) {\n  .deck-grid {\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n  }\n}\n\n/* ─────────────────────────────────────────\n   Utilities\n   ───────────────────────────────────────── */\n\n.text-balance {\n  text-wrap: balance;\n}\n\n.word-safe {\n  overflow-wrap: anywhere;\n  word-break: break-word;\n}\n\n.tabular-nums {\n  font-variant-numeric: tabular-nums;\n}\n"
 }

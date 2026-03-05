@@ -1,0 +1,38 @@
+<!--
+@id: layout/editorial-mosaic-hero
+@label: Editorial Mosaic Hero
+@description: Mosaic lead visuals above a long-form headline and deck for magazine-style storytelling
+@formats: instagram-portrait,instagram-square,linkedin-post
+
+@slot mosaic_item_01 | text | Top-left mosaic tile content | Orbital study
+@slot mosaic_item_02 | text | Top-center mosaic tile content | Flight path
+@slot mosaic_item_03 | text | Top-right mosaic tile content | Seismic signal
+@slot mosaic_item_04 | text | Middle-left mosaic tile content | Bridge model
+@slot mosaic_item_05 | text | Middle-right mosaic tile content | Data cube
+@slot mosaic_item_06 | text | Bottom mosaic tile content | Gravity map
+@slot dek_line | text | Supporting subheading/dek line below headline
+@slot byline | text | Author/byline text | By Research Desk
+@slot publish_date | text | Publish date text | January 2026
+-->
+<div class="content-shell template-editorial-mosaic {{ALIGN_CLASS}}">
+  {{HEADER}}
+  <div class="content-panel {{POSITION_CLASS}}">
+    <div class="mosaic-hero-grid">
+      <div class="mosaic-tile">{{SLOT:mosaic_item_01}}</div>
+      <div class="mosaic-tile mosaic-tile--wide">{{SLOT:mosaic_item_02}}</div>
+      <div class="mosaic-tile">{{SLOT:mosaic_item_03}}</div>
+      <div class="mosaic-tile mosaic-tile--wide">{{SLOT:mosaic_item_04}}</div>
+      <div class="mosaic-tile">{{SLOT:mosaic_item_05}}</div>
+      <div class="mosaic-tile mosaic-tile--wide">{{SLOT:mosaic_item_06}}</div>
+    </div>
+    <div class="editorial-story-block flow-after-section">
+      <h1 class="heading-primary content-limit text-balance word-safe">{{HEADING}}</h1>
+      <p class="body-primary flow-after-heading caption-limit word-safe">{{SLOT:dek_line}}</p>
+      <div class="editorial-meta-row flow-after-section">
+        <span class="editorial-meta">{{SLOT:byline}}</span>
+        <span class="editorial-meta">{{SLOT:publish_date}}</span>
+      </div>
+    </div>
+    {{FOOTER}}
+  </div>
+</div>

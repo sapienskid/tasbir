@@ -1,0 +1,27 @@
+<!--
+@id: layout/split-copy-media
+@label: Split Copy Media
+@description: Top copy panel with bottom media panel for editorial and story-first posts
+@formats: instagram-story,twitter-card,linkedin-post,instagram-portrait
+
+@slot byline | text | Author/byline text | By Editorial Team
+@slot publish_date | text | Publish date text | January 2026
+@slot media_caption | text | Caption or annotation for lower media zone | Visual context placeholder
+-->
+<div class="content-shell template-split-copy-media {{ALIGN_CLASS}}">
+  {{HEADER}}
+  <div class="content-panel {{POSITION_CLASS}}">
+    <div class="split-copy-stack">
+      <h1 class="heading-primary content-limit text-balance word-safe">{{HEADING}}</h1>
+      <p class="body-primary flow-after-heading caption-limit word-safe">{{BODY}}</p>
+      <div class="editorial-meta-row flow-after-section">
+        <span class="editorial-meta">{{SLOT:byline}}</span>
+        <span class="editorial-meta">{{SLOT:publish_date}}</span>
+      </div>
+    </div>
+    <div class="split-media-band flow-after-section">
+      <div class="split-media-caption word-safe">{{SLOT:media_caption}}</div>
+    </div>
+    {{FOOTER}}
+  </div>
+</div>

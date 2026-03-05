@@ -1,0 +1,33 @@
+<!--
+@id: layout/overlap-card-stack
+@label: Overlap Card Stack
+@description: Overlapping card composition where each card is independently swappable
+@formats: instagram-square,instagram-portrait,linkedin-post
+
+@slot card_01_title | text | Back card title text
+@slot card_01_meta | text | Back card byline/meta text
+@slot card_02_title | text | Middle card title text
+@slot card_02_meta | text | Middle card byline/meta text
+@slot card_03_title | text | Front card title text
+@slot card_03_meta | text | Front card byline/meta text
+-->
+<div class="content-shell template-overlap-stack {{ALIGN_CLASS}}">
+  {{HEADER}}
+  <div class="content-panel {{POSITION_CLASS}}">
+    <div class="stack-stage">
+      <article class="stack-card stack-card--back">
+        <h2 class="stack-card-title word-safe">{{SLOT:card_01_title}}</h2>
+        <p class="stack-card-meta word-safe">{{SLOT:card_01_meta}}</p>
+      </article>
+      <article class="stack-card stack-card--middle">
+        <h2 class="stack-card-title word-safe">{{SLOT:card_02_title}}</h2>
+        <p class="stack-card-meta word-safe">{{SLOT:card_02_meta}}</p>
+      </article>
+      <article class="stack-card stack-card--front">
+        <h2 class="stack-card-title word-safe">{{SLOT:card_03_title}}</h2>
+        <p class="stack-card-meta word-safe">{{SLOT:card_03_meta}}</p>
+      </article>
+    </div>
+    {{FOOTER}}
+  </div>
+</div>

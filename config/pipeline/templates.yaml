@@ -43,7 +43,7 @@ formats:
     height: 1350
     caption_source: instagram_caption
     hashtag_count: 3
-    default_template_id: core/editorial-base
+    default_template_id: layout/editorial-mosaic-hero
     meta_left_label: "Instagram"
     meta_right_label: ""
     layout:
@@ -57,7 +57,7 @@ formats:
     height: 1080
     caption_source: instagram_caption
     hashtag_count: 3
-    default_template_id: core/editorial-base
+    default_template_id: layout/concept-explainer-callout
     meta_left_label: "Instagram"
     meta_right_label: ""
     layout:
@@ -71,7 +71,7 @@ formats:
     height: 1920
     caption_source: instagram_caption
     hashtag_count: 2
-    default_template_id: core/editorial-base
+    default_template_id: layout/split-copy-media
     meta_left_label: "Story"
     meta_right_label: ""
     layout:
@@ -85,7 +85,7 @@ formats:
     height: 1350
     caption_source: carousel_slides
     hashtag_count: 0
-    default_template_id: core/carousel-cover
+    default_template_id: layout/carousel-cover-hero
     meta_left_label: ""
     meta_right_label: ""
     layout:
@@ -99,7 +99,7 @@ formats:
     height: 630
     caption_source: twitter_caption
     hashtag_count: 0
-    default_template_id: core/bold-base
+    default_template_id: layout/statement-cta
     meta_left_label: "X / Twitter"
     meta_right_label: ""
     layout:
@@ -113,7 +113,7 @@ formats:
     height: 627
     caption_source: linkedin_caption
     hashtag_count: 0
-    default_template_id: core/editorial-base
+    default_template_id: layout/editorial-classic
     meta_left_label: "LinkedIn"
     meta_right_label: ""
     layout:

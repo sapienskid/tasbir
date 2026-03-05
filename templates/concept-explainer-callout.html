@@ -1,0 +1,29 @@
+<!--
+@id: layout/concept-explainer-callout
+@label: Concept Explainer Callout
+@description: Definition-style educational card with topic tag and callout explanation box
+@formats: instagram-square,instagram-portrait,carousel-post,linkedin-post
+
+@slot topic_label | text | Topic/category chip text | Biology
+@slot callout_text | text | Main callout box explanation text
+@slot support_note | text | Supporting note below callout | Add one practical example.
+@slot corner_item_top | text | Top-right circular item label | Field sample
+@slot corner_item_bottom | text | Bottom-right circular item label | Lab culture
+-->
+<div class="content-shell template-concept-explainer {{ALIGN_CLASS}}">
+  {{HEADER}}
+  <div class="content-panel {{POSITION_CLASS}}">
+    <div class="topic-chip">{{SLOT:topic_label}}</div>
+    <h1 class="heading-primary flow-after-heading content-limit text-balance word-safe">{{HEADING}}</h1>
+    <p class="body-secondary flow-after-heading caption-limit word-safe">{{BODY}}</p>
+    <div class="concept-callout flow-after-section">
+      <p class="body-secondary word-safe">{{SLOT:callout_text}}</p>
+    </div>
+    <p class="concept-support-note flow-after-heading word-safe">{{SLOT:support_note}}</p>
+    <div class="concept-corners">
+      <span class="corner-chip corner-chip--top">{{SLOT:corner_item_top}}</span>
+      <span class="corner-chip corner-chip--bottom">{{SLOT:corner_item_bottom}}</span>
+    </div>
+    {{FOOTER}}
+  </div>
+</div>

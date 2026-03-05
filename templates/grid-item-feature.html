@@ -1,0 +1,23 @@
+<!--
+@id: layout/grid-item-feature
+@label: Grid Item Feature
+@description: Emphasis variant of a single reusable grid item card for board compositions
+@formats: instagram-square,instagram-portrait,instagram-story,carousel-post,twitter-card,linkedin-post
+
+@slot item_tag | text | Small category or section label | Feature
+@slot item_title | text | Feature card title text
+@slot item_body | text | Feature supporting text
+@slot item_meta | text | Optional byline or source line | By Editorial Team
+-->
+<div class="content-shell template-grid-item-feature {{ALIGN_CLASS}}">
+  {{HEADER}}
+  <div class="content-panel {{POSITION_CLASS}}">
+    <article class="grid-item-card grid-item-card--feature">
+      <div class="grid-item-tag">{{SLOT:item_tag}}</div>
+      <h1 class="grid-item-title grid-item-title--feature word-safe">{{SLOT:item_title}}</h1>
+      <p class="grid-item-body grid-item-body--feature word-safe">{{SLOT:item_body}}</p>
+      <p class="grid-item-meta word-safe">{{SLOT:item_meta}}</p>
+    </article>
+    {{FOOTER}}
+  </div>
+</div>
