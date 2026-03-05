@@ -18,7 +18,7 @@ describe("social pipeline worker", () => {
 
   it("rejects preview requests without API key", async () => {
     const response = await worker.fetch(
-      new Request("https://worker.test/template/instagram-post?title=Hello&caption=World"),
+      new Request("https://worker.test/template/instagram-portrait?title=Hello&caption=World"),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
@@ -28,7 +28,7 @@ describe("social pipeline worker", () => {
 
   it("renders template endpoint without CDN script and with token variables", async () => {
     const response = await worker.fetch(
-      authorizedRequest("https://worker.test/template/instagram-post?title=Hello&caption=World&brandingColor=%230a8fa5"),
+      authorizedRequest("https://worker.test/template/instagram-portrait?title=Hello&caption=World&brandingColor=%230a8fa5"),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
@@ -43,7 +43,7 @@ describe("social pipeline worker", () => {
 
   it("hides carousel labels by default", async () => {
     const response = await worker.fetch(
-      authorizedRequest("https://worker.test/template/carousel-slide?title=T&heading=H&body=B&slide=1&total=5"),
+      authorizedRequest("https://worker.test/template/carousel-post?title=T&heading=H&body=B&slide=1&total=5"),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
@@ -57,7 +57,7 @@ describe("social pipeline worker", () => {
   it("resolves preview templates with slot values", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/instagram-post?templateId=core/metric-split&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal+that+compounds&slot.insight_line=One+metric+only+works+when+paired+with+context."
+        "https://worker.test/template/instagram-portrait?templateId=core/metric-card&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal+that+compounds"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -65,7 +65,7 @@ describe("social pipeline worker", () => {
 
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('data-template-id="core/metric-split"');
+    expect(html).toContain('data-template-id="core/metric-card"');
     expect(html).not.toContain("data-template-archetype=");
     expect(html).toContain("9.8K");
     expect(html).toContain("Signal that compounds");
@@ -87,7 +87,7 @@ describe("social pipeline worker", () => {
   it("does not render style-specific css classes", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/twitter-card?templateId=core/data-base&title=Data+Story&caption=Signal+beats+noise"
+        "https://worker.test/template/twitter-card?templateId=core/bold-base&title=Data+Story&caption=Signal+beats+noise"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -119,7 +119,7 @@ describe("social pipeline worker", () => {
     expect(typeof body.catalog_version).toBe("string");
     expect(body.templates.length).toBeGreaterThan(0);
     expect(body.templates[0].version.length).toBeGreaterThan(0);
-    expect(body.templates_by_format["instagram-post"].length).toBeGreaterThan(0);
+    expect(body.templates_by_format["instagram-portrait"].length).toBeGreaterThan(0);
   });
 
   it("generates assets from direct plain-content endpoint", async () => {
@@ -188,13 +188,13 @@ describe("social pipeline worker", () => {
       ok: boolean;
       slug: string;
       image_source: { source: string };
-      assets: { instagram_post: { key: string } };
+      assets: { instagram_portrait: { key: string } };
     };
 
     expect(body.ok).toBe(true);
     expect(body.slug).toBe("test-pipeline-post");
     expect(body.image_source.source).toBe("feature");
-    expect(body.assets.instagram_post.key).toContain("instagram-post.png");
+    expect(body.assets.instagram_portrait.key).toContain("instagram-portrait.png");
   });
 
   it("supports selecting specific output formats from API", async () => {
@@ -255,7 +255,8 @@ describe("social pipeline worker", () => {
     const body = (await response.json()) as {
       requested_formats: string[];
       assets: {
-        instagram_post: unknown;
+        instagram_portrait: unknown;
+        instagram_square: unknown;
         instagram_story: unknown;
         twitter_card: { key: string } | null;
         linkedin_post: unknown;
@@ -265,7 +266,8 @@ describe("social pipeline worker", () => {
 
     expect(body.requested_formats).toEqual(["twitter-card"]);
     expect(body.assets.twitter_card?.key).toContain("twitter-card.png");
-    expect(body.assets.instagram_post).toBeNull();
+    expect(body.assets.instagram_portrait).toBeNull();
+    expect(body.assets.instagram_square).toBeNull();
     expect(body.assets.instagram_story).toBeNull();
     expect(body.assets.linkedin_post).toBeNull();
     expect(body.assets.carousel).toHaveLength(0);
@@ -320,7 +322,7 @@ describe("social pipeline worker", () => {
             mode: "none"
           },
           output: {
-            formats: ["instagram-post"]
+            formats: ["instagram-portrait"]
           }
         })
       }),
@@ -331,11 +333,11 @@ describe("social pipeline worker", () => {
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
       image_source: { source: string };
-      assets: { instagram_post: { key: string } | null };
+      assets: { instagram_portrait: { key: string } | null };
     };
 
     expect(body.image_source.source).toBe("none");
-    expect(body.assets.instagram_post?.key).toContain("instagram-post.png");
+    expect(body.assets.instagram_portrait?.key).toContain("instagram-portrait.png");
   });
 
   it("normalizes markdown captions and generic carousel headings", async () => {
@@ -376,7 +378,7 @@ describe("social pipeline worker", () => {
           title: "Social Media Asset Pipeline Worker",
           content: "# Social Media Asset Pipeline Worker\n\nTurn one post into multi-platform outputs.",
           output: {
-            formats: ["carousel-slide"],
+            formats: ["carousel-post"],
             carouselSlides: 3
           }
         })
