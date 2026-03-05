@@ -149,27 +149,6 @@
     },
     "generation": {
       "carousel_required_slides": 5,
-      "stock_topic_keywords": [
-        "travel",
-        "food",
-        "recipe",
-        "restaurant",
-        "coffee",
-        "city",
-        "beach",
-        "mountain",
-        "tech",
-        "software",
-        "app",
-        "gadget",
-        "camera",
-        "fitness",
-        "fashion",
-        "workspace",
-        "laptop",
-        "phone",
-        "coding"
-      ],
       "limits": {
         "post_text_max_chars": 14000,
         "direct_content_max_chars": 120000,
@@ -231,14 +210,36 @@
           "- hashtags: <hashtag_min_count>-<hashtag_max_count> relevant tags, each beginning with #, no spaces inside a tag.",
           "- image_prompt: optional BACKGROUND-ONLY art direction aligned with the campaign intent and selected templates (no text, no UI, no logos).",
           "- use_feature_image: boolean, true only if feature image is present and contextually aligned.",
+          "- stock_search_query: specific keywords for stock photo search (max 10 words, no quotes, no metadata, focus on specific subjects and locations).",
           "- slot_content: object of string values that MUST include every key from <required_slot_keys>.",
           "- apply these template composition directives exactly:",
           "<template_composition_directives>",
           "Output JSON only."
-        ]
+        ],
+        "template_planner": {
+          "system_prompt": [
+            "You are an expert template planner for social content automation."
+          ],
+          "user_instructions": [
+            "Choose one best template per requested format based on source content.",
+            "Rules:",
+            "- Return strict JSON only.",
+            "- Use only template ids listed under each format.",
+            "- Prefer templates whose slot requirements fit the content naturally.",
+            "- Ensure all requested formats have one selected template id."
+          ]
+        }
       },
       "image": {
         "default_model": "@cf/black-forest-labs/flux-1-schnell",
+        "prompt_fallback": "<title>, modern editorial photo, clean composition, natural lighting, no text overlay",
+        "prompt_composition": [
+          "<prompt_prefix>",
+          "Campaign title: <title>",
+          "Tags: <tags>",
+          "Scene description: <scene>",
+          "<negative_clauses>"
+        ],
         "prompt_prefix": [
           "Create one campaign-quality social background image that can be reused across square, portrait, and landscape crops.",
           "Use one clear focal subject, intentional negative space for headline placement, and brand-safe composition.",

@@ -265,7 +265,6 @@ const RATE_LIMIT_BUCKETS = new Map<string, { count: number; resetAt: number }>()
 const PROTECTED_ROUTE_SET = new Set<ProtectedRoute>(["preview", "catalog", "generate", "generate-from-content", "webhook"]);
 
 const DEFAULT_IMAGE_MODEL = PIPELINE_CONFIG.generation.image.default_model;
-const STOCK_TOPIC_PATTERN = createTopicKeywordPattern(PIPELINE_CONFIG.generation.stock_topic_keywords);
 const DEFAULT_CAROUSEL_SLIDES = PIPELINE_CONFIG.generation.carousel_required_slides;
 const TEMPLATE_KINDS = listTemplateKinds();
 const TEMPLATE_KIND_SET = new Set(TEMPLATE_KINDS);
@@ -1204,7 +1203,7 @@ async function chooseImageSource(
     if (!allowStock || !env.PEXELS_API_KEY?.trim()) {
       throw new HttpError(422, "Stock image mode requires enable_stock_image_search and PEXELS_API_KEY");
     }
-    const stockImage = await searchPexelsImage(post.title, env.PEXELS_API_KEY.trim(), security);
+    const stockImage = await searchPexelsImage(llmOutput.stock_search_query || post.title, env.PEXELS_API_KEY.trim(), security);
     if (!stockImage) {
       throw new HttpError(422, "Stock image mode did not return a usable image");
     }
@@ -1230,6 +1229,9 @@ async function chooseImageSource(
     return aiImage;
   }
 
+  // --- Auto mode prioritized logic ---
+
+  // 1. Prefer feature image if configured and LLM suggests it
   if (preferFeature && llmOutput.use_feature_image && featureImage.length > 0) {
     return {
       source: "feature",
@@ -1237,19 +1239,15 @@ async function chooseImageSource(
     };
   }
 
-  const topicText = `${post.title} ${(post.primary_tag?.name ?? "")} ${(post.tags ?? [])
-    .map((tag) => tag.name ?? "")
-    .join(" ")} ${prompt}`.toLowerCase();
-
-  const concreteTopic = STOCK_TOPIC_PATTERN ? STOCK_TOPIC_PATTERN.test(topicText) : false;
-
-  if (allowStock && concreteTopic && env.PEXELS_API_KEY?.trim()) {
-    const stockImage = await searchPexelsImage(post.title, env.PEXELS_API_KEY.trim(), security);
+  // 2. Priority: Search Stock (using intelligent LLM-generated query)
+  if (allowStock && env.PEXELS_API_KEY?.trim()) {
+    const stockImage = await searchPexelsImage(llmOutput.stock_search_query || post.title, env.PEXELS_API_KEY.trim(), security);
     if (stockImage) {
       return stockImage;
     }
   }
 
+  // 3. Fallback: Generate AI Image
   if (allowAi) {
     const aiImage = await generateAiImage(env, {
       prompt,
@@ -1265,6 +1263,7 @@ async function chooseImageSource(
     }
   }
 
+  // 4. Ultimate Fallback: Feature Image
   if (featureImage.length > 0) {
     return {
       source: "feature",
@@ -1278,16 +1277,16 @@ async function chooseImageSource(
   };
 }
 
-async function searchPexelsImage(title: string, apiKey: string, security: ResolvedSecurityConfig): Promise<SelectedImage | null> {
-  const query = title
+async function searchPexelsImage(query: string, apiKey: string, security: ResolvedSecurityConfig): Promise<SelectedImage | null> {
+  const stockQuery = query
     .replace(/[^a-zA-Z0-9\s]/g, " ")
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, PIPELINE_CONFIG.generation.limits.stock_query_term_max_count)
-    .join(" ");
+    .join(" ") || PIPELINE_CONFIG.generation.fallbacks.stock_search_query;
 
   const endpoint = `https://api.pexels.com/v1/search?query=${encodeURIComponent(
-    query || PIPELINE_CONFIG.generation.fallbacks.stock_search_query
+    stockQuery
   )}&per_page=1&orientation=landscape&size=large`;
 
   const response = await fetch(endpoint, {
@@ -1344,13 +1343,23 @@ async function generateAiImage(
     (PIPELINE_CONFIG.generation.image as unknown as { negative_clauses?: string[] }).negative_clauses ?? []
   ) as string[];
 
-  const imagePrompt = [
-    ...PIPELINE_CONFIG.generation.image.prompt_prefix,
-    args.postTitle ? `Campaign context title: ${args.postTitle}` : "",
-    args.topTags ? `Context tags: ${args.topTags}` : "",
-    `Scene: ${args.prompt}`,
-    ...negativeClauses
-  ]
+  const composition = (PIPELINE_CONFIG.generation.image as any).prompt_composition || [
+    "<prompt_prefix>",
+    "Campaign title: <title>",
+    "Tags: <tags>",
+    "Scene description: <scene>",
+    "<negative_clauses>"
+  ];
+
+  const imagePrompt = composition
+    .map((line: string) => {
+      let l = line.replace("<prompt_prefix>", PIPELINE_CONFIG.generation.image.prompt_prefix.join(" "));
+      l = l.replace("<negative_clauses>", negativeClauses.join(" "));
+      l = l.replace("<title>", args.postTitle || "");
+      l = l.replace("<tags>", args.topTags || "");
+      l = l.replace("<scene>", args.prompt);
+      return l;
+    })
     .filter(Boolean)
     .join(" ");
 
@@ -1741,18 +1750,7 @@ function resolveNotifyUrl(
   });
 }
 
-function createTopicKeywordPattern(keywords: readonly string[]): RegExp | null {
-  const safeKeywords = keywords
-    .map((keyword) => keyword.trim().toLowerCase())
-    .filter(Boolean)
-    .map((keyword) => keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
 
-  if (safeKeywords.length === 0) {
-    return null;
-  }
-
-  return new RegExp(`\\b(${safeKeywords.join("|")})\\b`, "i");
-}
 
 function normalizeSlotContent(
   value: unknown,

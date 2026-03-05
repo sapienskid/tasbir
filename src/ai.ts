@@ -22,6 +22,7 @@ export interface LlmOutput {
   carousel_slides: CarouselSlide[];
   hashtags: string[];
   image_prompt: string;
+  stock_search_query: string;
   use_feature_image: boolean;
   slot_content: Record<string, string>;
 }
@@ -75,6 +76,7 @@ function buildLlmJsonSchema(requiredSlotKeys: string[]): Record<string, unknown>
         items: { type: "string" }
       },
       image_prompt: { type: "string" },
+      stock_search_query: { type: "string" },
       use_feature_image: { type: "boolean" },
       slot_content: {
         type: "object",
@@ -92,6 +94,7 @@ function buildLlmJsonSchema(requiredSlotKeys: string[]): Record<string, unknown>
       "carousel_slides",
       "hashtags",
       "image_prompt",
+      "stock_search_query",
       "use_feature_image",
       "slot_content"
     ]
@@ -244,43 +247,35 @@ export async function chooseTemplateAssignments(args: {
     plainBody.length > PIPELINE_CONFIG.generation.limits.post_text_max_chars
       ? `${plainBody.slice(0, PIPELINE_CONFIG.generation.limits.post_text_max_chars)}...`
       : plainBody;
+
   const userBrief =
     typeof args.userPrompt === "string" && args.userPrompt.trim().length > 0
       ? `\n<user_brief>${args.userPrompt.trim()}</user_brief>`
       : "";
-
-  const prompt = [
-    "Choose one best template per requested format based on source content.",
-    "Rules:",
-    "- Return strict JSON only.",
-    "- Use only template ids listed under each format.",
-    "- Prefer templates whose slot requirements fit the content naturally.",
-    "- Ensure all requested formats have one selected template id.",
-    "",
-    "Requested formats and candidate templates:",
-    promptLines.join("\n\n"),
-    "",
-    "Source content:",
-    `<title>${args.post.title.trim()}</title>`,
-    `<excerpt>${excerpt || "(none)"}</excerpt>`,
-    "<body>",
-    postText,
-    "</body>",
-    userBrief
-  ]
-    .filter(Boolean)
-    .join("\n");
 
   try {
     const raw = await args.ai.run(textModel, {
       messages: [
         {
           role: "system",
-          content: "You are an expert template planner for social content automation."
+          content: PIPELINE_CONFIG.generation.llm.template_planner.system_prompt.join("\n")
         },
         {
           role: "user",
-          content: prompt
+          content: buildPromptTemplate(args.userPrompt, [
+            ...PIPELINE_CONFIG.generation.llm.template_planner.user_instructions,
+            "",
+            "Requested formats and candidate templates:",
+            promptLines.join("\n\n"),
+            "",
+            "Source content:",
+            `<title>${args.post.title.trim()}</title>`,
+            `<excerpt>${excerpt || "(none)"}</excerpt>`,
+            "<body>",
+            postText,
+            "</body>",
+            userBrief
+          ])
         }
       ],
       response_format: {
@@ -456,8 +451,12 @@ function normalizeLlmOutput(
   const rawHashtags = Array.isArray(payload.hashtags) ? payload.hashtags : [];
   const hashtags = normalizeHashtags(rawHashtags, args.title, cleanedFallbackText);
 
-  const imagePromptFallback = `${args.title}, modern editorial photo, clean composition, natural lighting, no text overlay`;
+  const imagePromptFallbackTemplate = (PIPELINE_CONFIG.generation.image as any).prompt_fallback || "<title>, modern editorial photo, clean composition, natural lighting, no text overlay";
+  const imagePromptFallback = imagePromptFallbackTemplate.replace("<title>", args.title);
   const imagePrompt = ensureLength(toText(payload.image_prompt), limits.image_prompt_max_chars, imagePromptFallback);
+
+  const stockSearchQueryFallback = args.title.replace(/[^a-zA-Z0-9\s]/g, " ").slice(0, 100);
+  const stockSearchQuery = ensureLength(toText(payload.stock_search_query), 200, stockSearchQueryFallback);
 
   const useFeatureImage = args.hasFeatureImage && Boolean(payload.use_feature_image);
   const slotContent = args.normalizeSlotContent(payload.slot_content, {
@@ -473,6 +472,7 @@ function normalizeLlmOutput(
     carousel_slides: normalizedSlides,
     hashtags,
     image_prompt: imagePrompt,
+    stock_search_query: stockSearchQuery,
     use_feature_image: useFeatureImage,
     slot_content: slotContent
   };
