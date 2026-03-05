@@ -11,6 +11,7 @@ import {
   getTemplateDimensions,
   isTemplateKind,
   listRequiredSlotKeys,
+  listTemplateFields,
   listTemplateKinds,
   previewParamsFromUrl,
   resolveTemplateId,
@@ -155,6 +156,7 @@ interface StoredAsset {
 interface TemplatePlan {
   templateIds: Partial<Record<TemplateKind, string>>;
   requiredSlotKeys: string[];
+  slotFields: import("./templates").TemplateFieldDeclaration[];
 }
 
 interface GenerationResult {
@@ -169,7 +171,8 @@ interface GenerationResult {
   };
   llm_output: LlmOutput;
   assets: {
-    instagram_post: StoredAsset | null;
+    instagram_portrait: StoredAsset | null;
+    instagram_square: StoredAsset | null;
     instagram_story: StoredAsset | null;
     twitter_card: StoredAsset | null;
     linkedin_post: StoredAsset | null;
@@ -268,16 +271,14 @@ const TEMPLATE_KINDS = listTemplateKinds();
 const TEMPLATE_KIND_SET = new Set(TEMPLATE_KINDS);
 const TEMPLATE_REGISTRY = PIPELINE_CONFIG.templates as ReadonlyArray<{
   id: string;
-  format?: string;
-  formats?: readonly string[];
+  label: string;
+  description?: string;
 }>;
+// All discovered templates support all formats
+const ALL_TEMPLATE_IDS = new Set(TEMPLATE_REGISTRY.map((t) => t.id));
 const TEMPLATE_IDS_BY_FORMAT: Record<TemplateKind, Set<string>> = TEMPLATE_KINDS.reduce(
   (acc, format) => {
-    acc[format] = new Set(
-      TEMPLATE_REGISTRY
-        .filter((template) => templateSupportsFormat(template, format))
-        .map((template) => template.id)
-    );
+    acc[format] = ALL_TEMPLATE_IDS;
     return acc;
   },
   {} as Record<TemplateKind, Set<string>>
@@ -405,36 +406,37 @@ function handleTemplatePreview(url: URL): Response {
 
 function handleTemplateCatalog(): Response {
   const templateFileMap = TEMPLATE_FILES as Record<string, string>;
+  const allKinds = listTemplateKinds();
+
   const templates = (PIPELINE_CONFIG.templates as ReadonlyArray<{
     id: string;
-    format?: TemplateKind;
-    formats?: readonly TemplateKind[];
     label: string;
     description?: string;
     file: string;
   }>).map((template) => {
     const templateMarkup = templateFileMap[template.id] ?? "";
-    const formats = resolveTemplateFormats(template);
+    const fields = listTemplateFields(template.id);
     return {
       id: template.id,
-      format: formats[0],
-      formats,
       label: template.label,
       description: template.description ?? "",
       file: template.file,
+      fields,
+      required_slot_keys: fields.map((f) => f.key),
       version: stableShortHash(`${template.id}:${templateMarkup}`)
     };
   });
 
-  const templatesByFormat = listTemplateKinds().reduce(
+  // All templates support all formats in the auto-discovery model
+  const templatesByFormat = allKinds.reduce(
     (acc, kind) => {
-      acc[kind] = templates.filter((template) => template.formats.includes(kind)).map((template) => template.id);
+      acc[kind] = templates.map((t) => t.id);
       return acc;
     },
     {} as Record<TemplateKind, string[]>
   );
 
-  const formats = listTemplateKinds().map((kind) => ({
+  const formats = allKinds.map((kind) => ({
     id: kind,
     width: PIPELINE_CONFIG.formats[kind].width,
     height: PIPELINE_CONFIG.formats[kind].height,
@@ -468,32 +470,6 @@ function matchTemplateKind(pathname: string): TemplateKind | null {
   return isTemplateKind(candidate) ? candidate : null;
 }
 
-function resolveTemplateFormats(template: {
-  format?: string;
-  formats?: readonly string[];
-}): TemplateKind[] {
-  const fromArray = Array.isArray(template.formats) ? template.formats : [];
-  const fromSingle = typeof template.format === "string" ? [template.format] : [];
-  const normalized = [...fromArray, ...fromSingle]
-    .map((format) => (typeof format === "string" ? format.trim() : ""))
-    .filter(isTemplateKind);
-
-  if (normalized.length > 0) {
-    return [...new Set(normalized)];
-  }
-
-  return [...TEMPLATE_KINDS];
-}
-
-function templateSupportsFormat(
-  template: {
-    format?: string;
-    formats?: readonly string[];
-  },
-  format: TemplateKind
-): boolean {
-  return resolveTemplateFormats(template).includes(format);
-}
 
 function resolveSecurityConfig(env: Env): ResolvedSecurityConfig {
   const raw = ((PIPELINE_CONFIG as unknown as { security?: Partial<SecurityConfig> }).security ?? {}) as Partial<SecurityConfig>;
@@ -850,6 +826,7 @@ async function runPipelineFromPost(
       post,
       requiredCarouselSlides: outputPlan.carouselSlides,
       requiredSlotKeys: templatePlan.requiredSlotKeys,
+      slotFields: templatePlan.slotFields,
       userPrompt: variantPrompt,
       llmOverrides: brandInput.llm,
       normalizeSlotContent
@@ -981,17 +958,19 @@ async function buildTemplatePlan(args: {
 
   const llmSelected = formatsForLlm.length
     ? await chooseTemplateAssignments({
-        ai: args.ai,
-        llmModel: args.llmModel,
-        post: args.post,
-        requestedFormats: formatsForLlm,
-        templateCandidates,
-        userPrompt: args.userPrompt
-      })
+      ai: args.ai,
+      llmModel: args.llmModel,
+      post: args.post,
+      requestedFormats: formatsForLlm,
+      templateCandidates,
+      userPrompt: args.userPrompt
+    })
     : {};
 
   const templateIds: Partial<Record<TemplateKind, string>> = {};
   const requiredSlotKeySet = new Set<string>();
+  const slotFieldMap = new Map<string, import("./templates").TemplateFieldDeclaration>();
+
   for (const format of requestedFormats) {
     const selectedTemplateId = preselected[format] ?? llmSelected[format];
     const resolvedTemplateId = resolveTemplateId(format, {
@@ -1004,35 +983,34 @@ async function buildTemplatePlan(args: {
     });
     for (const key of requiredForTemplate) {
       const normalized = normalizeSlotKey(key);
-      if (normalized) {
-        requiredSlotKeySet.add(normalized);
+      if (normalized) requiredSlotKeySet.add(normalized);
+    }
+
+    // Collect field declarations (with hints) from the selected template
+    for (const field of listTemplateFields(resolvedTemplateId)) {
+      if (!slotFieldMap.has(field.key)) {
+        slotFieldMap.set(field.key, field);
       }
     }
   }
 
   return {
     templateIds,
-    requiredSlotKeys: [...requiredSlotKeySet]
+    requiredSlotKeys: [...requiredSlotKeySet],
+    slotFields: [...slotFieldMap.values()]
   };
 }
 
 function buildTemplateCandidates(formats: TemplateKind[]): Record<string, TemplateChoiceCandidate[]> {
-  const templates = PIPELINE_CONFIG.templates as ReadonlyArray<{
-    id: string;
-    format?: TemplateKind;
-    formats?: readonly TemplateKind[];
-    label: string;
-    description?: string;
-  }>;
-
   const candidates: Record<string, TemplateChoiceCandidate[]> = {};
   for (const format of formats) {
-    const byFormat = templates.filter((template) => templateSupportsFormat(template, format));
-    candidates[format] = byFormat.map((template) => ({
+    // All templates are available for all formats — pass the full list as candidates
+    candidates[format] = TEMPLATE_REGISTRY.map((template) => ({
       id: template.id,
       label: template.label,
       description: template.description,
-      requiredSlotKeys: listRequiredSlotKeys(format, { templateId: template.id })
+      requiredSlotKeys: listRequiredSlotKeys(format, { templateId: template.id }),
+      fields: listTemplateFields(template.id)
     }));
   }
   return candidates;
@@ -1061,14 +1039,14 @@ function buildPostFromDirectContent(input: DirectContentRequestBody, security: R
   const url = input.url?.trim() || `https://local.test/${derivedSlug}/`;
   const featureImage = input.feature_image
     ? sanitizeImageUrl(
-        input.feature_image,
-        security,
-        "feature_image",
-        {
-          allowDataUrl: false,
-          requireAllowedHost: false
-        }
-      )
+      input.feature_image,
+      security,
+      "feature_image",
+      {
+        allowDataUrl: false,
+        requireAllowedHost: false
+      }
+    )
     : undefined;
 
   return {
@@ -1187,9 +1165,9 @@ async function chooseImageSource(
   const prompt = ensureLength(options?.prompt ?? llmOutput.image_prompt, PIPELINE_CONFIG.generation.limits.image_prompt_max_chars, llmOutput.image_prompt);
   const featureImage = post.feature_image
     ? sanitizeImageUrl(post.feature_image, security, "feature_image", {
-        allowDataUrl: false,
-        requireAllowedHost: false
-      })
+      allowDataUrl: false,
+      requireAllowedHost: false
+    })
     : "";
   const preferFeature = options?.preferFeature ?? PIPELINE_CONFIG.features.prefer_feature_image;
   const allowStock = options?.allowStock ?? PIPELINE_CONFIG.features.enable_stock_image_search;
@@ -1468,103 +1446,125 @@ async function renderAndStoreAssets(
   const browser = await puppeteer.launch(env.BROWSER, { keep_alive: PIPELINE_CONFIG.runtime.browser_keep_alive_ms });
 
   try {
-    const instagramPostAsset = args.requestedFormats.has("instagram-post")
+    const instagramPortraitAsset = args.requestedFormats.has("instagram-portrait")
       ? await renderStoreSingleAsset(env, browser, {
-          key: `${keyPrefix}/instagram-post.png`,
-          kind: "instagram-post",
-          params: {
-            ...commonTemplateValues,
-            templateId: args.templateIds?.["instagram-post"],
-            slots: {
-              ...sharedSlots,
-              headline: sharedSlots.headline || args.postTitle,
-              subheadline: sharedSlots.subheadline || args.llmOutput.instagram_caption
-            },
-            caption: withHashtags(
-              args.llmOutput.instagram_caption,
-              args.llmOutput.hashtags,
-              PIPELINE_CONFIG.formats["instagram-post"].hashtag_count
-            )
+        key: `${keyPrefix}/instagram-portrait.png`,
+        kind: "instagram-portrait",
+        params: {
+          ...commonTemplateValues,
+          templateId: args.templateIds?.["instagram-portrait"],
+          slots: {
+            ...sharedSlots,
+            headline: sharedSlots.headline || args.postTitle,
+            subheadline: sharedSlots.subheadline || args.llmOutput.instagram_caption
           },
-          formatLabel: "instagram-post"
-        })
+          caption: withHashtags(
+            args.llmOutput.instagram_caption,
+            args.llmOutput.hashtags,
+            PIPELINE_CONFIG.formats["instagram-portrait"].hashtag_count
+          )
+        },
+        formatLabel: "instagram-portrait"
+      })
+      : null;
+
+    const instagramSquareAsset = args.requestedFormats.has("instagram-square")
+      ? await renderStoreSingleAsset(env, browser, {
+        key: `${keyPrefix}/instagram-square.png`,
+        kind: "instagram-square",
+        params: {
+          ...commonTemplateValues,
+          templateId: args.templateIds?.["instagram-square"],
+          slots: {
+            ...sharedSlots,
+            headline: sharedSlots.headline || args.postTitle,
+            subheadline: sharedSlots.subheadline || args.llmOutput.instagram_caption
+          },
+          caption: withHashtags(
+            args.llmOutput.instagram_caption,
+            args.llmOutput.hashtags,
+            PIPELINE_CONFIG.formats["instagram-square"].hashtag_count
+          )
+        },
+        formatLabel: "instagram-square"
+      })
       : null;
 
     const instagramStoryAsset = args.requestedFormats.has("instagram-story")
       ? await renderStoreSingleAsset(env, browser, {
-          key: `${keyPrefix}/instagram-story.png`,
-          kind: "instagram-story",
-          params: {
-            ...commonTemplateValues,
-            templateId: args.templateIds?.["instagram-story"],
-            slots: {
-              ...sharedSlots,
-              headline: sharedSlots.headline || args.postTitle,
-              supporting_line: sharedSlots.supporting_line || args.llmOutput.instagram_caption
-            },
-            caption: withHashtags(
-              args.llmOutput.instagram_caption,
-              args.llmOutput.hashtags,
-              PIPELINE_CONFIG.formats["instagram-story"].hashtag_count
-            )
+        key: `${keyPrefix}/instagram-story.png`,
+        kind: "instagram-story",
+        params: {
+          ...commonTemplateValues,
+          templateId: args.templateIds?.["instagram-story"],
+          slots: {
+            ...sharedSlots,
+            headline: sharedSlots.headline || args.postTitle,
+            supporting_line: sharedSlots.supporting_line || args.llmOutput.instagram_caption
           },
-          formatLabel: "instagram-story"
-        })
+          caption: withHashtags(
+            args.llmOutput.instagram_caption,
+            args.llmOutput.hashtags,
+            PIPELINE_CONFIG.formats["instagram-story"].hashtag_count
+          )
+        },
+        formatLabel: "instagram-story"
+      })
       : null;
 
     const twitterCardAsset = args.requestedFormats.has("twitter-card")
       ? await renderStoreSingleAsset(env, browser, {
-          key: `${keyPrefix}/twitter-card.png`,
-          kind: "twitter-card",
-          params: {
-            ...commonTemplateValues,
-            templateId: args.templateIds?.["twitter-card"],
-            slots: {
-              ...sharedSlots,
-              headline: sharedSlots.headline || args.postTitle,
-              supporting_line: sharedSlots.supporting_line || args.llmOutput.twitter_caption
-            },
-            caption: withHashtags(
-              args.llmOutput.twitter_caption,
-              args.llmOutput.hashtags,
-              PIPELINE_CONFIG.formats["twitter-card"].hashtag_count
-            )
+        key: `${keyPrefix}/twitter-card.png`,
+        kind: "twitter-card",
+        params: {
+          ...commonTemplateValues,
+          templateId: args.templateIds?.["twitter-card"],
+          slots: {
+            ...sharedSlots,
+            headline: sharedSlots.headline || args.postTitle,
+            supporting_line: sharedSlots.supporting_line || args.llmOutput.twitter_caption
           },
-          formatLabel: "twitter-card"
-        })
+          caption: withHashtags(
+            args.llmOutput.twitter_caption,
+            args.llmOutput.hashtags,
+            PIPELINE_CONFIG.formats["twitter-card"].hashtag_count
+          )
+        },
+        formatLabel: "twitter-card"
+      })
       : null;
 
     const linkedInAsset = args.requestedFormats.has("linkedin-post")
       ? await renderStoreSingleAsset(env, browser, {
-          key: `${keyPrefix}/linkedin-post.png`,
-          kind: "linkedin-post",
-          params: {
-            ...commonTemplateValues,
-            templateId: args.templateIds?.["linkedin-post"],
-            slots: {
-              ...sharedSlots,
-              headline: sharedSlots.headline || args.postTitle,
-              supporting_line: sharedSlots.supporting_line || args.llmOutput.linkedin_caption
-            },
-            caption: withHashtags(
-              args.llmOutput.linkedin_caption,
-              args.llmOutput.hashtags,
-              PIPELINE_CONFIG.formats["linkedin-post"].hashtag_count
-            )
+        key: `${keyPrefix}/linkedin-post.png`,
+        kind: "linkedin-post",
+        params: {
+          ...commonTemplateValues,
+          templateId: args.templateIds?.["linkedin-post"],
+          slots: {
+            ...sharedSlots,
+            headline: sharedSlots.headline || args.postTitle,
+            supporting_line: sharedSlots.supporting_line || args.llmOutput.linkedin_caption
           },
-          formatLabel: "linkedin-post"
-        })
+          caption: withHashtags(
+            args.llmOutput.linkedin_caption,
+            args.llmOutput.hashtags,
+            PIPELINE_CONFIG.formats["linkedin-post"].hashtag_count
+          )
+        },
+        formatLabel: "linkedin-post"
+      })
       : null;
 
     const carousel: StoredAsset[] = [];
-    if (args.requestedFormats.has("carousel-slide")) {
+    if (args.requestedFormats.has("carousel-post")) {
       for (const [index, slide] of args.llmOutput.carousel_slides.entries()) {
         const slideAsset = await renderStoreSingleAsset(env, browser, {
-          key: `${keyPrefix}/carousel-slide-${index + 1}.png`,
-          kind: "carousel-slide",
+          key: `${keyPrefix}/carousel-post-${index + 1}.png`,
+          kind: "carousel-post",
           params: {
             ...commonTemplateValues,
-            templateId: args.templateIds?.["carousel-slide"],
+            templateId: args.templateIds?.["carousel-post"],
             slots: {
               ...sharedSlots,
               headline: slide.heading,
@@ -1578,15 +1578,16 @@ async function renderAndStoreAssets(
             body: slide.body,
             slideNumber: index + 1,
             totalSlides: args.llmOutput.carousel_slides.length
-          },
-          formatLabel: `carousel-slide-${index + 1}`
+          } as CarouselTemplateParams,
+          formatLabel: `carousel-post-${index + 1}`
         });
         carousel.push(slideAsset);
       }
     }
 
     return {
-      instagram_post: instagramPostAsset,
+      instagram_portrait: instagramPortraitAsset,
+      instagram_square: instagramSquareAsset,
       instagram_story: instagramStoryAsset,
       twitter_card: twitterCardAsset,
       linkedin_post: linkedInAsset,
@@ -2142,15 +2143,15 @@ function validateWebhookPayload(input: unknown): GhostWebhookPayload {
     url: optionalString(body.url, "payload.url", 500),
     post: post
       ? {
-          slug: optionalString(post.slug, "payload.post.slug", 200),
-          url: optionalString(post.url, "payload.post.url", 500),
-          current: current
-            ? {
-                slug: optionalString(current.slug, "payload.post.current.slug", 200),
-                url: optionalString(current.url, "payload.post.current.url", 500)
-              }
-            : undefined
-        }
+        slug: optionalString(post.slug, "payload.post.slug", 200),
+        url: optionalString(post.url, "payload.post.url", 500),
+        current: current
+          ? {
+            slug: optionalString(current.slug, "payload.post.current.slug", 200),
+            url: optionalString(current.url, "payload.post.current.url", 500)
+          }
+          : undefined
+      }
       : undefined
   };
 }
