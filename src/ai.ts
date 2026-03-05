@@ -1,5 +1,5 @@
 import { listTemplateCompositionDirectives } from "./template-theme";
-import { listSlotHints } from "./templates";
+import { type TemplateFieldDeclaration } from "./templates";
 import { PIPELINE_CONFIG } from "./generated/template-assets";
 
 export interface LlmPromptOverrides {
@@ -41,6 +41,7 @@ export interface TemplateChoiceCandidate {
   label: string;
   description?: string;
   requiredSlotKeys: string[];
+  fields?: TemplateFieldDeclaration[];
 }
 
 const DEFAULT_LLM_MODEL = PIPELINE_CONFIG.generation.llm.default_model;
@@ -103,16 +104,15 @@ export async function generateStructuredCopy(args: {
   post: LlmSourcePost;
   requiredCarouselSlides: number;
   requiredSlotKeys: string[];
+  slotFields?: TemplateFieldDeclaration[];
   userPrompt?: string;
   llmOverrides?: LlmPromptOverrides;
   normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string; requiredSlotKeys: string[] }) => Record<string, string>;
 }): Promise<LlmOutput> {
   const textModel = (args.llmModel || DEFAULT_LLM_MODEL) as keyof AiModels;
-  const requiredSlotKeySet = new Set(args.requiredSlotKeys.map((key) => key.trim().toLowerCase()).filter(Boolean));
-  const slotHints = listSlotHints()
-    .filter((slot) => requiredSlotKeySet.size === 0 || requiredSlotKeySet.has(slot.id))
-    .map((slot) => `${slot.id}: ${slot.hint}`)
-    .join(" | ");
+
+  // Build slot hint lines from field declarations (preferred) or fall back to key list only
+  const slotHints = buildSlotHintLines(args.requiredSlotKeys, args.slotFields);
 
   const limits = PIPELINE_CONFIG.generation.limits;
   const templateCompositionPromptHints = listTemplateCompositionDirectives()
@@ -228,10 +228,11 @@ export async function chooseTemplateAssignments(args: {
     const candidates = args.templateCandidates[format] ?? [];
     const candidateLines = candidates
       .map((candidate) => {
-        const slotSummary =
-          candidate.requiredSlotKeys.length > 0 ? candidate.requiredSlotKeys.join(", ") : "(no explicit SLOT keys)";
+        const fieldSummary = candidate.fields && candidate.fields.length > 0
+          ? candidate.fields.map((f) => `${f.key}(${f.type})`).join(", ")
+          : candidate.requiredSlotKeys.length > 0 ? candidate.requiredSlotKeys.join(", ") : "(no explicit SLOT keys)";
         const description = candidate.description ? ` - ${candidate.description}` : "";
-        return `  - ${candidate.id}: ${candidate.label}${description}; slots: ${slotSummary}`;
+        return `  - ${candidate.id}: ${candidate.label}${description}; fields: ${fieldSummary}`;
       })
       .join("\n");
     return `format: ${format}\n${candidateLines}`;
@@ -879,4 +880,35 @@ function ensureLength(value: string, max: number, fallback: string): string {
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.min(max, Math.max(min, numeric));
+}
+
+/**
+ * Build a compact slot hint string for the LLM prompt.
+ * Uses field declarations (with `hint` and `type`) when provided,
+ * otherwise falls back to bare key names so the LLM can still attempt to fill them.
+ *
+ * Output example:
+ *   "quote_text(text): The quote or pull-quote text | quote_author(text): Name of person quoted"
+ */
+function buildSlotHintLines(
+  requiredSlotKeys: string[],
+  fields?: TemplateFieldDeclaration[]
+): string {
+  if (!requiredSlotKeys.length) return "";
+
+  const fieldMap = new Map<string, TemplateFieldDeclaration>(
+    (fields ?? []).map((f) => [f.key.trim().toLowerCase(), f])
+  );
+
+  return requiredSlotKeys
+    .map((key) => {
+      const normalized = key.trim().toLowerCase();
+      const field = fieldMap.get(normalized);
+      if (field) {
+        const defaultNote = field.default ? ` (default: "${field.default}")` : "";
+        return `${field.key}(${field.type}): ${field.hint}${defaultNote}`;
+      }
+      return `${key}: fill with relevant copy`;
+    })
+    .join(" | ");
 }
