@@ -8,7 +8,7 @@
 @slot publish_date | text | Publish date text | January 2026
 @slot media_caption | text | Caption or annotation for lower media zone | Visual context placeholder
 -->
-<div class="content-shell template-split-copy-media {{ALIGN_CLASS}}">
+<div class="content-shell template-split-copy-media template-inline-media {{ALIGN_CLASS}}">
   {{HEADER}}
   <div class="content-panel {{POSITION_CLASS}}">
     <div class="split-copy-stack">
@@ -19,7 +19,9 @@
         <span class="editorial-meta">{{SLOT:publish_date}}</span>
       </div>
     </div>
-    <div class="split-media-band flow-after-section">
+    <div class="split-media-band">
+      <div class="split-media-image" style="background-image: url('{{IMAGE_URL}}');"></div>
+      <div class="split-media-overlay"></div>
       <div class="split-media-caption word-safe">{{SLOT:media_caption}}</div>
     </div>
     {{FOOTER}}

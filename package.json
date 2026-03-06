@@ -11,6 +11,7 @@
     "build:templates": "node ./scripts/embed-template-assets.mjs",
     "build:assets": "pnpm run build:templates",
     "render:previews": "node ./scripts/render-template-previews.mjs",
+    "render:previews:ig-portrait": "node ./scripts/render-instagram-portrait-previews.mjs",
     "test": "vitest run"
   },
   "devDependencies": {

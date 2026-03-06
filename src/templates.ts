@@ -157,6 +157,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const format = PIPELINE_CONFIG.formats[kind];
   const selectedTemplate = selectTemplateDefinition(kind, params.templateId);
   const control = resolveTemplateControl(kind, params.design);
+  const safeImageUrl = escapeHtml(params.imageUrl);
 
   const header = renderTopBar(
     kind,
@@ -174,6 +175,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     CAPTION: escapeHtml(params.caption),
     HEADING: escapeHtml(kind === "carousel-post" ? (params as CarouselTemplateParams).heading : params.title),
     BODY: escapeHtml(kind === "carousel-post" ? (params as CarouselTemplateParams).body : params.caption),
+    IMAGE_URL: safeImageUrl,
     BRAND_NAME: escapeHtml(params.brandName),
     HEADER: header,
     FOOTER: footer,
@@ -184,6 +186,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
 
   const templateMarkup = loadTemplateMarkup(selectedTemplate.id);
   const frameTone = detectFrameTone(templateMarkup);
+  const visualLayers = resolveVisualLayerSettings(templateMarkup);
   const content = interpolateTemplate(templateMarkup, tokens, slotValues);
 
   return renderFrame(
@@ -194,7 +197,8 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
       params,
       control,
       content,
-      frameTone
+      frameTone,
+      visualLayers
     },
     selectedTemplate.id
   );
@@ -420,6 +424,7 @@ function renderFrame(
     control: ResolvedTemplateControl;
     content: string;
     frameTone: FrameTone;
+    visualLayers: VisualLayerSettings;
   },
   templateId: string
 ): string {
@@ -439,8 +444,7 @@ function renderFrame(
   const safeTitle = escapeHtml(args.params.title);
   const safeImageUrl = escapeHtml(args.params.imageUrl.trim());
   const hasImage = safeImageUrl.length > 0;
-  const visualLayers = resolveVisualLayerSettings();
-  const shouldRenderBackgroundImage = hasImage && visualLayers.useBackgroundImageOnly;
+  const shouldRenderBackgroundImage = hasImage && args.visualLayers.useBackgroundImageOnly;
   const isDataImage = safeImageUrl.startsWith("data:image/");
   const imageFilter = isDataImage ? "blur(1.8px) saturate(0.88)" : "none";
   const imageTransform = isDataImage ? "scale(1.04)" : "none";
@@ -473,7 +477,7 @@ function renderFrame(
   if (typeof args.control.imageOpacity === "number") {
     rootVars.push(`--frame-image-opacity:${args.control.imageOpacity}`);
   }
-  if (!args.control.showDecorLayers || !visualLayers.useHtmlDecorLayers) {
+  if (!args.control.showDecorLayers || !args.visualLayers.useHtmlDecorLayers) {
     rootVars.push("--frame-grain-opacity:0");
   }
   const rootStyle = `width: ${args.width}px; height: ${args.height}px; ${rootVars.join(";")}`;
@@ -510,7 +514,7 @@ interface VisualLayerSettings {
   useHtmlDecorLayers: boolean;
 }
 
-function resolveVisualLayerSettings(): VisualLayerSettings {
+function resolveVisualLayerSettings(templateMarkup: string): VisualLayerSettings {
   const defaults: VisualLayerSettings = {
     useBackgroundImageOnly: DEFAULT_VISUAL_LAYERS.useBackgroundImageOnly,
     useHtmlDecorLayers: DEFAULT_VISUAL_LAYERS.useHtmlDecorLayers
@@ -525,14 +529,17 @@ function resolveVisualLayerSettings(): VisualLayerSettings {
     };
   }).render;
   const visual = renderConfig?.visual_layers;
-  if (!visual) {
-    return defaults;
+  const configured: VisualLayerSettings = {
+    useBackgroundImageOnly: visual?.use_background_image_only ?? defaults.useBackgroundImageOnly,
+    useHtmlDecorLayers: visual?.use_html_decor_layers ?? defaults.useHtmlDecorLayers
+  };
+
+  // Templates can opt into inline media regions and disable global background-image rendering.
+  if (/\btemplate-inline-media\b/i.test(templateMarkup)) {
+    configured.useBackgroundImageOnly = false;
   }
 
-  return {
-    useBackgroundImageOnly: visual.use_background_image_only ?? defaults.useBackgroundImageOnly,
-    useHtmlDecorLayers: visual.use_html_decor_layers ?? defaults.useHtmlDecorLayers
-  };
+  return configured;
 }
 
 function renderTopBar(

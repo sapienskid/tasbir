@@ -2,7 +2,7 @@
 
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
-import { relative, resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
@@ -15,6 +15,8 @@ const outDir = resolve(projectRoot, process.env.OUT_DIR?.trim() || "artifacts/pr
 const chromeBin = process.env.CHROME_BIN?.trim() || "google-chrome-stable";
 const magickBin = process.env.MAGICK_BIN?.trim() || "magick";
 const viewportPadding = Number.parseInt(process.env.PREVIEW_VIEWPORT_PADDING || "140", 10);
+const previewImageUrl = process.env.PREVIEW_IMAGE_URL?.trim() || "";
+const formatOnly = process.env.FORMAT_ONLY?.trim() || "";
 
 const apiKey = process.env.API_KEY?.trim() || (await readApiKeyFromDevVars(resolve(projectRoot, ".dev.vars")));
 if (!apiKey) {
@@ -30,7 +32,13 @@ const catalog = await fetchJson(`${baseUrl}/template-catalog`, {
   }
 });
 
-const formats = normalizeFormats(catalog.formats);
+const allFormats = normalizeFormats(catalog.formats);
+const formats = formatOnly
+  ? allFormats.filter((format) => format.id === formatOnly)
+  : allFormats;
+if (formatOnly && formats.length === 0) {
+  throw new Error(`FORMAT_ONLY=${formatOnly} did not match any catalog format`);
+}
 const templatesByFormat = normalizeTemplatesByFormat(catalog.templates_by_format);
 const templateMap = normalizeTemplateMap(catalog.templates);
 const generatedAtIso = new Date().toISOString();
@@ -71,6 +79,11 @@ for (const format of formats) {
     const htmlPath = resolve(htmlDir, `${baseName}.html`);
     const pngPath = resolve(pngDir, `${baseName}.png`);
     const rawPath = resolve(pngDir, `${baseName}.raw.png`);
+    const metaPath = resolve(metaDir, `${baseName}.meta.txt`);
+
+    await mkdir(dirname(htmlPath), { recursive: true });
+    await mkdir(dirname(rawPath), { recursive: true });
+    await mkdir(dirname(metaPath), { recursive: true });
 
     const html = await fetchText(
       buildTemplatePreviewUrl(baseUrl, format.id, {
@@ -81,6 +94,7 @@ for (const format of formats) {
         heading: "One source article, many coherent outputs",
         body:
           "This preview intentionally uses longer narrative copy to test text wrapping, line rhythm, and readability boundaries without breaking the frame structure or token-driven layout behavior.",
+        imageUrl: previewImageUrl,
         brandName: "Tasbir Blog",
         brandingColor: "#111111",
         slots: {
@@ -141,7 +155,6 @@ for (const format of formats) {
       `width=${format.width}`,
       `height=${format.height}`
     ].join("\n");
-    const metaPath = resolve(metaDir, `${baseName}.meta.txt`);
     await writeFile(metaPath, `${summary}\n`, "utf8");
     manifest.formats[format.id].templates.push({
       id: templateId,
@@ -305,6 +318,9 @@ function buildTemplatePreviewUrl(base, format, args) {
   }
   if (args.body) {
     url.searchParams.set("body", args.body);
+  }
+  if (args.imageUrl) {
+    url.searchParams.set("imageUrl", args.imageUrl);
   }
   if (args.brandName) {
     url.searchParams.set("brandName", args.brandName);

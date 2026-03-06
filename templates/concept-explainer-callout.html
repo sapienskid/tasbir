@@ -10,16 +10,22 @@
 @slot corner_item_top | text | Top-right circular item label | Field sample
 @slot corner_item_bottom | text | Bottom-right circular item label | Lab culture
 -->
-<div class="content-shell template-concept-explainer {{ALIGN_CLASS}}">
+<div class="content-shell template-concept-explainer template-inline-media {{ALIGN_CLASS}}">
   {{HEADER}}
   <div class="content-panel {{POSITION_CLASS}}">
-    <div class="topic-chip">{{SLOT:topic_label}}</div>
-    <h1 class="heading-primary flow-after-heading content-limit text-balance word-safe">{{HEADING}}</h1>
-    <p class="body-secondary flow-after-heading caption-limit word-safe">{{BODY}}</p>
-    <div class="concept-callout flow-after-section">
-      <p class="body-secondary word-safe">{{SLOT:callout_text}}</p>
+    <div class="concept-media-band">
+      <div class="concept-media-image" style="background-image: url('{{IMAGE_URL}}');"></div>
+      <div class="concept-media-overlay"></div>
     </div>
-    <p class="concept-support-note flow-after-heading word-safe">{{SLOT:support_note}}</p>
+    <div class="concept-content">
+      <div class="topic-chip">{{SLOT:topic_label}}</div>
+      <h1 class="heading-primary flow-after-heading content-limit text-balance word-safe">{{HEADING}}</h1>
+      <p class="body-secondary flow-after-heading caption-limit word-safe">{{BODY}}</p>
+      <div class="concept-callout flow-after-section">
+        <p class="body-secondary word-safe">{{SLOT:callout_text}}</p>
+      </div>
+      <p class="concept-support-note flow-after-heading word-safe">{{SLOT:support_note}}</p>
+    </div>
     <div class="concept-corners">
       <span class="corner-chip corner-chip--top">{{SLOT:corner_item_top}}</span>
       <span class="corner-chip corner-chip--bottom">{{SLOT:corner_item_bottom}}</span>
