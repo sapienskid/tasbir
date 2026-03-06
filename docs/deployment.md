@@ -75,10 +75,10 @@ Health check:
 curl https://<your-worker-domain>/health
 ```
 
-Template catalog check:
+Template preview check:
 
 ```bash
-curl "https://<your-worker-domain>/template-catalog" -H "x-api-key: <api-key>"
+curl "https://<your-worker-domain>/template/instagram-square?templateId=layout/statement-cta&title=Deploy%20Check&caption=Template%20route%20ok" -H "x-api-key: <api-key>"
 ```
 
 ## 6. Observe

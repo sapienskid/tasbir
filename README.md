@@ -156,14 +156,7 @@ Local browser workflow (template-only, no deploy dependency):
 pnpm run dev:design
 ```
 
-Then open one of the local review pages:
-
-```text
-http://127.0.0.1:8787/preview
-http://127.0.0.1:8787/preview/gallery
-```
-
-Or open a direct template URL:
+Open a direct template URL:
 
 ```text
 http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context
@@ -180,33 +173,19 @@ curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-m
 
 Useful preview query params:
 
-- core: `title`, `caption`, `imageUrl`, `brandingColor`, `brand`/`brandName`, `templateId`
+- core: `title`, `caption`, `imageUrl`, `brand`/`brandName`, `templateId`
 - carousel: `heading`, `body`, `slide`, `total`
 - slots: `slot.<key>=value` or `slot_<key>=value`
-- design controls: `showBrandBadge`, `showSlideBadge`, `showMetaFooter`, `showTitleKicker`, `showDecorLayers`, `textAlign`, `imageOpacity`, `contentMaxWidth`, `contentInset`, `metaLeftText`, `metaRightText`
-- token overrides: `tokenPrimaryText`, `tokenSecondaryText`, `tokenMutedText`, `tokenSurfaceBase`, `tokenSurfaceElevated`, `tokenBorderSubtle`, `tokenAccent`, `tokenAccentForeground`
 
 If you run plain `pnpm run dev` and still want browser-openable template previews, set:
 - `API_AUTH_REQUIRE_FOR_PREVIEW=false` in `.dev.vars`
-
-## Template Catalog
-
-```bash
-curl "http://127.0.0.1:8787/template-catalog" -H 'x-api-key: your-api-key'
-```
-
-Catalog includes:
-
-- formats and dimensions
-- templates and versions
-- templates mapped by format
 
 ## How New Templates Are Recognized
 
 1. Add a new file under `templates/`.
 2. Optional: add `@formats: format-a,format-b` in template front-matter to constrain compatibility.
 3. Run `pnpm run build:templates`.
-4. New template appears in `/template-catalog` and planner candidates automatically.
+4. New template becomes available for rendering and selection automatically.
 
 No TypeScript template registration is required.
 
@@ -214,10 +193,7 @@ No TypeScript template registration is required.
 
 - `GET /health`
 - `GET /template/<format>`
-- `GET /preview`
-- `GET /preview/gallery`
 - `GET /preview/screenshot?format=...&templateId=...`
-- `GET /template-catalog`
 - `POST /generate`
 - `POST /generate-from-content`
 - `POST /webhook/ghost`

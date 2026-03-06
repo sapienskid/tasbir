@@ -8,14 +8,12 @@ The template system lets you:
 
 - add new layouts without changing renderer code
 - keep slot contracts explicit (`{{SLOT:key}}`)
-- let LLM fill content according to template requirements
+- bind content requirements to selected templates at runtime
 
 ## File Roles
 
 - `templates/*.html`: content layouts (the skeletons)
-- `templates/system/head-shell.html`: document head + stylesheet/token injection
-- `templates/system/frame-shell.html`: common frame/background wrapper
-- `templates/system/*.html`: reusable UI fragments
+- `templates/system/content-shell.html`: shared runtime shell + stylesheet/token injection
 - `src/styles/template.css`: style source compiled during build
 - `src/generated/template.css`: compiled stylesheet embedded into runtime assets
 
@@ -42,13 +40,13 @@ Slot tokens:
 
 For each selected template, runtime extracts slot keys from `{{SLOT:key}}` markers.
 
-Those keys become `required_slot_keys` and are enforced in LLM output schema.
+Those keys become `required_slot_keys` and are used by runtime orchestration to ensure renderable output.
 
 Slot value precedence:
 
-1. LLM `slot_content`
-2. request `slotOverrides`
-3. runtime fallback inference by slot key pattern
+1. request `slotOverrides` (highest)
+2. generated/provided slot content
+3. runtime fallback inference by slot key pattern (safety net)
 
 ## Template Selection Behavior
 
@@ -59,6 +57,34 @@ Per format:
 3. validate and fallback to format default template if needed
 
 Candidate list is auto-derived from template files discovered under `templates/` and filtered by optional `@formats` constraints.
+
+## Template Dependency Challenge (Agentic Orchestration)
+
+Slot differences across templates remain the core constraint, even with agentic generation.
+
+Recommended contract:
+
+1. planner agent chooses `templateIds` per platform/post type
+2. runtime extracts `required_slot_keys` from selected templates
+3. copy agent must return `slot_content` that satisfies required keys
+4. render guard agent validates fit/completeness before screenshot step
+5. fallback policy either:
+- re-prompt copy agent with missing keys
+- or fill deterministic slot defaults
+
+This keeps template evolution safe without silent rendering failures.
+
+## Planned Rich Content Slot Types
+
+For richer authored content, add slot-type-aware rendering policy:
+
+- `text`: plain inline text
+- `markdown`: markdown rendered to sanitized HTML
+- `math`: TeX rendered to HTML/SVG (KaTeX/MathJax)
+- `diagram`: Mermaid source rendered to SVG
+- `image_url` / `icon_url` / `number`: existing typed fields
+
+Agent outputs should include slot type metadata or target renderer hints so the render pipeline can apply the right preprocessor.
 
 ## Add a New Template
 
@@ -75,25 +101,17 @@ pnpm run build:templates
 
 4. Verify:
 
-- `GET /template-catalog`
 - `GET /template/<format>?templateId=layout/grid-item-card`
 
 ## Add a New Shared System Fragment
 
 1. Add HTML file under `templates/system/`, for example `badge-shell.html`.
 2. Rebuild assets.
-3. Render it via `src/templates.ts` using `renderSystemFragment(...)`.
+3. Reference it from `templates/system/content-shell.html` when needed.
 
 `embed-template-assets.mjs` auto-loads all `templates/system/*.html` files.
 
 ## Preview Cookbook
-
-Workspace UIs:
-
-```text
-/preview
-/preview/gallery
-```
 
 Direct template preview:
 
@@ -107,10 +125,10 @@ Slot override preview:
 /template/instagram-square?templateId=layout/statement-cta&slot.headline=Ship%20Faster&slot.supporting_line=One%20pipeline%20for%20all%20formats&slot.cta_text=Read%20Guide
 ```
 
-Design-control preview:
+Screenshot preview:
 
 ```text
-/template/linkedin-post?templateId=layout/editorial-classic&showMetaFooter=true&textAlign=left&imageOpacity=0.45
+/preview/screenshot?format=linkedin-post&templateId=layout/editorial-classic
 ```
 
 ## Troubleshooting Quick Checks

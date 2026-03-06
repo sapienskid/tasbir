@@ -132,7 +132,7 @@ Cause:
 
 Fix:
 
-- check `/template-catalog`
+- verify template ID exists in `templates/` and was included by `pnpm run build:assets`
 - use valid template ID for target format
 
 ## Template/Rendering Issues
@@ -147,7 +147,7 @@ Check in order:
 
 Debug steps:
 
-- call `/template-catalog`
+- run `pnpm run build:assets` and check for template validation output
 - preview with explicit `templateId`
 - verify selected IDs in response `template_plan.template_ids`
 
@@ -239,6 +239,6 @@ Fix:
 2. `pnpm run check`
 3. `pnpm run test`
 4. `GET /health`
-5. `GET /template-catalog`
+5. `GET /template/<format>?templateId=<known-template-id>`
 6. preview one template with explicit `templateId`
 7. run minimal `POST /generate-from-content`

@@ -1,115 +1,155 @@
 # Architecture
 
-This document describes how the pipeline works from input content to final PNG assets.
+This document describes the current runtime architecture (as of March 6, 2026) and a proposed evolution to a Cloudflare Agents-based orchestration model.
 
-## High-Level Flow
+## Build-Time Flow
 
 ```mermaid
 flowchart TD
     A[Author templates + config + CSS] --> B[pnpm run build:assets]
-    B --> C[src/generated/template-assets.json]
-    C --> D[Worker runtime]
-
-    D --> E{Input route}
-    E -->|POST /generate| F[Fetch Ghost post]
-    E -->|POST /generate-from-content| G[Build in-memory post]
-    E -->|POST /webhook/ghost| F
-
-    F --> H[Build template candidates]
-    G --> H
-
-    H --> I[LLM template assignment per format]
-    I --> J[Extract required SLOT keys]
-    J --> K[LLM structured copy generation]
-    K --> L[Normalize slot/caption output]
-    L --> M[Choose image source]
-    M --> N[Render HTML per format]
-    N --> O[Screenshot to PNG]
-    O --> P[Store in R2]
-    P --> Q[Return JSON response]
-    Q --> R[Optional notify webhook]
+    B --> C[scripts/embed-template-assets.mjs]
+    C --> D[src/generated/template-assets.json]
+    D --> E[Worker runtime imports generated assets]
 ```
 
-## Build-Time System
+`pnpm run build:assets`:
 
-`pnpm run build:assets` runs `scripts/embed-template-assets.mjs`, which:
-
-1. Loads and merges config from `config/pipeline.config.yaml` and fragments.
-2. Validates template registry and format defaults.
-3. Loads all `templates/*.html` and `templates/system/*.html`.
-4. Builds `src/styles/template.css` into `src/generated/template.css`, then embeds that compiled stylesheet.
-5. Emits `src/generated/template-assets.json`.
-
-`src/generated/template-assets.ts` is a typed wrapper around that JSON.
+1. loads and merges `config/pipeline.config.yaml` + fragments
+2. discovers templates from `templates/*.html` and system templates
+3. validates format defaults and template compatibility
+4. embeds compiled CSS and template HTML into generated JSON
 
 ## Runtime Components
 
-- `src/index.ts`: routes, request validation, orchestration
-- `src/ai.ts`: template planner + structured content generation
+- `src/index.ts`: routes, validation, orchestration
+- `src/ai.ts`: template planner + structured copy generation + normalization
 - `src/templates.ts`: template resolution, slot extraction, HTML assembly
-- `src/template-theme.ts`: brand token derivation and render controls
 - Cloudflare Workers AI (`AI`)
 - Cloudflare Browser Rendering (`BROWSER`)
 - Cloudflare R2 (`OUTPUT_BUCKET`)
 
-## Route Layers
+## Active Routes
 
 - `GET /health`
-- `GET /template/<format>` preview renderer
-- `GET /template-catalog` template and format catalog
-- `POST /generate` Ghost-backed generation
-- `POST /generate-from-content` direct-content generation
-- `POST /webhook/ghost` webhook-triggered generation
+- `GET /template/<format>`
+- `GET /preview/screenshot?format=...&templateId=...`
+- `POST /generate`
+- `POST /generate-from-content`
+- `POST /webhook/ghost`
 
-## Template and Slot Model
+## Current AI-Orchestrated Flow
 
-Templates are pure skeletons with placeholders:
+```mermaid
+flowchart TD
+    A[Request] --> B{Input type}
+    B -->|/generate or /webhook/ghost| C[Fetch Ghost post]
+    B -->|/generate-from-content| D[Build in-memory post]
+    C --> E[Build template candidates]
+    D --> E
+    E --> F{templateIds forced for all formats?}
+    F -->|No| G[LLM template planner]
+    F -->|Yes| H[Resolve forced template IDs]
+    G --> H
+    H --> I[Extract required SLOT keys]
+    I --> J[LLM structured copy generation]
+    J --> K[Normalize captions/slides/hashtags/slot content]
+    K --> L[Choose image source: ai/feature/custom/none]
+    L --> M[Render template HTML per format]
+    M --> N[Screenshot PNG via Browser Rendering]
+    N --> O[Store assets in R2]
+    O --> P[Return response + optional notify webhook]
+```
 
-- regular tokens like `{{HEADING}}`, `{{BODY}}`, `{{HEADER}}`
-- slot tokens like `{{SLOT:headline}}`, `{{SLOT:metric_value}}`
+## Template Dependency Model
 
-For selected templates, the runtime computes `required_slot_keys` by scanning `{{SLOT:key}}` placeholders. That list is enforced in the LLM JSON schema.
+Templates define dynamic slot contracts through `{{SLOT:key}}`. Runtime behavior:
 
-## Template Selection
+1. selected template IDs determine required slot keys
+2. required keys are enforced in LLM JSON schema
+3. slot output is normalized and bounded
+4. request `slotOverrides` can override generated slot values
+5. final rendering still applies fallback slot inference for safety
 
-Per requested format:
+Because slot keys vary by template, text generation and template selection are tightly coupled in the current architecture.
 
-1. If request provides `templateIds[format]`, that is used.
-2. Otherwise `chooseTemplateAssignments` asks the LLM to pick from current candidate template IDs only.
-3. Runtime validates selected ID and falls back to format default if needed.
+## Image Selection Flow
 
-This keeps selection dynamic and aligned with whatever templates are currently registered.
+`image.mode` controls selection:
 
-## Design System Boundaries
+- `custom`: use `image.customUrl`
+- `feature`: use source post feature image
+- `ai`: force AI image generation (if enabled)
+- `none`: no image
+- `auto`: try AI first (if enabled), then feature fallbacks
 
-- CSS source of truth: `src/styles/template.css` (compiled output: `src/generated/template.css`)
-- Shared wrappers: `templates/system/head-shell.html` and `templates/system/frame-shell.html`
-- Optional shared fragments (top bar, kicker, footer): `templates/system/*.html`
-- Brand/design overrides are injected as CSS variables and render controls
+## Proposed Agentic Flow (Design)
 
-No runtime style CDN/script injection and no full HTML layouts are hardcoded inside TypeScript modules.
+The goal is to evolve the current pipeline into an agentic orchestration system on Cloudflare Agents, with centralized behavior prompts and role-based sub-agents.
 
-## Image Source Selection
+```mermaid
+flowchart TD
+    A[Request: direct content or Ghost slug/url] --> B[Ingestion Agent]
+    B --> C[Campaign Strategist Agent]
+    C --> D[Template Planner Agent]
+    D --> E[Copy Composer Agent]
+    E --> F[Visual Director Agent]
+    F --> G[Render Guard Agent]
+    G --> H[Render template HTML to PNG]
+    H --> I[Store assets in R2]
+    I --> J[Return campaign plan + assets]
+```
 
-Runtime chooses image source by mode/settings and availability:
+Recommended Cloudflare implementation model:
 
-- `custom`
-- `feature`
-- `ai` (if enabled)
-- `none`
+- root `MarketingOrchestratorAgent` (extends `AIChatAgent`) handles the request/session
+- role sub-agents implemented as callable methods and/or dedicated Agent instances
+- long-running or approval-heavy tasks delegated to `AgentWorkflow`
+- campaign memory persisted in Agent state + embedded SQLite per instance
+- progress and partial outputs streamed over WebSockets/SSE when needed
 
-`auto` mode follows configured preferences and fallbacks.
+Central prompt control (design):
 
-## Asset Rendering and Storage
+- maintain one central prompt registry in config
+- each role prompt inherits from the central master prompt
+- runtime `llm` overrides append role-specific controls without duplicating policy text
 
-- HTML is rendered using Browser Rendering (Puppeteer) at format dimensions.
-- PNG assets are uploaded to R2.
-- Storage path is derived from `storage` config and request overrides.
-- `output.postCount > 1` produces `variants[]` with versioned storage behavior for non-primary variants.
+## Platform Strategy (Planned)
 
-## Determinism and Safety
+- Instagram feed: portrait/square variants
+- Instagram carousel: intro, middle, ending slides planned by strategist agent
+- Instagram story: short, CTA-forward sequence planned separately from feed
+- Facebook: mapped from Instagram strategy/assets with platform-native copy adaptation
+- LinkedIn and X/Twitter: unique post variants, not resized duplicates
 
-- No filesystem reads at Worker runtime.
-- Request limits and security controls enforced from config.
-- LLM output is normalized and bounded by generation limits.
-- Missing fields fallback to safe defaults so rendering still succeeds.
+## Content and Render Guardrails (Planned)
+
+- enforce "no typography in AI-generated backgrounds" in visual prompts
+- if markdown-like syntax appears in visual slots, either:
+- render it properly (Markdown -> HTML)
+- or normalize to plain text before overlay
+- support math rendering (`$...$`, `$$...$$`) via KaTeX/MathJax pre-render
+- support diagram rendering via Mermaid-to-SVG pre-render
+- preflight text-fit checks per slot:
+- estimate line-wrap and bounding boxes
+- adjust font-size/line-height or switch template variant
+- reject/post-process outputs that would overflow or hide text
+- avoid mid-sentence truncation via completion-aware clipping and sentence-boundary rules
+
+## Cloudflare Research Notes
+
+Design choices above align with Cloudflare Agents capabilities:
+
+- Agents are stateful and built on Durable Objects
+- each instance is globally unique and can be routed back to preserve context
+- lifecycle hooks (`onStart`, `onRequest`, `onMessage`, etc.) support request + realtime orchestration
+- AI models can be called from request handlers, websocket handlers, scheduled tasks, and custom methods
+- Agents + Workflows are recommended for long-running, retryable, multi-step tasks
+- MCP client support enables external tool ecosystems with OAuth-capable connection handling
+
+References:
+
+- https://developers.cloudflare.com/agents/
+- https://developers.cloudflare.com/agents/api-reference/agents-api/
+- https://developers.cloudflare.com/agents/api-reference/using-ai-models/
+- https://developers.cloudflare.com/agents/concepts/workflows/
+- https://developers.cloudflare.com/agents/api-reference/mcp-client/

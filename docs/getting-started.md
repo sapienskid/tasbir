@@ -83,13 +83,6 @@ curl http://127.0.0.1:8787/health
 
 ## 6. Preview a Template
 
-Open local review pages:
-
-```text
-http://127.0.0.1:8787/preview
-http://127.0.0.1:8787/preview/gallery
-```
-
 Direct template request example:
 
 ```bash
@@ -162,7 +155,6 @@ pnpm run build:templates
 
 4. Verify:
 
-- `GET /template-catalog`
 - `GET /template/<format>?templateId=<new-id>`
 
 ## 10. Validate Before Commit

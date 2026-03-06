@@ -6,11 +6,8 @@ Local base URL is usually `http://127.0.0.1:8787`.
 
 Protected routes:
 
-- `GET /preview`
-- `GET /preview/gallery`
-- `GET /preview/screenshot`
 - `GET /template/<format>`
-- `GET /template-catalog`
+- `GET /preview/screenshot`
 - `POST /generate`
 - `POST /generate-from-content`
 
@@ -30,16 +27,6 @@ Response:
   "ok": true
 }
 ```
-
-## `GET /preview`
-
-Returns the interactive single-template workspace UI.
-
-## `GET /preview/gallery`
-
-Returns the multi-template gallery UI that renders template cards grouped by format.
-
-Useful for design QA when iterating multiple premium templates.
 
 ## `GET /preview/screenshot`
 
@@ -72,7 +59,6 @@ Core:
 - `title`
 - `caption`
 - `imageUrl`
-- `brandingColor`
 - `brand` or `brandName`
 - `templateId`
 
@@ -88,79 +74,11 @@ Slot values:
 - `slot.<key>=...`
 - `slot_<key>=...`
 
-Design controls:
-
-- `showBrandBadge`
-- `showSlideBadge`
-- `showMetaFooter`
-- `showTitleKicker`
-- `showDecorLayers`
-- `textAlign` (`left`, `center`, or `justify`)
-- `contentPosition` (`top`, `center`, or `bottom`)
-- `imageOpacity` (`0..1`)
-- `contentMaxWidth`
-- `contentInset`
-- `metaLeftText`
-- `metaRightText`
-- `brandIconUrl`
-- `brandIconPosition`
-
-Brand token overrides:
-
-- `tokenPrimaryText`
-- `tokenSecondaryText`
-- `tokenMutedText`
-- `tokenSurfaceBase`
-- `tokenSurfaceElevated`
-- `tokenBorderSubtle`
-- `tokenAccent`
-- `tokenAccentForeground`
-
 ### Example
 
 ```bash
 curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context" \
   -H 'x-api-key: your-api-key'
-```
-
-## `GET /template-catalog`
-
-Returns current template registry and format metadata.
-
-### Response Shape
-
-```json
-{
-  "ok": true,
-  "schema_version": 1,
-  "catalog_version": "2f9bc4a1",
-  "defaults": {
-    "carousel_required_slides": 5
-  },
-  "formats": [
-    {
-      "id": "instagram-square",
-      "width": 1080,
-      "height": 1080,
-      "caption_source": "instagram_caption",
-      "hashtag_count": 3,
-      "default_template_id": "layout/editorial-classic"
-    }
-  ],
-  "templates": [
-    {
-      "id": "layout/editorial-classic",
-      "formats": ["instagram-square", "twitter-card", "linkedin-post"],
-      "label": "Core Editorial Base",
-      "description": "...",
-      "file": "templates/editorial-base.html",
-      "version": "8a31f10c"
-    }
-  ],
-  "templates_by_format": {
-    "instagram-square": ["layout/editorial-classic"]
-  }
-}
 ```
 
 ## `POST /generate`
@@ -175,11 +93,9 @@ Required:
 
 Optional:
 
-- `brandingColor`, `brandName`, `prompt`
+- `brandName`, `prompt`
 - `templateIds` (`{ [format]: templateId }`)
 - `slotOverrides` (`{ [slotKey]: value }`)
-- `brandTokens`
-- `design`
 - `storage`
 - `notifyUrl`
 - `llm`
@@ -208,15 +124,6 @@ Optional:
   "slotOverrides": {
     "metric_value": "2.4K",
     "metric_label": "Weekly readers"
-  },
-  "design": {
-    "textAlign": "left",
-    "imageOpacity": 0.55,
-    "formatOverrides": {
-      "twitter-card": {
-        "contentInset": 40
-      }
-    }
   },
   "image": {
     "mode": "custom",
@@ -317,6 +224,18 @@ Top-level response contains:
 - `required_slot_keys`
 - `template_ids`
 
+`llm_output` includes:
+
+- `instagram_caption`
+- `twitter_caption`
+- `linkedin_caption`
+- `carousel_slides` (`[{ heading, body }]`)
+- `hashtags`
+- `image_prompt`
+- `stock_search_query`
+- `use_feature_image`
+- `slot_content`
+
 `assets` includes:
 
 - `instagram_portrait`
@@ -325,3 +244,54 @@ Top-level response contains:
 - `twitter_card`
 - `linkedin_post`
 - `carousel` (array)
+
+## LLM Overrides (`llm`)
+
+Optional field accepted by both generation endpoints:
+
+- `systemPrompt` (`string` or `string[]`)
+- `userInstructions` (`string` or `string[]`)
+- `userInstructionsAppend` (`string`)
+- `temperature` (`number`, clamped to `0..2`)
+- `maxTokens` (`number`, clamped to `256..4096`)
+
+## Image Options (`image`)
+
+Optional field accepted by both generation endpoints:
+
+- `mode`: `auto | none | feature | ai | custom`
+- `customUrl`: required when `mode=custom`
+- `prompt`: optional prompt override used for AI image mode
+- `allowAi`: optional boolean override
+- `preferFeature`: optional boolean override
+
+## Proposed Agentic Contract (Design Only)
+
+This contract is planned and not currently implemented.
+
+Goal: use an orchestrator agent to plan and generate multi-platform campaigns from source content.
+
+Recommended request additions:
+
+- `agent.mode`: `orchestrated`
+- `agent.promptProfile`: central prompt profile key (for behavior customization)
+- `agent.platformGoals.instagram`: feed/carousel/story counts
+- `agent.platformGoals.facebook`: reuse/mutate Instagram plan
+- `agent.platformGoals.linkedin`: post count and tone controls
+- `agent.platformGoals.twitter`: post count and brevity controls
+- `agent.renderPolicy.allowMarkdown`: boolean
+- `agent.renderPolicy.allowMath`: boolean
+- `agent.renderPolicy.allowDiagrams`: boolean
+- `agent.renderPolicy.allowTextInAiImages`: default `false`
+
+Recommended response additions:
+
+- `campaign_plan.platform_posts[]` with platform, post_type, angle, template_id
+- `creative_decisions[]` with rationale for template and format choices
+- `render_checks[]` with overflow/fit/markup validation status
+- `prompt_trace` (optional) with prompt profile/version IDs used by each agent role
+
+Recommended error behavior:
+
+- `422` when required template slot keys are missing after retries/fallback
+- `422` when render fit checks fail and no valid fallback template is found

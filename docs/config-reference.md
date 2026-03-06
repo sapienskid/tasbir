@@ -130,6 +130,8 @@ Fallback strings used when model output is incomplete.
 - `max_tokens`
 - `system_prompt` (string array)
 - `user_instructions` (string array)
+- `template_planner.system_prompt` (string array)
+- `template_planner.user_instructions` (string array)
 
 Supported placeholders in `user_instructions`:
 
@@ -145,11 +147,76 @@ Supported placeholders in `user_instructions`:
 - `<required_slot_keys>`
 - `<template_composition_directives>`
 
+### Current System Prompts (Verbatim)
+
+`generation.llm.system_prompt`:
+
+```yaml
+generation:
+  llm:
+    system_prompt:
+      - "You are a senior social growth strategist and marketing copywriter for a personal tech/lifestyle brand."
+      - "Write persuasive but credible platform-native copy with a clear value proposition."
+      - "Use concrete benefits, audience pain points, and action-oriented language."
+      - "Do not invent facts that are not present in the source material."
+      - "Always respond with strict JSON matching the required schema."
+```
+
+`generation.llm.template_planner.system_prompt`:
+
+```yaml
+generation:
+  llm:
+    template_planner:
+      system_prompt:
+        - "You are an expert template planner for social content automation."
+```
+
+Additional runtime directives injected in code for text generation:
+
+- `Treat templates as structure-only skeletons and place all design decisions in CSS classes.`
+- `Fill slot_content comprehensively so every likely template slot has useful copy.`
+- `Never request generated text in images; typography is always rendered by the template system.`
+- `Keep slot values concise, specific, and directly usable without extra formatting.`
+
+### Proposed Central Prompt Registry (Design Only)
+
+To support role-based agent orchestration with one place to customize behavior, add a central prompt map:
+
+```yaml
+generation:
+  agents:
+    prompt_profiles:
+      default:
+        mastermind: |
+          You are the marketing mastermind for multi-platform campaign generation.
+          Optimize for clarity, novelty, platform-native behavior, and visual-text balance.
+        roles:
+          strategist: |
+            Plan platform counts, narrative arcs, and audience intent.
+          template_planner: |
+            Choose templates that match content semantics and slot constraints.
+          copywriter: |
+            Create copy per platform and per post type with strict length controls.
+          visual_director: |
+            Select image strategy and enforce no text artifacts in generated images.
+          render_guard: |
+            Validate markdown/math/diagram rendering and prevent overflow/hidden text.
+```
+
+Recommended behavior:
+
+- each role prompt inherits `mastermind` baseline instructions
+- profile key can be selected per request (`agent.promptProfile`)
+- prompt versions should be tracked in responses for reproducibility
+
 ### `image`
 
 - `default_model`
 - `prompt_prefix`
 - `negative_clauses`
+
+Note: image generation currently does not use a chat-style `system_prompt`; it composes a single prompt string using `prompt_prefix`, title, tags, scene description, and negative clauses.
 
 ## `runtime`
 
@@ -224,7 +291,7 @@ Design tokens are not configured in YAML.
 Use:
 
 - `src/styles/template.css` for spacing, typography, color-token usage, semantic classes
-- request `brandTokens` / preview `token*` query params for runtime color overrides
+- template CSS variables and class utilities for visual control
 
 ## Optional Advanced Sections
 
