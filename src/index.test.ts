@@ -26,6 +26,16 @@ describe("social pipeline worker", () => {
     expect(response.status).toBe(401);
   });
 
+  it("allows preview requests without API key when preview auth is disabled by env override", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/template/instagram-portrait?title=Hello&caption=World"),
+      { API_KEYS: TEST_API_KEY, API_AUTH_REQUIRE_FOR_PREVIEW: "false" } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+  });
+
   it("renders template endpoint without CDN script and with token variables", async () => {
     const response = await worker.fetch(
       authorizedRequest("https://worker.test/template/instagram-portrait?title=Hello&caption=World&brandingColor=%230a8fa5"),

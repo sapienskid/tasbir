@@ -44,6 +44,7 @@ interface Env {
   CORS_ALLOWED_HEADERS?: string;
   CORS_ALLOW_CREDENTIALS?: string;
   CORS_MAX_AGE_SECONDS?: string;
+  API_AUTH_REQUIRE_FOR_PREVIEW?: string;
   NOTIFY_HOST_ALLOWLIST?: string;
   IMAGE_HOST_ALLOWLIST?: string;
   ALLOW_PRIVATE_NETWORK_TARGETS?: string;
@@ -639,6 +640,13 @@ function resolveSecurityConfig(env: Env): ResolvedSecurityConfig {
   const envAllowedHeaders = splitCsv(env.CORS_ALLOWED_HEADERS);
   if (envAllowedHeaders.length > 0) {
     merged.cors.allowed_headers = envAllowedHeaders.map((header) => header.toLowerCase());
+  }
+
+  if (env.API_AUTH_REQUIRE_FOR_PREVIEW !== undefined) {
+    merged.api_auth.require_for_preview = parseBooleanString(
+      env.API_AUTH_REQUIRE_FOR_PREVIEW,
+      merged.api_auth.require_for_preview
+    );
   }
 
   if (env.CORS_ALLOW_CREDENTIALS !== undefined) {

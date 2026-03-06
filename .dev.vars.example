@@ -1,6 +1,8 @@
 GHOST_API_URL="https://YOUR_GHOST_DOMAIN/ghost/api/content"
 GHOST_CONTENT_API_KEY="YOUR_GHOST_CONTENT_API_KEY"
 API_KEYS="replace-with-comma-separated-api-keys"
+# Local template preview convenience: allow opening /template/* in browser without headers.
+API_AUTH_REQUIRE_FOR_PREVIEW="false"
 
 # Optional but recommended for public URLs in API responses.
 R2_PUBLIC_BASE_URL="https://pub-xxxxxxxx.r2.dev"
