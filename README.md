@@ -49,7 +49,7 @@ No runtime style CDN/script injection, no style/archetype/font-profile matrix.
 - `config/pipeline/runtime.yaml`: runtime, features, security, storage
 - `templates/*.html`: format-agnostic content skeletons
 - `templates/system/*.html`: shared wrappers (`head-shell`, `frame-shell`, partials)
-- `src/styles/template.css`: design tokens + semantic classes
+- `src/styles/template.css`: Tailwind theme tokens + utility source
 - `scripts/embed-template-assets.mjs`: build-time embed + validation
 - `src/generated/template-assets.json`: generated runtime bundle
 - `src/generated/template-assets.ts`: typed wrapper over generated JSON
@@ -88,13 +88,19 @@ cp .dev.vars.example .dev.vars
 pnpm run build:assets
 ```
 
-4. Run locally:
+4. Run locally (fully local runtime + live reload):
 
 ```bash
 pnpm run dev
 ```
 
-5. Check health:
+5. Optional remote dev mode (Cloudflare edge runtime):
+
+```bash
+pnpm run dev:remote
+```
+
+6. Check health:
 
 ```bash
 curl http://127.0.0.1:8787/health
@@ -142,7 +148,23 @@ curl -X POST http://127.0.0.1:8787/generate-from-content \
 
 ## Template Preview
 
-Render preview HTML without running full generation:
+Render preview HTML without running full generation.
+
+Local browser workflow (template-only, no deploy dependency):
+
+```bash
+pnpm run dev:templates
+```
+
+Then open a template URL directly:
+
+```text
+http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context
+```
+
+`dev:templates` watches template/style/config files, rebuilds assets on save, and uses Wrangler local live-reload so the browser refreshes automatically. It also sets `API_AUTH_REQUIRE_FOR_PREVIEW=false` for this local session so template URLs open directly in browser.
+
+Direct API request example (when preview auth is enabled):
 
 ```bash
 curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context" \
@@ -156,6 +178,9 @@ Useful preview query params:
 - slots: `slot.<key>=value` or `slot_<key>=value`
 - design controls: `showBrandBadge`, `showSlideBadge`, `showMetaFooter`, `showTitleKicker`, `showDecorLayers`, `textAlign`, `imageOpacity`, `contentMaxWidth`, `contentInset`, `metaLeftText`, `metaRightText`
 - token overrides: `tokenPrimaryText`, `tokenSecondaryText`, `tokenMutedText`, `tokenSurfaceBase`, `tokenSurfaceElevated`, `tokenBorderSubtle`, `tokenAccent`, `tokenAccentForeground`
+
+If you run plain `pnpm run dev` and still want browser-openable template previews, set:
+- `API_AUTH_REQUIRE_FOR_PREVIEW=false` in `.dev.vars`
 
 ## Template Catalog
 
