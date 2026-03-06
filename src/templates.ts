@@ -380,12 +380,15 @@ function renderDocumentShell(args: {
       TEMPLATE_TONE: args.frameTone,
       IMAGE_VISIBILITY_CLASS: imageVisibilityClass,
       IMAGE_URL: safeImageUrl,
+      BRAND_ICON_URL: escapeHtml(args.brandIcon.url),
       BRAND_ICON_TEXT: escapeHtml(args.brandIcon.text),
       BRAND_ICON_LEFT: formatCssNumber(args.brandIcon.left),
       BRAND_ICON_TOP: formatCssNumber(args.brandIcon.top),
       BRAND_ICON_SIZE: formatCssNumber(args.brandIcon.size),
       BRAND_ICON_OPACITY: formatCssNumber(args.brandIcon.opacity),
       BRAND_ICON_VISIBILITY_CLASS: args.brandIcon.visible ? "" : "hidden",
+      BRAND_ICON_IMAGE_VISIBILITY_CLASS: args.brandIcon.useImage ? "" : "hidden",
+      BRAND_ICON_TEXT_VISIBILITY_CLASS: args.brandIcon.useImage ? "hidden" : "",
       CONTENT: args.content
     },
     {}
@@ -397,12 +400,14 @@ interface VisualLayerSettings {
 }
 
 interface BrandIconLayerSettings {
+  url: string;
   text: string;
   left: number;
   top: number;
   size: number;
   opacity: number;
   visible: boolean;
+  useImage: boolean;
 }
 
 function resolveVisualLayerSettings(
@@ -434,15 +439,52 @@ function resolveBrandIconLayerSettings(
   brandName: string,
   slots: Record<string, string>
 ): BrandIconLayerSettings {
+  const defaultIconUrl = resolveDefaultBrandIconUrl();
+  const resolvedIconUrl = sanitizeBrandIconUrl(slots.brand_icon_url, defaultIconUrl);
   const fallbackText = deriveBrandIconText(brandName);
   return {
+    url: resolvedIconUrl,
     text: sanitizeBrandIconText(slots.brand_icon, fallbackText),
-    left: parseClampedNumber(slots.brand_icon_x, 92, 0, 100),
-    top: parseClampedNumber(slots.brand_icon_y, 9, 0, 100),
-    size: parseClampedNumber(slots.brand_icon_size, 92, 36, 220),
-    opacity: parseClampedNumber(slots.brand_icon_opacity, 0.92, 0.15, 1),
-    visible: parseBooleanFlag(slots.brand_icon_visible, true)
+    left: parseClampedNumber(slots.brand_icon_x, 95.6, 0, 100),
+    top: parseClampedNumber(slots.brand_icon_y, 96.3, 0, 100),
+    size: parseClampedNumber(slots.brand_icon_size, 34, 18, 220),
+    opacity: parseClampedNumber(slots.brand_icon_opacity, 0.95, 0.15, 1),
+    visible: parseBooleanFlag(slots.brand_icon_visible, true),
+    useImage: resolvedIconUrl.length > 0
   };
+}
+
+function resolveDefaultBrandIconUrl(): string {
+  const brandConfig = (PIPELINE_CONFIG.brand ?? {}) as Record<string, unknown>;
+  const configured =
+    readStringValue(brandConfig.icon_svg_url) ??
+    readStringValue(brandConfig.icon_url) ??
+    "/images/brand/icon.svg";
+  return sanitizeBrandIconUrl(configured, "/images/brand/icon.svg");
+}
+
+function readStringValue(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function sanitizeBrandIconUrl(rawValue: string | undefined, fallback: string): string {
+  const fallbackTrimmed = fallback.trim();
+  const candidate = rawValue?.trim() ?? "";
+  const value = candidate || fallbackTrimmed;
+  if (!value) {
+    return "";
+  }
+  if (value.startsWith("/")) {
+    return value;
+  }
+  if (/^https?:\/\/[A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]+$/i.test(value)) {
+    return value;
+  }
+  return fallbackTrimmed;
 }
 
 function deriveBrandIconText(brandName: string): string {

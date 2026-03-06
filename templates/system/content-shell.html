@@ -54,11 +54,16 @@
       class="pointer-events-none absolute inset-0 z-[50] border-[12px] border-brand-primary/5 group-data-[template-tone=dark]:border-white/5">
     </div>
 
-    <!-- Brand Icon (Re-styled for Swiss aesthetics) -->
-    <div
-      class="pointer-events-none absolute z-[60] flex items-center justify-center border-2 border-brand-primary bg-brand-surface font-brand-body font-black uppercase tracking-widest text-brand-primary {{BRAND_ICON_VISIBILITY_CLASS}}"
-      style="left: {{BRAND_ICON_LEFT}}%; top: {{BRAND_ICON_TOP}}%; width: {{BRAND_ICON_SIZE}}px; height: {{BRAND_ICON_SIZE}}px; transform: translate(-50%, -50%); opacity: {{BRAND_ICON_OPACITY}}; font-size: calc({{BRAND_ICON_SIZE}}px * 0.35);">
-      {{BRAND_ICON_TEXT}}
+    <!-- Brand Icon -->
+    <div class="pointer-events-none absolute z-[60] {{BRAND_ICON_VISIBILITY_CLASS}}"
+      style="left: {{BRAND_ICON_LEFT}}%; top: {{BRAND_ICON_TOP}}%; width: {{BRAND_ICON_SIZE}}px; height: {{BRAND_ICON_SIZE}}px; transform: translate(-50%, -50%); opacity: {{BRAND_ICON_OPACITY}};">
+      <img src="{{BRAND_ICON_URL}}" alt=""
+        class="h-full w-full object-contain group-data-[template-tone=dark]:invert {{BRAND_ICON_IMAGE_VISIBILITY_CLASS}}" />
+      <div
+        class="flex h-full w-full items-center justify-center border-2 border-brand-primary bg-brand-surface font-brand-body font-black uppercase tracking-widest text-brand-primary {{BRAND_ICON_TEXT_VISIBILITY_CLASS}}"
+        style="font-size: calc({{BRAND_ICON_SIZE}}px * 0.35);">
+        {{BRAND_ICON_TEXT}}
+      </div>
     </div>
 
     <!-- Main Content Slot -->
