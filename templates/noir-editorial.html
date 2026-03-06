@@ -1,0 +1,26 @@
+<!--
+@id: layout/noir-editorial
+@label: Noir Editorial
+@description: Minimal dark editorial layout with oversized serif headline and clean body copy
+@formats: instagram-portrait,carousel-post
+@frame_tone: dark
+@background_image: inline
+
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
+@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
+-->
+<div class="relative z-10 flex h-full w-full flex-col bg-brand-surface px-[66px] py-[62px] text-brand-primary">
+  <h1
+    class="max-w-[94%] font-brand-display text-[clamp(74px,8.5vw,102px)] font-semibold leading-[0.88] tracking-[-0.012em] text-balance">
+    {{HEADING}}
+  </h1>
+
+  <p
+    class="mt-auto max-w-[87%] font-brand-body text-[clamp(39px,4.1vw,56px)] font-medium leading-[1.24] tracking-[-0.01em] text-brand-secondary">
+    {{BODY}}
+  </p>
+</div>

@@ -1,0 +1,58 @@
+<!--
+@id: layout/grid-card
+@label: Grid Item Card
+@description: Swiss-style modular card for grid compositions
+@formats: instagram-square,instagram-portrait,instagram-story,carousel-post,twitter-card,linkedin-post
+@background_image: inline
+
+@slot item_tag | text | Small category or section label  | 
+@slot item_title | text | Card title text | 
+@slot item_body | text | Supporting body text | 
+@slot item_meta | text | Optional byline or source line  | 
+@slot footer_meta | text | Footer trailing metadata line  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
+@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
+-->
+<div class="relative z-10 flex h-full w-full bg-brand-surface text-brand-primary p-[var(--token-space-gutter)]">
+  <div class="swiss-border-thick w-full h-full flex flex-col p-8 overflow-hidden border-2 border-brand-primary">
+    <header class="mb-6 flex items-start justify-between">
+      <div class="font-brand-body text-[14px] font-black uppercase tracking-[0.4em]">
+        {{BRAND_NAME}}
+      </div>
+      <div class="font-brand-body text-[12px] font-bold uppercase tracking-[0.2em] text-brand-muted">
+        {{SLIDE_LABEL}}
+      </div>
+    </header>
+
+    <div class="relative flex min-h-0 flex-1 flex-col">
+      <div class="relative mb-6 h-[240px] shrink-0 overflow-hidden border-2 border-brand-primary">
+        <img src="{{IMAGE_URL}}" alt="" class="absolute inset-0 h-full w-full object-cover grayscale contrast-125" />
+      </div>
+
+      <div class="flex min-h-0 flex-1 flex-col">
+        <div
+          class="mb-4 inline-block w-fit border-2 border-brand-primary px-3 py-1 font-brand-body text-[12px] font-black uppercase tracking-[0.2em]">
+          {{SLOT:item_tag}}
+        </div>
+        <h1
+          class="mb-4 font-brand-display text-[clamp(28px,4vw,48px)] font-black leading-[0.9] tracking-tighter uppercase">
+          {{SLOT:item_title}}
+        </h1>
+        <p
+          class="mb-6 line-clamp-4 font-brand-body text-[clamp(18px,2.2vw,24px)] leading-tight tracking-tighter text-brand-secondary text-justify">
+          {{SLOT:item_body}}
+        </p>
+      </div>
+
+      <footer
+        class="mt-auto flex items-center justify-between border-t-2 border-brand-primary/20 pt-4 font-brand-body text-[11px] font-bold uppercase tracking-[0.3em] text-brand-muted">
+        <div>{{SLOT:item_meta}}</div>
+        <div>{{SLOT:footer_meta}}</div>
+      </footer>
+    </div>
+  </div>
+</div>

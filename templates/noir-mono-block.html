@@ -1,0 +1,22 @@
+<!--
+@id: layout/noir-mono-block
+@label: Noir Mono Block
+@description: Monospaced dark block layout for dense statement-style typography
+@formats: instagram-portrait,carousel-post
+@frame_tone: dark
+@background_image: inline
+
+@slot type_block | text | Primary monospace copy block  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
+@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
+-->
+<div class="relative z-10 flex h-full w-full bg-brand-surface px-[52px] py-[58px] text-brand-primary">
+  <h1
+    class="max-w-[96%] whitespace-normal [font-family:'Courier_New','Roboto_Mono','Liberation_Mono',monospace] text-[clamp(77px,8.6vw,108px)] font-bold uppercase leading-[0.9] tracking-[0.01em]">
+    {{SLOT:type_block}}
+  </h1>
+</div>
