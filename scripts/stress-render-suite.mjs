@@ -10,6 +10,13 @@ import process from "node:process";
 const DEFAULT_BASE_URL = "http://127.0.0.1:8787";
 const DEFAULT_IMAGE_URL =
   "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201200%20900%22%3E%3Crect%20width=%221200%22%20height=%22900%22%20fill=%22%230a0a0a%22/%3E%3C/svg%3E";
+const DEFAULT_IMAGE_URL_POOL = [
+  "https://picsum.photos/seed/tasbir-stress-01/1600/1200",
+  "https://picsum.photos/seed/tasbir-stress-02/1600/1200",
+  "https://picsum.photos/seed/tasbir-stress-03/1600/1200",
+  DEFAULT_IMAGE_URL
+];
+const ALLOWED_COLOR_MODES = ["normal", "swap"];
 const DEFAULT_CONCURRENCY = 2;
 const DEFAULT_RENDERER = "local-browser";
 const HEALTH_TIMEOUT_MS = 60_000;
@@ -68,6 +75,8 @@ Options:
   --base-url <url>        Worker URL (default: ${DEFAULT_BASE_URL})
   --out-dir <path>        Output directory (default: renders/stress-suite-<timestamp>)
   --image-url <url>       Image URL for preview renders
+  --image-urls <csv>      Comma-separated image URL pool (rotated across tasks)
+  --color-modes <csv>     Color modes to test: normal,swap (default: normal,swap)
   --api-key <key>         Optional API key when preview auth is enabled
   --concurrency <number>  Parallel screenshot requests (default: ${DEFAULT_CONCURRENCY})
   --formats <csv>         Optional format filter (example: instagram-square,twitter-card)
@@ -89,6 +98,8 @@ function parseArgs(argv) {
     baseUrl: DEFAULT_BASE_URL,
     outDir: `renders/stress-suite-${timestamp}`,
     imageUrl: DEFAULT_IMAGE_URL,
+    imageUrls: [...DEFAULT_IMAGE_URL_POOL],
+    colorModes: [...ALLOWED_COLOR_MODES],
     apiKey: process.env.API_KEY?.trim() || "",
     concurrency: DEFAULT_CONCURRENCY,
     formats: [],
@@ -166,11 +177,39 @@ function parseArgs(argv) {
 
     if (arg === "--image-url" && next) {
       options.imageUrl = next.trim();
+      options.imageUrls = options.imageUrl ? [options.imageUrl] : [];
       index += 1;
       continue;
     }
     if (arg.startsWith("--image-url=")) {
       options.imageUrl = arg.slice("--image-url=".length).trim();
+      options.imageUrls = options.imageUrl ? [options.imageUrl] : [];
+      continue;
+    }
+
+    if (arg === "--image-urls" && next) {
+      options.imageUrls = splitCsv(next);
+      if (options.imageUrls.length > 0) {
+        options.imageUrl = options.imageUrls[0];
+      }
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--image-urls=")) {
+      options.imageUrls = splitCsv(arg.slice("--image-urls=".length));
+      if (options.imageUrls.length > 0) {
+        options.imageUrl = options.imageUrls[0];
+      }
+      continue;
+    }
+
+    if (arg === "--color-modes" && next) {
+      options.colorModes = splitCsv(next).map((item) => item.toLowerCase());
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--color-modes=")) {
+      options.colorModes = splitCsv(arg.slice("--color-modes=".length)).map((item) => item.toLowerCase());
       continue;
     }
 
@@ -236,6 +275,25 @@ function parseArgs(argv) {
   if (!["local-browser", "cloudflare"].includes(options.renderer)) {
     throw new Error("--renderer must be one of: local-browser, cloudflare");
   }
+  options.imageUrls = options.imageUrls
+    .map((item) => String(item || "").trim())
+    .filter(Boolean);
+  if (options.imageUrls.length === 0) {
+    throw new Error("--image-url/--image-urls produced no valid image URLs");
+  }
+  options.imageUrl = options.imageUrls[0];
+
+  const dedupedColorModes = [...new Set(options.colorModes)];
+  const invalidColorModes = dedupedColorModes.filter((mode) => !ALLOWED_COLOR_MODES.includes(mode));
+  if (invalidColorModes.length > 0) {
+    throw new Error(
+      `Invalid --color-modes value(s): ${invalidColorModes.join(", ")}. Allowed: ${ALLOWED_COLOR_MODES.join(", ")}`
+    );
+  }
+  if (dedupedColorModes.length === 0) {
+    throw new Error("--color-modes must include at least one mode");
+  }
+  options.colorModes = dedupedColorModes;
 
   const parsed = new URL(options.baseUrl);
   if (parsed.protocol !== "http:") {
@@ -688,9 +746,18 @@ function deriveSlotValue(field, stressCase, imageUrl) {
   return `${stressCase.slotFallbackPrefix} ${humanizeKey(rawKey || "content")}`.slice(0, 120);
 }
 
+function buildImageVariants(imageUrls) {
+  return imageUrls.map((url, index) => ({
+    id: `img${String(index + 1).padStart(2, "0")}`,
+    url: String(url)
+  }));
+}
+
 function buildRenderTasks(catalog, options, stressCases) {
   const tasks = [];
   const templateById = new Map((catalog.templates ?? []).map((template) => [template.id, template]));
+  const imageVariants = buildImageVariants(options.imageUrls);
+  let imageCursor = 0;
 
   for (const format of catalog.formats ?? []) {
     const formatId = format.id;
@@ -703,28 +770,52 @@ function buildRenderTasks(catalog, options, stressCases) {
       const fields = Array.isArray(template.fields) ? template.fields : [];
 
       for (const stressCase of stressCases) {
+        const imageVariant = imageVariants[imageCursor % imageVariants.length];
+        imageCursor += 1;
         const slots = {};
         for (const field of fields) {
           const slotKey = String(field?.key ?? "").trim();
           if (!slotKey) continue;
-          slots[slotKey] = truncateForQuery(deriveSlotValue(field, stressCase, options.imageUrl), 240, {
+          slots[slotKey] = truncateForQuery(deriveSlotValue(field, stressCase, imageVariant.url), 240, {
             preserveWhitespace: Boolean(stressCase.preserveFormatting)
           });
         }
-        tasks.push({
-          formatId,
-          templateId,
-          templateVersion: String(template.version ?? "unknown"),
-          caseId: stressCase.id,
-          caseLabel: stressCase.label,
-          payload: stressCase,
-          slots
-        });
+        for (const colorMode of options.colorModes) {
+          tasks.push({
+            formatId,
+            templateId,
+            templateVersion: String(template.version ?? "unknown"),
+            caseId: stressCase.id,
+            caseLabel: stressCase.label,
+            colorMode,
+            imageVariantId: imageVariant.id,
+            imageUrl: imageVariant.url,
+            payload: stressCase,
+            slots: {
+              ...slots,
+              color_swap: colorMode
+            }
+          });
+        }
       }
     }
   }
 
   return options.maxTasks > 0 ? tasks.slice(0, options.maxTasks) : tasks;
+}
+
+function assertTemplateCoverage(tasks, catalog) {
+  const expectedTemplates = new Set(
+    Object.values(catalog.templates_by_format ?? {})
+      .flatMap((templateIds) => Array.isArray(templateIds) ? templateIds : [])
+      .map((templateId) => String(templateId ?? "").trim())
+      .filter(Boolean)
+  );
+  const coveredTemplates = new Set(tasks.map((task) => task.templateId));
+  const missing = [...expectedTemplates].filter((templateId) => !coveredTemplates.has(templateId));
+  if (missing.length > 0) {
+    throw new Error(`Stress task generation missed template(s): ${missing.join(", ")}`);
+  }
 }
 
 function buildTemplatePreviewUrl(task, options) {
@@ -736,7 +827,8 @@ function buildTemplatePreviewUrl(task, options) {
   url.searchParams.set("heading", task.payload.heading);
   url.searchParams.set("body", task.payload.body);
   url.searchParams.set("brandName", task.payload.brandName);
-  url.searchParams.set("imageUrl", options.imageUrl);
+  url.searchParams.set("imageUrl", task.imageUrl);
+  url.searchParams.set("colorSwap", task.colorMode);
   url.searchParams.set("slide", task.payload.slide);
   url.searchParams.set("total", task.payload.total);
 
@@ -778,9 +870,11 @@ function outputFilePathForTask(task, outputRoot) {
   const fileName = [
     sanitizeFilePart(task.templateId),
     sanitizeFilePart(task.caseId),
+    sanitizeFilePart(task.colorMode),
+    sanitizeFilePart(task.imageVariantId),
     sanitizeFilePart(task.templateVersion.slice(0, 8))
   ].join("--") + ".png";
-  return join(outputRoot, task.formatId, task.caseId, fileName);
+  return join(outputRoot, task.formatId, task.caseId, task.colorMode, fileName);
 }
 
 async function renderTaskCloudflare(task, options, outputRoot, headers, index, total) {
@@ -792,7 +886,8 @@ async function renderTaskCloudflare(task, options, outputRoot, headers, index, t
   url.searchParams.set("heading", task.payload.heading);
   url.searchParams.set("body", task.payload.body);
   url.searchParams.set("brandName", task.payload.brandName);
-  url.searchParams.set("imageUrl", options.imageUrl);
+  url.searchParams.set("imageUrl", task.imageUrl);
+  url.searchParams.set("colorSwap", task.colorMode);
   url.searchParams.set("slide", task.payload.slide);
   url.searchParams.set("total", task.payload.total);
 
@@ -808,11 +903,11 @@ async function renderTaskCloudflare(task, options, outputRoot, headers, index, t
 
   const png = Buffer.from(await response.arrayBuffer());
   const filePath = outputFilePathForTask(task, outputRoot);
-  await mkdir(join(outputRoot, task.formatId, task.caseId), { recursive: true });
+  await mkdir(join(outputRoot, task.formatId, task.caseId, task.colorMode), { recursive: true });
   await writeFile(filePath, png);
 
   console.log(
-    `[${String(index + 1).padStart(4, "0")}/${String(total).padStart(4, "0")}] ${task.formatId} :: ${task.templateId} :: ${task.caseId} -> ${filePath}`
+    `[${String(index + 1).padStart(4, "0")}/${String(total).padStart(4, "0")}] ${task.formatId} :: ${task.templateId} :: ${task.caseId} :: ${task.colorMode} :: ${task.imageVariantId} -> ${filePath}`
   );
   return filePath;
 }
@@ -907,7 +1002,7 @@ async function createLocalBrowserRenderer(options, catalog) {
       const size = dimensionsByFormat.get(task.formatId) ?? { width: 1080, height: 1080 };
       const page = await browser.newPage();
       const filePath = outputFilePathForTask(task, outputRoot);
-      await mkdir(join(outputRoot, task.formatId, task.caseId), { recursive: true });
+      await mkdir(join(outputRoot, task.formatId, task.caseId, task.colorMode), { recursive: true });
 
       try {
         await page.setViewport({ width: size.width, height: size.height, deviceScaleFactor: 1 });
@@ -945,7 +1040,7 @@ async function createLocalBrowserRenderer(options, catalog) {
       }
 
       console.log(
-        `[${String(index + 1).padStart(4, "0")}/${String(total).padStart(4, "0")}] ${task.formatId} :: ${task.templateId} :: ${task.caseId} -> ${filePath}`
+        `[${String(index + 1).padStart(4, "0")}/${String(total).padStart(4, "0")}] ${task.formatId} :: ${task.templateId} :: ${task.caseId} :: ${task.colorMode} :: ${task.imageVariantId} -> ${filePath}`
       );
       return filePath;
     }
@@ -1243,6 +1338,10 @@ function buildGalleryIndexHtml(args) {
         <label for="template">Template</label>
         <select id="template"></select>
       </div>
+      <div class="control">
+        <label for="color">Color</label>
+        <select id="color"></select>
+      </div>
     </div>
     <div id="count" class="empty"></div>
     <div id="grid" class="grid"></div>
@@ -1261,6 +1360,8 @@ function buildGalleryIndexHtml(args) {
         <p id="viewer-format"></p>
         <p id="viewer-template"></p>
         <p id="viewer-case"></p>
+        <p id="viewer-color"></p>
+        <p id="viewer-image-variant"></p>
         <p id="viewer-file"></p>
       </div>
     </div>
@@ -1279,6 +1380,7 @@ function buildGalleryIndexHtml(args) {
     const formatSelect = document.getElementById("format");
     const caseSelect = document.getElementById("case");
     const templateSelect = document.getElementById("template");
+    const colorSelect = document.getElementById("color");
     const failureBox = document.getElementById("failures");
     const failureList = document.getElementById("failure-list");
 
@@ -1289,6 +1391,8 @@ function buildGalleryIndexHtml(args) {
     const viewerFormat = document.getElementById("viewer-format");
     const viewerTemplate = document.getElementById("viewer-template");
     const viewerCase = document.getElementById("viewer-case");
+    const viewerColor = document.getElementById("viewer-color");
+    const viewerImageVariant = document.getElementById("viewer-image-variant");
     const viewerFile = document.getElementById("viewer-file");
 
     function chip(label, value) {
@@ -1302,6 +1406,7 @@ function buildGalleryIndexHtml(args) {
     stats.appendChild(chip("Passed", summary.totals?.passed ?? entries.length));
     stats.appendChild(chip("Failed", summary.totals?.failed ?? failures.length));
     stats.appendChild(chip("Duration", (summary.duration_seconds ?? 0) + "s"));
+    stats.appendChild(chip("Color modes", uniqueValues(entries, "colorMode").length));
 
     function uniqueValues(items, key) {
       return [...new Set(items.map((item) => item[key]).filter(Boolean))].sort();
@@ -1323,16 +1428,26 @@ function buildGalleryIndexHtml(args) {
     fillSelect(formatSelect, uniqueValues(entries, "formatId"), "formats");
     fillSelect(caseSelect, uniqueValues(entries, "caseId"), "cases");
     fillSelect(templateSelect, uniqueValues(entries, "templateId"), "templates");
+    fillSelect(colorSelect, uniqueValues(entries, "colorMode"), "color modes");
 
     function matches(entry) {
       const q = search.value.trim().toLowerCase();
       if (q) {
-        const haystack = [entry.templateId, entry.caseId, entry.caseLabel, entry.formatId, entry.file].join(" ").toLowerCase();
+        const haystack = [
+          entry.templateId,
+          entry.caseId,
+          entry.caseLabel,
+          entry.formatId,
+          entry.colorMode,
+          entry.imageVariantId,
+          entry.file
+        ].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
       }
       if (formatSelect.value && entry.formatId !== formatSelect.value) return false;
       if (caseSelect.value && entry.caseId !== caseSelect.value) return false;
       if (templateSelect.value && entry.templateId !== templateSelect.value) return false;
+      if (colorSelect.value && entry.colorMode !== colorSelect.value) return false;
       return true;
     }
 
@@ -1343,6 +1458,8 @@ function buildGalleryIndexHtml(args) {
       viewerFormat.textContent = "Format: " + entry.formatId;
       viewerTemplate.textContent = "Template: " + entry.templateId;
       viewerCase.textContent = "Case ID: " + entry.caseId;
+      viewerColor.textContent = "Color: " + (entry.colorMode || "normal");
+      viewerImageVariant.textContent = "Image: " + (entry.imageVariantId || "img");
       viewerFile.textContent = "File: " + entry.file;
       modal.classList.add("open");
       modal.setAttribute("aria-hidden", "false");
@@ -1377,6 +1494,7 @@ function buildGalleryIndexHtml(args) {
           "<strong>" + entry.templateId + "</strong>",
           "<span>" + entry.formatId + "</span>",
           "<span>" + (entry.caseLabel || entry.caseId) + "</span>",
+          "<span>Color: " + (entry.colorMode || "normal") + " | " + (entry.imageVariantId || "img") + "</span>",
           "</div>"
         ].join("");
         card.addEventListener("click", () => openViewer(entry));
@@ -1388,6 +1506,7 @@ function buildGalleryIndexHtml(args) {
     formatSelect.addEventListener("change", renderGrid);
     caseSelect.addEventListener("change", renderGrid);
     templateSelect.addEventListener("change", renderGrid);
+    colorSelect.addEventListener("change", renderGrid);
 
     closeBtn.addEventListener("click", closeViewer);
     modal.addEventListener("click", (event) => {
@@ -1420,11 +1539,14 @@ function buildGalleryIndexHtml(args) {
 function summarizeFailures(tasks, failures, startedAt, outputRoot) {
   const byCase = {};
   const byFormat = {};
+  const byColor = {};
   const byTemplate = {};
-  const failedKeySet = new Set(failures.map((item) => `${item.task.formatId}|${item.task.templateId}|${item.task.caseId}`));
+  const failedKeySet = new Set(
+    failures.map((item) => `${item.task.formatId}|${item.task.templateId}|${item.task.caseId}|${item.task.colorMode}`)
+  );
 
   for (const task of tasks) {
-    const key = `${task.formatId}|${task.templateId}|${task.caseId}`;
+    const key = `${task.formatId}|${task.templateId}|${task.caseId}|${task.colorMode}`;
     const failed = failedKeySet.has(key);
     byCase[task.caseId] ??= { total: 0, failed: 0 };
     byCase[task.caseId].total += 1;
@@ -1433,6 +1555,10 @@ function summarizeFailures(tasks, failures, startedAt, outputRoot) {
     byFormat[task.formatId] ??= { total: 0, failed: 0 };
     byFormat[task.formatId].total += 1;
     if (failed) byFormat[task.formatId].failed += 1;
+
+    byColor[task.colorMode] ??= { total: 0, failed: 0 };
+    byColor[task.colorMode].total += 1;
+    if (failed) byColor[task.colorMode].failed += 1;
 
     byTemplate[task.templateId] ??= { total: 0, failed: 0, formats: {} };
     byTemplate[task.templateId].total += 1;
@@ -1453,6 +1579,7 @@ function summarizeFailures(tasks, failures, startedAt, outputRoot) {
     },
     by_case: byCase,
     by_format: byFormat,
+    by_color: byColor,
     by_template: byTemplate
   };
 }
@@ -1498,12 +1625,19 @@ async function main() {
     const stressCases = buildStressCases(options.cases);
     const catalog = await loadTemplateCatalogFromGeneratedAssets(options.formats);
     const tasks = buildRenderTasks(catalog, options, stressCases);
+    if (!options.maxTasks) {
+      assertTemplateCoverage(tasks, catalog);
+    }
     if (tasks.length === 0) {
       throw new Error("No tasks generated. Check --formats/--cases filters.");
     }
 
     await mkdir(outputRoot, { recursive: true });
     console.log(`Rendering ${tasks.length} stress screenshots (${stressCases.length} case(s))...`);
+    console.log(`Templates discovered: ${catalog.templates.length}`);
+    console.log(`Image pool size: ${options.imageUrls.length}`);
+    console.log(`Image pool: ${options.imageUrls.join(", ")}`);
+    console.log(`Color modes: ${options.colorModes.join(", ")}`);
     console.log(`Renderer mode: ${options.renderer}`);
 
     if (options.renderer === "local-browser") {
@@ -1525,6 +1659,8 @@ async function main() {
       templateId: item.task.templateId,
       caseId: item.task.caseId,
       caseLabel: item.task.caseLabel,
+      colorMode: item.task.colorMode,
+      imageVariantId: item.task.imageVariantId,
       file: relative(outputRoot, item.filePath).split("\\\\").join("/")
     }));
 
