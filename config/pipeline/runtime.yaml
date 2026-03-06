@@ -6,9 +6,8 @@ runtime:
 
 features:
   enable_template_preview: true
-  enable_stock_image_search: false
-  enable_ai_image_generation: false
-  prefer_feature_image: true
+  enable_ai_image_generation: true
+  prefer_feature_image: false
   enable_notifications: true
 
 security:

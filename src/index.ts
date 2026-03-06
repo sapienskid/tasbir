@@ -30,7 +30,6 @@ interface Env {
   GHOST_API_URL: string;
   GHOST_CONTENT_API_KEY: string;
   GHOST_WEBHOOK_TOKEN?: string;
-  PEXELS_API_KEY?: string;
   R2_PUBLIC_BASE_URL?: string;
   BRAND_NAME?: string;
   LLM_MODEL?: string;
@@ -49,10 +48,9 @@ interface Env {
 }
 
 interface ImageGenerationOptions {
-  mode?: "auto" | "none" | "feature" | "stock" | "ai" | "custom";
+  mode?: "auto" | "none" | "feature" | "ai" | "custom";
   customUrl?: string;
   prompt?: string;
-  allowStock?: boolean;
   allowAi?: boolean;
   preferFeature?: boolean;
 }
@@ -142,7 +140,7 @@ interface GhostPost {
 }
 
 interface SelectedImage {
-  source: "feature" | "stock" | "ai" | "custom" | "none";
+  source: "feature" | "ai" | "custom" | "none";
   imageUrl: string;
   attribution?: string;
   sourceUrl?: string;
@@ -1094,15 +1092,14 @@ async function runCampaignPipelineFromPost(
 
 function enforceDeterministicImagePolicy(options: ImageGenerationOptions | undefined): ImageGenerationOptions {
   const mode = (options?.mode ?? "auto").toLowerCase() as NonNullable<ImageGenerationOptions["mode"]>;
-  if (mode === "stock" || mode === "ai") {
-    throw new HttpError(400, "campaign mode only supports image.mode auto, feature, custom, or none");
+  if (mode !== "auto" && mode !== "feature" && mode !== "custom" && mode !== "none" && mode !== "ai") {
+    throw new HttpError(400, "campaign mode only supports image.mode auto, feature, custom, none, or ai");
   }
   return {
     ...options,
     mode,
-    allowStock: false,
-    allowAi: false,
-    preferFeature: options?.preferFeature ?? true
+    allowAi: options?.allowAi ?? true,
+    preferFeature: options?.preferFeature ?? false
   };
 }
 
@@ -1558,7 +1555,6 @@ async function chooseImageSource(
     })
     : "";
   const preferFeature = options?.preferFeature ?? PIPELINE_CONFIG.features.prefer_feature_image;
-  const allowStock = options?.allowStock ?? PIPELINE_CONFIG.features.enable_stock_image_search;
   const allowAi = options?.allowAi ?? PIPELINE_CONFIG.features.enable_ai_image_generation;
 
   if (mode === "none") {
@@ -1588,17 +1584,6 @@ async function chooseImageSource(
     return { source: "feature", imageUrl: featureImage };
   }
 
-  if (mode === "stock") {
-    if (!allowStock || !env.PEXELS_API_KEY?.trim()) {
-      throw new HttpError(422, "Stock image mode requires enable_stock_image_search and PEXELS_API_KEY");
-    }
-    const stockImage = await searchPexelsImage(llmOutput.stock_search_query || post.title, env.PEXELS_API_KEY.trim(), security);
-    if (!stockImage) {
-      throw new HttpError(422, "Stock image mode did not return a usable image");
-    }
-    return stockImage;
-  }
-
   if (mode === "ai") {
     if (!allowAi) {
       throw new HttpError(422, "AI image mode is disabled by configuration or request controls");
@@ -1620,23 +1605,7 @@ async function chooseImageSource(
 
   // --- Auto mode prioritized logic ---
 
-  // 1. Prefer feature image if configured and LLM suggests it
-  if (preferFeature && llmOutput.use_feature_image && featureImage.length > 0) {
-    return {
-      source: "feature",
-      imageUrl: featureImage
-    };
-  }
-
-  // 2. Priority: Search Stock (using intelligent LLM-generated query)
-  if (allowStock && env.PEXELS_API_KEY?.trim()) {
-    const stockImage = await searchPexelsImage(llmOutput.stock_search_query || post.title, env.PEXELS_API_KEY.trim(), security);
-    if (stockImage) {
-      return stockImage;
-    }
-  }
-
-  // 3. Fallback: Generate AI Image
+  // 1. Generate AI image first when enabled.
   if (allowAi) {
     const aiImage = await generateAiImage(env, {
       prompt,
@@ -1652,7 +1621,15 @@ async function chooseImageSource(
     }
   }
 
-  // 4. Ultimate Fallback: Feature Image
+  // 2. Fall back to feature image only when explicitly preferred.
+  if (preferFeature && llmOutput.use_feature_image && featureImage.length > 0) {
+    return {
+      source: "feature",
+      imageUrl: featureImage
+    };
+  }
+
+  // 3. Ultimate fallback: feature image if available.
   if (featureImage.length > 0) {
     return {
       source: "feature",
@@ -1663,59 +1640,6 @@ async function chooseImageSource(
   return {
     source: "none",
     imageUrl: ""
-  };
-}
-
-async function searchPexelsImage(query: string, apiKey: string, security: ResolvedSecurityConfig): Promise<SelectedImage | null> {
-  const stockQuery = query
-    .replace(/[^a-zA-Z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, PIPELINE_CONFIG.generation.limits.stock_query_term_max_count)
-    .join(" ") || PIPELINE_CONFIG.generation.fallbacks.stock_search_query;
-
-  const endpoint = `https://api.pexels.com/v1/search?query=${encodeURIComponent(
-    stockQuery
-  )}&per_page=1&orientation=landscape&size=large`;
-
-  const response = await fetch(endpoint, {
-    headers: {
-      Authorization: apiKey,
-      accept: "application/json"
-    }
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const data = (await response.json()) as {
-    photos?: Array<{
-      url?: string;
-      photographer?: string;
-      src?: {
-        large2x?: string;
-        original?: string;
-      };
-    }>;
-  };
-
-  const photo = data.photos?.[0];
-  const imageUrl = photo?.src?.large2x ?? photo?.src?.original;
-  if (!imageUrl) {
-    return null;
-  }
-
-  const safeImageUrl = sanitizeImageUrl(imageUrl, security, "Pexels image URL", {
-    allowDataUrl: false,
-    requireAllowedHost: false
-  });
-
-  return {
-    source: "stock",
-    imageUrl: safeImageUrl,
-    sourceUrl: photo?.url ? sanitizeHttpUrl(photo.url, security, "Pexels source URL", { requireAllowedHost: false }) : undefined,
-    attribution: photo?.photographer ? `Photo by ${photo.photographer} via Pexels` : "Photo via Pexels"
   };
 }
 
@@ -2671,14 +2595,13 @@ function parseImageOptions(input: unknown): ImageGenerationOptions | undefined {
   }
   const object = requireObject(input, "image");
   const mode = optionalString(object.mode, "image.mode", 16);
-  if (mode && !["auto", "none", "feature", "stock", "ai", "custom"].includes(mode)) {
-    throw new HttpError(400, "image.mode must be one of auto, none, feature, stock, ai, custom");
+  if (mode && !["auto", "none", "feature", "ai", "custom"].includes(mode)) {
+    throw new HttpError(400, "image.mode must be one of auto, none, feature, ai, custom");
   }
   const parsed: ImageGenerationOptions = {
     mode: mode as ImageGenerationOptions["mode"],
     customUrl: optionalString(object.customUrl, "image.customUrl", 2_000),
     prompt: optionalString(object.prompt, "image.prompt", PIPELINE_CONFIG.generation.limits.image_prompt_max_chars),
-    allowStock: object.allowStock !== undefined ? requiredBoolean(object.allowStock, "image.allowStock") : undefined,
     allowAi: object.allowAi !== undefined ? requiredBoolean(object.allowAi, "image.allowAi") : undefined,
     preferFeature: object.preferFeature !== undefined ? requiredBoolean(object.preferFeature, "image.preferFeature") : undefined
   };

@@ -443,7 +443,7 @@ describe("social pipeline worker", () => {
     expect(body.assets.twitter_card?.key).toContain("twitter-card.png");
   });
 
-  it("rejects ai/stock image modes in campaign mode", async () => {
+  it("rejects stock image mode in campaign mode", async () => {
     launchMock.mockResolvedValue(fakeBrowser());
 
     const env = {
@@ -490,7 +490,7 @@ describe("social pipeline worker", () => {
             }
           },
           image: {
-            mode: "ai"
+            mode: "stock"
           }
         })
       }),
@@ -500,7 +500,76 @@ describe("social pipeline worker", () => {
 
     expect(response.status).toBe(400);
     const body = (await response.json()) as { error: string };
-    expect(body.error).toContain("campaign mode only supports");
+    expect(body.error).toContain("image.mode");
+  });
+
+  it("supports ai image mode in campaign mode", async () => {
+    launchMock.mockResolvedValue(fakeBrowser());
+
+    const aiRun = vi
+      .fn()
+      .mockImplementationOnce(async () => ({
+        response: JSON.stringify({
+          instagram_caption: "test",
+          twitter_caption: "test",
+          linkedin_caption: "test",
+          carousel_slides: [
+            { heading: "A", body: "B." },
+            { heading: "C", body: "D." },
+            { heading: "E", body: "F." },
+            { heading: "G", body: "H." },
+            { heading: "I", body: "J." }
+          ],
+          hashtags: ["#a", "#b", "#c", "#d", "#e"],
+          image_prompt: "cinematic editorial illustration",
+          stock_search_query: "unused",
+          use_feature_image: false,
+          slot_content: {}
+        })
+      }))
+      .mockImplementationOnce(async () => new Uint8Array([1, 2, 3, 4]));
+
+    const env = {
+      AI: {
+        run: aiRun
+      },
+      BROWSER: {},
+      OUTPUT_BUCKET: {
+        put: vi.fn(async () => null)
+      },
+      API_KEYS: TEST_API_KEY,
+      R2_KEY_PREFIX: "social-assets"
+    } as never;
+
+    const response = await worker.fetch(
+      authorizedRequest("https://worker.test/generate-from-content", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: "Campaign AI Image Mode",
+          content: "campaign body",
+          campaign: {
+            platforms: ["twitter-card"],
+            counts: {
+              "twitter-card": 1
+            }
+          },
+          image: {
+            mode: "ai"
+          }
+        })
+      }),
+      env,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      image_source: { source: string };
+      campaign_outputs: Array<{ image_source: { source: string } }>;
+    };
+    expect(body.image_source.source).toBe("ai");
+    expect(body.campaign_outputs[0]?.image_source.source).toBe("ai");
   });
 
   it("keeps planner candidate context even when prompt is provided", async () => {
