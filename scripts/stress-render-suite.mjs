@@ -446,8 +446,11 @@ function loremParagraph(sentenceCount, wordsPerSentence, seed = 0) {
   return sentences.join(" ");
 }
 
-function truncateForQuery(text, maxChars = 220) {
-  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+function truncateForQuery(text, maxChars = 220, options = {}) {
+  const preserveWhitespace = options?.preserveWhitespace === true;
+  const normalized = preserveWhitespace
+    ? String(text || "").replace(/\r\n?/g, "\n").trim()
+    : String(text || "").replace(/\s+/g, " ").trim();
   if (normalized.length <= maxChars) {
     return normalized;
   }
@@ -516,19 +519,21 @@ function buildStressCases(filterCaseIds) {
     {
       id: "markdown-rich",
       label: "Markdown rich",
-      title: "## Markdown stress heading",
+      title: "**Markdown stress heading**",
       caption: truncateForQuery(
         "### Hook line\n- Bullet one explains context\n- Bullet two adds detail\n- Bullet three closes with CTA\n[Reference](https://example.com)",
-        460
+        460,
+        { preserveWhitespace: true }
       ),
       heading: "**Bold heading** with _emphasis_",
       body: truncateForQuery(
         "Here is `inline code`, plus a quote:\n> Keep constraints explicit.\n\n1. Plan\n2. Draft\n3. Publish",
-        520
+        520,
+        { preserveWhitespace: true }
       ),
       brandName: "Stress Lab",
-      slotHeadline: "### Slot markdown headline",
-      slotBody: truncateForQuery("- item alpha\n- item beta\n- item gamma", 240),
+      slotHeadline: "**Slot markdown headline**",
+      slotBody: truncateForQuery("- item alpha\n- item beta\n- item gamma", 240, { preserveWhitespace: true }),
       slotTag: "`MARKDOWN`",
       slotCta: "[Open checklist](https://example.com/checklist)",
       slotQuote: "> Deterministic systems reduce surprises.",
@@ -536,7 +541,8 @@ function buildStressCases(filterCaseIds) {
       metricValue: "88",
       slide: "1",
       total: "6",
-      slotFallbackPrefix: "Markdown"
+      slotFallbackPrefix: "Markdown",
+      preserveFormatting: true
     },
     {
       id: "math-heavy",
@@ -561,7 +567,8 @@ function buildStressCases(filterCaseIds) {
       metricValue: "3.1415",
       slide: "4",
       total: "8",
-      slotFallbackPrefix: "Math"
+      slotFallbackPrefix: "Math",
+      preserveFormatting: true
     },
     {
       id: "diagram-mermaid",
@@ -569,12 +576,14 @@ function buildStressCases(filterCaseIds) {
       title: "Diagram syntax stress",
       caption: truncateForQuery(
         "```mermaid\ngraph TD\nA[Input]-->B[Plan]\nB-->C[Render]\nC-->D[Review]\n```",
-        460
+        460,
+        { preserveWhitespace: true }
       ),
       heading: "Flow graph validation",
       body: truncateForQuery(
         "```mermaid\nsequenceDiagram\nUser->>Agent: provide content\nAgent->>Renderer: choose template\nRenderer-->>User: output assets\n```",
-        520
+        520,
+        { preserveWhitespace: true }
       ),
       brandName: "Stress Lab",
       slotHeadline: "Mermaid payload",
@@ -586,7 +595,8 @@ function buildStressCases(filterCaseIds) {
       metricValue: "7",
       slide: "2",
       total: "4",
-      slotFallbackPrefix: "Diagram"
+      slotFallbackPrefix: "Diagram",
+      preserveFormatting: true
     },
     {
       id: "mixed-stress",
@@ -599,7 +609,8 @@ function buildStressCases(filterCaseIds) {
       heading: "Mixed channel payload",
       body: truncateForQuery(
         `${loremParagraph(2, 20, 89)}\n\n- bullet a\n- bullet b\n\n$$\\alpha+\\beta=\\gamma$$\n\n\`\`\`mermaid\ngraph TD\nA-->B\n\`\`\``,
-        560
+        560,
+        { preserveWhitespace: true }
       ),
       brandName: "Stress Lab",
       slotHeadline: "Mixed slot pressure test",
@@ -611,7 +622,8 @@ function buildStressCases(filterCaseIds) {
       metricValue: "4200",
       slide: "5",
       total: "9",
-      slotFallbackPrefix: "Mixed"
+      slotFallbackPrefix: "Mixed",
+      preserveFormatting: true
     }
   ];
 
@@ -695,7 +707,9 @@ function buildRenderTasks(catalog, options, stressCases) {
         for (const field of fields) {
           const slotKey = String(field?.key ?? "").trim();
           if (!slotKey) continue;
-          slots[slotKey] = truncateForQuery(deriveSlotValue(field, stressCase, options.imageUrl), 240);
+          slots[slotKey] = truncateForQuery(deriveSlotValue(field, stressCase, options.imageUrl), 240, {
+            preserveWhitespace: Boolean(stressCase.preserveFormatting)
+          });
         }
         tasks.push({
           formatId,
