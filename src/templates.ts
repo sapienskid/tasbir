@@ -513,18 +513,18 @@ function renderTopBar(
   const showLeft = control.showBrandBadge;
   const showRight = kind === "carousel-post" && control.showSlideBadge && Boolean(slideLabel?.trim());
   const showTopBar = showLeft || showRight;
+  const topBarVisibilityClass = showTopBar ? "" : " hidden";
+  const leftPillVisibilityClass = showLeft ? "" : " hidden";
+  const rightPillVisibilityClass = showRight ? "" : " hidden";
   const brandIconUrl = escapeHtml(control.brandIconUrl.trim());
-  const hasBrandIcon = brandIconUrl.length > 0;
+  const brandIconVisibilityClass = brandIconUrl.length > 0 ? "" : " hidden";
 
-  return renderSystemFragment("@system/top-bar-shell", {
-    TOP_BAR_VISIBILITY_CLASS: showTopBar ? "" : "hidden",
-    LEFT_PILL_VISIBILITY_CLASS: showLeft ? "" : "hidden",
-    RIGHT_PILL_VISIBILITY_CLASS: showRight ? "" : "hidden",
-    LEFT_LABEL: escapeHtml(brandName),
-    RIGHT_LABEL: escapeHtml(slideLabel ?? ""),
-    BRAND_ICON_VISIBILITY_CLASS: hasBrandIcon ? "" : "hidden",
-    BRAND_ICON_URL: brandIconUrl
-  });
+  return `<div class="flex w-full items-center justify-between gap-5${topBarVisibilityClass}">
+  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary${leftPillVisibilityClass}"><img class="mr-1.5 h-[1em] w-auto object-contain${brandIconVisibilityClass}" src="${brandIconUrl}" alt="" />${escapeHtml(brandName)}</span>
+  <span class="ml-auto">
+    <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary${rightPillVisibilityClass}">${escapeHtml(slideLabel ?? "")}</span>
+  </span>
+</div>`;
 }
 
 function renderMetaFooter(
@@ -535,12 +535,12 @@ function renderMetaFooter(
 ): string {
   const left = control.metaLeftText ?? defaultLeft;
   const right = control.metaRightText ?? defaultRight;
+  const visibilityClass = control.showMetaFooter ? "" : " hidden";
 
-  return renderSystemFragment("@system/meta-footer-shell", {
-    META_FOOTER_VISIBILITY_CLASS: control.showMetaFooter ? "" : "hidden",
-    META_LEFT_LABEL: escapeHtml(left),
-    META_RIGHT_LABEL: escapeHtml(right)
-  });
+  return `<div class="mt-auto flex w-full items-center justify-between font-brand-body text-base font-medium uppercase tracking-[0.1em] leading-[1.2] text-brand-muted${visibilityClass}">
+  <span>${escapeHtml(left)}</span>
+  <span>${escapeHtml(right)}</span>
+</div>`;
 }
 
 function renderKicker(
@@ -549,10 +549,8 @@ function renderKicker(
   title: string
 ): string {
   const shouldShowKicker = kind === "carousel-post" && control.showTitleKicker;
-  return renderSystemFragment("@system/kicker-shell", {
-    KICKER_VISIBILITY_CLASS: shouldShowKicker ? "" : "hidden",
-    KICKER_TEXT: escapeHtml(title)
-  });
+  const visibilityClass = shouldShowKicker ? "" : " hidden";
+  return `<p class="max-w-5xl font-brand-body text-xl font-medium uppercase tracking-[0.14em] leading-[1.1] text-brand-muted${visibilityClass}">${escapeHtml(title)}</p>`;
 }
 
 function defaultMetaLeft(kind: TemplateKind): string {
@@ -578,14 +576,6 @@ function brandIconCornerClassName(position: BrandIconPosition): string {
     default:
       return "top-0 left-0";
   }
-}
-
-function renderSystemFragment(templateId: string, tokens: Record<string, string>): string {
-  const template = loadTemplateMarkup(templateId);
-  return template.replace(/\{\{\s*([A-Z0-9_:-]+)\s*\}\}/g, (_match, rawKey: string) => {
-    const key = rawKey.trim().toUpperCase();
-    return tokens[key] ?? "";
-  });
 }
 
 function escapeHtml(value: string): string {

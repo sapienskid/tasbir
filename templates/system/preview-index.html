@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Template Preview Workspace</title>
+  <style>{{TEMPLATE_CSS}}</style>
+</head>
+
+<body class="min-h-screen bg-slate-100 text-slate-900">
+  <div class="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-4 p-4 lg:flex-row">
+    <aside class="flex w-full shrink-0 flex-col gap-3 rounded-lg border border-slate-300 bg-white p-4 lg:w-[390px]">
+      <header class="space-y-1">
+        <h1 class="font-brand-display text-3xl leading-tight">Template Workspace</h1>
+        <p class="text-sm text-slate-600">Single-page preview with swappable templates. Tailwind utilities only.</p>
+      </header>
+
+      <div class="grid grid-cols-1 gap-3">
+        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="formatSelect">
+          Format
+          <select id="formatSelect" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"></select>
+        </label>
+
+        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="titleInput">
+          Title
+          <input id="titleInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        </label>
+
+        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="captionInput">
+          Caption
+          <input id="captionInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        </label>
+
+        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="headingInput">
+          Heading
+          <input id="headingInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        </label>
+
+        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="bodyInput">
+          Body
+          <input id="bodyInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        </label>
+
+        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="brandNameInput">
+          Brand Name
+          <input id="brandNameInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        </label>
+
+        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="brandingColorInput">
+          Brand Color
+          <input id="brandingColorInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        </label>
+
+        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="imageUrlInput">
+          Image URL
+          <input id="imageUrlInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+            placeholder="https://..." />
+        </label>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2 pt-1">
+        <button id="applyBtn"
+          class="rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-white">Apply</button>
+        <button id="reloadBtn"
+          class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700">Reload</button>
+        <button id="resetBtn"
+          class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700">Reset</button>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <a id="openTabLink"
+          class="inline-flex rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-white"
+          target="_blank" rel="noopener noreferrer">Open In New Tab</a>
+        <a id="downloadPngLink"
+          class="inline-flex rounded-md border border-emerald-700 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-emerald-700"
+          target="_blank" rel="noopener noreferrer">Capture PNG</a>
+      </div>
+
+      <label class="inline-flex items-center gap-2 text-xs text-slate-600" for="autoRefreshInput">
+        <input id="autoRefreshInput" type="checkbox" class="h-4 w-4 accent-slate-900" checked />
+        Auto refresh template list
+      </label>
+
+      <section class="grid gap-2 border-t border-slate-200 pt-3">
+        <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Templates</h2>
+        <div id="templateButtons" class="grid max-h-[45vh] grid-cols-1 gap-2 overflow-y-auto"></div>
+      </section>
+    </aside>
+
+    <main class="flex min-h-[70vh] flex-1 flex-col overflow-hidden rounded-lg border border-slate-300 bg-white">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
+        <p id="statusLabel" class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Loading</p>
+        <p id="routeLabel" class="max-w-[70%] truncate text-xs text-slate-500"></p>
+      </div>
+      <div class="flex-1 overflow-auto bg-slate-900/95 p-3">
+        <div class="mx-auto w-fit">
+          <iframe id="previewFrame" title="Template preview" class="block border-0 bg-white shadow-2xl"></iframe>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script id="preview-defaults" type="application/json">{{PREVIEW_DEFAULTS_JSON}}</script>
+  <script>
+    (() => {
+      const defaults = JSON.parse(document.getElementById("preview-defaults")?.textContent || "{}");
+      const fieldConfig = [
+        ["title", "titleInput"],
+        ["caption", "captionInput"],
+        ["heading", "headingInput"],
+        ["body", "bodyInput"],
+        ["brandName", "brandNameInput"],
+        ["brandingColor", "brandingColorInput"],
+        ["imageUrl", "imageUrlInput"]
+      ];
+
+      const state = {
+        catalog: null,
+        catalogVersion: "",
+        format: "",
+        templateId: ""
+      };
+
+      const formatSelect = document.getElementById("formatSelect");
+      const templateButtons = document.getElementById("templateButtons");
+      const autoRefreshInput = document.getElementById("autoRefreshInput");
+      const previewFrame = document.getElementById("previewFrame");
+      const statusLabel = document.getElementById("statusLabel");
+      const routeLabel = document.getElementById("routeLabel");
+      const openTabLink = document.getElementById("openTabLink");
+      const downloadPngLink = document.getElementById("downloadPngLink");
+
+      function fieldElement(fieldKey) {
+        const entry = fieldConfig.find(([key]) => key === fieldKey);
+        return entry ? document.getElementById(entry[1]) : null;
+      }
+
+      function getFieldValue(fieldKey) {
+        const input = fieldElement(fieldKey);
+        return input ? input.value.trim() : "";
+      }
+
+      function setFieldValue(fieldKey, value) {
+        const input = fieldElement(fieldKey);
+        if (input) {
+          input.value = value || "";
+        }
+      }
+
+      function templateById(templateId) {
+        const templates = Array.isArray(state.catalog?.templates) ? state.catalog.templates : [];
+        return templates.find((template) => template.id === templateId);
+      }
+
+      function formatById(formatId) {
+        const formats = Array.isArray(state.catalog?.formats) ? state.catalog.formats : [];
+        return formats.find((format) => format.id === formatId);
+      }
+
+      function templatesForFormat(formatId) {
+        const mapping = state.catalog?.templates_by_format || {};
+        const ids = mapping[formatId];
+        return Array.isArray(ids) ? ids : [];
+      }
+
+      function setStatus(label) {
+        statusLabel.textContent = label;
+      }
+
+      function syncUrl() {
+        const next = new URL(window.location.href);
+        next.searchParams.set("format", state.format);
+        next.searchParams.set("templateId", state.templateId);
+        for (const [fieldKey] of fieldConfig) {
+          const value = getFieldValue(fieldKey);
+          if (value) {
+            next.searchParams.set(fieldKey, value);
+          } else {
+            next.searchParams.delete(fieldKey);
+          }
+        }
+        history.replaceState(null, "", next.toString());
+      }
+
+      function buildTemplateUrl(includeCacheBust) {
+        const params = new URLSearchParams();
+        params.set("templateId", state.templateId);
+        for (const [fieldKey] of fieldConfig) {
+          const value = getFieldValue(fieldKey);
+          if (value) {
+            params.set(fieldKey, value);
+          }
+        }
+        if (includeCacheBust) {
+          params.set("_t", String(Date.now()));
+        }
+        return "/template/" + encodeURIComponent(state.format) + "?" + params.toString();
+      }
+
+      function buildScreenshotUrl() {
+        const params = new URLSearchParams();
+        params.set("format", state.format);
+        params.set("templateId", state.templateId);
+        for (const [fieldKey] of fieldConfig) {
+          const value = getFieldValue(fieldKey);
+          if (value) {
+            params.set(fieldKey, value);
+          }
+        }
+        return "/preview/screenshot?" + params.toString();
+      }
+
+      function applyPreview() {
+        const format = formatById(state.format);
+        if (!format) {
+          return;
+        }
+
+        previewFrame.width = String(format.width);
+        previewFrame.height = String(format.height);
+
+        const url = buildTemplateUrl(true);
+        previewFrame.src = url;
+        routeLabel.textContent = "/template/" + state.format + "?templateId=" + state.templateId;
+        openTabLink.href = url;
+        downloadPngLink.href = buildScreenshotUrl();
+        downloadPngLink.download = state.format + "-" + state.templateId.replaceAll("/", "_") + ".png";
+        syncUrl();
+        setStatus("Preview ready");
+      }
+
+      function renderTemplateButtons() {
+        templateButtons.innerHTML = "";
+        const ids = templatesForFormat(state.format);
+        if (ids.length === 0) {
+          const empty = document.createElement("p");
+          empty.className = "rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500";
+          empty.textContent = "No templates in this format.";
+          templateButtons.appendChild(empty);
+          return;
+        }
+
+        for (const id of ids) {
+          const template = templateById(id);
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "rounded-md border px-3 py-2 text-left text-xs transition";
+          const active = id === state.templateId;
+          if (active) {
+            button.className += " border-slate-900 bg-slate-900 text-white";
+          } else {
+            button.className += " border-slate-300 bg-white text-slate-700 hover:border-slate-500 hover:text-slate-900";
+          }
+          button.textContent = (template?.label || id) + " (" + id + ")";
+          button.addEventListener("click", () => {
+            state.templateId = id;
+            renderTemplateButtons();
+            applyPreview();
+          });
+          templateButtons.appendChild(button);
+        }
+      }
+
+      function renderFormatOptions() {
+        const formats = Array.isArray(state.catalog?.formats) ? state.catalog.formats : [];
+        formatSelect.innerHTML = "";
+        for (const format of formats) {
+          const option = document.createElement("option");
+          option.value = format.id;
+          option.textContent = format.id + " (" + format.width + "x" + format.height + ")";
+          formatSelect.appendChild(option);
+        }
+
+        if (!formats.some((format) => format.id === state.format)) {
+          state.format = formats[0]?.id || "";
+        }
+
+        const ids = templatesForFormat(state.format);
+        if (!ids.includes(state.templateId)) {
+          state.templateId = ids[0] || "";
+        }
+
+        formatSelect.value = state.format;
+      }
+
+      function loadInitialFromUrl() {
+        const url = new URL(window.location.href);
+        state.format = url.searchParams.get("format")?.trim() || "";
+        state.templateId = url.searchParams.get("templateId")?.trim() || "";
+
+        for (const [fieldKey] of fieldConfig) {
+          const value = url.searchParams.get(fieldKey);
+          setFieldValue(fieldKey, value ?? defaults[fieldKey] ?? "");
+        }
+      }
+
+      async function reloadCatalog() {
+        try {
+          const response = await fetch("/template-catalog?_t=" + Date.now(), { cache: "no-store" });
+          if (!response.ok) {
+            setStatus("Catalog failed");
+            return;
+          }
+
+          const catalog = await response.json();
+          state.catalog = catalog;
+          state.catalogVersion = catalog.catalog_version || "";
+          renderFormatOptions();
+          renderTemplateButtons();
+          applyPreview();
+        } catch (_error) {
+          setStatus("Server unavailable");
+        }
+      }
+
+      async function pollCatalog() {
+        if (!autoRefreshInput.checked) {
+          return;
+        }
+        try {
+          const response = await fetch("/template-catalog?_t=" + Date.now(), { cache: "no-store" });
+          if (!response.ok) {
+            return;
+          }
+          const next = await response.json();
+          if ((next.catalog_version || "") === state.catalogVersion) {
+            return;
+          }
+          state.catalog = next;
+          state.catalogVersion = next.catalog_version || "";
+          renderFormatOptions();
+          renderTemplateButtons();
+          applyPreview();
+          setStatus("Templates updated");
+        } catch (_error) {
+          // Keep last stable state.
+        }
+      }
+
+      document.getElementById("applyBtn").addEventListener("click", () => {
+        state.format = formatSelect.value;
+        renderFormatOptions();
+        renderTemplateButtons();
+        applyPreview();
+      });
+
+      document.getElementById("reloadBtn").addEventListener("click", () => {
+        applyPreview();
+      });
+
+      document.getElementById("resetBtn").addEventListener("click", () => {
+        for (const [fieldKey] of fieldConfig) {
+          setFieldValue(fieldKey, defaults[fieldKey] ?? "");
+        }
+        applyPreview();
+      });
+
+      formatSelect.addEventListener("change", () => {
+        state.format = formatSelect.value;
+        const ids = templatesForFormat(state.format);
+        state.templateId = ids[0] || "";
+        renderTemplateButtons();
+        applyPreview();
+      });
+
+      loadInitialFromUrl();
+      void reloadCatalog();
+      setInterval(() => {
+        void pollCatalog();
+      }, 1500);
+    })();
+  </script>
+</body>
+
+</html>

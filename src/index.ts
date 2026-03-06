@@ -22,7 +22,7 @@ import {
   type TemplateControlSet,
   type TemplateKind
 } from "./templates";
-import { PIPELINE_CONFIG, TEMPLATE_FILES } from "./generated/template-assets";
+import { PIPELINE_CONFIG, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/template-assets";
 
 interface Env {
   AI: Ai;
@@ -372,6 +372,22 @@ export default {
         return finalizeResponse(request, security, handleTemplatePreview(url));
       }
 
+      if (request.method === "GET" && url.pathname === "/preview/screenshot") {
+        enforceRouteSecurity(request, security, "preview");
+        if (!PIPELINE_CONFIG.features.enable_template_preview) {
+          throw new HttpError(403, "Template preview route is disabled by configuration");
+        }
+        return finalizeResponse(request, security, await handlePreviewScreenshot(url, env));
+      }
+
+      if (request.method === "GET" && url.pathname === "/preview") {
+        enforceRouteSecurity(request, security, "preview");
+        if (!PIPELINE_CONFIG.features.enable_template_preview) {
+          throw new HttpError(403, "Template preview route is disabled by configuration");
+        }
+        return finalizeResponse(request, security, handlePreviewWorkspace());
+      }
+
       if (request.method === "GET" && url.pathname === "/template-catalog") {
         enforceRouteSecurity(request, security, "catalog");
         return finalizeResponse(request, security, handleTemplateCatalog());
@@ -445,6 +461,8 @@ export default {
               "POST /generate",
               "POST /generate-from-content",
               "POST /webhook/ghost",
+              "GET /preview/screenshot?format=...&templateId=...",
+              "GET /preview",
               "GET /template-catalog",
               ...TEMPLATE_KINDS.map((kind) => `GET /template/${kind}?...`)
             ]
@@ -475,6 +493,67 @@ function handleTemplatePreview(url: URL): Response {
 }
 
 function handleTemplateCatalog(): Response {
+  return json(buildTemplateCatalogPayload());
+}
+
+function handlePreviewWorkspace(): Response {
+  const template = (TEMPLATE_FILES as Record<string, string>)["@system/preview-index"];
+  if (!template) {
+    throw new HttpError(500, "Missing system template: @system/preview-index");
+  }
+
+  const html = interpolateHtmlTemplate(template, {
+    TEMPLATE_CSS: TEMPLATE_CSS.replaceAll("</style", "<\\/style"),
+    PREVIEW_DEFAULTS_JSON: escapeJsonForHtml(
+      JSON.stringify({
+        title: PIPELINE_CONFIG.preview_defaults.title,
+        caption: PIPELINE_CONFIG.preview_defaults.caption,
+        heading: PIPELINE_CONFIG.preview_defaults.heading,
+        body: PIPELINE_CONFIG.preview_defaults.body,
+        brandName: PIPELINE_CONFIG.brand.default_name,
+        brandingColor: PIPELINE_CONFIG.brand.default_color,
+        imageUrl: ""
+      })
+    )
+  });
+
+  return new Response(html, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store"
+    }
+  });
+}
+
+async function handlePreviewScreenshot(url: URL, env: Env): Promise<Response> {
+  const format = url.searchParams.get("format")?.trim() ?? "";
+  if (!isTemplateKind(format)) {
+    return json({ error: "Invalid or missing format query param" }, 400);
+  }
+
+  const params = previewParamsFromUrl(format, url);
+  const html = renderTemplate(format, params);
+  const size = getTemplateDimensions(format);
+  const browser = await puppeteer.launch(env.BROWSER, { keep_alive: PIPELINE_CONFIG.runtime.browser_keep_alive_ms });
+
+  try {
+    const png = await renderPng(browser, html, size.width, size.height);
+    const templateId = url.searchParams.get("templateId")?.trim() || "default";
+    const safeTemplateId = templateId.replaceAll(/[^A-Za-z0-9._-]+/g, "_");
+
+    return new Response(png, {
+      headers: {
+        "content-type": "image/png",
+        "cache-control": "no-store",
+        "content-disposition": `inline; filename=\"${format}-${safeTemplateId}.png\"`
+      }
+    });
+  } finally {
+    await browser.close();
+  }
+}
+
+function buildTemplateCatalogPayload() {
   const templateFileMap = TEMPLATE_FILES as Record<string, string>;
   const allKinds = listTemplateKinds();
 
@@ -525,17 +604,40 @@ function handleTemplateCatalog(): Response {
     })
   );
 
-  return json({
+  return {
     ok: true,
     schema_version: PIPELINE_CONFIG.schema_version,
     catalog_version: catalogVersion,
     defaults: {
-      carousel_required_slides: PIPELINE_CONFIG.generation.carousel_required_slides
+      carousel_required_slides: PIPELINE_CONFIG.generation.carousel_required_slides,
+      preview: {
+        title: PIPELINE_CONFIG.preview_defaults.title,
+        caption: PIPELINE_CONFIG.preview_defaults.caption,
+        heading: PIPELINE_CONFIG.preview_defaults.heading,
+        body: PIPELINE_CONFIG.preview_defaults.body,
+        brandName: PIPELINE_CONFIG.brand.default_name,
+        brandingColor: PIPELINE_CONFIG.brand.default_color,
+        imageUrl: ""
+      }
     },
     formats,
     templates,
     templates_by_format: templatesByFormat
+  };
+}
+
+function interpolateHtmlTemplate(template: string, tokens: Record<string, string>): string {
+  return template.replace(/\{\{\s*([A-Z0-9_:-]+)\s*\}\}/g, (_match, rawKey: string) => {
+    const key = rawKey.trim().toUpperCase();
+    return tokens[key] ?? "";
   });
+}
+
+function escapeJsonForHtml(value: string): string {
+  return value
+    .replaceAll("&", "\\u0026")
+    .replaceAll("<", "\\u003c")
+    .replaceAll(">", "\\u003e");
 }
 
 function matchTemplateKind(pathname: string): TemplateKind | null {
@@ -783,7 +885,7 @@ function finalizeResponse(request: Request, security: ResolvedSecurityConfig, re
   const headers = new Headers(response.headers);
   headers.set("x-content-type-options", "nosniff");
   headers.set("referrer-policy", "no-referrer");
-  headers.set("x-frame-options", "DENY");
+  headers.set("x-frame-options", allowsSameOriginFrames(request) ? "SAMEORIGIN" : "DENY");
 
   if (security.cors.enabled) {
     const corsHeaders = corsHeadersForRequest(request, security);
@@ -796,6 +898,14 @@ function finalizeResponse(request: Request, security: ResolvedSecurityConfig, re
     status: response.status,
     headers
   });
+}
+
+function allowsSameOriginFrames(request: Request): boolean {
+  if (request.method !== "GET") {
+    return false;
+  }
+  const pathname = new URL(request.url).pathname;
+  return pathname === "/preview" || pathname.startsWith("/template/");
 }
 
 function corsHeadersForRequest(request: Request, security: ResolvedSecurityConfig): Headers {
