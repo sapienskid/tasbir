@@ -129,6 +129,7 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const selectedTemplate = selectTemplateDefinition(kind, params.templateId);
   const frameTone = resolveFrameTone(selectedTemplate);
   const slotValues = resolveSlotValues(kind, params, selectedTemplate.id);
+  const brandIcon = resolveBrandIconLayerSettings(params.brandName, slotValues);
 
   const tokens: Record<string, string> = {
     TITLE: escapeHtml(params.title),
@@ -155,7 +156,8 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     title: params.title,
     imageUrl: params.imageUrl,
     content,
-    visualLayers
+    visualLayers,
+    brandIcon
   });
 }
 
@@ -357,6 +359,7 @@ function renderDocumentShell(args: {
   imageUrl: string;
   content: string;
   visualLayers: VisualLayerSettings;
+  brandIcon: BrandIconLayerSettings;
 }): string {
   const safeTitle = escapeHtml(args.title);
   const safeImageUrl = escapeHtml(args.imageUrl.trim());
@@ -377,6 +380,12 @@ function renderDocumentShell(args: {
       TEMPLATE_TONE: args.frameTone,
       IMAGE_VISIBILITY_CLASS: imageVisibilityClass,
       IMAGE_URL: safeImageUrl,
+      BRAND_ICON_TEXT: escapeHtml(args.brandIcon.text),
+      BRAND_ICON_LEFT: formatCssNumber(args.brandIcon.left),
+      BRAND_ICON_TOP: formatCssNumber(args.brandIcon.top),
+      BRAND_ICON_SIZE: formatCssNumber(args.brandIcon.size),
+      BRAND_ICON_OPACITY: formatCssNumber(args.brandIcon.opacity),
+      BRAND_ICON_VISIBILITY_CLASS: args.brandIcon.visible ? "" : "hidden",
       CONTENT: args.content
     },
     {}
@@ -385,6 +394,15 @@ function renderDocumentShell(args: {
 
 interface VisualLayerSettings {
   useBackgroundImageOnly: boolean;
+}
+
+interface BrandIconLayerSettings {
+  text: string;
+  left: number;
+  top: number;
+  size: number;
+  opacity: number;
+  visible: boolean;
 }
 
 function resolveVisualLayerSettings(
@@ -410,6 +428,81 @@ function resolveVisualLayerSettings(
   }
 
   return configured;
+}
+
+function resolveBrandIconLayerSettings(
+  brandName: string,
+  slots: Record<string, string>
+): BrandIconLayerSettings {
+  const fallbackText = deriveBrandIconText(brandName);
+  return {
+    text: sanitizeBrandIconText(slots.brand_icon, fallbackText),
+    left: parseClampedNumber(slots.brand_icon_x, 92, 0, 100),
+    top: parseClampedNumber(slots.brand_icon_y, 9, 0, 100),
+    size: parseClampedNumber(slots.brand_icon_size, 92, 36, 220),
+    opacity: parseClampedNumber(slots.brand_icon_opacity, 0.92, 0.15, 1),
+    visible: parseBooleanFlag(slots.brand_icon_visible, true)
+  };
+}
+
+function deriveBrandIconText(brandName: string): string {
+  const cleaned = brandName
+    .replace(/[^A-Za-z0-9 ]+/g, " ")
+    .trim();
+  if (!cleaned) {
+    return "BR";
+  }
+
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+}
+
+function sanitizeBrandIconText(rawValue: string | undefined, fallback: string): string {
+  if (!rawValue) {
+    return fallback;
+  }
+  const cleaned = rawValue
+    .trim()
+    .replace(/[^A-Za-z0-9&+.-]/g, "")
+    .slice(0, 6);
+  return cleaned || fallback;
+}
+
+function parseClampedNumber(
+  rawValue: string | undefined,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  if (!rawValue) {
+    return fallback;
+  }
+  const parsed = Number.parseFloat(rawValue.trim());
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function parseBooleanFlag(rawValue: string | undefined, fallback: boolean): boolean {
+  if (!rawValue) {
+    return fallback;
+  }
+  const normalized = rawValue.trim().toLowerCase();
+  if (["0", "false", "off", "no", "hidden"].includes(normalized)) {
+    return false;
+  }
+  if (["1", "true", "on", "yes", "show"].includes(normalized)) {
+    return true;
+  }
+  return fallback;
+}
+
+function formatCssNumber(value: number): string {
+  return Number(value.toFixed(2)).toString();
 }
 
 function escapeHtml(value: string): string {

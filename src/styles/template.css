@@ -20,18 +20,18 @@
 }
 
 :root {
-  --token-font-display: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
-  --token-font-body: "Inter", "Helvetica Neue", Helvetica, Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --token-font-display: "Cormorant Garamond", "Bodoni MT", "Times New Roman", Times, serif;
+  --token-font-body: "Manrope", "Avenir Next", "Helvetica Neue", Helvetica, sans-serif;
 
-  --token-color-text-primary: #121212;
-  --token-color-text-secondary: #2d2d2d;
-  --token-color-text-muted: #6a6a6a;
-  --token-color-surface-base: #f8f8f5;
-  --token-color-surface-elevated: #f1f1ee;
-  --token-color-border-subtle: #1a1a1a;
-  --token-color-brand-accent: #101010;
-  --token-color-brand-accent-foreground: #ffffff;
-  --token-color-overlay-strong: rgba(0, 0, 0, 0.45);
+  --token-color-text-primary: #070707;
+  --token-color-text-secondary: #242424;
+  --token-color-text-muted: #5e5e5e;
+  --token-color-surface-base: #f5f5f3;
+  --token-color-surface-elevated: #ffffff;
+  --token-color-border-subtle: #101010;
+  --token-color-brand-accent: #090909;
+  --token-color-brand-accent-foreground: #fcfcfc;
+  --token-color-overlay-strong: rgba(0, 0, 0, 0.58);
 
   --color-text-primary: var(--token-color-text-primary);
   --color-text-secondary: var(--token-color-text-secondary);
@@ -50,14 +50,14 @@
   --token-space-xl: 40px;
   --token-space-2xl: 46px;
 
-  --token-type-kicker: 22px;
-  --token-type-heading: 64px;
-  --token-type-body: 28px;
-  --token-type-metric-value: 66px;
-  --token-type-metric-label: 20px;
+  --token-type-kicker: 20px;
+  --token-type-heading: 68px;
+  --token-type-body: 29px;
+  --token-type-metric-value: 74px;
+  --token-type-metric-label: 22px;
 
-  --radius-card: 0px;
-  --radius-pill: 0px;
+  --radius-card: 2px;
+  --radius-pill: 999px;
   --frame-title-shadow: none;
   --frame-caption-shadow: none;
 
@@ -70,12 +70,12 @@
 }
 
 [data-template-tone="dark"] {
-  --token-color-text-primary: #f2f2f2;
-  --token-color-text-secondary: #d1d1d1;
-  --token-color-text-muted: #9a9a9a;
-  --token-color-surface-base: #070707;
-  --token-color-surface-elevated: #131313;
-  --token-color-border-subtle: #2b2b2b;
+  --token-color-text-primary: #f6f6f6;
+  --token-color-text-secondary: #dddddd;
+  --token-color-text-muted: #aeaeae;
+  --token-color-surface-base: #050505;
+  --token-color-surface-elevated: #0d0d0d;
+  --token-color-border-subtle: #f0f0f0;
 }
 
 * {

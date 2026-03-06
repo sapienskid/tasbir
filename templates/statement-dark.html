@@ -5,24 +5,38 @@
 @frame_tone: dark
 
 @slot cta_text | text | Short call-to-action button label | Read More
+@slot brand_icon | text | Monogram text for the floating brand icon
+@slot brand_icon_x | number | Icon horizontal position percent (0-100) | 92
+@slot brand_icon_y | number | Icon vertical position percent (0-100) | 9
+@slot brand_icon_size | number | Icon circle size in px | 92
+@slot brand_icon_opacity | number | Icon opacity from 0 to 1 | 0.92
+@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
-<div
-  class="relative z-10 flex h-full w-full flex-col p-14 items-start text-left">
-  <div class="flex w-full items-center justify-between gap-5">
-  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary">{{BRAND_NAME}}</span>
-  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary empty:hidden">{{SLIDE_LABEL}}</span>
-</div>
-  <div class="relative isolate z-0 mt-auto p-8">
-    <p class="max-w-5xl font-brand-body text-xl font-medium uppercase tracking-[0.14em] leading-[1.1] text-brand-muted empty:hidden">{{KICKER_TEXT}}</p>
-    <h1
-      class="mt-2 max-w-5xl font-brand-display text-brand-primary text-6xl leading-tight tracking-tight drop-shadow-sm text-balance [overflow-wrap:anywhere] break-words">
-      {{HEADING}}</h1>
-    <div class="mt-4 h-px w-full bg-white"></div>
+<div class="relative z-10 grid h-full w-full grid-rows-[auto_minmax(0,1fr)] gap-6 p-10 text-left">
+  <header class="flex w-full items-start justify-between gap-3">
+    <div class="flex max-w-full flex-wrap items-center gap-2.5">
+      <span
+        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
+        {{BRAND_NAME}}</span>
+      <span
+        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary empty:hidden group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
+        {{SLIDE_LABEL}}</span>
+    </div>
+  </header>
+  <section
+    class="relative flex h-full min-h-0 w-full flex-col items-start gap-4 overflow-hidden border border-black/86 bg-white/86 p-8 backdrop-blur-[1.25px] group-data-[template-tone=dark]:border-white/62 group-data-[template-tone=dark]:bg-black/84">
     <p
-      class="mt-4 max-w-4xl font-brand-body italic text-brand-secondary text-2xl leading-relaxed drop-shadow-sm [overflow-wrap:anywhere] break-words">
+      class="m-0 max-w-full font-brand-body text-[clamp(13px,1.45vw,21px)] font-semibold uppercase tracking-[0.18em] leading-[1.2] text-brand-muted empty:hidden">
+      {{KICKER_TEXT}}</p>
+    <h1
+      class="m-0 max-w-full font-brand-display text-[clamp(48px,6.6vw,68px)] font-semibold leading-[0.99] tracking-[-0.012em] text-brand-primary text-balance [overflow-wrap:anywhere] break-words">
+      {{HEADING}}</h1>
+    <div class="h-px w-full bg-black/76 group-data-[template-tone=dark]:bg-white/66"></div>
+    <p
+      class="m-0 max-w-full font-brand-body text-[clamp(20px,2.45vw,29px)] italic leading-[1.32] text-brand-secondary [overflow-wrap:anywhere] break-words">
       {{BODY}}</p>
     <div
-      class="mt-6 inline-flex w-fit items-center bg-white px-6 py-3 font-brand-body text-2xl font-semibold uppercase tracking-[0.06em] leading-[1.1] text-black">
+      class="inline-flex w-fit items-center border border-black/90 bg-black/92 px-[18px] py-3 font-brand-body text-[clamp(18px,2vw,30px)] font-bold uppercase tracking-[0.06em] leading-[1.08] text-[#fafafa] group-data-[template-tone=dark]:border-white/82 group-data-[template-tone=dark]:bg-white/92 group-data-[template-tone=dark]:text-[#070707]">
       {{SLOT:cta_text}}</div>
-  </div>
+  </section>
 </div>

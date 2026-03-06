@@ -388,6 +388,12 @@ async function loadSystemTemplateFiles(directoryPath) {
     "TEMPLATE_TONE",
     "IMAGE_VISIBILITY_CLASS",
     "IMAGE_URL",
+    "BRAND_ICON_TEXT",
+    "BRAND_ICON_LEFT",
+    "BRAND_ICON_TOP",
+    "BRAND_ICON_SIZE",
+    "BRAND_ICON_OPACITY",
+    "BRAND_ICON_VISIBILITY_CLASS",
     "CONTENT"
   ]);
 

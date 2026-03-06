@@ -8,15 +8,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=Inter:wght@300;400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Manrope:wght@400;500;600;700;800&display=swap"
     rel="stylesheet" />
   <style>{{TEMPLATE_CSS}}</style>
   <style>
     :root {
       --canvas-width: {{CANVAS_WIDTH}}px;
       --canvas-height: {{CANVAS_HEIGHT}}px;
-      --font-display: var(--token-font-display, "Playfair Display", Georgia, "Times New Roman", serif);
-      --font-body: var(--token-font-body, "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif);
+      --font-display: var(--token-font-display, "Cormorant Garamond", Georgia, "Times New Roman", serif);
+      --font-body: var(--token-font-body, "Manrope", "Helvetica Neue", Helvetica, sans-serif);
     }
 
     * {
@@ -39,15 +39,33 @@
 </head>
 
 <body>
-  <div class="relative isolate h-full w-full overflow-hidden bg-brand-surface" data-template-id="{{TEMPLATE_ID}}"
+  <div class="group relative isolate h-full w-full overflow-hidden bg-brand-surface" data-template-id="{{TEMPLATE_ID}}"
     data-template-tone="{{TEMPLATE_TONE}}">
-    <div class="pointer-events-none absolute inset-0 z-10 {{IMAGE_VISIBILITY_CLASS}}">
-      <img src="{{IMAGE_URL}}" alt="" class="h-full w-full object-cover" />
+    <div
+      class="pointer-events-none absolute inset-0 z-[1] bg-[radial-gradient(circle_at_14%_12%,rgba(255,255,255,0.46),rgba(255,255,255,0)_48%),radial-gradient(circle_at_84%_84%,rgba(0,0,0,0.26),rgba(0,0,0,0)_52%)] group-data-[template-tone=dark]:bg-[radial-gradient(circle_at_15%_13%,rgba(255,255,255,0.12),rgba(255,255,255,0)_47%),radial-gradient(circle_at_82%_85%,rgba(0,0,0,0.66),rgba(0,0,0,0)_54%)]">
     </div>
-    <div class="pointer-events-none absolute inset-0 z-20 bg-black/50"></div>
-    <div class="pointer-events-none absolute inset-0 z-30 bg-gradient-to-br from-brand-accent/20 to-transparent"></div>
-    <div class="pointer-events-none absolute inset-0 z-40 border border-brand-border/30"></div>
-    <div class="relative z-[70] h-full w-full">{{CONTENT}}</div>
+    <div class="pointer-events-none absolute inset-0 z-10 {{IMAGE_VISIBILITY_CLASS}}">
+      <img src="{{IMAGE_URL}}" alt="" class="h-full w-full object-cover grayscale contrast-[1.12] brightness-[0.84]" />
+    </div>
+    <div class="pointer-events-none absolute inset-0 z-20 bg-black/52"></div>
+    <div
+      class="pointer-events-none absolute inset-0 z-30 bg-[linear-gradient(150deg,rgba(255,255,255,0.22),rgba(0,0,0,0.36))] group-data-[template-tone=dark]:bg-[linear-gradient(145deg,rgba(255,255,255,0.04),rgba(0,0,0,0.62))]">
+    </div>
+    <div
+      class="pointer-events-none absolute inset-0 z-40 bg-[linear-gradient(to_right,rgba(0,0,0,0.11)_1px,transparent_1px),linear-gradient(to_bottom,rgba(0,0,0,0.11)_1px,transparent_1px)] bg-[length:72px_72px] opacity-[0.22] group-data-[template-tone=dark]:bg-[linear-gradient(to_right,rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.12)_1px,transparent_1px)] group-data-[template-tone=dark]:opacity-[0.18]">
+    </div>
+    <div
+      class="pointer-events-none absolute inset-0 z-[58] border border-black/70 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.34),inset_0_0_0_24px_rgba(255,255,255,0.08)] group-data-[template-tone=dark]:border-white/45 group-data-[template-tone=dark]:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.14),inset_0_0_0_24px_rgba(0,0,0,0.28)]">
+    </div>
+    <div
+      class="pointer-events-none absolute z-[65] rounded-full border border-black/25 group-data-[template-tone=dark]:border-white/35 {{BRAND_ICON_VISIBILITY_CLASS}}"
+      style="left: {{BRAND_ICON_LEFT}}%; top: {{BRAND_ICON_TOP}}%; width: calc({{BRAND_ICON_SIZE}}px * 1.18); height: calc({{BRAND_ICON_SIZE}}px * 1.18); transform: translate(-50%, -50%); opacity: {{BRAND_ICON_OPACITY}};">
+    </div>
+    <div
+      class="pointer-events-none absolute z-[66] flex items-center justify-center rounded-full border border-black/90 bg-white/82 font-brand-body font-bold uppercase tracking-[0.08em] text-black shadow-[0_8px_24px_rgba(0,0,0,0.2)] group-data-[template-tone=dark]:border-white/85 group-data-[template-tone=dark]:bg-black/72 group-data-[template-tone=dark]:text-white {{BRAND_ICON_VISIBILITY_CLASS}}"
+      style="left: {{BRAND_ICON_LEFT}}%; top: {{BRAND_ICON_TOP}}%; width: {{BRAND_ICON_SIZE}}px; height: {{BRAND_ICON_SIZE}}px; transform: translate(-50%, -50%); opacity: {{BRAND_ICON_OPACITY}}; font-size: calc({{BRAND_ICON_SIZE}}px * 0.27);">
+      {{BRAND_ICON_TEXT}}</div>
+    <div class="relative z-[80] h-full w-full">{{CONTENT}}</div>
   </div>
 </body>
 

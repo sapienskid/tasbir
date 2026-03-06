@@ -6,28 +6,37 @@
 @slot metric_value | text | The primary metric or number to display prominently
 @slot metric_label | text | Short label describing what the metric measures
 @slot headline | text | Supporting headline text shown below the metric
+@slot brand_icon | text | Monogram text for the floating brand icon
+@slot brand_icon_x | number | Icon horizontal position percent (0-100) | 92
+@slot brand_icon_y | number | Icon vertical position percent (0-100) | 9
+@slot brand_icon_size | number | Icon circle size in px | 92
+@slot brand_icon_opacity | number | Icon opacity from 0 to 1 | 0.92
+@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
-<div
-  class="relative z-10 flex h-full w-full flex-col p-14 items-start text-left">
-  <div class="flex w-full items-center justify-between gap-5">
-  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary">{{BRAND_NAME}}</span>
-  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary empty:hidden">{{SLIDE_LABEL}}</span>
-</div>
-  <div class="relative isolate z-0 mt-auto p-8">
-    <div class="mb-6 flex flex-col gap-1">
-      <div
-        class="font-brand-display text-brand-primary text-7xl leading-none tabular-nums">
-        {{SLOT:metric_value}}</div>
-      <div
-        class="font-brand-body text-brand-secondary text-xl leading-[1.2]">
-        {{SLOT:metric_label}}</div>
+<div class="relative z-10 grid h-full w-full grid-rows-[auto_minmax(0,1fr)] gap-6 p-10 text-left">
+  <header class="flex w-full items-start justify-between gap-3">
+    <div class="flex max-w-full flex-wrap items-center gap-2.5">
+      <span
+        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
+        {{BRAND_NAME}}</span>
+      <span
+        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary empty:hidden group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
+        {{SLIDE_LABEL}}</span>
     </div>
-    <div class="mt-4 h-px w-full bg-brand-border"></div>
+  </header>
+  <section
+    class="relative flex h-full min-h-0 w-full flex-col items-start gap-4 overflow-hidden border border-black/86 bg-white/86 p-8 backdrop-blur-[1.25px] group-data-[template-tone=dark]:border-white/62 group-data-[template-tone=dark]:bg-black/84">
+    <div class="flex min-h-0 w-full flex-col gap-1">
+      <p class="m-0 font-brand-display text-[clamp(62px,9vw,74px)] font-semibold leading-[0.9] tracking-[-0.014em] text-brand-primary tabular-nums">
+        {{SLOT:metric_value}}</p>
+      <p class="m-0 font-brand-body text-[clamp(18px,2.2vw,22px)] leading-[1.2] text-brand-secondary">{{SLOT:metric_label}}</p>
+    </div>
+    <div class="h-px w-full bg-black/76 group-data-[template-tone=dark]:bg-white/66"></div>
     <h1
-      class="mt-4 max-w-5xl font-brand-display text-brand-primary text-5xl leading-tight tracking-tight drop-shadow-sm text-balance [overflow-wrap:anywhere] break-words">
+      class="m-0 max-w-full font-brand-display text-[clamp(42px,5.6vw,58px)] font-semibold leading-[1.01] tracking-[-0.012em] text-brand-primary text-balance [overflow-wrap:anywhere] break-words">
       {{SLOT:headline}}</h1>
     <p
-      class="mt-4 max-w-4xl font-brand-body text-brand-secondary text-xl leading-relaxed drop-shadow-sm [overflow-wrap:anywhere] break-words">
+      class="m-0 max-w-full font-brand-body text-[clamp(20px,2.45vw,29px)] leading-[1.32] text-brand-secondary [overflow-wrap:anywhere] break-words">
       {{BODY}}</p>
-  </div>
+  </section>
 </div>
