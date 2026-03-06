@@ -45,6 +45,9 @@ interface Env {
   CORS_ALLOW_CREDENTIALS?: string;
   CORS_MAX_AGE_SECONDS?: string;
   API_AUTH_REQUIRE_FOR_PREVIEW?: string;
+  RATE_LIMIT_ENABLED?: string;
+  RATE_LIMIT_WINDOW_SECONDS?: string;
+  RATE_LIMIT_MAX_REQUESTS_PER_WINDOW?: string;
   NOTIFY_HOST_ALLOWLIST?: string;
   IMAGE_HOST_ALLOWLIST?: string;
   ALLOW_PRIVATE_NETWORK_TARGETS?: string;
@@ -736,6 +739,24 @@ function resolveSecurityConfig(env: Env): ResolvedSecurityConfig {
   if (env.CORS_MAX_AGE_SECONDS !== undefined) {
     merged.cors.max_age_seconds = Math.round(
       clampNumber(Number(env.CORS_MAX_AGE_SECONDS), 0, 86400, merged.cors.max_age_seconds)
+    );
+  }
+  if (env.RATE_LIMIT_ENABLED !== undefined) {
+    merged.rate_limit.enabled = parseBooleanString(env.RATE_LIMIT_ENABLED, merged.rate_limit.enabled);
+  }
+  if (env.RATE_LIMIT_WINDOW_SECONDS !== undefined) {
+    merged.rate_limit.window_seconds = Math.round(
+      clampNumber(Number(env.RATE_LIMIT_WINDOW_SECONDS), 1, 3600, merged.rate_limit.window_seconds)
+    );
+  }
+  if (env.RATE_LIMIT_MAX_REQUESTS_PER_WINDOW !== undefined) {
+    merged.rate_limit.max_requests_per_window = Math.round(
+      clampNumber(
+        Number(env.RATE_LIMIT_MAX_REQUESTS_PER_WINDOW),
+        1,
+        10_000,
+        merged.rate_limit.max_requests_per_window
+      )
     );
   }
 
@@ -2501,9 +2522,20 @@ async function renderPng(
 
   try {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    const configuredWaitUntil = PIPELINE_CONFIG.runtime.page_set_content_wait_until as
+      | "load"
+      | "domcontentloaded"
+      | "networkidle0";
+    const safeWaitUntil = configuredWaitUntil === "networkidle0" ? "domcontentloaded" : configuredWaitUntil;
     await page.setContent(html, {
-      waitUntil: PIPELINE_CONFIG.runtime.page_set_content_wait_until as "load" | "domcontentloaded" | "networkidle0"
+      waitUntil: safeWaitUntil,
+      timeout: 15_000
     });
+
+    await page.waitForFunction(
+      "() => typeof window.__RICH_RENDER_DONE__ === 'undefined' || window.__RICH_RENDER_DONE__ === true",
+      { timeout: 7_000 }
+    );
 
     await page.evaluate(`
       (async () => {

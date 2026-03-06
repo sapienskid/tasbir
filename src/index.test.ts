@@ -55,6 +55,42 @@ describe("social pipeline worker", () => {
     expect(html).not.toContain("1080 x 1080");
   });
 
+  it("renders markdown and math syntax into rich html wrappers", async () => {
+    const response = await worker.fetch(
+      authorizedRequest(
+        "https://worker.test/template/instagram-portrait?templateId=layout/editorial" +
+          "&title=%2A%2ABold%2A%2A%20headline" +
+          "&caption=Inline%20math%20%24a%5E2%2Bb%5E2%3Dc%5E2%24%0A%0A-%20item%20one%0A-%20item%20two"
+      ),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('<span class="rich-text rich-text-inline"><strong>Bold</strong> headline</span>');
+    expect(html).toContain('class="rich-text rich-text-block"');
+    expect(html).toContain('class="rich-math rich-math-inline"');
+    expect(html).toContain("<ul>");
+  });
+
+  it("renders mermaid fences into deferred diagram placeholders", async () => {
+    const diagramMarkdown = encodeURIComponent("```mermaid\ngraph TD\nA-->B\n```");
+    const response = await worker.fetch(
+      authorizedRequest(
+        `https://worker.test/template/carousel-post?templateId=layout/carousel-module&title=Flow&heading=Flow&body=${diagramMarkdown}&slide=1&total=3`
+      ),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('class="rich-mermaid rich-mermaid-block"');
+    expect(html).toContain("data-mermaid=");
+    expect(html).toContain("__RICH_RENDER_DONE__");
+  });
+
   it("hides carousel labels by default", async () => {
     const response = await worker.fetch(
       authorizedRequest("https://worker.test/template/carousel-post?title=T&heading=H&body=B&slide=1&total=5"),
@@ -850,6 +886,7 @@ function fakeBrowser() {
   const page = {
     setViewport: vi.fn(async () => undefined),
     setContent: vi.fn(async () => undefined),
+    waitForFunction: vi.fn(async () => undefined),
     evaluate: vi.fn(async () => undefined),
     screenshot: vi.fn(async () => new Uint8Array([137, 80, 78, 71])),
     close: vi.fn(async () => undefined)

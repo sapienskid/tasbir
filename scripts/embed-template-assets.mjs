@@ -14,6 +14,7 @@ const systemTemplateDir = resolve(templatesDir, "system");
 const loadedConfig = await loadConfigWithExtends(configPath);
 const config = assertConfigShape(loadedConfig);
 const templateCss = await readCompiledTemplateCss(templateCssPath);
+const runtimeScripts = await loadRuntimeScripts(projectRoot);
 const formatKeys = Object.keys(config.formats);
 
 // ─── Auto-discover templates from templates/ directory ───────────────────────
@@ -58,7 +59,8 @@ const generated = JSON.stringify(
   {
     pipeline_config: config,
     template_files: templateFiles,
-    template_css: templateCss
+    template_css: templateCss,
+    runtime_scripts: runtimeScripts
   },
   null,
   2
@@ -402,10 +404,28 @@ async function loadSystemTemplateFiles(directoryPath) {
     "BRAND_ICON_VISIBILITY_CLASS",
     "BRAND_ICON_IMAGE_VISIBILITY_CLASS",
     "BRAND_ICON_TEXT_VISIBILITY_CLASS",
-    "CONTENT"
+    "CONTENT",
+    "MERMAID_RUNTIME_JS"
   ]);
 
   return loaded;
+}
+
+async function loadRuntimeScripts(rootDir) {
+  const mermaidPath = resolve(rootDir, "node_modules/mermaid/dist/mermaid.min.js");
+  let mermaidRuntime = "";
+  try {
+    mermaidRuntime = await readFile(mermaidPath, "utf8");
+  } catch {
+    throw new Error(
+      "Missing Mermaid runtime at node_modules/mermaid/dist/mermaid.min.js. " +
+      "Install dependencies with `pnpm install` before running the build."
+    );
+  }
+
+  return {
+    mermaid: mermaidRuntime
+  };
 }
 
 function assertSystemTemplateTokenSet(template, templateId, requiredTokens) {

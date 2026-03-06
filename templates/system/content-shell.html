@@ -35,6 +35,123 @@
       text-rendering: optimizeLegibility;
       -webkit-font-smoothing: antialiased;
     }
+
+    .rich-text {
+      display: block;
+      max-width: 100%;
+    }
+
+    .rich-text-inline {
+      display: inline;
+      max-width: 100%;
+    }
+
+    .rich-text p {
+      margin: 0;
+    }
+
+    .rich-text p+p {
+      margin-top: 0.34em;
+    }
+
+    .rich-text ul,
+    .rich-text ol {
+      margin: 0.35em 0 0.35em 1.15em;
+      padding: 0;
+    }
+
+    .rich-text li {
+      margin: 0.16em 0;
+    }
+
+    .rich-text blockquote {
+      margin: 0.35em 0;
+      padding: 0 0 0 0.6em;
+      border-left: 2px solid currentColor;
+      opacity: 0.86;
+    }
+
+    .rich-text pre {
+      margin: 0.35em 0;
+      padding: 0.35em 0.45em;
+      border-radius: 0.35em;
+      border: 1px solid rgba(15, 23, 42, 0.22);
+      background: rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+      white-space: pre-wrap;
+      font-family: "Courier New", "Liberation Mono", monospace;
+      font-size: 0.74em;
+      line-height: 1.2;
+    }
+
+    .rich-text code {
+      font-family: "Courier New", "Liberation Mono", monospace;
+      font-size: 0.8em;
+      border-radius: 0.2em;
+      background: rgba(15, 23, 42, 0.08);
+      padding: 0.08em 0.26em;
+    }
+
+    .rich-text a {
+      color: inherit;
+      text-decoration: underline;
+      text-decoration-thickness: 0.08em;
+      text-underline-offset: 0.1em;
+    }
+
+    .rich-math {
+      display: inline-block;
+      max-width: 100%;
+      vertical-align: middle;
+      white-space: normal;
+    }
+
+    .rich-math-block {
+      display: block;
+      margin: 0.35em 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+    }
+
+    .rich-mermaid {
+      width: 100%;
+      max-width: 100%;
+      margin: 0.35em 0;
+      padding: 0.3em;
+      border-radius: 0.35em;
+      border: 1px solid rgba(15, 23, 42, 0.2);
+      background: rgba(255, 255, 255, 0.92);
+      color: #0f172a;
+      overflow: hidden;
+      display: block;
+      line-height: 1;
+    }
+
+    .rich-mermaid-inline {
+      display: inline-block;
+      width: auto;
+      max-width: 100%;
+      vertical-align: middle;
+    }
+
+    .rich-mermaid svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      max-width: 100%;
+    }
+
+    .rich-mermaid-inline svg {
+      width: auto;
+      max-width: 100%;
+    }
+
+    .rich-mermaid-error {
+      white-space: pre-wrap;
+      font-family: "Courier New", "Liberation Mono", monospace;
+      font-size: 0.66em;
+      line-height: 1.2;
+    }
   </style>
 </head>
 
@@ -69,6 +186,72 @@
     <!-- Main Content Slot -->
     <div class="relative z-[100] h-full w-full">{{CONTENT}}</div>
   </div>
+  <script>{{MERMAID_RUNTIME_JS}}</script>
+  <script>
+    (() => {
+      const runtimeWindow = window;
+      runtimeWindow.__RICH_RENDER_DONE__ = false;
+
+      const decodeMermaid = (value) => {
+        try {
+          return decodeURIComponent(value);
+        } catch {
+          return value;
+        }
+      };
+
+      const renderMermaidDiagrams = async () => {
+        const mermaidNodes = Array.from(document.querySelectorAll(".rich-mermaid[data-mermaid]"));
+        if (mermaidNodes.length === 0) {
+          runtimeWindow.__RICH_RENDER_DONE__ = true;
+          return;
+        }
+
+        const mermaidRuntime = runtimeWindow.mermaid;
+        if (!mermaidRuntime || typeof mermaidRuntime.initialize !== "function" || typeof mermaidRuntime.render !== "function") {
+          mermaidNodes.forEach((node) => {
+            node.textContent = decodeMermaid(node.getAttribute("data-mermaid") || "");
+            node.classList.add("rich-mermaid-error");
+          });
+          runtimeWindow.__RICH_RENDER_DONE__ = true;
+          return;
+        }
+
+        mermaidRuntime.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: "neutral",
+          fontFamily: "Inter, Manrope, sans-serif",
+          suppressErrorRendering: true
+        });
+
+        let index = 0;
+        for (const node of mermaidNodes) {
+          const source = decodeMermaid(node.getAttribute("data-mermaid") || "");
+          if (!source.trim()) {
+            node.remove();
+            continue;
+          }
+
+          try {
+            const result = await mermaidRuntime.render(`rich-mermaid-${index++}`, source);
+            node.innerHTML = result.svg;
+          } catch {
+            node.textContent = source;
+            node.classList.add("rich-mermaid-error");
+          }
+        }
+
+        runtimeWindow.__RICH_RENDER_DONE__ = true;
+      };
+
+      Promise.resolve()
+        .then(renderMermaidDiagrams)
+        .catch(() => {
+          runtimeWindow.__RICH_RENDER_DONE__ = true;
+        });
+    })();
+  </script>
 </body>
 
 </html>

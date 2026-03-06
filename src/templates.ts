@@ -1,4 +1,6 @@
-import { PIPELINE_CONFIG, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/template-assets";
+import katex from "katex";
+import MarkdownIt from "markdown-it";
+import { PIPELINE_CONFIG, RUNTIME_SCRIPTS, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/template-assets";
 
 export type TemplateKind = string;
 
@@ -49,6 +51,22 @@ const TEMPLATE_DEFINITIONS = PIPELINE_CONFIG.templates as readonly TemplateDefin
 const TEMPLATE_SLOT_KEY_CACHE = new Map<string, string[]>();
 const TEMPLATE_FIELD_CACHE = new Map<string, TemplateFieldDeclaration[]>();
 const SLOT_TOKEN_PATTERN = /\{\{\s*SLOT:([A-Za-z0-9_:-]+)\s*\}\}/gi;
+const RICH_TEXT_TOKEN_KEYS = new Set(["TITLE", "CAPTION", "HEADING", "BODY", "BRAND_NAME", "SLIDE_LABEL", "KICKER_TEXT"]);
+const BLOCK_RICH_TOKEN_KEYS = new Set(["CAPTION", "BODY"]);
+const INLINE_SLOT_PATTERN =
+  /(?:^|_)(cta|action|button|label|tag|badge|meta|date|index|number|count|score|percent|pct|step|total|slide|author|role|name|brand|icon|x|y|size|opacity|visible|url|prompt|rights)(?:_|$)/i;
+const BLOCK_SLOT_PATTERN =
+  /(?:^|_)(body|description|insight|detail|narrative|summary|copy|content|caption|callout|support_note)(?:_|$)/i;
+const MARKDOWN_BLOCK_HINT_PATTERN = /(^|\n)\s*(?:[-*+]\s+\S+|\d+\.\s+\S+|>\s+\S+|#{1,6}\s+\S+|```|~~~|\$\$)/m;
+const MERMAID_FENCE_PATTERN = /```mermaid\s*([\s\S]*?)```/gi;
+const BLOCK_MATH_PATTERN = /\$\$([\s\S]+?)\$\$/g;
+const INLINE_MATH_PATTERN = /(?<!\\)\$([^\n$]+?)(?<!\\)\$/g;
+const MARKDOWN = new MarkdownIt({
+  html: false,
+  linkify: true,
+  breaks: true,
+  typographer: false
+});
 
 const DEFAULT_VISUAL_LAYERS = {
   useBackgroundImageOnly: true
@@ -131,23 +149,29 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const frameTone = resolveFrameTone(selectedTemplate);
   const slotValues = resolveSlotValues(kind, params, selectedTemplate.id);
   const brandIcon = resolveBrandIconLayerSettings(params.brandName, slotValues);
+  const slotFieldTypeByKey = new Map(
+    listTemplateFields(selectedTemplate.id).map((field) => [normalizeSlotKey(field.key), field.type] as const)
+  );
 
   const tokens: Record<string, string> = {
-    TITLE: escapeHtml(params.title),
-    CAPTION: escapeHtml(params.caption),
-    HEADING: escapeHtml(kind === "carousel-post" ? (params as CarouselTemplateParams).heading : params.title),
-    BODY: escapeHtml(kind === "carousel-post" ? (params as CarouselTemplateParams).body : params.caption),
-    IMAGE_URL: escapeHtml(params.imageUrl),
-    BRAND_NAME: escapeHtml(params.brandName),
-    SLIDE_LABEL: escapeHtml(
-      kind === "carousel-post" ? `${(params as CarouselTemplateParams).slideNumber}/${(params as CarouselTemplateParams).totalSlides}` : ""
-    ),
-    KICKER_TEXT: escapeHtml(kind === "carousel-post" ? params.title : "")
+    TITLE: params.title,
+    CAPTION: params.caption,
+    HEADING: kind === "carousel-post" ? (params as CarouselTemplateParams).heading : params.title,
+    BODY: kind === "carousel-post" ? (params as CarouselTemplateParams).body : params.caption,
+    IMAGE_URL: params.imageUrl,
+    BRAND_NAME: params.brandName,
+    SLIDE_LABEL: kind === "carousel-post"
+      ? `${(params as CarouselTemplateParams).slideNumber}/${(params as CarouselTemplateParams).totalSlides}`
+      : "",
+    KICKER_TEXT: kind === "carousel-post" ? params.title : ""
   };
 
   const templateMarkup = loadTemplateMarkup(selectedTemplate.id);
   const visualLayers = resolveVisualLayerSettings(selectedTemplate, templateMarkup);
-  const content = interpolateTemplate(templateMarkup, tokens, slotValues);
+  const content = interpolateTemplate(templateMarkup, tokens, slotValues, {
+    renderSlot: (slotKey, value) => renderSlotRichText(slotKey, value, slotFieldTypeByKey.get(slotKey)),
+    renderToken: (tokenKey, value) => renderTokenRichText(tokenKey, value)
+  });
 
   return renderDocumentShell({
     width: format.width,
@@ -230,18 +254,156 @@ function normalizeFrameTone(value: unknown): "default" | "dark" | undefined {
   return undefined;
 }
 
-function interpolateTemplate(template: string, tokens: Record<string, string>, slots: Record<string, string>): string {
+function interpolateTemplate(
+  template: string,
+  tokens: Record<string, string>,
+  slots: Record<string, string>,
+  options?: {
+    renderToken?: (tokenKey: string, value: string) => string;
+    renderSlot?: (slotKey: string, value: string) => string;
+  }
+): string {
   return template.replace(/\{\{\s*([A-Za-z0-9_:-]+)\s*\}\}/g, (_match, rawKey: string) => {
     const key = rawKey.trim();
     const slotMatch = key.match(/^slot:(.+)$/i);
     if (slotMatch?.[1]) {
       const slotKey = normalizeSlotKey(slotMatch[1]);
-      return escapeHtml(slots[slotKey] ?? "");
+      const slotValue = slots[slotKey] ?? "";
+      return options?.renderSlot ? options.renderSlot(slotKey, slotValue) : escapeHtml(slotValue);
     }
 
     const normalizedTokenKey = key.toUpperCase();
-    return tokens[normalizedTokenKey] ?? "";
+    const tokenValue = tokens[normalizedTokenKey] ?? "";
+    return options?.renderToken ? options.renderToken(normalizedTokenKey, tokenValue) : tokenValue;
   });
+}
+
+type RichRenderMode = "inline" | "block";
+
+function renderTokenRichText(tokenKey: string, value: string): string {
+  const rawValue = value.trim();
+  if (!rawValue) {
+    return "";
+  }
+  if (!RICH_TEXT_TOKEN_KEYS.has(tokenKey)) {
+    return escapeHtml(value);
+  }
+  const mode: RichRenderMode = BLOCK_RICH_TOKEN_KEYS.has(tokenKey) ? "block" : "inline";
+  return renderRichText(value, mode);
+}
+
+function renderSlotRichText(
+  slotKey: string,
+  value: string,
+  fieldType?: TemplateFieldDeclaration["type"]
+): string {
+  const rawValue = value.trim();
+  if (!rawValue) {
+    return "";
+  }
+  if (fieldType && fieldType !== "text") {
+    return escapeHtml(rawValue);
+  }
+  const mode = resolveSlotRenderMode(slotKey, rawValue);
+  return renderRichText(rawValue, mode);
+}
+
+function resolveSlotRenderMode(slotKey: string, value: string): RichRenderMode {
+  if (INLINE_SLOT_PATTERN.test(slotKey)) {
+    return "inline";
+  }
+  if (BLOCK_SLOT_PATTERN.test(slotKey)) {
+    return "block";
+  }
+  if (MARKDOWN_BLOCK_HINT_PATTERN.test(value)) {
+    return "block";
+  }
+  return "inline";
+}
+
+function renderRichText(value: string, mode: RichRenderMode): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    return "";
+  }
+
+  const { markdownSource, replacements } = buildRichTextReplacements(normalized, mode);
+  const rendered = mode === "block" ? MARKDOWN.render(markdownSource) : MARKDOWN.renderInline(markdownSource);
+  let html = rendered.trim();
+
+  for (const [token, replacement] of replacements.entries()) {
+    html = html.replaceAll(token, replacement);
+  }
+
+  if (!html) {
+    return "";
+  }
+  if (mode === "block") {
+    return `<div class="rich-text rich-text-block">${html}</div>`;
+  }
+  return `<span class="rich-text rich-text-inline">${html}</span>`;
+}
+
+function buildRichTextReplacements(
+  input: string,
+  mode: RichRenderMode
+): {
+  markdownSource: string;
+  replacements: Map<string, string>;
+} {
+  let markdownSource = input;
+  const replacements = new Map<string, string>();
+  let markerId = 0;
+  const nextMarker = (name: string) => `@@${name}_${markerId++}@@`;
+
+  markdownSource = markdownSource.replace(MERMAID_FENCE_PATTERN, (_match, rawCode: string) => {
+    const marker = nextMarker("MERMAID");
+    const code = rawCode.trim();
+    if (!code) {
+      replacements.set(marker, "");
+      return marker;
+    }
+    const modeClass = mode === "block" ? "rich-mermaid-block" : "rich-mermaid-inline";
+    replacements.set(
+      marker,
+      `<span class="rich-mermaid ${modeClass}" data-mermaid="${encodeURIComponent(code)}"></span>`
+    );
+    return marker;
+  });
+
+  markdownSource = markdownSource.replace(BLOCK_MATH_PATTERN, (_match, expression: string) => {
+    const marker = nextMarker("MATH_BLOCK");
+    replacements.set(marker, renderMathMarkup(expression, true));
+    return marker;
+  });
+
+  markdownSource = markdownSource.replace(INLINE_MATH_PATTERN, (_match, expression: string) => {
+    const marker = nextMarker("MATH_INLINE");
+    replacements.set(marker, renderMathMarkup(expression, false));
+    return marker;
+  });
+
+  return { markdownSource, replacements };
+}
+
+function renderMathMarkup(expression: string, displayMode: boolean): string {
+  const formula = expression.trim();
+  if (!formula) {
+    return "";
+  }
+  try {
+    const rendered = katex.renderToString(formula, {
+      displayMode,
+      throwOnError: false,
+      strict: "ignore",
+      output: "mathml"
+    });
+    const modeClass = displayMode ? "rich-math-block" : "rich-math-inline";
+    return `<span class="rich-math ${modeClass}">${rendered}</span>`;
+  } catch {
+    const fallback = displayMode ? `$$${formula}$$` : `$${formula}$`;
+    return `<span class="rich-math-fallback">${escapeHtml(fallback)}</span>`;
+  }
 }
 
 function resolveSlotValues(
@@ -368,6 +530,7 @@ function renderDocumentShell(args: {
   const shouldRenderBackgroundImage = hasImage && args.visualLayers.useBackgroundImageOnly;
   const imageVisibilityClass = shouldRenderBackgroundImage ? "" : "hidden";
   const safeCss = TEMPLATE_CSS.replaceAll("</style", "<\\/style");
+  const safeMermaidRuntime = (RUNTIME_SCRIPTS.mermaid ?? "").replaceAll("</script", "<\\/script");
   const shell = loadTemplateMarkup("@system/content-shell");
 
   return interpolateTemplate(
@@ -390,7 +553,8 @@ function renderDocumentShell(args: {
       BRAND_ICON_VISIBILITY_CLASS: args.brandIcon.visible ? "" : "hidden",
       BRAND_ICON_IMAGE_VISIBILITY_CLASS: args.brandIcon.useImage ? "" : "hidden",
       BRAND_ICON_TEXT_VISIBILITY_CLASS: args.brandIcon.useImage ? "hidden" : "",
-      CONTENT: args.content
+      CONTENT: args.content,
+      MERMAID_RUNTIME_JS: safeMermaidRuntime
     },
     {}
   );

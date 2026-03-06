@@ -89,17 +89,27 @@ Current render-policy actions in runtime:
 - remove markdown/math/diagram syntax from visual text when those modes are disabled
 - append explicit no-text directives to AI image prompts when `allow_text_in_ai_images=false`
 
-## Planned Rich Content Slot Types
+## Rich Content Rendering (Implemented)
 
-For richer authored content, add slot-type-aware rendering policy:
+The runtime now renders rich syntax directly in template text fields and slot content:
 
-- `text`: plain inline text
-- `markdown`: markdown rendered to sanitized HTML
-- `math`: TeX rendered to HTML/SVG (KaTeX/MathJax)
-- `diagram`: Mermaid source rendered to SVG
-- `image_url` / `icon_url` / `number`: existing typed fields
+- markdown: rendered via `markdown-it` with HTML disabled (`html: false`)
+- math: `$...$` and `$$...$$` rendered via KaTeX (`renderToString`, MathML output)
+- diagrams: fenced Mermaid blocks (```mermaid ... ```) converted to placeholders server-side, then to SVG client-side before screenshot
 
-Agent outputs should include slot type metadata or target renderer hints so the render pipeline can apply the right preprocessor.
+Current mode selection:
+
+1. core body fields (`{{BODY}}`, `{{CAPTION}}`) render in block mode
+2. headline/meta fields render inline mode
+3. slots use key heuristics (metadata-ish keys inline, narrative keys block)
+
+Render lifecycle:
+
+1. template interpolation emits rich HTML wrappers (`rich-text`, `rich-math`, `rich-mermaid`)
+2. content shell runs embedded Mermaid runtime
+3. browser screenshot waits for `window.__RICH_RENDER_DONE__ === true`
+
+This fixes literal markdown/math/mermaid source appearing in final PNGs.
 
 ## Add a New Template
 

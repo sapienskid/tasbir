@@ -122,7 +122,7 @@ Each generated post should include:
 1. Introduce central prompt registry and orchestrator shell. Completed on March 6, 2026.
 2. Move existing planner/copy/image logic behind role-agent interfaces. In progress (template + copy merged; further decomposition pending).
 3. Add render guard pipeline (fit/completion checks). In progress (syntax sanitation + sentence completion safeguards active).
-4. Add markdown/math/diagram slot rendering. Pending (full typed rendering pipeline not yet shipped).
+4. Add markdown/math/diagram slot rendering. Completed on March 6, 2026 (markdown-it + KaTeX + Mermaid runtime path shipped in template renderer).
 5. Enable campaign planning for Instagram/Facebook/LinkedIn/X. In progress (platform goals contract exists; deeper planner logic pending).
 6. Add workflow-backed long-running execution for large campaigns. Pending.
 

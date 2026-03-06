@@ -131,11 +131,10 @@ Runtime behavior:
 ## Content and Render Guardrails
 
 - enforce "no typography in AI-generated backgrounds" in visual prompts
-- if markdown-like syntax appears in visual slots, either:
-- render it properly (Markdown -> HTML)
-- or normalize to plain text before overlay
-- support math rendering (`$...$`, `$$...$$`) via KaTeX/MathJax pre-render
-- support diagram rendering via Mermaid-to-SVG pre-render
+- render markdown syntax in visual text via server-side `markdown-it`
+- render math syntax (`$...$`, `$$...$$`) via server-side KaTeX (MathML output)
+- render Mermaid fenced blocks via shell-side Mermaid runtime to SVG
+- screenshot capture waits for `window.__RICH_RENDER_DONE__` to prevent half-rendered diagrams
 - preflight text-fit checks per slot:
 - estimate line-wrap and bounding boxes
 - adjust font-size/line-height or switch template variant
