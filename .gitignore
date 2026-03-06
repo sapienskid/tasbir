@@ -12,3 +12,5 @@ node_modules/
 dist/
 coverage/
 *.log
+artifacts/
+src/generated/template.css

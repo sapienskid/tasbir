@@ -1,3 +1,7 @@
+@import "tailwindcss";
+@source "../../templates/**/*.html";
+@source "../**/*.ts";
+
 :root {
   --token-font-display: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
   --token-font-body: "Inter", "Helvetica Neue", Helvetica, Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;

@@ -5,7 +5,7 @@ import { parse } from "yaml";
 const projectRoot = process.cwd();
 const configPath = resolve(projectRoot, "config/pipeline.config.yaml");
 const outputPath = resolve(projectRoot, "src/generated/template-assets.json");
-const templateCssPath = resolve(projectRoot, "src/styles/template.css");
+const templateCssPath = resolve(projectRoot, "src/generated/template.css");
 const templatesDir = resolve(projectRoot, "templates");
 const systemTemplateDir = resolve(templatesDir, "system");
 
@@ -13,7 +13,7 @@ const systemTemplateDir = resolve(templatesDir, "system");
 
 const loadedConfig = await loadConfigWithExtends(configPath);
 const config = assertConfigShape(loadedConfig);
-const templateCss = await readFile(templateCssPath, "utf8");
+const templateCss = await readCompiledTemplateCss(templateCssPath);
 const formatKeys = Object.keys(config.formats);
 
 // ─── Auto-discover templates from templates/ directory ───────────────────────
@@ -448,6 +448,17 @@ async function loadConfigWithExtends(entryPath, stack = new Set()) {
   merged = deepMerge(merged, current);
   stack.delete(absolutePath);
   return merged;
+}
+
+async function readCompiledTemplateCss(filePath) {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    throw new Error(
+      `Compiled stylesheet not found at ${toPosix(relative(projectRoot, filePath))}. ` +
+      "Run `pnpm run build:styles` before embedding template assets."
+    );
+  }
 }
 
 function isPlainObject(value) {
