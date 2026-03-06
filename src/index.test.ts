@@ -77,7 +77,7 @@ describe("social pipeline worker", () => {
   it("resolves preview templates with slot values", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/instagram-portrait?templateId=layout/grid-feature&slot.item_title=Signal+that+compounds&slot.item_body=Metric+context+from+LLM&slot.item_tag=Engagement"
+        "https://worker.test/template/instagram-portrait?templateId=layout/statement-cta&slot.cta_text=Read+More&slot.kicker_text=Growth&slot.footer_meta=Issue+01"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -85,10 +85,10 @@ describe("social pipeline worker", () => {
 
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('data-template-id="layout/grid-feature"');
+    expect(html).toContain('data-template-id="layout/statement-cta"');
     expect(html).not.toContain("data-template-archetype=");
-    expect(html).toContain("Engagement");
-    expect(html).toContain("Signal that compounds");
+    expect(html).toContain("Read More");
+    expect(html).toContain("Issue 01");
   });
 
   it("applies font variables from css-based template head", async () => {
@@ -107,7 +107,7 @@ describe("social pipeline worker", () => {
   it("does not render style-specific css classes", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/twitter-card?templateId=layout/statement-cta&title=Data+Story&caption=Signal+beats+noise"
+        "https://worker.test/template/twitter-card?templateId=layout/split-hero&title=Data+Story&caption=Signal+beats+noise"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()

@@ -10,7 +10,7 @@
         "height": 1350,
         "caption_source": "instagram_caption",
         "hashtag_count": 3,
-        "default_template_id": "layout/grid-feature",
+        "default_template_id": "layout/editorial",
         "meta_left_label": "Instagram",
         "meta_right_label": "",
         "layout": {
@@ -26,7 +26,7 @@
         "height": 1080,
         "caption_source": "instagram_caption",
         "hashtag_count": 3,
-        "default_template_id": "layout/grid-card",
+        "default_template_id": "layout/statement-cta",
         "meta_left_label": "Instagram",
         "meta_right_label": "",
         "layout": {
@@ -42,7 +42,7 @@
         "height": 1920,
         "caption_source": "instagram_caption",
         "hashtag_count": 2,
-        "default_template_id": "layout/grid-feature",
+        "default_template_id": "layout/split-hero",
         "meta_left_label": "Story",
         "meta_right_label": "",
         "layout": {
@@ -74,7 +74,7 @@
         "height": 628,
         "caption_source": "twitter_caption",
         "hashtag_count": 0,
-        "default_template_id": "layout/cta-card",
+        "default_template_id": "layout/split-hero",
         "meta_left_label": "X / Twitter",
         "meta_right_label": "",
         "layout": {
@@ -632,174 +632,6 @@
         "file": "templates/editorial-base.html"
       },
       {
-        "id": "layout/grid-card",
-        "label": "Grid Item Card",
-        "description": "Swiss-style modular card for grid compositions",
-        "selectionHints": "compact update, listicle point, quick insight, modular content blocks",
-        "backgroundImage": "inline",
-        "fields": [
-          {
-            "key": "item_tag",
-            "type": "text",
-            "hint": "Small category or section label",
-            "default": ""
-          },
-          {
-            "key": "item_title",
-            "type": "text",
-            "hint": "Card title text",
-            "default": ""
-          },
-          {
-            "key": "item_body",
-            "type": "text",
-            "hint": "Supporting body text",
-            "default": ""
-          },
-          {
-            "key": "item_meta",
-            "type": "text",
-            "hint": "Optional byline or source line",
-            "default": ""
-          },
-          {
-            "key": "footer_meta",
-            "type": "text",
-            "hint": "Footer trailing metadata line",
-            "default": ""
-          },
-          {
-            "key": "brand_icon_url",
-            "type": "image_url",
-            "hint": "SVG or image URL for the brand icon layer",
-            "default": "/images/brand/icon.svg"
-          },
-          {
-            "key": "brand_icon_x",
-            "type": "number",
-            "hint": "Brand icon horizontal position in percent",
-            "default": "95.6"
-          },
-          {
-            "key": "brand_icon_y",
-            "type": "number",
-            "hint": "Brand icon vertical position in percent",
-            "default": "96.3"
-          },
-          {
-            "key": "brand_icon_size",
-            "type": "number",
-            "hint": "Brand icon size in px",
-            "default": "34"
-          },
-          {
-            "key": "brand_icon_opacity",
-            "type": "number",
-            "hint": "Brand icon opacity",
-            "default": "0.95"
-          },
-          {
-            "key": "brand_icon_visible",
-            "type": "text",
-            "hint": "Set to 0 to hide icon layer",
-            "default": "1"
-          }
-        ],
-        "formats": [
-          "instagram-square",
-          "instagram-portrait",
-          "instagram-story",
-          "carousel-post",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "file": "templates/grid-card.html"
-      },
-      {
-        "id": "layout/grid-feature",
-        "label": "Grid Item Feature",
-        "description": "Swiss-style featured modular card for grid compositions",
-        "selectionHints": "featured takeaway, hero statistic, key point highlight, primary message",
-        "backgroundImage": "inline",
-        "fields": [
-          {
-            "key": "item_tag",
-            "type": "text",
-            "hint": "Small category or section label",
-            "default": ""
-          },
-          {
-            "key": "item_title",
-            "type": "text",
-            "hint": "Feature card title text",
-            "default": ""
-          },
-          {
-            "key": "item_body",
-            "type": "text",
-            "hint": "Feature supporting text",
-            "default": ""
-          },
-          {
-            "key": "item_meta",
-            "type": "text",
-            "hint": "Optional byline or source line",
-            "default": ""
-          },
-          {
-            "key": "footer_meta",
-            "type": "text",
-            "hint": "Footer trailing metadata line",
-            "default": ""
-          },
-          {
-            "key": "brand_icon_url",
-            "type": "image_url",
-            "hint": "SVG or image URL for the brand icon layer",
-            "default": "/images/brand/icon.svg"
-          },
-          {
-            "key": "brand_icon_x",
-            "type": "number",
-            "hint": "Brand icon horizontal position in percent",
-            "default": "95.6"
-          },
-          {
-            "key": "brand_icon_y",
-            "type": "number",
-            "hint": "Brand icon vertical position in percent",
-            "default": "96.3"
-          },
-          {
-            "key": "brand_icon_size",
-            "type": "number",
-            "hint": "Brand icon size in px",
-            "default": "34"
-          },
-          {
-            "key": "brand_icon_opacity",
-            "type": "number",
-            "hint": "Brand icon opacity",
-            "default": "0.95"
-          },
-          {
-            "key": "brand_icon_visible",
-            "type": "text",
-            "hint": "Set to 0 to hide icon layer",
-            "default": "1"
-          }
-        ],
-        "formats": [
-          "instagram-square",
-          "instagram-portrait",
-          "instagram-story",
-          "carousel-post",
-          "twitter-card",
-          "linkedin-post"
-        ],
-        "file": "templates/grid-feature.html"
-      },
-      {
         "id": "layout/noir-abstract-body",
         "label": "Noir Abstract Body",
         "description": "Dark layout with abstract geometric marks above editorial title and body",
@@ -1302,8 +1134,6 @@
     "layout/concept-explainer": "<!--\n@id: layout/concept-explainer\n@label: Concept Explainer Callout\n@description: Modern Swiss-style educational layout with image and high-contrast callout\n@selection_hints: educational explainer, concept breakdown, myth vs reality, teach and clarify\n@formats: instagram-square,instagram-portrait,carousel-post,linkedin-post\n@background_image: inline\n\n@slot topic_label | text | Topic/category chip text  | \n@slot callout_text | text | Main callout box explanation text | \n@slot support_note | text | Supporting note below callout  | \n@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg\n@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6\n@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3\n@slot brand_icon_size | number | Brand icon size in px | 34\n@slot brand_icon_opacity | number | Brand icon opacity | 0.95\n@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1\n-->\n<div class=\"relative z-10 grid h-full w-full grid-cols-12 bg-brand-surface text-brand-primary\">\n  <!-- Left Side: Image Content -->\n  <div class=\"col-span-12 h-1/2 relative border-b-4 border-brand-primary overflow-hidden\">\n    <img src=\"{{IMAGE_URL}}\" alt=\"\"\n      class=\"absolute inset-0 h-full w-full object-cover grayscale contrast-125 brightness-90\" />\n    <div\n      class=\"absolute top-0 left-0 bg-brand-primary text-brand-surface px-6 py-3 font-brand-body text-[16px] font-black uppercase tracking-[0.4em]\">\n      {{SLIDE_LABEL}}\n    </div>\n  </div>\n\n  <!-- Right Side: Text Context -->\n  <div class=\"col-span-12 h-1/2 p-[var(--token-space-gutter)] flex flex-col justify-between\">\n    <div class=\"max-w-[95%]\">\n      <div\n        class=\"inline-block border-2 border-brand-primary px-4 py-1 mb-4 font-brand-body text-[14px] font-black uppercase tracking-[0.2em]\">\n        {{SLOT:topic_label}}\n      </div>\n      <h1\n        class=\"mb-4 font-brand-display text-[clamp(40px,5.5vw,64px)] font-black leading-[0.9] tracking-tighter uppercase\">\n        {{HEADING}}\n      </h1>\n      <p\n        class=\"mb-6 font-brand-body text-[clamp(18px,2.2vw,24px)] leading-tight text-justify tracking-tight text-brand-secondary\">\n        {{BODY}}\n      </p>\n    </div>\n\n    <div class=\"grid grid-cols-12 gap-6 items-end\">\n      <div class=\"col-span-8 swiss-border-thick p-6 bg-brand-surface border-2 border-brand-primary\">\n        <p class=\"m-0 font-brand-body text-[clamp(16px,2vw,22px)] font-bold italic leading-tight text-brand-primary\">\n          {{SLOT:callout_text}}\n        </p>\n      </div>\n      <div class=\"col-span-4 text-right flex flex-col items-end gap-3\">\n        <p class=\"font-brand-body text-[12px] font-black uppercase tracking-[0.4em] text-brand-muted\">\n          {{SLOT:support_note}}\n        </p>\n        <div\n          class=\"inline-flex px-4 h-12 bg-brand-primary items-center justify-center text-brand-surface font-brand-body font-black uppercase tracking-tighter text-[14px]\">\n          {{BRAND_NAME}}\n        </div>\n      </div>\n    </div>\n  </div>\n</div>\n",
     "layout/cta-card": "<!--\n@id: layout/cta-card\n@label: Final CTA Card\n@description: High-impact Swiss-style closing card to drive specific actions\n@selection_hints: campaign closer, subscribe or buy CTA, final slide, next-step action\n@formats: instagram-square,instagram-portrait,carousel-post,linkedin-post\n\n@slot cta_text | text | Short call-to-action button label  | \n@slot footer_note | text | Small footer text  | \n@slot rights_note | text | Footer legal or archival note  | \n@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg\n@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6\n@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3\n@slot brand_icon_size | number | Brand icon size in px | 34\n@slot brand_icon_opacity | number | Brand icon opacity | 0.95\n@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1\n-->\n<div\n  class=\"relative z-10 flex flex-col h-full w-full bg-brand-primary text-brand-surface p-[var(--token-space-gutter)]\">\n  <header class=\"flex justify-between items-start mb-16\">\n    <div class=\"font-brand-body text-[16px] font-black uppercase tracking-[0.4em]\">\n      {{BRAND_NAME}}\n    </div>\n    <div class=\"font-brand-body text-[16px] font-bold uppercase tracking-[0.2em] text-brand-surface/70\">\n      {{SLIDE_LABEL}}\n    </div>\n  </header>\n\n  <main class=\"flex-1 flex flex-col justify-center items-center text-center max-w-[85%] mx-auto\">\n    <h1\n      class=\"font-brand-display text-[clamp(64px,9vw,96px)] font-black leading-[0.85] tracking-tighter uppercase mb-6\">\n      {{HEADING}}\n    </h1>\n    <div class=\"w-24 h-4 bg-brand-surface mb-10\"></div>\n    <p class=\"font-brand-body text-[clamp(24px,3vw,34px)] leading-tight tracking-tighter mb-12 opacity-90\">\n      {{BODY}}\n    </p>\n\n    <div\n      class=\"inline-flex items-center gap-6 border-b-4 border-brand-surface pb-2 text-[clamp(28px,3.5vw,40px)] font-brand-body font-black uppercase tracking-widest cursor-pointer hover:bg-brand-surface hover:text-brand-primary transition-colors px-6\">\n      {{SLOT:cta_text}}\n      <span>→</span>\n    </div>\n  </main>\n\n  <footer class=\"mt-auto flex justify-between items-end pt-8 border-t-2 border-brand-surface/30\">\n    <div class=\"font-brand-body text-[12px] font-black uppercase tracking-[0.2em] text-brand-surface/60\">\n      {{SLOT:footer_note}}\n    </div>\n    <div class=\"font-brand-body text-[12px] font-bold uppercase tracking-[0.1em] text-brand-surface/60\">\n      {{SLOT:rights_note}}\n    </div>\n  </footer>\n</div>\n",
     "layout/editorial": "<!--\n@id: layout/editorial\n@label: Editorial Classic\n@description: Modern Swiss editorial layout with asymmetric grid and high contrast\n@selection_hints: thought leadership, analysis summary, editorial commentary, professional insight\n@formats: instagram-square,instagram-portrait,carousel-post,linkedin-post\n\n@slot sidebar_label | text | Small vertical label for the sidebar  | \n@slot issue_meta | text | Header metadata line  | \n@slot footer_meta | text | Footer metadata line  | \n@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg\n@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6\n@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3\n@slot brand_icon_size | number | Brand icon size in px | 34\n@slot brand_icon_opacity | number | Brand icon opacity | 0.95\n@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1\n-->\n<div class=\"relative z-10 flex h-full w-full bg-brand-surface text-brand-primary\">\n  <!-- Sidebar Branding -->\n  <aside class=\"w-[80px] border-r-2 border-brand-primary flex flex-col items-center justify-between py-10\">\n    <div\n      class=\"rotate-[-90deg] whitespace-nowrap font-brand-body text-[12px] font-black uppercase tracking-[0.5em] origin-center\">\n      {{BRAND_NAME}}\n    </div>\n    <div\n      class=\"rotate-[-90deg] whitespace-nowrap font-brand-body text-[12px] font-bold uppercase tracking-[0.3em] text-brand-muted origin-center\">\n      {{SLOT:sidebar_label}}\n    </div>\n  </aside>\n\n  <!-- Main Content -->\n  <main class=\"flex-1 flex flex-col p-[var(--token-space-gutter)]\">\n    <header class=\"flex justify-between items-start mb-12\">\n      <div\n        class=\"font-brand-body text-[14px] font-bold uppercase tracking-[0.3em] border-2 border-brand-primary px-4 py-1\">\n        {{SLIDE_LABEL}}\n      </div>\n      <div class=\"font-brand-body text-[14px] font-bold uppercase tracking-[0.2em] text-brand-muted\">\n        {{SLOT:issue_meta}}\n      </div>\n    </header>\n\n    <div class=\"flex-1 flex flex-col justify-end max-w-[95%]\">\n      <p class=\"mb-4 font-brand-body text-brand-muted font-bold uppercase tracking-[0.4em] text-[15px]\">\n        {{KICKER_TEXT}}\n      </p>\n      <h1\n        class=\"mb-10 font-brand-display text-[clamp(48px,7vw,78px)] font-black leading-[0.9] tracking-tighter uppercase border-l-[12px] border-brand-primary pl-8\">\n        {{HEADING}}\n      </h1>\n      <p\n        class=\"font-brand-body text-[clamp(22px,2.8vw,30px)] leading-tight text-justify tracking-tighter text-brand-secondary\">\n        {{BODY}}\n      </p>\n    </div>\n\n    <footer class=\"mt-16 w-full h-1 bg-brand-primary relative\">\n      <div class=\"absolute right-0 top-3 font-brand-body text-[12px] font-bold uppercase tracking-[0.4em]\">\n        {{SLOT:footer_meta}}\n      </div>\n    </footer>\n  </main>\n</div>\n",
-    "layout/grid-card": "<!--\n@id: layout/grid-card\n@label: Grid Item Card\n@description: Swiss-style modular card for grid compositions\n@selection_hints: compact update, listicle point, quick insight, modular content blocks\n@formats: instagram-square,instagram-portrait,instagram-story,carousel-post,twitter-card,linkedin-post\n@background_image: inline\n\n@slot item_tag | text | Small category or section label  | \n@slot item_title | text | Card title text | \n@slot item_body | text | Supporting body text | \n@slot item_meta | text | Optional byline or source line  | \n@slot footer_meta | text | Footer trailing metadata line  | \n@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg\n@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6\n@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3\n@slot brand_icon_size | number | Brand icon size in px | 34\n@slot brand_icon_opacity | number | Brand icon opacity | 0.95\n@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1\n-->\n<div class=\"relative z-10 flex h-full w-full bg-brand-surface text-brand-primary p-[var(--token-space-gutter)]\">\n  <div class=\"swiss-border-thick w-full h-full flex flex-col p-8 overflow-hidden border-2 border-brand-primary\">\n    <header class=\"mb-6 flex items-start justify-between\">\n      <div class=\"font-brand-body text-[14px] font-black uppercase tracking-[0.4em]\">\n        {{BRAND_NAME}}\n      </div>\n      <div class=\"font-brand-body text-[12px] font-bold uppercase tracking-[0.2em] text-brand-muted\">\n        {{SLIDE_LABEL}}\n      </div>\n    </header>\n\n    <div class=\"relative flex min-h-0 flex-1 flex-col\">\n      <div class=\"relative mb-6 h-[240px] shrink-0 overflow-hidden border-2 border-brand-primary\">\n        <img src=\"{{IMAGE_URL}}\" alt=\"\" class=\"absolute inset-0 h-full w-full object-cover grayscale contrast-125\" />\n      </div>\n\n      <div class=\"flex min-h-0 flex-1 flex-col\">\n        <div\n          class=\"mb-4 inline-block w-fit border-2 border-brand-primary px-3 py-1 font-brand-body text-[12px] font-black uppercase tracking-[0.2em]\">\n          {{SLOT:item_tag}}\n        </div>\n        <h1\n          class=\"mb-4 font-brand-display text-[clamp(28px,4vw,48px)] font-black leading-[0.9] tracking-tighter uppercase\">\n          {{SLOT:item_title}}\n        </h1>\n        <p\n          class=\"mb-6 line-clamp-4 font-brand-body text-[clamp(18px,2.2vw,24px)] leading-tight tracking-tighter text-brand-secondary text-justify\">\n          {{SLOT:item_body}}\n        </p>\n      </div>\n\n      <footer\n        class=\"mt-auto flex items-center justify-between border-t-2 border-brand-primary/20 pt-4 font-brand-body text-[11px] font-bold uppercase tracking-[0.3em] text-brand-muted\">\n        <div>{{SLOT:item_meta}}</div>\n        <div>{{SLOT:footer_meta}}</div>\n      </footer>\n    </div>\n  </div>\n</div>\n",
-    "layout/grid-feature": "<!--\n@id: layout/grid-feature\n@label: Grid Item Feature\n@description: Swiss-style featured modular card for grid compositions\n@selection_hints: featured takeaway, hero statistic, key point highlight, primary message\n@formats: instagram-square,instagram-portrait,instagram-story,carousel-post,twitter-card,linkedin-post\n@background_image: inline\n\n@slot item_tag | text | Small category or section label  | \n@slot item_title | text | Feature card title text | \n@slot item_body | text | Feature supporting text | \n@slot item_meta | text | Optional byline or source line  | \n@slot footer_meta | text | Footer trailing metadata line  | \n@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg\n@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6\n@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3\n@slot brand_icon_size | number | Brand icon size in px | 34\n@slot brand_icon_opacity | number | Brand icon opacity | 0.95\n@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1\n-->\n<div class=\"relative z-10 flex h-full w-full bg-brand-surface text-brand-primary p-[var(--token-space-gutter)]\">\n  <div class=\"swiss-border-thick w-full h-full flex flex-col p-10 overflow-hidden border-2 border-brand-primary\">\n    <header class=\"mb-8 flex items-start justify-between\">\n      <div class=\"font-brand-body text-[16px] font-black uppercase tracking-[0.4em]\">\n        {{BRAND_NAME}}\n      </div>\n      <div\n        class=\"border-2 border-brand-primary px-4 py-1 font-brand-body text-[14px] font-bold uppercase tracking-[0.2em]\">\n        {{SLIDE_LABEL}}\n      </div>\n    </header>\n\n    <div class=\"relative flex min-h-0 flex-1 flex-col\">\n      <div class=\"relative mb-8 h-[48%] shrink-0 overflow-hidden border-4 border-brand-primary\">\n        <img src=\"{{IMAGE_URL}}\" alt=\"\"\n          class=\"absolute inset-0 h-full w-full object-cover grayscale contrast-125 saturate-0\" />\n        <div\n          class=\"absolute right-0 top-0 bg-brand-primary px-4 py-2 font-brand-body text-[12px] font-black uppercase tracking-[0.3em] text-brand-surface\">\n          {{SLOT:item_tag}}\n        </div>\n      </div>\n\n      <div class=\"flex min-h-0 flex-1 flex-col\">\n        <h1\n          class=\"mb-6 font-brand-display text-[clamp(40px,6vw,72px)] font-black leading-[0.9] tracking-tighter uppercase\">\n          {{SLOT:item_title}}\n        </h1>\n        <p\n          class=\"mb-8 line-clamp-3 font-brand-body text-[clamp(24px,3vw,34px)] leading-tight tracking-tighter text-brand-secondary text-justify\">\n          {{SLOT:item_body}}\n        </p>\n      </div>\n\n      <footer\n        class=\"mt-auto flex items-end justify-between border-t-4 border-brand-primary pt-6 font-brand-body text-[14px] font-black uppercase tracking-[0.3em]\">\n        <div>{{SLOT:item_meta}}</div>\n        <div class=\"text-brand-muted\">{{SLOT:footer_meta}}</div>\n      </footer>\n    </div>\n  </div>\n</div>\n",
     "layout/noir-abstract-body": "<!--\n@id: layout/noir-abstract-body\n@label: Noir Abstract Body\n@description: Dark layout with abstract geometric marks above editorial title and body\n@selection_hints: premium dark aesthetic, reflective essay, emotional narrative, cinematic tone\n@formats: instagram-portrait,carousel-post\n@frame_tone: dark\n@background_image: inline\n\n@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg\n@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6\n@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3\n@slot brand_icon_size | number | Brand icon size in px | 34\n@slot brand_icon_opacity | number | Brand icon opacity | 0.95\n@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1\n-->\n<div class=\"relative z-10 flex h-full w-full flex-col bg-brand-surface px-[54px] py-[48px] text-brand-primary\">\n  <div class=\"mx-auto w-[76%] max-w-[760px] overflow-hidden rounded-md border border-brand-primary/20\">\n    <div class=\"aspect-[36/26] w-full\">\n      <img src=\"{{IMAGE_URL}}\" alt=\"\"\n        class=\"h-full w-full object-cover grayscale contrast-125 brightness-105 saturate-0\" />\n    </div>\n  </div>\n\n  <div class=\"mt-auto\">\n    <h1\n      class=\"max-w-[96%] font-brand-display text-[clamp(67px,7.7vw,94px)] font-semibold leading-[0.9] tracking-[-0.012em] text-balance\">\n      {{HEADING}}\n    </h1>\n    <p\n      class=\"mt-[20px] max-w-[97%] font-brand-body text-[clamp(34px,3.5vw,49px)] font-medium leading-[1.21] tracking-[-0.01em] text-brand-secondary\">\n      {{BODY}}\n    </p>\n  </div>\n</div>\n",
     "layout/noir-abstract-byline": "<!--\n@id: layout/noir-abstract-byline\n@label: Noir Abstract Byline\n@description: Dark abstract cover layout with centered mark, serif headline, and byline\n@selection_hints: author-led perspective, byline storytelling, personal voice, signature essay\n@formats: instagram-portrait,carousel-post\n@frame_tone: dark\n@background_image: inline\n\n@slot byline | text | Author byline shown at the bottom left  | \n@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg\n@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6\n@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3\n@slot brand_icon_size | number | Brand icon size in px | 34\n@slot brand_icon_opacity | number | Brand icon opacity | 0.95\n@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1\n-->\n<div class=\"relative z-10 flex h-full w-full flex-col bg-brand-surface px-[58px] py-[56px] text-brand-primary\">\n  <div class=\"mx-auto mt-[10px] w-[62%] max-w-[620px] overflow-hidden rounded-md border border-brand-primary/20\">\n    <div class=\"aspect-[36/26] w-full\">\n      <img src=\"{{IMAGE_URL}}\" alt=\"\"\n        class=\"h-full w-full object-cover grayscale contrast-125 brightness-105 saturate-0\" />\n    </div>\n  </div>\n\n  <h1\n    class=\"mt-[74px] max-w-[95%] font-brand-display text-[clamp(76px,8.2vw,106px)] font-semibold leading-[0.9] tracking-[-0.012em] text-balance\">\n    {{HEADING}}\n  </h1>\n\n  <p\n    class=\"mt-auto font-brand-body text-[clamp(34px,3.4vw,48px)] font-medium leading-[1.16] tracking-[-0.01em] text-brand-secondary\">\n    {{SLOT:byline}}\n  </p>\n</div>\n",
     "layout/noir-editorial": "<!--\n@id: layout/noir-editorial\n@label: Noir Editorial\n@description: Minimal dark editorial layout with oversized serif headline and clean body copy\n@selection_hints: minimalist dark editorial, high-authority claim, manifesto-style message\n@formats: instagram-portrait,carousel-post\n@frame_tone: dark\n@background_image: inline\n\n@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg\n@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6\n@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3\n@slot brand_icon_size | number | Brand icon size in px | 34\n@slot brand_icon_opacity | number | Brand icon opacity | 0.95\n@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1\n-->\n<div class=\"relative z-10 flex h-full w-full flex-col bg-brand-surface px-[66px] py-[62px] text-brand-primary\">\n  <h1\n    class=\"max-w-[94%] font-brand-display text-[clamp(74px,8.5vw,102px)] font-semibold leading-[0.88] tracking-[-0.012em] text-balance\">\n    {{HEADING}}\n  </h1>\n\n  <p\n    class=\"mt-auto max-w-[87%] font-brand-body text-[clamp(39px,4.1vw,56px)] font-medium leading-[1.24] tracking-[-0.01em] text-brand-secondary\">\n    {{BODY}}\n  </p>\n</div>\n",

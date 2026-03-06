@@ -8,7 +8,7 @@ formats:
     height: 1350
     caption_source: instagram_caption
     hashtag_count: 3
-    default_template_id: layout/grid-feature
+    default_template_id: layout/editorial
     meta_left_label: "Instagram"
     meta_right_label: ""
     layout:
@@ -22,7 +22,7 @@ formats:
     height: 1080
     caption_source: instagram_caption
     hashtag_count: 3
-    default_template_id: layout/grid-card
+    default_template_id: layout/statement-cta
     meta_left_label: "Instagram"
     meta_right_label: ""
     layout:
@@ -36,7 +36,7 @@ formats:
     height: 1920
     caption_source: instagram_caption
     hashtag_count: 2
-    default_template_id: layout/grid-feature
+    default_template_id: layout/split-hero
     meta_left_label: "Story"
     meta_right_label: ""
     layout:
@@ -64,7 +64,7 @@ formats:
     height: 628
     caption_source: twitter_caption
     hashtag_count: 0
-    default_template_id: layout/cta-card
+    default_template_id: layout/split-hero
     meta_left_label: "X / Twitter"
     meta_right_label: ""
     layout:
