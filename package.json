@@ -4,16 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm run preview",
-    "dev:api": "wrangler dev --local --live-reload",
-    "dev:remote": "wrangler dev --remote",
-    "deploy": "wrangler deploy",
-    "check": "tsc --noEmit",
-    "build:styles": "pnpm exec tailwindcss -i ./src/styles/template.css -o ./src/generated/template.css",
-    "build:assets": "pnpm run build:styles && node ./scripts/embed-template-assets.mjs",
-    "watch:assets": "pnpm exec chokidar \"templates/**/*.html\" \"src/styles/**/*.css\" \"config/pipeline/**/*.yaml\" \"scripts/embed-template-assets.mjs\" -c \"pnpm run build:assets\" --debounce 250",
-    "preview": "pnpm run build:assets && pnpm exec concurrently --kill-others-on-fail --names \"assets,worker\" --prefix-colors \"yellow,cyan\" \"pnpm run watch:assets\" \"pnpm exec wrangler dev --local --live-reload --ip 127.0.0.1 --port 8787 --var API_AUTH_REQUIRE_FOR_PREVIEW:false\"",
-    "test": "vitest run"
+    "dev": "pnpm run build && pnpm exec concurrently --kill-others-on-fail --names \"assets,worker\" --prefix-colors \"yellow,cyan\" \"pnpm exec chokidar \\\"templates/**/*.html\\\" \\\"src/styles/**/*.css\\\" \\\"config/pipeline/**/*.yaml\\\" \\\"scripts/embed-template-assets.mjs\\\" -c \\\"pnpm run build\\\" --debounce 250\" \"pnpm exec wrangler dev --local --live-reload --ip 127.0.0.1 --port 8787 --var API_AUTH_REQUIRE_FOR_PREVIEW:false\"",
+    "build": "pnpm exec tailwindcss -i ./src/styles/template.css -o ./src/generated/template.css && node ./scripts/embed-template-assets.mjs",
+    "render:all": "node ./scripts/render-template-variations.mjs",
+    "test": "tsc --noEmit && vitest run",
+    "deploy": "wrangler deploy --env production"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",

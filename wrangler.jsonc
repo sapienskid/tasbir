@@ -2,10 +2,17 @@
 	"$schema": "./node_modules/wrangler/config-schema.json",
 	"name": "social-post-pipeline",
 	"main": "src/index.ts",
+	"assets": {
+		"directory": "./public",
+		"binding": "ASSETS"
+	},
 	"compatibility_date": "2026-03-04",
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"vars": {
+		"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
+	},
 	"ai": {
 		"binding": "AI"
 	},
@@ -27,6 +34,42 @@
 		"logs": {
 			"enabled": true,
 			"invocation_logs": false
+		}
+	},
+	"env": {
+		"staging": {
+			"name": "social-post-pipeline-staging",
+			"vars": {
+				"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
+			},
+			"r2_buckets": [
+				{
+					"binding": "OUTPUT_BUCKET",
+					"bucket_name": "social-post-assets"
+				},
+				{
+					"bucket_name": "social-post-assets",
+					"binding": "social_post_assets",
+					"remote": true
+				}
+			]
+		},
+		"production": {
+			"name": "social-post-pipeline",
+			"vars": {
+				"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
+			},
+			"r2_buckets": [
+				{
+					"binding": "OUTPUT_BUCKET",
+					"bucket_name": "social-post-assets"
+				},
+				{
+					"bucket_name": "social-post-assets",
+					"binding": "social_post_assets",
+					"remote": true
+				}
+			]
 		}
 	}
 }

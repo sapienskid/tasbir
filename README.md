@@ -153,16 +153,23 @@ Render preview HTML without running full generation.
 Local browser workflow (template-only, no deploy dependency):
 
 ```bash
-pnpm run dev:templates
+pnpm run dev:design
 ```
 
-Then open a template URL directly:
+Then open one of the local review pages:
+
+```text
+http://127.0.0.1:8787/preview
+http://127.0.0.1:8787/preview/gallery
+```
+
+Or open a direct template URL:
 
 ```text
 http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context
 ```
 
-`dev:templates` watches template/style/config files, rebuilds assets on save, and uses Wrangler local live-reload so the browser refreshes automatically. It also sets `API_AUTH_REQUIRE_FOR_PREVIEW=false` for this local session so template URLs open directly in browser.
+`dev:design`/`dev:templates` watches template/style/config files, rebuilds assets on save, and uses Wrangler local live-reload so the browser refreshes automatically. It also sets `API_AUTH_REQUIRE_FOR_PREVIEW=false` for this local session so preview URLs open directly in browser.
 
 Direct API request example (when preview auth is enabled):
 
@@ -207,10 +214,40 @@ No TypeScript template registration is required.
 
 - `GET /health`
 - `GET /template/<format>`
+- `GET /preview`
+- `GET /preview/gallery`
+- `GET /preview/screenshot?format=...&templateId=...`
 - `GET /template-catalog`
 - `POST /generate`
 - `POST /generate-from-content`
 - `POST /webhook/ghost`
+
+## Deployment
+
+Dry-run bundle check:
+
+```bash
+pnpm run deploy:dry-run
+```
+
+Deploy staging:
+
+```bash
+pnpm run deploy:staging
+```
+
+Deploy production:
+
+```bash
+pnpm run deploy:production
+```
+
+Tail logs:
+
+```bash
+pnpm run tail:staging
+pnpm run tail:production
+```
 
 ## Auth
 
@@ -264,4 +301,5 @@ See `.dev.vars.example` for complete local example values.
 - [API Reference](docs/api-reference.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Design Principles](docs/design-principles.md)
+- [Deployment](docs/deployment.md)
 - [Research Summary](docs/research-summary.md)

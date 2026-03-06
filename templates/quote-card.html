@@ -1,41 +1,52 @@
 <!--
-@id: layout/quote-attribution
+@id: layout/quote-card
 @label: Quote Attribution
-@description: Pull-quote layout with author and role attribution
+@description: High-impact Swiss-style pull-quote layout with author attribution
+@formats: instagram-square,instagram-portrait,carousel-post,linkedin-post
 
 @slot quote_text | text | The quote or pull-quote text to display prominently
 @slot quote_author | text | Name of the person being quoted | Editorial Team
-@slot author_role | text | Role or title of the quoted person
-@slot brand_icon | text | Monogram text for the floating brand icon
-@slot brand_icon_x | number | Icon horizontal position percent (0-100) | 92
-@slot brand_icon_y | number | Icon vertical position percent (0-100) | 9
-@slot brand_icon_size | number | Icon circle size in px | 92
-@slot brand_icon_opacity | number | Icon opacity from 0 to 1 | 0.92
+@slot author_role | text | Role or title of the quoted person | CREATIVE DIRECTOR
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
-<div class="relative z-10 grid h-full w-full grid-rows-[auto_minmax(0,1fr)] gap-6 p-10 text-left">
-  <header class="flex w-full items-start justify-between gap-3">
-    <div class="flex max-w-full flex-wrap items-center gap-2.5">
-      <span
-        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
-        {{BRAND_NAME}}</span>
-      <span
-        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary empty:hidden group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
-        {{SLIDE_LABEL}}</span>
+<div class="relative z-10 flex h-full w-full bg-brand-surface text-brand-primary p-[var(--token-space-gutter)]">
+  <div class="swiss-border-thick w-full h-full p-12 flex flex-col justify-between relative overflow-hidden">
+    <!-- Large Background Quote Mark -->
+    <div
+      class="absolute -top-10 -left-6 font-brand-display text-[260px] font-black leading-none opacity-10 pointer-events-none">
+      “
     </div>
-  </header>
-  <section
-    class="relative flex h-full min-h-0 w-full flex-col items-start gap-4 overflow-hidden border border-black/86 bg-white/86 p-8 backdrop-blur-[1.25px] group-data-[template-tone=dark]:border-white/62 group-data-[template-tone=dark]:bg-black/84">
-    <div class="pointer-events-none absolute left-[18px] top-0 font-brand-display text-[clamp(120px,16vw,180px)] leading-[0.7] text-brand-primary opacity-[0.12]">
-      "</div>
-    <h1
-      class="m-0 max-w-full pl-8 font-brand-display text-[clamp(42px,5.6vw,58px)] font-semibold italic leading-[1.01] tracking-[-0.012em] text-brand-primary text-balance [overflow-wrap:anywhere] break-words">
-      {{SLOT:quote_text}}</h1>
-    <div class="h-px w-[96px] bg-black/76 group-data-[template-tone=dark]:bg-white/66"></div>
-    <div class="flex min-h-0 w-full flex-col gap-1">
-      <p class="m-0 font-brand-body text-[clamp(13px,1.4vw,16px)] font-semibold uppercase tracking-[0.09em] leading-[1.2] text-brand-primary">
-        {{SLOT:quote_author}}</p>
-      <p class="m-0 font-brand-body text-[clamp(16px,2vw,22px)] italic leading-[1.32] text-brand-muted">{{SLOT:author_role}}</p>
-    </div>
-  </section>
+
+    <header class="flex justify-between items-start mb-8 border-b-2 border-brand-primary pb-4">
+      <div class="font-brand-body text-[16px] font-black uppercase tracking-[0.4em]">
+        {{BRAND_NAME}}
+      </div>
+      <div class="font-brand-body text-[14px] font-bold uppercase tracking-[0.2em] text-brand-muted">
+        {{SLIDE_LABEL}}
+      </div>
+    </header>
+
+    <main class="flex-1 flex flex-col justify-center">
+      <h1
+        class="font-brand-display text-[clamp(42px,5.5vw,68px)] font-black leading-[0.9] tracking-tighter uppercase mb-8">
+        {{SLOT:quote_text}}
+      </h1>
+      <div class="swiss-rule h-1 w-24 bg-brand-primary mb-8"></div>
+    </main>
+
+    <footer class="flex items-center gap-6">
+      <div
+        class="w-auto px-6 h-16 bg-brand-primary shrink-0 flex items-center justify-center text-brand-surface font-brand-body font-black text-[24px] uppercase tracking-tighter">
+        {{BRAND_NAME}}
+      </div>
+      <div>
+        <p class="font-brand-body text-[20px] font-black uppercase tracking-widest mb-1">
+          {{SLOT:quote_author}}
+        </p>
+        <p class="font-brand-body text-[14px] font-bold uppercase tracking-[0.3em] text-brand-muted">
+          {{SLOT:author_role}}
+        </p>
+      </div>
+    </footer>
+  </div>
 </div>

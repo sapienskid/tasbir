@@ -516,12 +516,13 @@ function escapeHtml(value: string): string {
 
 export function previewParamsFromUrl(kind: TemplateKind, url: URL): BaseTemplateParams | CarouselTemplateParams {
   const defaults = PIPELINE_CONFIG.preview_defaults;
+  const defaultImageUrl = typeof defaults.image_url === "string" ? defaults.image_url : "";
   const slotValues = slotValuesFromQuery(url.searchParams);
 
   const base: BaseTemplateParams = {
     title: url.searchParams.get("title") ?? defaults.title,
     caption: url.searchParams.get("caption") ?? defaults.caption,
-    imageUrl: url.searchParams.get("imageUrl") ?? "",
+    imageUrl: url.searchParams.get("imageUrl") ?? defaultImageUrl,
     brandName: url.searchParams.get("brand") ?? url.searchParams.get("brandName") ?? PIPELINE_CONFIG.brand.default_name,
     templateId: url.searchParams.get("templateId") ?? undefined,
     slots: slotValues

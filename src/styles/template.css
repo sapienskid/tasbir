@@ -17,22 +17,27 @@
 
   --radius-brand-card: var(--radius-card);
   --radius-brand-pill: var(--radius-pill);
+
+  --spacing-brand-gutter: var(--token-space-gutter);
 }
 
 :root {
-  --token-font-display: "Cormorant Garamond", "Bodoni MT", "Times New Roman", Times, serif;
-  --token-font-body: "Manrope", "Avenir Next", "Helvetica Neue", Helvetica, sans-serif;
+  /* Typography */
+  --token-font-display: "Cormorant Garamond", "Bodoni MT", serif;
+  --token-font-body: "Inter", "Manrope", "Helvetica", "Arial", sans-serif;
 
-  --token-color-text-primary: #070707;
-  --token-color-text-secondary: #242424;
-  --token-color-text-muted: #5e5e5e;
-  --token-color-surface-base: #f5f5f3;
-  --token-color-surface-elevated: #ffffff;
-  --token-color-border-subtle: #101010;
-  --token-color-brand-accent: #090909;
-  --token-color-brand-accent-foreground: #fcfcfc;
-  --token-color-overlay-strong: rgba(0, 0, 0, 0.58);
+  /* Colors - Pure Monochromatic Palette */
+  --token-color-text-primary: #000000;
+  --token-color-text-secondary: #222222;
+  --token-color-text-muted: #555555;
+  --token-color-surface-base: #FFFFFF;
+  --token-color-surface-elevated: #F8F8F8;
+  --token-color-border-subtle: #000000;
+  --token-color-brand-accent: #000000;
+  --token-color-brand-accent-foreground: #FFFFFF;
+  --token-color-overlay-strong: rgba(0, 0, 0, 0.6);
 
+  /* Semantic Colors */
   --color-text-primary: var(--token-color-text-primary);
   --color-text-secondary: var(--token-color-text-secondary);
   --color-text-muted: var(--token-color-text-muted);
@@ -42,21 +47,26 @@
   --color-brand-accent: var(--token-color-brand-accent);
   --color-brand-accent-foreground: var(--token-color-brand-accent-foreground);
 
-  --token-space-2xs: 8px;
-  --token-space-xs: 12px;
+  /* Spacing - Geometric System */
+  --token-space-2xs: 4px;
+  --token-space-xs: 8px;
   --token-space-sm: 16px;
   --token-space-md: 24px;
   --token-space-lg: 32px;
-  --token-space-xl: 40px;
-  --token-space-2xl: 46px;
+  --token-space-xl: 48px;
+  --token-space-2xl: 64px;
+  --token-space-gutter: 40px;
 
-  --token-type-kicker: 20px;
-  --token-type-heading: 68px;
-  --token-type-body: 29px;
-  --token-type-metric-value: 74px;
-  --token-type-metric-label: 22px;
+  /* Font Sizes */
+  --token-type-kicker: 14px;
+  --token-type-heading: 72px;
+  --token-type-body: 28px;
+  --token-type-small: 12px;
+  --token-type-metric-value: 84px;
+  --token-type-metric-label: 16px;
 
-  --radius-card: 2px;
+  /* Form Elements */
+  --radius-card: 0px; /* Sharp corners for Swiss design */
   --radius-pill: 999px;
   --frame-title-shadow: none;
   --frame-caption-shadow: none;
@@ -66,16 +76,16 @@
   --token-shadow-title: var(--frame-title-shadow);
   --token-shadow-caption: var(--frame-caption-shadow);
 
-  --heading-max-lines: 5;
+  --heading-max-lines: 4;
 }
 
 [data-template-tone="dark"] {
-  --token-color-text-primary: #f6f6f6;
-  --token-color-text-secondary: #dddddd;
-  --token-color-text-muted: #aeaeae;
-  --token-color-surface-base: #050505;
-  --token-color-surface-elevated: #0d0d0d;
-  --token-color-border-subtle: #f0f0f0;
+  --token-color-text-primary: #FFFFFF;
+  --token-color-text-secondary: #DDDDDD;
+  --token-color-text-muted: #AAAAAA;
+  --token-color-surface-base: #000000;
+  --token-color-surface-elevated: #111111;
+  --token-color-border-subtle: #FFFFFF;
 }
 
 * {
@@ -85,4 +95,36 @@
 html,
 body {
   margin: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background-color: var(--color-surface-base);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Utilities */
+.text-justify {
+  text-align: justify;
+  text-justify: inter-word;
+}
+
+.swiss-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--token-space-md);
+}
+
+.swiss-border {
+  border: 1px solid var(--token-color-border-subtle);
+}
+
+.swiss-border-thick {
+  border: 4px solid var(--token-color-border-subtle);
+}
+
+.swiss-rule {
+  height: 1px;
+  background-color: var(--token-color-border-subtle);
+  width: 100%;
 }

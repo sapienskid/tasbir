@@ -6,6 +6,9 @@ Local base URL is usually `http://127.0.0.1:8787`.
 
 Protected routes:
 
+- `GET /preview`
+- `GET /preview/gallery`
+- `GET /preview/screenshot`
 - `GET /template/<format>`
 - `GET /template-catalog`
 - `POST /generate`
@@ -27,6 +30,27 @@ Response:
   "ok": true
 }
 ```
+
+## `GET /preview`
+
+Returns the interactive single-template workspace UI.
+
+## `GET /preview/gallery`
+
+Returns the multi-template gallery UI that renders template cards grouped by format.
+
+Useful for design QA when iterating multiple premium templates.
+
+## `GET /preview/screenshot`
+
+Returns a PNG render for a specific preview request.
+
+Required query params:
+
+- `format`
+- `templateId` (recommended; defaults to format default template if omitted)
+
+Supports the same content/slot query params as `GET /template/<format>`.
 
 ## `GET /template/<format>`
 

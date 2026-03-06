@@ -1,39 +1,58 @@
 <!--
-@id: layout/carousel-cover-hero
+@id: layout/carousel-header
 @label: Carousel Cover Hero
-@description: Opening slide structure for carousel narrative series
+@description: Swiss-style opening slide for carousel narratives
 @formats: carousel-post
 
-@slot series_label | text | Short series or topic label displayed above the headline
-@slot brand_icon | text | Monogram text for the floating brand icon
-@slot brand_icon_x | number | Icon horizontal position percent (0-100) | 92
-@slot brand_icon_y | number | Icon vertical position percent (0-100) | 9
-@slot brand_icon_size | number | Icon circle size in px | 92
-@slot brand_icon_opacity | number | Icon opacity from 0 to 1 | 0.92
+@slot series_label | text | Short series or topic label displayed above the headline | SERIES / VOL. 1
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
-<div class="relative z-10 grid h-full w-full grid-rows-[auto_minmax(0,1fr)] gap-6 p-10 text-left">
-  <header class="flex w-full items-start justify-between gap-3">
-    <div class="flex max-w-full flex-wrap items-center gap-2.5">
-      <span
-        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
-        {{BRAND_NAME}}</span>
-      <span
-        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary empty:hidden group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
-        {{SLIDE_LABEL}}</span>
-    </div>
-  </header>
-  <section
-    class="relative flex h-full min-h-0 w-full flex-col items-start gap-4 overflow-hidden border border-black/86 bg-white/64 p-8 backdrop-blur-[1.25px] group-data-[template-tone=dark]:border-white/62 group-data-[template-tone=dark]:bg-black/62">
+<div class="relative z-10 grid h-full w-full grid-cols-12 bg-brand-surface text-brand-primary">
+  <!-- Left Side: Decorative Sidebar -->
+  <aside
+    class="col-span-1 border-r border-brand-primary flex flex-col items-center justify-center py-10 bg-brand-primary text-brand-surface">
     <div
-      class="inline-flex w-fit items-center border-b-2 border-black/88 pb-1.5 font-brand-body text-[clamp(13px,1.6vw,18px)] font-semibold uppercase tracking-[0.14em] leading-[1.2] text-brand-muted group-data-[template-tone=dark]:border-white/84">
-      {{SLOT:series_label}}</div>
-    <h1
-      class="m-0 max-w-full font-brand-display text-[clamp(48px,6.6vw,68px)] font-semibold leading-[0.99] tracking-[-0.012em] text-brand-primary text-balance [overflow-wrap:anywhere] break-words">
-      {{HEADING}}</h1>
-    <div class="h-px w-[96px] bg-black/76 group-data-[template-tone=dark]:bg-white/66"></div>
-    <p
-      class="m-0 max-w-full font-brand-body text-[clamp(20px,2.45vw,29px)] leading-[1.32] text-brand-secondary [overflow-wrap:anywhere] break-words">
-      {{BODY}}</p>
-  </section>
+      class="rotate-[-90deg] whitespace-nowrap font-brand-body text-[14px] font-black uppercase tracking-[0.5em] origin-center">
+      START HERE
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="col-span-11 flex flex-col p-[var(--token-space-gutter)]">
+    <header class="flex justify-between items-start mb-16 px-4">
+      <div class="font-brand-body text-[18px] font-black uppercase tracking-[0.4em]">
+        {{BRAND_NAME}}
+      </div>
+      <div
+        class="font-brand-body text-[14px] font-bold uppercase tracking-[0.2em] border-2 border-brand-primary px-4 py-1">
+        {{SLIDE_LABEL}}
+      </div>
+    </header>
+
+    <div class="flex-1 flex flex-col justify-center px-4">
+      <div
+        class="inline-block border-2 border-brand-primary px-4 py-1 mb-6 font-brand-body text-[16px] font-black uppercase tracking-[0.2em] w-fit">
+        {{SLOT:series_label}}
+      </div>
+      <h1
+        class="mb-10 font-brand-display text-[clamp(64px,9vw,96px)] font-black leading-[0.85] tracking-tighter uppercase max-w-[90%]">
+        {{HEADING}}
+      </h1>
+      <div class="w-32 h-6 bg-brand-primary mb-10"></div>
+      <p
+        class="font-brand-body text-[clamp(28px,3.5vw,42px)] leading-tight tracking-tighter text-justify text-brand-secondary max-w-[85%]">
+        {{BODY}}
+      </p>
+    </div>
+
+    <footer class="mt-auto px-4 py-8 flex items-center justify-between border-t-2 border-brand-primary/10">
+      <div class="flex items-center gap-4">
+        <span class="w-12 h-1 bg-brand-primary"></span>
+        <span class="font-brand-body text-[12px] font-black uppercase tracking-[0.3em]">CONTINUE SWIPING</span>
+      </div>
+      <div class="font-brand-body text-[12px] font-bold uppercase tracking-[0.2em] text-brand-muted">
+        2024 / SYSTEM RECORD
+      </div>
+    </footer>
+  </main>
 </div>

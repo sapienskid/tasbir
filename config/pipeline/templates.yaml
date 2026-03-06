@@ -7,7 +7,7 @@ formats:
     height: 1350
     caption_source: instagram_caption
     hashtag_count: 3
-    default_template_id: layout/grid-item-feature
+    default_template_id: layout/grid-feature
     meta_left_label: "Instagram"
     meta_right_label: ""
     layout:
@@ -21,7 +21,7 @@ formats:
     height: 1080
     caption_source: instagram_caption
     hashtag_count: 3
-    default_template_id: layout/grid-item-card
+    default_template_id: layout/grid-card
     meta_left_label: "Instagram"
     meta_right_label: ""
     layout:
@@ -35,7 +35,7 @@ formats:
     height: 1920
     caption_source: instagram_caption
     hashtag_count: 2
-    default_template_id: layout/grid-item-feature
+    default_template_id: layout/grid-feature
     meta_left_label: "Story"
     meta_right_label: ""
     layout:
@@ -49,7 +49,7 @@ formats:
     height: 1350
     caption_source: carousel_slides
     hashtag_count: 0
-    default_template_id: layout/carousel-cover-hero
+    default_template_id: layout/carousel-header
     meta_left_label: ""
     meta_right_label: ""
     layout:
@@ -60,10 +60,10 @@ formats:
       caption_width_max: 980
   twitter-card:
     width: 1200
-    height: 630
+    height: 628
     caption_source: twitter_caption
     hashtag_count: 0
-    default_template_id: layout/statement-cta
+    default_template_id: layout/cta-card
     meta_left_label: "X / Twitter"
     meta_right_label: ""
     layout:
@@ -77,7 +77,7 @@ formats:
     height: 627
     caption_source: linkedin_caption
     hashtag_count: 0
-    default_template_id: layout/grid-item-card
+    default_template_id: layout/editorial
     meta_left_label: "LinkedIn"
     meta_right_label: ""
     layout:
@@ -92,5 +92,6 @@ preview_defaults:
   caption: A practical system for turning one source article into platform-native outputs with consistent structure, language discipline, and reusable visual identity.
   heading: Structure first. Style through tokens.
   body: Templates stay skeletal while one centralized tokenized CSS system controls color, typography, spacing, and tone so every output remains cohesive as your template library evolves.
+  image_url: /images/preview/default.svg
   slide_number: 1
   total_slides: 5

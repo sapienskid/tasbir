@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>System / Gallery</title>
+  <style>{{TEMPLATE_CSS}}</style>
+  <style>
+    :root {
+      --font-display: var(--token-font-display, "Cormorant Garamond", Georgia, "Times New Roman", serif);
+      --font-body: var(--token-font-body, "Inter", "Manrope", sans-serif);
+    }
+
+    body {
+      margin: 0;
+      padding: 28px;
+      font-family: var(--font-body);
+      background: #f2f2f2;
+      color: #101010;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .toolbar h1 {
+      margin: 0 18px 0 0;
+      font-family: var(--font-display);
+      font-size: 40px;
+      line-height: 0.92;
+      text-transform: uppercase;
+      letter-spacing: -0.02em;
+    }
+
+    .toolbar p {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #4d4d4d;
+    }
+
+    .toolbar label {
+      display: grid;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #222;
+    }
+
+    .toolbar input {
+      min-width: 340px;
+      border: 2px solid #101010;
+      padding: 8px 10px;
+      font: inherit;
+      font-weight: 700;
+      background: #fff;
+      color: #101010;
+    }
+
+    .toolbar button {
+      border: 2px solid #101010;
+      background: #101010;
+      color: #fff;
+      padding: 8px 14px;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .status {
+      margin: 0 0 16px;
+      font-size: 11px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #4d4d4d;
+    }
+
+    .gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+      gap: 18px;
+    }
+
+    .preview-card {
+      background: white;
+      border: 2px solid #101010;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .preview-head {
+      display: grid;
+      gap: 4px;
+    }
+
+    .preview-head strong {
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #000;
+    }
+
+    .preview-head span {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #444;
+    }
+
+    .preview-frame {
+      border: 2px solid #000;
+      overflow: hidden;
+      background: #fff;
+      width: 100%;
+      max-width: 460px;
+      position: relative;
+    }
+
+    .preview-frame iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      border: 0;
+      background: #fff;
+      transform-origin: top left;
+    }
+
+    .preview-link {
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #000;
+      text-decoration: none;
+    }
+
+    .preview-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+
+<body>
+  <header class="toolbar">
+    <h1>Template Library</h1>
+    <p>All local format and template combinations</p>
+    <label for="imageUrlInput">
+      Image URL
+      <input id="imageUrlInput" placeholder="/images/preview/default.svg" />
+    </label>
+    <button id="reloadBtn" type="button">Reload Gallery</button>
+  </header>
+
+  <p id="statusLabel" class="status">Loading catalog</p>
+  <div id="gallery" class="gallery"></div>
+
+  <script id="preview-defaults" type="application/json">{{PREVIEW_DEFAULTS_JSON}}</script>
+  <script>
+    (() => {
+      const defaults = JSON.parse(document.getElementById("preview-defaults")?.textContent || "{}");
+      const fallbackImageUrl = defaults.imageUrl || "/images/preview/default.svg";
+      const statusLabel = document.getElementById("statusLabel");
+      const gallery = document.getElementById("gallery");
+      const imageUrlInput = document.getElementById("imageUrlInput");
+      const reloadBtn = document.getElementById("reloadBtn");
+      const urlState = new URL(window.location.href);
+
+      imageUrlInput.value = urlState.searchParams.get("imageUrl") || fallbackImageUrl;
+
+      function setStatus(text) {
+        statusLabel.textContent = text;
+      }
+
+      function syncUrl() {
+        const next = new URL(window.location.href);
+        const imageUrl = imageUrlInput.value.trim();
+        if (imageUrl) {
+          next.searchParams.set("imageUrl", imageUrl);
+        } else {
+          next.searchParams.delete("imageUrl");
+        }
+        history.replaceState(null, "", next.toString());
+      }
+
+      function buildTemplateHref(formatId, templateId) {
+        const params = new URLSearchParams();
+        params.set("templateId", templateId);
+        params.set("title", defaults.title || "");
+        params.set("caption", defaults.caption || "");
+        params.set("heading", defaults.heading || "");
+        params.set("body", defaults.body || "");
+        params.set("brandName", defaults.brandName || "");
+        params.set("imageUrl", imageUrlInput.value.trim() || fallbackImageUrl);
+        return "/template/" + encodeURIComponent(formatId) + "?" + params.toString();
+      }
+
+      function buildCard(format, templateId, templateMeta) {
+        const card = document.createElement("article");
+        card.className = "preview-card";
+
+        const head = document.createElement("div");
+        head.className = "preview-head";
+
+        const title = document.createElement("strong");
+        title.textContent = templateMeta?.label || templateId;
+        head.appendChild(title);
+
+        const meta = document.createElement("span");
+        meta.textContent = format.id + " | " + format.width + "x" + format.height;
+        head.appendChild(meta);
+
+        const frame = document.createElement("div");
+        frame.className = "preview-frame";
+
+        const iframe = document.createElement("iframe");
+        const frameWidth = Number(format.width) || 1080;
+        const frameHeight = Number(format.height) || 1080;
+        const previewWidth = Math.min(460, frameWidth);
+        const scale = previewWidth / frameWidth;
+        const previewHeight = Math.round(frameHeight * scale);
+
+        frame.style.height = previewHeight + "px";
+        iframe.width = String(frameWidth);
+        iframe.height = String(frameHeight);
+        iframe.style.transform = "scale(" + scale + ")";
+        iframe.loading = "lazy";
+        iframe.title = templateId + " (" + format.id + ")";
+        iframe.src = buildTemplateHref(format.id, templateId);
+        frame.appendChild(iframe);
+
+        const openLink = document.createElement("a");
+        openLink.className = "preview-link";
+        openLink.target = "_blank";
+        openLink.rel = "noopener noreferrer";
+        openLink.href = iframe.src;
+        openLink.textContent = "Open full preview";
+
+        card.appendChild(head);
+        card.appendChild(frame);
+        card.appendChild(openLink);
+        return card;
+      }
+
+      async function loadGallery() {
+        syncUrl();
+        setStatus("Loading catalog");
+        gallery.innerHTML = "";
+
+        try {
+          const response = await fetch("/template-catalog?_t=" + Date.now(), { cache: "no-store" });
+          if (!response.ok) {
+            setStatus("Catalog request failed");
+            return;
+          }
+
+          const catalog = await response.json();
+          const templates = Array.isArray(catalog.templates) ? catalog.templates : [];
+          const templatesById = new Map(templates.map((template) => [template.id, template]));
+          const formats = Array.isArray(catalog.formats) ? catalog.formats : [];
+          const mapping = catalog.templates_by_format || {};
+
+          let totalCards = 0;
+          for (const format of formats) {
+            const templateIds = Array.isArray(mapping[format.id]) ? mapping[format.id] : [];
+            for (const templateId of templateIds) {
+              const templateMeta = templatesById.get(templateId) || null;
+              gallery.appendChild(buildCard(format, templateId, templateMeta));
+              totalCards += 1;
+            }
+          }
+
+          setStatus("Loaded " + totalCards + " previews");
+        } catch (_error) {
+          setStatus("Worker unavailable");
+        }
+      }
+
+      reloadBtn.addEventListener("click", () => {
+        void loadGallery();
+      });
+
+      imageUrlInput.addEventListener("change", () => {
+        void loadGallery();
+      });
+
+      void loadGallery();
+    })();
+  </script>
+</body>
+
+</html>

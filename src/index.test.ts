@@ -64,6 +64,18 @@ describe("social pipeline worker", () => {
     expect(html).not.toContain("CAROUSEL");
   });
 
+  it("renders preview gallery endpoint", async () => {
+    const response = await worker.fetch(
+      authorizedRequest("https://worker.test/preview/gallery"),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("Premium Template Gallery");
+  });
+
   it("resolves preview templates with slot values", async () => {
     const response = await worker.fetch(
       authorizedRequest(

@@ -1,37 +1,55 @@
 <!--
-@id: layout/editorial-classic
+@id: layout/editorial
 @label: Editorial Classic
-@description: Classic editorial single-column headline and summary block
+@description: Modern Swiss editorial layout with asymmetric grid and high contrast
+@formats: instagram-square,instagram-portrait,carousel-post,linkedin-post
 
-@slot brand_icon | text | Monogram text for the floating brand icon
-@slot brand_icon_x | number | Icon horizontal position percent (0-100) | 92
-@slot brand_icon_y | number | Icon vertical position percent (0-100) | 9
-@slot brand_icon_size | number | Icon circle size in px | 92
-@slot brand_icon_opacity | number | Icon opacity from 0 to 1 | 0.92
+@slot sidebar_label | text | Small vertical label for the sidebar | PERSPECTIVES
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
-<div class="relative z-10 grid h-full w-full grid-rows-[auto_minmax(0,1fr)] gap-6 p-10 text-left">
-  <header class="flex w-full items-start justify-between gap-3">
-    <div class="flex max-w-full flex-wrap items-center gap-2.5">
-      <span
-        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
-        {{BRAND_NAME}}</span>
-      <span
-        class="inline-flex w-fit items-center border border-black/88 bg-white/58 px-3.5 py-2 font-brand-body text-[12px] font-semibold uppercase tracking-[0.12em] leading-[1.05] text-brand-primary empty:hidden group-data-[template-tone=dark]:border-white/84 group-data-[template-tone=dark]:bg-black/44">
-        {{SLIDE_LABEL}}</span>
+<div class="relative z-10 flex h-full w-full bg-brand-surface text-brand-primary">
+  <!-- Sidebar Branding -->
+  <aside class="w-[80px] border-r-2 border-brand-primary flex flex-col items-center justify-between py-10">
+    <div
+      class="rotate-[-90deg] whitespace-nowrap font-brand-body text-[12px] font-black uppercase tracking-[0.5em] origin-center">
+      {{BRAND_NAME}}
     </div>
-  </header>
-  <section
-    class="relative flex h-full min-h-0 w-full flex-col items-start gap-4 overflow-hidden border border-black/86 bg-white/64 p-8 backdrop-blur-[1.25px] group-data-[template-tone=dark]:border-white/62 group-data-[template-tone=dark]:bg-black/62">
-    <p
-      class="m-0 max-w-full font-brand-body text-[clamp(13px,1.45vw,21px)] font-semibold uppercase tracking-[0.18em] leading-[1.2] text-brand-muted empty:hidden">
-      {{KICKER_TEXT}}</p>
-    <h1
-      class="m-0 max-w-full font-brand-display text-[clamp(48px,6.6vw,68px)] font-semibold leading-[0.99] tracking-[-0.012em] text-brand-primary text-balance [overflow-wrap:anywhere] break-words">
-      {{HEADING}}</h1>
-    <div class="h-px w-full bg-black/76 group-data-[template-tone=dark]:bg-white/66"></div>
-    <p
-      class="m-0 max-w-full font-brand-body text-[clamp(20px,2.45vw,29px)] italic leading-[1.32] text-brand-secondary [overflow-wrap:anywhere] break-words">
-      {{BODY}}</p>
-  </section>
+    <div
+      class="rotate-[-90deg] whitespace-nowrap font-brand-body text-[12px] font-bold uppercase tracking-[0.3em] text-brand-muted origin-center">
+      {{SLOT:sidebar_label}}
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col p-[var(--token-space-gutter)]">
+    <header class="flex justify-between items-start mb-12">
+      <div
+        class="font-brand-body text-[14px] font-bold uppercase tracking-[0.3em] border-2 border-brand-primary px-4 py-1">
+        {{SLIDE_LABEL}}
+      </div>
+      <div class="font-brand-body text-[14px] font-bold uppercase tracking-[0.2em] text-brand-muted">
+        VOL. 01 / ISSUE 04
+      </div>
+    </header>
+
+    <div class="flex-1 flex flex-col justify-end max-w-[95%]">
+      <p class="mb-4 font-brand-body text-brand-muted font-bold uppercase tracking-[0.4em] text-[15px]">
+        {{KICKER_TEXT}}
+      </p>
+      <h1
+        class="mb-10 font-brand-display text-[clamp(48px,7vw,78px)] font-black leading-[0.9] tracking-tighter uppercase border-l-[12px] border-brand-primary pl-8">
+        {{HEADING}}
+      </h1>
+      <p
+        class="font-brand-body text-[clamp(22px,2.8vw,30px)] leading-tight text-justify tracking-tighter text-brand-secondary">
+        {{BODY}}
+      </p>
+    </div>
+
+    <footer class="mt-16 w-full h-1 bg-brand-primary relative">
+      <div class="absolute right-0 top-3 font-brand-body text-[12px] font-bold uppercase tracking-[0.4em]">
+        PUBLISHED SYSTEM RECORD / 2024
+      </div>
+    </footer>
+  </main>
 </div>

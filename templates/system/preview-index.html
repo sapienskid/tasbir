@@ -4,93 +4,177 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Template Preview Workspace</title>
+  <title>System / Workspace</title>
   <style>{{TEMPLATE_CSS}}</style>
+  <style>
+    body {
+      margin: 0;
+      background-color: #f5f5f5;
+    }
+
+    .swiss-input {
+      border: 2px solid #000;
+      padding: 10px 14px;
+      font-family: inherit;
+      font-weight: 600;
+      background: #fff;
+      color: #000;
+      border-radius: 0;
+      outline: none;
+    }
+
+    .swiss-input:focus {
+      background: #000;
+      color: #fff;
+    }
+
+    .swiss-btn {
+      border: 2px solid #000;
+      padding: 10px 20px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      border-radius: 0;
+      transition: all 0.2s ease;
+    }
+
+    .swiss-btn-primary {
+      background: #000;
+      color: #fff;
+    }
+
+    .swiss-btn-primary:hover {
+      background: #fff;
+      color: #000;
+    }
+
+    .swiss-btn-secondary {
+      background: #fff;
+      color: #000;
+    }
+
+    .swiss-btn-secondary:hover {
+      background: #000;
+      color: #fff;
+    }
+
+    .template-btn {
+      text-align: left;
+      padding: 12px 16px;
+      border: 2px solid #000;
+      background: #fff;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 11px;
+    }
+
+    .template-btn.active {
+      background: #000;
+      color: #fff;
+    }
+
+    .template-btn:not(.active):hover {
+      background: #f0f0f0;
+    }
+  </style>
 </head>
 
-<body class="min-h-screen bg-slate-100 text-slate-900">
-  <div class="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col gap-4 p-4 lg:flex-row">
-    <aside class="flex w-full shrink-0 flex-col gap-3 rounded-lg border border-slate-300 bg-white p-4 lg:w-[390px]">
-      <header class="space-y-1">
-        <h1 class="font-brand-display text-3xl leading-tight">Template Workspace</h1>
-        <p class="text-sm text-slate-600">Single-page preview with swappable templates. Tailwind utilities only.</p>
+<body class="min-h-screen text-black font-brand-body">
+  <div class="mx-auto flex min-h-screen w-full max-w-[2000px] flex-col gap-0 lg:flex-row">
+    <!-- Sidebar -->
+    <aside class="flex w-full shrink-0 flex-col gap-8 bg-white border-r-[4px] border-black p-10 lg:w-[480px]">
+      <header class="space-y-4">
+        <p class="m-0 text-[12px] font-black uppercase tracking-[0.4em] text-brand-muted">V_MODULE / WORKSPACE</p>
+        <h1 class="font-brand-display text-[48px] leading-[0.85] font-black uppercase tracking-tighter">System Console
+        </h1>
+        <p class="text-[16px] font-bold text-brand-secondary leading-tight max-w-[320px]">
+          Direct parameter injection and architectural rendering for single narrative modules.
+        </p>
       </header>
 
-      <div class="grid grid-cols-1 gap-3">
-        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="formatSelect">
-          Format
-          <select id="formatSelect" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"></select>
+      <div class="grid grid-cols-1 gap-6">
+        <label class="grid gap-2 text-[12px] font-black uppercase tracking-[0.2em]" for="formatSelect">
+          Injection Mode
+          <select id="formatSelect" class="swiss-input text-base"></select>
         </label>
 
-        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="titleInput">
-          Title
-          <input id="titleInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        <div class="grid grid-cols-2 gap-4">
+          <label class="grid gap-2 text-[12px] font-black uppercase tracking-[0.2em]" for="titleInput">
+            Meta Title
+            <input id="titleInput" class="swiss-input text-sm" />
+          </label>
+          <label class="grid gap-2 text-[12px] font-black uppercase tracking-[0.2em]" for="captionInput">
+            Descriptor
+            <input id="captionInput" class="swiss-input text-sm" />
+          </label>
+        </div>
+
+        <label class="grid gap-2 text-[12px] font-black uppercase tracking-[0.2em]" for="headingInput">
+          Primary Heading
+          <input id="headingInput" class="swiss-input text-sm" />
         </label>
 
-        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="captionInput">
-          Caption
-          <input id="captionInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        <label class="grid gap-2 text-[12px] font-black uppercase tracking-[0.2em]" for="bodyInput">
+          Narrative Body
+          <input id="bodyInput" class="swiss-input text-sm" />
         </label>
 
-        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="headingInput">
-          Heading
-          <input id="headingInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
+        <label class="grid gap-2 text-[12px] font-black uppercase tracking-[0.2em]" for="brandNameInput">
+          System Identity
+          <input id="brandNameInput" class="swiss-input text-sm" />
         </label>
 
-        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="bodyInput">
-          Body
-          <input id="bodyInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
-        </label>
-
-        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="brandNameInput">
-          Brand Name
-          <input id="brandNameInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900" />
-        </label>
-
-        <label class="grid gap-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-600" for="imageUrlInput">
-          Image URL
-          <input id="imageUrlInput" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
-            placeholder="https://..." />
+        <label class="grid gap-2 text-[12px] font-black uppercase tracking-[0.2em]" for="imageUrlInput">
+          Asset Reference
+          <input id="imageUrlInput" class="swiss-input text-sm" placeholder="URL://" />
         </label>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2 pt-1">
-        <button id="applyBtn"
-          class="rounded-md border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-white">Apply</button>
-        <button id="reloadBtn"
-          class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700">Reload</button>
-        <button id="resetBtn"
-          class="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700">Reset</button>
+      <div class="flex flex-col gap-4 pt-4 border-t-2 border-black/10">
+        <div class="grid grid-cols-2 gap-4">
+          <button id="applyBtn" class="swiss-btn swiss-btn-primary">Apply</button>
+          <button id="reloadBtn" class="swiss-btn swiss-btn-secondary">Reload</button>
+        </div>
+        <button id="resetBtn" class="swiss-btn swiss-btn-secondary w-full">Reset System</button>
       </div>
 
-      <div class="flex flex-wrap items-center gap-2">
-        <a id="openTabLink"
-          class="inline-flex rounded-md border border-emerald-700 bg-emerald-700 px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-white"
-          target="_blank" rel="noopener noreferrer">Open In New Tab</a>
-        <a id="downloadPngLink"
-          class="inline-flex rounded-md border border-emerald-700 bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.08em] text-emerald-700"
-          target="_blank" rel="noopener noreferrer">Capture PNG</a>
+      <div class="grid grid-cols-1 gap-4">
+        <a id="openTabLink" class="swiss-btn swiss-btn-primary text-center flex items-center justify-center"
+          target="_blank" rel="noopener noreferrer">ENTER_MODULE</a>
+        <a id="downloadPngLink" class="swiss-btn swiss-btn-secondary text-center flex items-center justify-center"
+          target="_blank" rel="noopener noreferrer">EXPORT_PNG</a>
+        <a class="text-[12px] font-black uppercase tracking-[0.4em] text-brand-muted text-center hover:text-black transition-colors"
+          href="/preview/gallery">Open Gallery Gallery</a>
       </div>
 
-      <label class="inline-flex items-center gap-2 text-xs text-slate-600" for="autoRefreshInput">
-        <input id="autoRefreshInput" type="checkbox" class="h-4 w-4 accent-slate-900" checked />
-        Auto refresh template list
+      <label class="inline-flex items-center gap-3 text-[12px] font-black uppercase tracking-[0.1em]"
+        for="autoRefreshInput">
+        <input id="autoRefreshInput" type="checkbox" class="h-5 w-5" checked />
+        Auto-sync Repository
       </label>
 
-      <section class="grid gap-2 border-t border-slate-200 pt-3">
-        <h2 class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Templates</h2>
-        <div id="templateButtons" class="grid max-h-[45vh] grid-cols-1 gap-2 overflow-y-auto"></div>
+      <section class="grid gap-4 border-t-4 border-black pt-8">
+        <h2 class="text-[14px] font-black uppercase tracking-[0.3em] text-black">Available Modules</h2>
+        <div id="templateButtons" class="grid max-h-[30vh] grid-cols-1 gap-3 overflow-y-auto pr-2"></div>
       </section>
     </aside>
 
-    <main class="flex min-h-[70vh] flex-1 flex-col overflow-hidden rounded-lg border border-slate-300 bg-white">
-      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3">
-        <p id="statusLabel" class="text-xs font-semibold uppercase tracking-[0.08em] text-slate-600">Loading</p>
-        <p id="routeLabel" class="max-w-[70%] truncate text-xs text-slate-500"></p>
+    <!-- Main Preview Area -->
+    <main class="flex min-h-screen flex-1 flex-col bg-black">
+      <div class="flex items-center justify-between gap-4 border-b-2 border-white/20 px-8 py-5">
+        <div class="flex items-center gap-4">
+          <div class="w-12 h-[2px] bg-white"></div>
+          <p id="statusLabel" class="text-[12px] font-black uppercase tracking-[0.4em] text-white">SYSTEM_READY</p>
+        </div>
+        <p id="routeLabel" class="truncate text-[10px] font-black tracking-widest text-white/40 uppercase"></p>
       </div>
-      <div class="flex-1 overflow-auto bg-slate-900/95 p-3">
-        <div class="mx-auto w-fit">
-          <iframe id="previewFrame" title="Template preview" class="block border-0 bg-white shadow-2xl"></iframe>
+      <div class="flex-1 flex items-center justify-center overflow-auto p-12">
+        <div class="relative isolate shadow-[0_60px_120px_rgba(0,0,0,0.8)]">
+          <iframe id="previewFrame" title="Template preview" class="block border-0 bg-white"></iframe>
         </div>
       </div>
     </main>
@@ -216,12 +300,12 @@
 
         const url = buildTemplateUrl(true);
         previewFrame.src = url;
-        routeLabel.textContent = "/template/" + state.format + "?templateId=" + state.templateId;
+        routeLabel.textContent = "ENDPOINT::" + state.format.toUpperCase() + "::ID_" + state.templateId.replaceAll("/", "_").toUpperCase();
         openTabLink.href = url;
         downloadPngLink.href = buildScreenshotUrl();
         downloadPngLink.download = state.format + "-" + state.templateId.replaceAll("/", "_") + ".png";
         syncUrl();
-        setStatus("Preview ready");
+        setStatus("READY_FOR_INSPECTION");
       }
 
       function refreshPreviewFrameOnly() {
@@ -243,8 +327,8 @@
         const ids = templatesForFormat(state.format);
         if (ids.length === 0) {
           const empty = document.createElement("p");
-          empty.className = "rounded-md border border-dashed border-slate-300 px-3 py-2 text-xs text-slate-500";
-          empty.textContent = "No templates in this format.";
+          empty.className = "border-2 border-dashed border-black/10 p-4 text-[10px] font-black uppercase tracking-widest text-black/20";
+          empty.textContent = "NULL_MODULES_IN_FORMAT";
           templateButtons.appendChild(empty);
           return;
         }
@@ -253,14 +337,11 @@
           const template = templateById(id);
           const button = document.createElement("button");
           button.type = "button";
-          button.className = "rounded-md border px-3 py-2 text-left text-xs transition";
-          const active = id === state.templateId;
-          if (active) {
-            button.className += " border-slate-900 bg-slate-900 text-white";
-          } else {
-            button.className += " border-slate-300 bg-white text-slate-700 hover:border-slate-500 hover:text-slate-900";
+          button.className = "template-btn";
+          if (id === state.templateId) {
+            button.classList.add("active");
           }
-          button.textContent = (template?.label || id) + " (" + id + ")";
+          button.textContent = (template?.label || id).toUpperCase();
           button.addEventListener("click", () => {
             state.templateId = id;
             renderTemplateButtons();
@@ -276,7 +357,7 @@
         for (const format of formats) {
           const option = document.createElement("option");
           option.value = format.id;
-          option.textContent = format.id + " (" + format.width + "x" + format.height + ")";
+          option.textContent = format.id.toUpperCase() + " [" + format.width + "x" + format.height + "]";
           formatSelect.appendChild(option);
         }
 
@@ -307,7 +388,7 @@
         try {
           const response = await fetch("/template-catalog?_t=" + Date.now(), { cache: "no-store" });
           if (!response.ok) {
-            setStatus("Catalog failed");
+            setStatus("FATAL: CATALOG_FAILED");
             return;
           }
 
@@ -318,7 +399,7 @@
           renderTemplateButtons();
           applyPreview();
         } catch (_error) {
-          setStatus("Server unavailable");
+          setStatus("FATAL: SERVER_UNAVAILABLE");
         }
       }
 
@@ -341,7 +422,7 @@
           renderFormatOptions();
           renderTemplateButtons();
           applyPreview();
-          setStatus("Templates updated");
+          setStatus("MODULES_SYNCED");
         } catch (_error) {
           // Keep last stable state.
         }

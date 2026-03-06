@@ -88,6 +88,13 @@ pnpm run build:templates
 
 ## Preview Cookbook
 
+Workspace UIs:
+
+```text
+/preview
+/preview/gallery
+```
+
 Direct template preview:
 
 ```text

@@ -73,7 +73,7 @@ This regenerates `src/generated/template-assets.json`.
 ## 5. Run Locally
 
 ```bash
-pnpm run dev
+pnpm run dev:design
 ```
 
 Health check:
@@ -83,6 +83,15 @@ curl http://127.0.0.1:8787/health
 ```
 
 ## 6. Preview a Template
+
+Open local review pages:
+
+```text
+http://127.0.0.1:8787/preview
+http://127.0.0.1:8787/preview/gallery
+```
+
+Direct template request example:
 
 ```bash
 curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/statement-cta&slot.headline=Launch%20Week&slot.supporting_line=One%20guide%2C%20all%20platforms&slot.cta_text=Read%20Now" \
@@ -172,3 +181,4 @@ pnpm run test
 - [Configuration Reference](config-reference.md)
 - [API Reference](api-reference.md)
 - [Troubleshooting](troubleshooting.md)
+- [Deployment](deployment.md)

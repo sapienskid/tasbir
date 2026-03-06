@@ -25,6 +25,7 @@ import { PIPELINE_CONFIG, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/templ
 interface Env {
   AI: Ai;
   BROWSER: Fetcher;
+  ASSETS?: Fetcher;
   OUTPUT_BUCKET: R2Bucket;
   GHOST_API_URL: string;
   GHOST_CONTENT_API_KEY: string;
@@ -355,6 +356,13 @@ export default {
         return finalizeResponse(request, security, handleCorsPreflight(request, security));
       }
 
+      if (request.method === "GET" && url.pathname.startsWith("/images/")) {
+        const staticAsset = await maybeServeStaticAsset(request, env);
+        if (staticAsset) {
+          return finalizeResponse(request, security, staticAsset);
+        }
+      }
+
       if (request.method === "GET" && url.pathname.startsWith("/template/")) {
         enforceRouteSecurity(request, security, "preview");
         if (!PIPELINE_CONFIG.features.enable_template_preview) {
@@ -377,6 +385,14 @@ export default {
           throw new HttpError(403, "Template preview route is disabled by configuration");
         }
         return finalizeResponse(request, security, handlePreviewWorkspace());
+      }
+
+      if (request.method === "GET" && url.pathname === "/preview/gallery") {
+        enforceRouteSecurity(request, security, "preview");
+        if (!PIPELINE_CONFIG.features.enable_template_preview) {
+          throw new HttpError(403, "Template preview route is disabled by configuration");
+        }
+        return finalizeResponse(request, security, handlePreviewGallery());
       }
 
       if (request.method === "GET" && url.pathname === "/template-catalog") {
@@ -454,6 +470,7 @@ export default {
               "POST /webhook/ghost",
               "GET /preview/screenshot?format=...&templateId=...",
               "GET /preview",
+              "GET /preview/gallery",
               "GET /template-catalog",
               ...TEMPLATE_KINDS.map((kind) => `GET /template/${kind}?...`)
             ]
@@ -488,23 +505,22 @@ function handleTemplateCatalog(): Response {
 }
 
 function handlePreviewWorkspace(): Response {
-  const template = (TEMPLATE_FILES as Record<string, string>)["@system/preview-index"];
+  return renderPreviewSystemTemplate("@system/preview-index");
+}
+
+function handlePreviewGallery(): Response {
+  return renderPreviewSystemTemplate("@system/preview-gallery");
+}
+
+function renderPreviewSystemTemplate(templateId: string): Response {
+  const template = (TEMPLATE_FILES as Record<string, string>)[templateId];
   if (!template) {
-    throw new HttpError(500, "Missing system template: @system/preview-index");
+    throw new HttpError(500, `Missing system template: ${templateId}`);
   }
 
   const html = interpolateHtmlTemplate(template, {
     TEMPLATE_CSS: TEMPLATE_CSS.replaceAll("</style", "<\\/style"),
-    PREVIEW_DEFAULTS_JSON: escapeJsonForHtml(
-      JSON.stringify({
-        title: PIPELINE_CONFIG.preview_defaults.title,
-        caption: PIPELINE_CONFIG.preview_defaults.caption,
-        heading: PIPELINE_CONFIG.preview_defaults.heading,
-        body: PIPELINE_CONFIG.preview_defaults.body,
-        brandName: PIPELINE_CONFIG.brand.default_name,
-        imageUrl: ""
-      })
-    )
+    PREVIEW_DEFAULTS_JSON: escapeJsonForHtml(JSON.stringify(buildPreviewDefaultsPayload()))
   });
 
   return new Response(html, {
@@ -513,6 +529,30 @@ function handlePreviewWorkspace(): Response {
       "cache-control": "no-store"
     }
   });
+}
+
+function buildPreviewDefaultsPayload() {
+  const defaultImageUrl = getPreviewDefaultImageUrl();
+  return {
+    title: PIPELINE_CONFIG.preview_defaults.title,
+    caption: PIPELINE_CONFIG.preview_defaults.caption,
+    heading: PIPELINE_CONFIG.preview_defaults.heading,
+    body: PIPELINE_CONFIG.preview_defaults.body,
+    brandName: PIPELINE_CONFIG.brand.default_name,
+    imageUrl: defaultImageUrl
+  };
+}
+
+async function maybeServeStaticAsset(request: Request, env: Env): Promise<Response | null> {
+  if (!env.ASSETS) {
+    return null;
+  }
+
+  const response = await env.ASSETS.fetch(request);
+  if (response.status === 404) {
+    return null;
+  }
+  return response;
 }
 
 async function handlePreviewScreenshot(url: URL, env: Env): Promise<Response> {
@@ -544,6 +584,7 @@ async function handlePreviewScreenshot(url: URL, env: Env): Promise<Response> {
 }
 
 function buildTemplateCatalogPayload() {
+  const defaultImageUrl = getPreviewDefaultImageUrl();
   const templateFileMap = TEMPLATE_FILES as Record<string, string>;
   const allKinds = listTemplateKinds();
 
@@ -606,13 +647,18 @@ function buildTemplateCatalogPayload() {
         heading: PIPELINE_CONFIG.preview_defaults.heading,
         body: PIPELINE_CONFIG.preview_defaults.body,
         brandName: PIPELINE_CONFIG.brand.default_name,
-        imageUrl: ""
+        imageUrl: defaultImageUrl
       }
     },
     formats,
     templates,
     templates_by_format: templatesByFormat
   };
+}
+
+function getPreviewDefaultImageUrl(): string {
+  const defaults = PIPELINE_CONFIG.preview_defaults as Record<string, unknown>;
+  return typeof defaults.image_url === "string" ? defaults.image_url : "";
 }
 
 function interpolateHtmlTemplate(template: string, tokens: Record<string, string>): string {
@@ -894,7 +940,7 @@ function allowsSameOriginFrames(request: Request): boolean {
     return false;
   }
   const pathname = new URL(request.url).pathname;
-  return pathname === "/preview" || pathname.startsWith("/template/");
+  return pathname.startsWith("/preview") || pathname.startsWith("/template/");
 }
 
 function corsHeadersForRequest(request: Request, security: ResolvedSecurityConfig): Headers {
