@@ -10,25 +10,43 @@
 @slot corner_item_top | text | Top-right circular item label | Field sample
 @slot corner_item_bottom | text | Bottom-right circular item label | Lab culture
 -->
-<div class="content-shell template-concept-explainer template-inline-media {{ALIGN_CLASS}}">
-  {{HEADER}}
-  <div class="content-panel {{POSITION_CLASS}}">
-    <div class="concept-media-band">
-      <div class="concept-media-image" style="background-image: url('{{IMAGE_URL}}');"></div>
-      <div class="concept-media-overlay"></div>
-    </div>
-    <div class="concept-content">
-      <div class="topic-chip">{{SLOT:topic_label}}</div>
-      <h1 class="heading-primary flow-after-heading content-limit text-balance word-safe">{{HEADING}}</h1>
-      <p class="body-secondary flow-after-heading caption-limit word-safe">{{BODY}}</p>
-      <div class="concept-callout flow-after-section">
-        <p class="body-secondary word-safe">{{SLOT:callout_text}}</p>
+<div class="template-inline-media relative z-10 flex h-full w-full flex-col {{ALIGN_CLASS}}"
+  style="--template-panel-padding:0;--template-heading-size:62px;--template-body-size:26px;">
+  <div class="px-[calc(22px*var(--layout-scale)*var(--frame-space-scale))] pt-[calc(22px*var(--layout-scale)*var(--frame-space-scale))]">
+    {{HEADER}}
+  </div>
+  <div class="relative {{POSITION_CLASS}} flex h-full min-h-0 flex-col p-0">
+    <div class="relative min-h-0 basis-[44%] overflow-hidden">
+      <div class="absolute inset-0 bg-cover bg-center bg-no-repeat" style="background-image: url('{{IMAGE_URL}}');"></div>
+      <div
+        class="absolute inset-0 bg-[linear-gradient(0deg,color-mix(in_srgb,var(--color-overlay-strong)_44%,transparent)_0%,transparent_64%)]">
       </div>
-      <p class="concept-support-note flow-after-heading word-safe">{{SLOT:support_note}}</p>
     </div>
-    <div class="concept-corners">
-      <span class="corner-chip corner-chip--top">{{SLOT:corner_item_top}}</span>
-      <span class="corner-chip corner-chip--bottom">{{SLOT:corner_item_bottom}}</span>
+    <div class="relative z-[1] min-h-0 flex-1 bg-[color-mix(in_srgb,var(--color-overlay-strong)_16%,transparent)] p-[calc(24px*var(--layout-scale)*var(--frame-space-scale))]">
+      <div
+        class="inline-flex w-fit rounded-[999px] bg-[color-mix(in_srgb,var(--color-overlay-strong)_18%,transparent)] px-[calc(18px*var(--layout-scale))] py-[calc(8px*var(--layout-scale))] font-brand-body text-brand-primary text-[calc(20px*var(--layout-scale)*var(--frame-type-scale))] font-semibold uppercase tracking-[0.08em] leading-[1.1]">
+        {{SLOT:topic_label}}</div>
+      <h1
+        class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--content-max-width)] font-brand-display text-brand-primary text-[calc(var(--template-heading-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-heading-line-height)] tracking-[var(--template-heading-letter-spacing)] [text-shadow:var(--token-shadow-title)] text-balance [overflow-wrap:anywhere] break-words">
+        {{HEADING}}</h1>
+      <p
+        class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--caption-max-width)] font-brand-body text-brand-secondary text-[calc(var(--template-body-secondary-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-body-line-height)] [text-shadow:var(--token-shadow-caption)] [overflow-wrap:anywhere] break-words">
+        {{BODY}}</p>
+      <div
+        class="mt-[calc(var(--template-flow-section)*var(--layout-scale)*var(--frame-space-scale))] bg-[color-mix(in_srgb,var(--color-overlay-strong)_14%,transparent)] p-[calc(20px*var(--layout-scale)*var(--frame-space-scale))]">
+        <p
+          class="font-brand-body text-brand-secondary text-[calc(var(--template-body-secondary-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-body-line-height)] [text-shadow:var(--token-shadow-caption)] [overflow-wrap:anywhere] break-words">
+          {{SLOT:callout_text}}</p>
+      </div>
+      <p
+        class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] font-brand-body text-brand-muted text-[calc(18px*var(--layout-scale)*var(--frame-type-scale))] leading-[1.3] [overflow-wrap:anywhere] break-words">
+        {{SLOT:support_note}}</p>
+    </div>
+    <div class="pointer-events-none absolute inset-0">
+      <span
+        class="absolute right-[calc(16px*var(--layout-scale))] top-[calc(16px*var(--layout-scale))] inline-flex h-[calc(120px*var(--layout-scale))] w-[calc(120px*var(--layout-scale))] items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-overlay-strong)_18%,transparent)] p-[calc(12px*var(--layout-scale))] text-center font-brand-body text-brand-secondary text-[calc(14px*var(--layout-scale)*var(--frame-type-scale))] leading-[1.2]">{{SLOT:corner_item_top}}</span>
+      <span
+        class="absolute bottom-[calc(20px*var(--layout-scale))] right-[calc(20px*var(--layout-scale))] inline-flex h-[calc(120px*var(--layout-scale))] w-[calc(120px*var(--layout-scale))] items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-overlay-strong)_18%,transparent)] p-[calc(12px*var(--layout-scale))] text-center font-brand-body text-brand-secondary text-[calc(14px*var(--layout-scale)*var(--frame-type-scale))] leading-[1.2]">{{SLOT:corner_item_bottom}}</span>
     </div>
     {{FOOTER}}
   </div>

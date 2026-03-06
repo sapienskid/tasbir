@@ -6,13 +6,20 @@
 
 @slot series_label | text | Short series or topic label displayed above the headline
 -->
-<div class="content-shell template-carousel-cover {{ALIGN_CLASS}}">
-    {{HEADER}}
-    <div class="content-panel {{POSITION_CLASS}}">
-        <div class="series-number">{{SLOT:series_label}}</div>
-        <h1 class="heading-primary content-limit text-balance word-safe">{{HEADING}}</h1>
-        <div class="rule-line rule-line--thick flow-after-heading" style="width: 80px;"></div>
-        <p class="body-secondary flow-after-heading caption-limit word-safe">{{BODY}}</p>
-        {{FOOTER}}
-    </div>
+<div
+  class="relative z-10 flex h-full w-full flex-col p-[calc(var(--content-inset)*var(--layout-scale)*var(--frame-space-scale))] {{ALIGN_CLASS}}">
+  {{HEADER}}
+  <div class="relative {{POSITION_CLASS}} p-[calc(var(--template-panel-padding)*var(--layout-scale)*var(--frame-space-scale))]">
+    <div
+      class="mb-[calc(var(--token-space-md)*var(--layout-scale))] inline-block border-b-2 border-brand-primary pb-[calc(var(--token-space-xs)*var(--layout-scale))] font-brand-body text-[calc(18px*var(--layout-scale)*var(--frame-type-scale))] font-semibold uppercase tracking-[0.16em] text-brand-muted">
+      {{SLOT:series_label}}</div>
+    <h1
+      class="max-w-[var(--content-max-width)] font-brand-display text-brand-primary text-[calc(var(--template-heading-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-heading-line-height)] tracking-[var(--template-heading-letter-spacing)] [text-shadow:var(--token-shadow-title)] text-balance [overflow-wrap:anywhere] break-words">
+      {{HEADING}}</h1>
+    <div class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] h-[2px] w-[80px] bg-brand-primary"></div>
+    <p
+      class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--caption-max-width)] font-brand-body text-brand-secondary text-[calc(var(--template-body-secondary-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-body-line-height)] [text-shadow:var(--token-shadow-caption)] [overflow-wrap:anywhere] break-words">
+      {{BODY}}</p>
+    {{FOOTER}}
+  </div>
 </div>

@@ -1,7 +1,10 @@
-<div class="top-bar {{TOP_BAR_VISIBILITY_CLASS}}">
-  <span class="brand-pill {{LEFT_PILL_VISIBILITY_CLASS}}"><img class="brand-icon {{BRAND_ICON_VISIBILITY_CLASS}}"
-      src="{{BRAND_ICON_URL}}" alt="" />{{LEFT_LABEL}}</span>
-  <span class="top-bar-right">
-    <span class="brand-pill {{RIGHT_PILL_VISIBILITY_CLASS}}">{{RIGHT_LABEL}}</span>
+<div class="flex w-full items-center justify-between gap-[calc(20px*var(--layout-scale))] {{TOP_BAR_VISIBILITY_CLASS}}">
+  <span
+    class="inline-flex w-fit items-center border border-[var(--frame-brand-pill-border)] bg-[var(--frame-brand-pill-bg)] text-[var(--frame-brand-pill-text)] px-[calc(16px*var(--layout-scale)*var(--frame-space-scale))] py-[calc(8px*var(--layout-scale)*var(--frame-space-scale))] font-brand-body text-[calc(14px*var(--layout-scale)*var(--frame-type-scale))] font-medium uppercase tracking-[0.12em] leading-[1.1] {{LEFT_PILL_VISIBILITY_CLASS}}"><img
+      class="mr-[calc(6px*var(--layout-scale))] h-[1em] w-auto object-contain {{BRAND_ICON_VISIBILITY_CLASS}}" src="{{BRAND_ICON_URL}}"
+      alt="" />{{LEFT_LABEL}}</span>
+  <span class="ml-auto">
+    <span
+      class="inline-flex w-fit items-center border border-[var(--frame-brand-pill-border)] bg-[var(--frame-brand-pill-bg)] text-[var(--frame-brand-pill-text)] px-[calc(16px*var(--layout-scale)*var(--frame-space-scale))] py-[calc(8px*var(--layout-scale)*var(--frame-space-scale))] font-brand-body text-[calc(14px*var(--layout-scale)*var(--frame-type-scale))] font-medium uppercase tracking-[0.12em] leading-[1.1] {{RIGHT_PILL_VISIBILITY_CLASS}}">{{RIGHT_LABEL}}</span>
   </span>
 </div>

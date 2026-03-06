@@ -456,14 +456,14 @@ function renderFrame(
   const imageLayerStyle = shouldRenderBackgroundImage
     ? `background-image: url('${safeImageUrl}'); opacity: var(--frame-image-opacity); filter: ${imageFilter}; transform: ${imageTransform};`
     : "";
-  const imageVisibilityClass = shouldRenderBackgroundImage ? "" : "is-hidden";
+  const imageVisibilityClass = shouldRenderBackgroundImage ? "" : "hidden";
 
   // Brand icon corner
   const brandIconUrl = escapeHtml(args.control.brandIconUrl.trim());
   const hasBrandIcon = brandIconUrl.length > 0;
   const brandIconCornerClass = hasBrandIcon
     ? brandIconCornerClassName(args.control.brandIconPosition)
-    : "is-hidden";
+    : "hidden";
   const brandIconCornerStyle = "";
 
   const rootVars = [
@@ -472,13 +472,60 @@ function renderFrame(
     `--caption-max-width:${captionMax}px`,
     `--layout-scale:${layoutScale.toFixed(4)}`,
     `--layout-width-scale:${widthScale.toFixed(4)}`,
-    `--layout-height-scale:${heightScale.toFixed(4)}`
+    `--layout-height-scale:${heightScale.toFixed(4)}`,
+    "--frame-bg:var(--color-surface-base)",
+    "--frame-overlay-top:linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 32%, transparent))",
+    "--frame-overlay-bottom:linear-gradient(0deg, transparent, transparent)",
+    "--frame-vignette:none",
+    "--frame-brand-pill-bg:transparent",
+    "--frame-brand-pill-border:var(--color-border-subtle)",
+    "--frame-brand-pill-text:var(--color-text-primary)",
+    "--frame-title-shadow:none",
+    "--frame-caption-shadow:none",
+    "--frame-grain-opacity:0",
+    "--frame-image-opacity:0.5",
+    "--frame-type-scale:1",
+    "--frame-space-scale:1",
+    "--template-panel-padding:34px",
+    "--template-heading-size:var(--token-type-heading)",
+    "--template-heading-secondary-size:var(--template-heading-size)",
+    "--template-heading-quote-size:var(--template-heading-size)",
+    "--template-heading-line-height:1.06",
+    "--template-heading-letter-spacing:-0.02em",
+    "--template-body-size:var(--token-type-body)",
+    "--template-body-secondary-size:var(--template-body-size)",
+    "--template-body-quote-size:var(--template-body-size)",
+    "--template-body-line-height:1.38",
+    "--template-body-color:var(--color-text-secondary)",
+    "--template-flow-kicker:var(--token-space-2xs)",
+    "--template-flow-heading:var(--token-space-xs)",
+    "--template-flow-subheading:var(--token-space-2xs)",
+    "--template-flow-section:var(--token-space-md)",
+    "--template-check-item-size:22px",
+    "--template-metric-value-size:var(--token-type-metric-value)",
+    "--template-metric-label-size:var(--token-type-metric-label)"
   ];
   if (typeof args.control.imageOpacity === "number") {
     rootVars.push(`--frame-image-opacity:${args.control.imageOpacity}`);
   }
   if (!args.control.showDecorLayers || !args.visualLayers.useHtmlDecorLayers) {
     rootVars.push("--frame-grain-opacity:0");
+  }
+  if (args.frameTone === "dark") {
+    rootVars.push(
+      "--color-text-primary:#f2f2f2",
+      "--color-text-secondary:#d1d1d1",
+      "--color-text-muted:#9a9a9a",
+      "--color-surface-base:#070707",
+      "--color-surface-elevated:#131313",
+      "--color-border-subtle:#2b2b2b",
+      "--frame-bg:#050505",
+      "--frame-overlay-top:linear-gradient(180deg, color-mix(in srgb, #000000 32%, transparent) 0%, color-mix(in srgb, #000000 60%, transparent) 100%)",
+      "--frame-overlay-bottom:linear-gradient(0deg, color-mix(in srgb, #000000 22%, transparent) 0%, transparent 62%)",
+      "--frame-brand-pill-bg:color-mix(in srgb, #000000 16%, transparent)",
+      "--frame-brand-pill-border:color-mix(in srgb, #ffffff 24%, transparent)",
+      "--frame-brand-pill-text:var(--color-text-primary)"
+    );
   }
   const rootStyle = `width: ${args.width}px; height: ${args.height}px; ${rootVars.join(";")}`;
 
@@ -555,12 +602,12 @@ function renderTopBar(
   const hasBrandIcon = brandIconUrl.length > 0;
 
   return renderSystemFragment("@system/top-bar-shell", {
-    TOP_BAR_VISIBILITY_CLASS: showTopBar ? "" : "is-hidden",
-    LEFT_PILL_VISIBILITY_CLASS: showLeft ? "" : "is-hidden",
-    RIGHT_PILL_VISIBILITY_CLASS: showRight ? "" : "is-hidden",
+    TOP_BAR_VISIBILITY_CLASS: showTopBar ? "" : "hidden",
+    LEFT_PILL_VISIBILITY_CLASS: showLeft ? "" : "hidden",
+    RIGHT_PILL_VISIBILITY_CLASS: showRight ? "" : "hidden",
     LEFT_LABEL: escapeHtml(brandName),
     RIGHT_LABEL: escapeHtml(slideLabel ?? ""),
-    BRAND_ICON_VISIBILITY_CLASS: hasBrandIcon ? "" : "is-hidden",
+    BRAND_ICON_VISIBILITY_CLASS: hasBrandIcon ? "" : "hidden",
     BRAND_ICON_URL: brandIconUrl
   });
 }
@@ -575,7 +622,7 @@ function renderMetaFooter(
   const right = control.metaRightText ?? defaultRight;
 
   return renderSystemFragment("@system/meta-footer-shell", {
-    META_FOOTER_VISIBILITY_CLASS: control.showMetaFooter ? "" : "is-hidden",
+    META_FOOTER_VISIBILITY_CLASS: control.showMetaFooter ? "" : "hidden",
     META_LEFT_LABEL: escapeHtml(left),
     META_RIGHT_LABEL: escapeHtml(right)
   });
@@ -588,7 +635,7 @@ function renderKicker(
 ): string {
   const shouldShowKicker = kind === "carousel-post" && control.showTitleKicker;
   return renderSystemFragment("@system/kicker-shell", {
-    KICKER_VISIBILITY_CLASS: shouldShowKicker ? "" : "is-hidden",
+    KICKER_VISIBILITY_CLASS: shouldShowKicker ? "" : "hidden",
     KICKER_TEXT: escapeHtml(title)
   });
 }
@@ -605,36 +652,36 @@ function defaultMetaRight(kind: TemplateKind): string {
 
 function alignmentClassName(alignment: "left" | "center" | "justify"): string {
   if (alignment === "center") {
-    return "align-center";
+    return "items-center text-center";
   }
   if (alignment === "justify") {
-    return "align-justify";
+    return "items-start text-justify";
   }
-  return "align-left";
+  return "items-start text-left";
 }
 
 function positionClassName(position: ContentPosition): string {
   if (position === "top") {
-    return "push-start";
+    return "mb-auto";
   }
   if (position === "center") {
-    return "push-center";
+    return "my-auto";
   }
-  return "push-end";
+  return "mt-auto";
 }
 
 function brandIconCornerClassName(position: BrandIconPosition): string {
   switch (position) {
     case "top-left":
-      return "corner-top-left";
+      return "top-0 left-0";
     case "top-right":
-      return "corner-top-right";
+      return "top-0 right-0";
     case "bottom-left":
-      return "corner-bottom-left";
+      return "bottom-0 left-0";
     case "bottom-right":
-      return "corner-bottom-right";
+      return "bottom-0 right-0";
     default:
-      return "corner-top-left";
+      return "top-0 left-0";
   }
 }
 

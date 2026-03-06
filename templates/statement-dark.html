@@ -5,14 +5,22 @@
 
 @slot cta_text | text | Short call-to-action button label | Read More
 -->
-<div class="content-shell template-dark {{ALIGN_CLASS}}">
-    {{HEADER}}
-    <div class="content-panel {{POSITION_CLASS}}">
-        {{KICKER}}
-        <h1 class="heading-primary flow-after-kicker content-limit text-balance word-safe">{{HEADING}}</h1>
-        <div class="rule-line rule-line--inverted flow-after-heading"></div>
-        <p class="body-primary flow-after-heading caption-limit word-safe">{{BODY}}</p>
-        <div class="cta-pill cta-pill--inverted flow-after-section">{{SLOT:cta_text}}</div>
-        {{FOOTER}}
-    </div>
+<div
+  class="template-dark relative z-10 flex h-full w-full flex-col p-[calc(var(--content-inset)*var(--layout-scale)*var(--frame-space-scale))] {{ALIGN_CLASS}}"
+  style="--color-text-primary:#f2f2f2;--color-text-secondary:#d1d1d1;--color-text-muted:#9a9a9a;--color-surface-base:#070707;--color-surface-elevated:#131313;--color-border-subtle:#2b2b2b;">
+  {{HEADER}}
+  <div class="relative {{POSITION_CLASS}} p-[calc(var(--template-panel-padding)*var(--layout-scale)*var(--frame-space-scale))]">
+    {{KICKER}}
+    <h1
+      class="mt-[calc(var(--template-flow-kicker)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--content-max-width)] font-brand-display text-brand-primary text-[calc(var(--template-heading-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-heading-line-height)] tracking-[var(--template-heading-letter-spacing)] [text-shadow:var(--token-shadow-title)] text-balance [overflow-wrap:anywhere] break-words">
+      {{HEADING}}</h1>
+    <div class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] h-px w-full bg-white"></div>
+    <p
+      class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--caption-max-width)] font-brand-body italic text-brand-secondary text-[calc(var(--template-body-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-body-line-height)] [text-shadow:var(--token-shadow-caption)] [overflow-wrap:anywhere] break-words">
+      {{BODY}}</p>
+    <div
+      class="mt-[calc(var(--template-flow-section)*var(--layout-scale)*var(--frame-space-scale))] inline-flex w-fit items-center bg-white px-[calc(24px*var(--layout-scale)*var(--frame-space-scale))] py-[calc(12px*var(--layout-scale)*var(--frame-space-scale))] font-brand-body text-[calc(22px*var(--layout-scale)*var(--frame-type-scale))] font-semibold uppercase tracking-[0.06em] leading-[1.1] text-black">
+      {{SLOT:cta_text}}</div>
+    {{FOOTER}}
+  </div>
 </div>
