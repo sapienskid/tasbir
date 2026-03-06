@@ -1,14 +1,12 @@
 import {
   brandConfig,
   createBrandTheme,
-  layoutDefaultsForFormat,
   renderTemplateHead,
   resolveTemplateControl,
   templateControlSetFromQuery,
   tokenOverridesFromQuery,
   type BrandIconPosition,
   type BrandTokenOverrides,
-  type ContentPosition,
   type ResolvedTemplateControl,
   type TemplateControlSet,
   type TemplateFormatKey
@@ -33,6 +31,8 @@ interface TemplateDefinition {
   label: string;
   description?: string;
   file: string;
+  frameTone?: "default" | "dark";
+  backgroundImage?: "global" | "inline";
   fields?: TemplateFieldDeclaration[];
 }
 
@@ -72,13 +72,6 @@ const SLOT_TOKEN_PATTERN = /\{\{\s*SLOT:([A-Za-z0-9_:-]+)\s*\}\}/gi;
 const DEFAULT_VISUAL_LAYERS = {
   useBackgroundImageOnly: true,
   useHtmlDecorLayers: true
-} as const;
-
-const FRAME_DECOR_DEFAULTS = {
-  borderAlphaPercent: 22,
-  grainDotColor: "rgba(255, 255, 255, 0.28)",
-  grainDotSizePx: 0.6,
-  grainBgSizePx: 3
 } as const;
 
 export function listTemplateKinds(): TemplateKind[] {
@@ -179,14 +172,12 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     BRAND_NAME: escapeHtml(params.brandName),
     HEADER: header,
     FOOTER: footer,
-    KICKER: kicker,
-    ALIGN_CLASS: alignmentClassName(control.textAlign),
-    POSITION_CLASS: positionClassName(control.contentPosition)
+    KICKER: kicker
   };
 
   const templateMarkup = loadTemplateMarkup(selectedTemplate.id);
-  const frameTone = detectFrameTone(templateMarkup);
-  const visualLayers = resolveVisualLayerSettings(templateMarkup);
+  const frameTone = resolveFrameTone(selectedTemplate);
+  const visualLayers = resolveVisualLayerSettings(selectedTemplate, templateMarkup);
   const content = interpolateTemplate(templateMarkup, tokens, slotValues);
 
   return renderFrame(
@@ -255,8 +246,26 @@ function loadTemplateMarkup(templateId: string): string {
   return content;
 }
 
-function detectFrameTone(templateMarkup: string): FrameTone {
-  return /\btemplate-dark\b/i.test(templateMarkup) ? "dark" : "default";
+function resolveFrameTone(template: TemplateDefinition): FrameTone {
+  const explicitTone = normalizeFrameTone(template.frameTone);
+  if (explicitTone) {
+    return explicitTone;
+  }
+  return "default";
+}
+
+function normalizeFrameTone(value: unknown): FrameTone | undefined {
+  if (value === "default" || value === "dark") {
+    return value;
+  }
+  return undefined;
+}
+
+function normalizeBackgroundImageMode(value: unknown): "global" | "inline" | undefined {
+  if (value === "global" || value === "inline") {
+    return value;
+  }
+  return undefined;
 }
 
 function interpolateTemplate(template: string, tokens: Record<string, string>, slots: Record<string, string>): string {
@@ -384,37 +393,6 @@ function listTemplateSlotKeys(templateId: string): string[] {
   return keys;
 }
 
-function captionMaxWidth(kind: TemplateKind, contentMaxWidth: number): number {
-  const layout = layoutDefaultsForFormat(kind);
-  return Math.min(Number(layout.captionWidthMax), contentMaxWidth + Number(layout.captionWidthAdd));
-}
-
-function frameDecorTokens(): {
-  borderAlphaPercent: number;
-  grainDotColor: string;
-  grainDotSizePx: number;
-  grainBgSizePx: number;
-} {
-  const renderConfig = (PIPELINE_CONFIG as unknown as {
-    render?: {
-      frame_decor?: {
-        border_alpha_percent?: number;
-        grain_dot_color?: string;
-        grain_dot_size_px?: number;
-        grain_bg_size_px?: number;
-      };
-    };
-  }).render;
-
-  const frameDecor = renderConfig?.frame_decor;
-  return {
-    borderAlphaPercent: frameDecor?.border_alpha_percent ?? FRAME_DECOR_DEFAULTS.borderAlphaPercent,
-    grainDotColor: frameDecor?.grain_dot_color ?? FRAME_DECOR_DEFAULTS.grainDotColor,
-    grainDotSizePx: frameDecor?.grain_dot_size_px ?? FRAME_DECOR_DEFAULTS.grainDotSizePx,
-    grainBgSizePx: frameDecor?.grain_bg_size_px ?? FRAME_DECOR_DEFAULTS.grainBgSizePx
-  };
-}
-
 function renderFrame(
   args: {
     kind: TemplateKind;
@@ -433,101 +411,19 @@ function renderFrame(
     brandColor: args.params.brandColor,
     overrides: args.params.brandTokens
   });
-
-  const widthScale = args.width / 1080;
-  const heightScale = args.height / 1080;
-  const layoutScale = Math.max(0.55, Math.min(1.9, Math.min(widthScale, heightScale)));
-  const contentMax = args.control.contentMaxWidth;
-  const captionMax = captionMaxWidth(args.kind, contentMax);
-  const frameDecor = frameDecorTokens();
+  applyFrameToneToTheme(theme, args.frameTone);
 
   const safeTitle = escapeHtml(args.params.title);
   const safeImageUrl = escapeHtml(args.params.imageUrl.trim());
   const hasImage = safeImageUrl.length > 0;
   const shouldRenderBackgroundImage = hasImage && args.visualLayers.useBackgroundImageOnly;
-  const isDataImage = safeImageUrl.startsWith("data:image/");
-  const imageFilter = isDataImage ? "blur(1.8px) saturate(0.88)" : "none";
-  const imageTransform = isDataImage ? "scale(1.04)" : "none";
-  const overlayOpacity = shouldRenderBackgroundImage ? (isDataImage ? 0.84 : 0.72) : 0.56;
-  const overlayBackground = shouldRenderBackgroundImage
-    ? "var(--frame-overlay-top), var(--frame-overlay-bottom), var(--frame-vignette)"
-    : "var(--frame-overlay-top), var(--frame-vignette)";
-  const accentSweepOpacity = shouldRenderBackgroundImage ? 0.42 : 0.16;
-  const imageLayerStyle = shouldRenderBackgroundImage
-    ? `background-image: url('${safeImageUrl}'); opacity: var(--frame-image-opacity); filter: ${imageFilter}; transform: ${imageTransform};`
-    : "";
   const imageVisibilityClass = shouldRenderBackgroundImage ? "" : "hidden";
 
-  // Brand icon corner
   const brandIconUrl = escapeHtml(args.control.brandIconUrl.trim());
   const hasBrandIcon = brandIconUrl.length > 0;
   const brandIconCornerClass = hasBrandIcon
     ? brandIconCornerClassName(args.control.brandIconPosition)
     : "hidden";
-  const brandIconCornerStyle = "";
-
-  const rootVars = [
-    `--content-inset:${args.control.contentInset}px`,
-    `--content-max-width:${contentMax}px`,
-    `--caption-max-width:${captionMax}px`,
-    `--layout-scale:${layoutScale.toFixed(4)}`,
-    `--layout-width-scale:${widthScale.toFixed(4)}`,
-    `--layout-height-scale:${heightScale.toFixed(4)}`,
-    "--frame-bg:var(--color-surface-base)",
-    "--frame-overlay-top:linear-gradient(180deg, transparent, color-mix(in srgb, var(--color-overlay-strong) 32%, transparent))",
-    "--frame-overlay-bottom:linear-gradient(0deg, transparent, transparent)",
-    "--frame-vignette:none",
-    "--frame-brand-pill-bg:transparent",
-    "--frame-brand-pill-border:var(--color-border-subtle)",
-    "--frame-brand-pill-text:var(--color-text-primary)",
-    "--frame-title-shadow:none",
-    "--frame-caption-shadow:none",
-    "--frame-grain-opacity:0",
-    "--frame-image-opacity:0.5",
-    "--frame-type-scale:1",
-    "--frame-space-scale:1",
-    "--template-panel-padding:34px",
-    "--template-heading-size:var(--token-type-heading)",
-    "--template-heading-secondary-size:var(--template-heading-size)",
-    "--template-heading-quote-size:var(--template-heading-size)",
-    "--template-heading-line-height:1.06",
-    "--template-heading-letter-spacing:-0.02em",
-    "--template-body-size:var(--token-type-body)",
-    "--template-body-secondary-size:var(--template-body-size)",
-    "--template-body-quote-size:var(--template-body-size)",
-    "--template-body-line-height:1.38",
-    "--template-body-color:var(--color-text-secondary)",
-    "--template-flow-kicker:var(--token-space-2xs)",
-    "--template-flow-heading:var(--token-space-xs)",
-    "--template-flow-subheading:var(--token-space-2xs)",
-    "--template-flow-section:var(--token-space-md)",
-    "--template-check-item-size:22px",
-    "--template-metric-value-size:var(--token-type-metric-value)",
-    "--template-metric-label-size:var(--token-type-metric-label)"
-  ];
-  if (typeof args.control.imageOpacity === "number") {
-    rootVars.push(`--frame-image-opacity:${args.control.imageOpacity}`);
-  }
-  if (!args.control.showDecorLayers || !args.visualLayers.useHtmlDecorLayers) {
-    rootVars.push("--frame-grain-opacity:0");
-  }
-  if (args.frameTone === "dark") {
-    rootVars.push(
-      "--color-text-primary:#f2f2f2",
-      "--color-text-secondary:#d1d1d1",
-      "--color-text-muted:#9a9a9a",
-      "--color-surface-base:#070707",
-      "--color-surface-elevated:#131313",
-      "--color-border-subtle:#2b2b2b",
-      "--frame-bg:#050505",
-      "--frame-overlay-top:linear-gradient(180deg, color-mix(in srgb, #000000 32%, transparent) 0%, color-mix(in srgb, #000000 60%, transparent) 100%)",
-      "--frame-overlay-bottom:linear-gradient(0deg, color-mix(in srgb, #000000 22%, transparent) 0%, transparent 62%)",
-      "--frame-brand-pill-bg:color-mix(in srgb, #000000 16%, transparent)",
-      "--frame-brand-pill-border:color-mix(in srgb, #ffffff 24%, transparent)",
-      "--frame-brand-pill-text:var(--color-text-primary)"
-    );
-  }
-  const rootStyle = `width: ${args.width}px; height: ${args.height}px; ${rootVars.join(";")}`;
 
   const frameShell = loadTemplateMarkup("@system/frame-shell");
   return interpolateTemplate(
@@ -535,20 +431,10 @@ function renderFrame(
     {
       HEAD_HTML: renderTemplateHead({ safeTitle, width: args.width, height: args.height, theme }),
       TEMPLATE_ID: escapeHtml(templateId),
-      FRAME_TONE_CLASS: args.frameTone === "dark" ? "frame-tone-dark" : "",
       FRAME_TONE: args.frameTone,
-      ROOT_STYLE: rootStyle,
       IMAGE_VISIBILITY_CLASS: imageVisibilityClass,
-      IMAGE_LAYER_STYLE: imageLayerStyle,
-      OVERLAY_OPACITY: overlayOpacity.toString(),
-      OVERLAY_BACKGROUND: overlayBackground,
-      ACCENT_SWEEP_OPACITY: accentSweepOpacity.toString(),
-      GRAIN_DOT_COLOR: frameDecor.grainDotColor,
-      GRAIN_DOT_SIZE: frameDecor.grainDotSizePx.toString(),
-      GRAIN_BG_SIZE: frameDecor.grainBgSizePx.toString(),
-      BORDER_ALPHA_PERCENT: frameDecor.borderAlphaPercent.toString(),
+      IMAGE_URL: safeImageUrl,
       BRAND_ICON_CORNER_CLASS: brandIconCornerClass,
-      BRAND_ICON_CORNER_STYLE: brandIconCornerStyle,
       BRAND_ICON_URL: brandIconUrl,
       CONTENT: args.content
     },
@@ -556,12 +442,31 @@ function renderFrame(
   );
 }
 
+function applyFrameToneToTheme(
+  theme: ReturnType<typeof createBrandTheme>,
+  frameTone: FrameTone
+): void {
+  if (frameTone !== "dark") {
+    return;
+  }
+
+  theme.tokens.primaryText = "#f2f2f2";
+  theme.tokens.secondaryText = "#d1d1d1";
+  theme.tokens.mutedText = "#9a9a9a";
+  theme.tokens.surfaceBase = "#070707";
+  theme.tokens.surfaceElevated = "#131313";
+  theme.tokens.borderSubtle = "#2b2b2b";
+}
+
 interface VisualLayerSettings {
   useBackgroundImageOnly: boolean;
   useHtmlDecorLayers: boolean;
 }
 
-function resolveVisualLayerSettings(templateMarkup: string): VisualLayerSettings {
+function resolveVisualLayerSettings(
+  template: TemplateDefinition,
+  templateMarkup: string
+): VisualLayerSettings {
   const defaults: VisualLayerSettings = {
     useBackgroundImageOnly: DEFAULT_VISUAL_LAYERS.useBackgroundImageOnly,
     useHtmlDecorLayers: DEFAULT_VISUAL_LAYERS.useHtmlDecorLayers
@@ -581,8 +486,18 @@ function resolveVisualLayerSettings(templateMarkup: string): VisualLayerSettings
     useHtmlDecorLayers: visual?.use_html_decor_layers ?? defaults.useHtmlDecorLayers
   };
 
-  // Templates can opt into inline media regions and disable global background-image rendering.
-  if (/\btemplate-inline-media\b/i.test(templateMarkup)) {
+  const explicitBackgroundMode = normalizeBackgroundImageMode(template.backgroundImage);
+  if (explicitBackgroundMode === "inline") {
+    configured.useBackgroundImageOnly = false;
+    return configured;
+  }
+  if (explicitBackgroundMode === "global") {
+    configured.useBackgroundImageOnly = true;
+    return configured;
+  }
+
+  // Fallback when metadata is missing: templates with inline IMAGE_URL usage disable global background image.
+  if (/\{\{\s*IMAGE_URL\s*\}\}/i.test(templateMarkup)) {
     configured.useBackgroundImageOnly = false;
   }
 
@@ -648,26 +563,6 @@ function defaultMetaLeft(kind: TemplateKind): string {
 function defaultMetaRight(kind: TemplateKind): string {
   const formatConfig = PIPELINE_CONFIG.formats?.[kind] as { meta_right_label?: string } | undefined;
   return formatConfig?.meta_right_label ?? "";
-}
-
-function alignmentClassName(alignment: "left" | "center" | "justify"): string {
-  if (alignment === "center") {
-    return "items-center text-center";
-  }
-  if (alignment === "justify") {
-    return "items-start text-justify";
-  }
-  return "items-start text-left";
-}
-
-function positionClassName(position: ContentPosition): string {
-  if (position === "top") {
-    return "mb-auto";
-  }
-  if (position === "center") {
-    return "my-auto";
-  }
-  return "mt-auto";
 }
 
 function brandIconCornerClassName(position: BrandIconPosition): string {

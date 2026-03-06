@@ -175,7 +175,7 @@ const CONTROL_DEFAULTS = {
   showMetaFooter: false,
   showTitleKicker: true,
   showDecorLayers: false,
-  textAlign: "justify" as const,
+  textAlign: "left" as const,
   contentPosition: "bottom" as ContentPosition,
   brandIconPosition: "top-left" as BrandIconPosition
 };
@@ -183,7 +183,7 @@ const CONTROL_DEFAULTS = {
 const FALLBACK_LAYOUT_DEFAULTS: LayoutControlDefaults = {
   contentMaxWidth: 1020,
   contentInset: 64,
-  textAlign: "justify",
+  textAlign: "left",
   captionWidthAdd: 30,
   captionWidthMax: 980
 };

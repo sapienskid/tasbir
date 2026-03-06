@@ -7,18 +7,18 @@
 @slot series_label | text | Short series or topic label displayed above the headline
 -->
 <div
-  class="relative z-10 flex h-full w-full flex-col p-[calc(var(--content-inset)*var(--layout-scale)*var(--frame-space-scale))] {{ALIGN_CLASS}}">
+  class="relative z-10 flex h-full w-full flex-col p-14 items-start text-left">
   {{HEADER}}
-  <div class="relative {{POSITION_CLASS}} p-[calc(var(--template-panel-padding)*var(--layout-scale)*var(--frame-space-scale))]">
+  <div class="relative isolate z-0 mt-auto p-8">
     <div
-      class="mb-[calc(var(--token-space-md)*var(--layout-scale))] inline-block border-b-2 border-brand-primary pb-[calc(var(--token-space-xs)*var(--layout-scale))] font-brand-body text-[calc(18px*var(--layout-scale)*var(--frame-type-scale))] font-semibold uppercase tracking-[0.16em] text-brand-muted">
+      class="mb-6 inline-block border-b-2 border-brand-primary pb-3 font-brand-body text-lg font-semibold uppercase tracking-[0.16em] text-brand-muted">
       {{SLOT:series_label}}</div>
     <h1
-      class="max-w-[var(--content-max-width)] font-brand-display text-brand-primary text-[calc(var(--template-heading-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-heading-line-height)] tracking-[var(--template-heading-letter-spacing)] [text-shadow:var(--token-shadow-title)] text-balance [overflow-wrap:anywhere] break-words">
+      class="max-w-5xl font-brand-display text-brand-primary text-6xl leading-tight tracking-tight drop-shadow-sm text-balance [overflow-wrap:anywhere] break-words">
       {{HEADING}}</h1>
-    <div class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] h-[2px] w-[80px] bg-brand-primary"></div>
+    <div class="mt-4 h-[2px] w-[80px] bg-brand-primary"></div>
     <p
-      class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--caption-max-width)] font-brand-body text-brand-secondary text-[calc(var(--template-body-secondary-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-body-line-height)] [text-shadow:var(--token-shadow-caption)] [overflow-wrap:anywhere] break-words">
+      class="mt-4 max-w-4xl font-brand-body text-brand-secondary text-xl leading-relaxed drop-shadow-sm [overflow-wrap:anywhere] break-words">
       {{BODY}}</p>
     {{FOOTER}}
   </div>

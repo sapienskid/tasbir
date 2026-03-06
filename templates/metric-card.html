@@ -8,24 +8,23 @@
 @slot headline | text | Supporting headline text shown below the metric
 -->
 <div
-  class="relative z-10 flex h-full w-full flex-col p-[calc(var(--content-inset)*var(--layout-scale)*var(--frame-space-scale))] {{ALIGN_CLASS}}"
-  style="--template-panel-padding:30px;--template-heading-secondary-size:54px;--template-body-secondary-size:26px;">
+  class="relative z-10 flex h-full w-full flex-col p-14 items-start text-left">
   {{HEADER}}
-  <div class="relative {{POSITION_CLASS}} p-[calc(var(--template-panel-padding)*var(--layout-scale)*var(--frame-space-scale))]">
-    <div class="mb-[calc(var(--token-space-md)*var(--layout-scale))] flex flex-col gap-1">
+  <div class="relative isolate z-0 mt-auto p-8">
+    <div class="mb-6 flex flex-col gap-1">
       <div
-        class="font-brand-display text-brand-primary text-[calc(var(--template-metric-value-size)*var(--layout-scale)*var(--frame-type-scale))] leading-none tabular-nums">
+        class="font-brand-display text-brand-primary text-7xl leading-none tabular-nums">
         {{SLOT:metric_value}}</div>
       <div
-        class="font-brand-body text-brand-secondary text-[calc(var(--template-metric-label-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[1.2]">
+        class="font-brand-body text-brand-secondary text-xl leading-[1.2]">
         {{SLOT:metric_label}}</div>
     </div>
-    <div class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] h-px w-full bg-brand-border"></div>
+    <div class="mt-4 h-px w-full bg-brand-border"></div>
     <h1
-      class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--content-max-width)] font-brand-display text-brand-primary text-[calc(var(--template-heading-secondary-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-heading-line-height)] tracking-[var(--template-heading-letter-spacing)] [text-shadow:var(--token-shadow-title)] text-balance [overflow-wrap:anywhere] break-words">
+      class="mt-4 max-w-5xl font-brand-display text-brand-primary text-5xl leading-tight tracking-tight drop-shadow-sm text-balance [overflow-wrap:anywhere] break-words">
       {{SLOT:headline}}</h1>
     <p
-      class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--caption-max-width)] font-brand-body text-brand-secondary text-[calc(var(--template-body-secondary-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-body-line-height)] [text-shadow:var(--token-shadow-caption)] [overflow-wrap:anywhere] break-words">
+      class="mt-4 max-w-4xl font-brand-body text-brand-secondary text-xl leading-relaxed drop-shadow-sm [overflow-wrap:anywhere] break-words">
       {{BODY}}</p>
     {{FOOTER}}
   </div>

@@ -3,23 +3,19 @@
 {{HEAD_HTML}}
 
 <body>
-  <div class="relative isolate overflow-hidden {{FRAME_TONE_CLASS}}" data-template-id="{{TEMPLATE_ID}}" data-template-tone="{{FRAME_TONE}}"
-    style="{{ROOT_STYLE}}">
-    <div class="absolute inset-0" style="background: var(--frame-bg);"></div>
-    <div class="absolute inset-0 bg-cover bg-center {{IMAGE_VISIBILITY_CLASS}}" style="{{IMAGE_LAYER_STYLE}}"></div>
-    <div class="absolute inset-0" style="opacity: {{OVERLAY_OPACITY}}; background: {{OVERLAY_BACKGROUND}};"></div>
-    <div class="absolute inset-0"
-      style="background: linear-gradient(140deg, color-mix(in srgb, var(--color-brand-accent) 18%, transparent), transparent 56%); opacity: {{ACCENT_SWEEP_OPACITY}};">
+  <div class="relative isolate h-full w-full overflow-hidden" data-template-id="{{TEMPLATE_ID}}"
+    data-template-tone="{{FRAME_TONE}}">
+    <div class="pointer-events-none absolute inset-0 z-0 bg-brand-surface"></div>
+    <div class="pointer-events-none absolute inset-0 z-10 {{IMAGE_VISIBILITY_CLASS}}">
+      <img src="{{IMAGE_URL}}" alt="" class="h-full w-full object-cover" />
     </div>
-    <div class="absolute inset-0"
-      style="opacity: var(--frame-grain-opacity); background-image: radial-gradient({{GRAIN_DOT_COLOR}} {{GRAIN_DOT_SIZE}}px, transparent {{GRAIN_DOT_SIZE}}px); background-size: {{GRAIN_BG_SIZE}}px {{GRAIN_BG_SIZE}}px;">
+    <div class="pointer-events-none absolute inset-0 z-20 bg-black/50"></div>
+    <div class="pointer-events-none absolute inset-0 z-30 bg-gradient-to-br from-brand-accent/20 to-transparent"></div>
+    <div class="pointer-events-none absolute inset-0 z-50 border border-brand-border/30"></div>
+    <div class="relative z-[70] h-full w-full">{{CONTENT}}</div>
+    <div class="absolute z-[80] {{BRAND_ICON_CORNER_CLASS}}">
+      <img src="{{BRAND_ICON_URL}}" alt="" class="h-8 w-auto object-contain" />
     </div>
-    <div class="absolute inset-0 border"
-      style="border-color: color-mix(in srgb, var(--color-border-subtle) {{BORDER_ALPHA_PERCENT}}%, transparent);">
-    </div>
-    <div class="absolute z-20 {{BRAND_ICON_CORNER_CLASS}}" style="{{BRAND_ICON_CORNER_STYLE}}"><img src="{{BRAND_ICON_URL}}" alt=""
-        class="h-[calc(32px*var(--layout-scale))] w-auto object-contain" /></div>
-    {{CONTENT}}
   </div>
 </body>
 

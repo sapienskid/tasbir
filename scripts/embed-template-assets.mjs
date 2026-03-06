@@ -85,6 +85,8 @@ console.log(
  *   @id: layout/my-template
  *   @label: My Template
  *   @description: A one-line description
+ *   @frame_tone: default|dark
+ *   @background_image: global|inline
  *
  *   @slot slot_key | type | Hint text for AI / docs | optional default value
  *   -->
@@ -165,7 +167,15 @@ function parseTemplateFrontMatter(html, filePath, templatesDir) {
   const fallbackId = toPosix(relPath.replace(/\.html$/i, ""));
   const fallbackLabel = humanizeFilename(basename(filePath, ".html"));
 
-  const defaults = { id: fallbackId, label: fallbackLabel, description: "", fields: [], formats: undefined };
+  const defaults = {
+    id: fallbackId,
+    label: fallbackLabel,
+    description: "",
+    frameTone: undefined,
+    backgroundImage: undefined,
+    fields: [],
+    formats: undefined
+  };
 
   // Match the first HTML comment block (must start at or near the top)
   const preamble = html.slice(0, 2048); // only scan the first 2 KB
@@ -175,7 +185,7 @@ function parseTemplateFrontMatter(html, filePath, templatesDir) {
   const comment = commentMatch[1];
 
   // Check if it looks like our @-directive front-matter
-  if (!/@(id|label|description|slot)\b/.test(comment)) return defaults;
+  if (!/@(id|label|description|frame_tone|background_image|slot)\b/.test(comment)) return defaults;
 
   const result = { ...defaults };
 
@@ -188,6 +198,22 @@ function parseTemplateFrontMatter(html, filePath, templatesDir) {
 
   const descMatch = comment.match(/^[ \t]*@description[ \t]*:[ \t]*(.+)$/m);
   if (descMatch?.[1]?.trim()) result.description = descMatch[1].trim();
+
+  const frameToneMatch = comment.match(/^[ \t]*@frame_tone[ \t]*:[ \t]*(.+)$/m);
+  if (frameToneMatch?.[1]?.trim()) {
+    const frameToneValue = frameToneMatch[1].trim().toLowerCase();
+    if (frameToneValue === "default" || frameToneValue === "dark") {
+      result.frameTone = frameToneValue;
+    }
+  }
+
+  const backgroundImageMatch = comment.match(/^[ \t]*@background_image[ \t]*:[ \t]*(.+)$/m);
+  if (backgroundImageMatch?.[1]?.trim()) {
+    const backgroundImageValue = backgroundImageMatch[1].trim().toLowerCase();
+    if (backgroundImageValue === "global" || backgroundImageValue === "inline") {
+      result.backgroundImage = backgroundImageValue;
+    }
+  }
 
   const formatsMatch = comment.match(/^[ \t]*@formats[ \t]*:[ \t]*(.+)$/m);
   if (formatsMatch?.[1]?.trim()) {
@@ -378,20 +404,10 @@ async function loadSystemTemplateFiles(directoryPath) {
   assertSystemTemplateTokenSet(loaded["@system/frame-shell"], "@system/frame-shell", [
     "HEAD_HTML",
     "TEMPLATE_ID",
-    "FRAME_TONE_CLASS",
     "FRAME_TONE",
-    "ROOT_STYLE",
     "IMAGE_VISIBILITY_CLASS",
-    "IMAGE_LAYER_STYLE",
-    "OVERLAY_OPACITY",
-    "OVERLAY_BACKGROUND",
-    "ACCENT_SWEEP_OPACITY",
-    "GRAIN_DOT_COLOR",
-    "GRAIN_DOT_SIZE",
-    "GRAIN_BG_SIZE",
-    "BORDER_ALPHA_PERCENT",
+    "IMAGE_URL",
     "BRAND_ICON_CORNER_CLASS",
-    "BRAND_ICON_CORNER_STYLE",
     "BRAND_ICON_URL",
     "CONTENT"
   ]);

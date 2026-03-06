@@ -3,6 +3,7 @@
 @label: Concept Explainer Callout
 @description: Definition-style educational card with topic tag and callout explanation box
 @formats: instagram-square,instagram-portrait,carousel-post,linkedin-post
+@background_image: inline
 
 @slot topic_label | text | Topic/category chip text | Biology
 @slot callout_text | text | Main callout box explanation text
@@ -10,43 +11,42 @@
 @slot corner_item_top | text | Top-right circular item label | Field sample
 @slot corner_item_bottom | text | Bottom-right circular item label | Lab culture
 -->
-<div class="template-inline-media relative z-10 flex h-full w-full flex-col {{ALIGN_CLASS}}"
-  style="--template-panel-padding:0;--template-heading-size:62px;--template-body-size:26px;">
-  <div class="px-[calc(22px*var(--layout-scale)*var(--frame-space-scale))] pt-[calc(22px*var(--layout-scale)*var(--frame-space-scale))]">
+<div class="relative z-10 flex h-full w-full flex-col items-start text-left">
+  <div class="px-6 pt-6">
     {{HEADER}}
   </div>
-  <div class="relative {{POSITION_CLASS}} flex h-full min-h-0 flex-col p-0">
+  <div class="relative isolate z-0 mt-auto flex h-full min-h-0 flex-col p-0">
     <div class="relative min-h-0 basis-[44%] overflow-hidden">
-      <div class="absolute inset-0 bg-cover bg-center bg-no-repeat" style="background-image: url('{{IMAGE_URL}}');"></div>
+      <img src="{{IMAGE_URL}}" alt="" class="absolute inset-0 h-full w-full object-cover" />
       <div
-        class="absolute inset-0 bg-[linear-gradient(0deg,color-mix(in_srgb,var(--color-overlay-strong)_44%,transparent)_0%,transparent_64%)]">
+        class="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent">
       </div>
     </div>
-    <div class="relative z-[1] min-h-0 flex-1 bg-[color-mix(in_srgb,var(--color-overlay-strong)_16%,transparent)] p-[calc(24px*var(--layout-scale)*var(--frame-space-scale))]">
+    <div class="relative z-[1] min-h-0 flex-1 bg-black/15 p-6">
       <div
-        class="inline-flex w-fit rounded-[999px] bg-[color-mix(in_srgb,var(--color-overlay-strong)_18%,transparent)] px-[calc(18px*var(--layout-scale))] py-[calc(8px*var(--layout-scale))] font-brand-body text-brand-primary text-[calc(20px*var(--layout-scale)*var(--frame-type-scale))] font-semibold uppercase tracking-[0.08em] leading-[1.1]">
+        class="inline-flex w-fit rounded-[999px] bg-black/20 px-4 py-2 font-brand-body text-brand-primary text-xl font-semibold uppercase tracking-[0.08em] leading-[1.1]">
         {{SLOT:topic_label}}</div>
       <h1
-        class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--content-max-width)] font-brand-display text-brand-primary text-[calc(var(--template-heading-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-heading-line-height)] tracking-[var(--template-heading-letter-spacing)] [text-shadow:var(--token-shadow-title)] text-balance [overflow-wrap:anywhere] break-words">
+        class="mt-4 max-w-5xl font-brand-display text-brand-primary text-6xl leading-tight tracking-tight drop-shadow-sm text-balance [overflow-wrap:anywhere] break-words">
         {{HEADING}}</h1>
       <p
-        class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] max-w-[var(--caption-max-width)] font-brand-body text-brand-secondary text-[calc(var(--template-body-secondary-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-body-line-height)] [text-shadow:var(--token-shadow-caption)] [overflow-wrap:anywhere] break-words">
+        class="mt-4 max-w-4xl font-brand-body text-brand-secondary text-xl leading-relaxed drop-shadow-sm [overflow-wrap:anywhere] break-words">
         {{BODY}}</p>
       <div
-        class="mt-[calc(var(--template-flow-section)*var(--layout-scale)*var(--frame-space-scale))] bg-[color-mix(in_srgb,var(--color-overlay-strong)_14%,transparent)] p-[calc(20px*var(--layout-scale)*var(--frame-space-scale))]">
+        class="mt-6 bg-black/15 p-5">
         <p
-          class="font-brand-body text-brand-secondary text-[calc(var(--template-body-secondary-size)*var(--layout-scale)*var(--frame-type-scale))] leading-[var(--template-body-line-height)] [text-shadow:var(--token-shadow-caption)] [overflow-wrap:anywhere] break-words">
+          class="font-brand-body text-brand-secondary text-xl leading-relaxed drop-shadow-sm [overflow-wrap:anywhere] break-words">
           {{SLOT:callout_text}}</p>
       </div>
       <p
-        class="mt-[calc(var(--template-flow-heading)*var(--layout-scale)*var(--frame-space-scale))] font-brand-body text-brand-muted text-[calc(18px*var(--layout-scale)*var(--frame-type-scale))] leading-[1.3] [overflow-wrap:anywhere] break-words">
+        class="mt-4 font-brand-body text-brand-muted text-lg leading-[1.3] [overflow-wrap:anywhere] break-words">
         {{SLOT:support_note}}</p>
     </div>
     <div class="pointer-events-none absolute inset-0">
       <span
-        class="absolute right-[calc(16px*var(--layout-scale))] top-[calc(16px*var(--layout-scale))] inline-flex h-[calc(120px*var(--layout-scale))] w-[calc(120px*var(--layout-scale))] items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-overlay-strong)_18%,transparent)] p-[calc(12px*var(--layout-scale))] text-center font-brand-body text-brand-secondary text-[calc(14px*var(--layout-scale)*var(--frame-type-scale))] leading-[1.2]">{{SLOT:corner_item_top}}</span>
+        class="absolute right-4 top-4 inline-flex h-28 w-28 items-center justify-center rounded-full bg-black/20 p-3 text-center font-brand-body text-brand-secondary text-sm leading-[1.2]">{{SLOT:corner_item_top}}</span>
       <span
-        class="absolute bottom-[calc(20px*var(--layout-scale))] right-[calc(20px*var(--layout-scale))] inline-flex h-[calc(120px*var(--layout-scale))] w-[calc(120px*var(--layout-scale))] items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--color-overlay-strong)_18%,transparent)] p-[calc(12px*var(--layout-scale))] text-center font-brand-body text-brand-secondary text-[calc(14px*var(--layout-scale)*var(--frame-type-scale))] leading-[1.2]">{{SLOT:corner_item_bottom}}</span>
+        class="absolute bottom-5 right-5 inline-flex h-28 w-28 items-center justify-center rounded-full bg-black/20 p-3 text-center font-brand-body text-brand-secondary text-sm leading-[1.2]">{{SLOT:corner_item_bottom}}</span>
     </div>
     {{FOOTER}}
   </div>
