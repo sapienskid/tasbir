@@ -37,7 +37,7 @@ No runtime style CDN/script injection, no style/archetype/font-profile matrix.
 3. LLM chooses template IDs per requested format (unless forced via `templateIds`).
 4. Required slot keys are extracted from selected template `{{SLOT:key}}` placeholders.
 5. LLM generates structured output (captions, slides, hashtags, image prompt, slot content).
-6. Worker resolves image source (feature/stock/AI/custom/none).
+6. Worker resolves image source (AI/feature/custom/none).
 7. HTML is rendered and screenshotted via Cloudflare Browser Rendering.
 8. PNG files are stored in R2 and returned in API response.
 
@@ -275,7 +275,6 @@ Required:
 Common optional:
 
 - `R2_PUBLIC_BASE_URL`
-- `PEXELS_API_KEY`
 - `DEFAULT_BRAND_COLOR`
 - `BRAND_NAME`
 - `LLM_MODEL`

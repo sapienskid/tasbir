@@ -187,18 +187,6 @@ Fix:
 
 ## Image Issues
 
-### Stock image fallback never runs
-
-Cause:
-
-- stock feature disabled, missing `PEXELS_API_KEY`, or no keyword match
-
-Fix:
-
-- enable `features.enable_stock_image_search`
-- set `PEXELS_API_KEY`
-- review `generation.stock_topic_keywords`
-
 ### AI image generation not used
 
 Cause:

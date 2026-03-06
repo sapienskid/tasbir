@@ -165,7 +165,6 @@ Runtime constants:
 Feature toggles:
 
 - `enable_template_preview`
-- `enable_stock_image_search`
 - `enable_ai_image_generation`
 - `prefer_feature_image`
 - `enable_notifications`

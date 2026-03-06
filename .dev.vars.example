@@ -7,9 +7,6 @@ API_AUTH_REQUIRE_FOR_PREVIEW="false"
 # Optional but recommended for public URLs in API responses.
 R2_PUBLIC_BASE_URL="https://pub-xxxxxxxx.r2.dev"
 
-# Optional stock image fallback.
-PEXELS_API_KEY="YOUR_PEXELS_API_KEY"
-
 # Required webhook security for /webhook/ghost
 GHOST_WEBHOOK_TOKEN="replace-with-random-secret"
 

@@ -48,7 +48,6 @@ Required for Ghost-backed flow (`/generate`, `/webhook/ghost`):
 Common optional values:
 
 - `R2_PUBLIC_BASE_URL`
-- `PEXELS_API_KEY`
 - `DEFAULT_BRAND_COLOR`
 - `BRAND_NAME`
 - `LLM_MODEL`

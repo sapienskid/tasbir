@@ -31,7 +31,6 @@ wrangler secret put GHOST_WEBHOOK_TOKEN --env production
 ```
 
 Optional secrets/vars should also be configured if used:
-- `PEXELS_API_KEY`
 - `NOTIFY_WEBHOOK_URL`
 - `R2_PUBLIC_BASE_URL`
 - `BRAND_NAME`

@@ -95,7 +95,6 @@ Runtime chooses image source by mode/settings and availability:
 
 - `custom`
 - `feature`
-- `stock` (if enabled + key available)
 - `ai` (if enabled)
 - `none`
 
