@@ -1,0 +1,50 @@
+<!--
+@id: layout/image-bg-top-band
+@label: Image Background Top Band
+@description: Full-bleed image background with top-anchored content band
+@selection_hints: hero headline on image, editorial top banner, announcement over media, visual-first opener
+@formats: instagram-square,instagram-portrait,instagram-story,twitter-card,linkedin-post,carousel-post
+@background_image: global
+
+@slot band_label | text | Small label inside top content band  | 
+@slot band_meta | text | Supporting metadata line in top band  | 
+@slot footer_note | text | Footer annotation text  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
+@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
+-->
+<div class="relative z-10 flex h-full w-full flex-col justify-between p-[clamp(18px,2.8vw,52px)] text-brand-primary">
+  <section class="w-full max-w-[92%] border-4 border-brand-primary bg-brand-surface p-[clamp(16px,2.2vw,30px)]">
+    <header class="mb-5 flex items-start justify-between gap-4 border-b-2 border-brand-primary pb-3">
+      <div class="font-brand-body text-[clamp(11px,1.1vw,14px)] font-black uppercase tracking-[0.32em]">
+        {{BRAND_NAME}}
+      </div>
+      <div class="font-brand-body text-[clamp(10px,1vw,13px)] font-bold uppercase tracking-[0.18em] text-brand-muted">
+        {{SLIDE_LABEL}}
+      </div>
+    </header>
+
+    <div
+      class="mb-3 inline-flex w-fit border-2 border-brand-primary px-3 py-1 font-brand-body text-[clamp(10px,0.95vw,12px)] font-black uppercase tracking-[0.24em]">
+      {{SLOT:band_label}}
+    </div>
+    <h1 class="mb-4 font-brand-display text-[clamp(30px,4.5vw,70px)] font-black leading-[0.9] tracking-tighter uppercase">
+      {{HEADING}}
+    </h1>
+    <div class="font-brand-body text-[clamp(15px,1.8vw,28px)] leading-tight tracking-tight text-brand-secondary">
+      {{BODY}}
+    </div>
+  </section>
+
+  <footer class="ml-auto w-fit max-w-[78%] border-2 border-brand-primary bg-brand-surface px-4 py-2">
+    <p class="font-brand-body text-[clamp(10px,0.9vw,12px)] font-bold uppercase tracking-[0.2em] text-brand-muted">
+      {{SLOT:band_meta}}
+    </p>
+    <p class="mt-2 font-brand-body text-[clamp(10px,0.9vw,12px)] font-bold uppercase tracking-[0.24em]">
+      {{SLOT:footer_note}}
+    </p>
+  </footer>
+</div>

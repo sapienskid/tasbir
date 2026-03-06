@@ -1,0 +1,49 @@
+<!--
+@id: layout/image-bg-center-panel
+@label: Image Background Center Panel
+@description: Full-bleed image background with centered text panel
+@selection_hints: quote over image, centered thesis, campaign message, balanced hero overlay
+@formats: instagram-square,instagram-portrait,instagram-story,twitter-card,linkedin-post,carousel-post
+@background_image: global
+
+@slot panel_tag | text | Compact tag above the centered heading  | 
+@slot panel_meta | text | Metadata below the centered body copy  | 
+@slot cta_text | text | Small call-to-action text inside panel footer  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
+@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
+-->
+<div class="relative z-10 flex h-full w-full items-center justify-center p-[clamp(18px,2.8vw,44px)] text-brand-primary">
+  <section class="w-full max-w-[92%] border-4 border-brand-primary bg-brand-surface p-[clamp(18px,2.5vw,36px)] text-center">
+    <header class="mb-5 flex items-center justify-between gap-4 border-b-2 border-brand-primary pb-3 text-left">
+      <p class="font-brand-body text-[clamp(11px,1vw,14px)] font-black uppercase tracking-[0.32em]">
+        {{BRAND_NAME}}
+      </p>
+      <p class="font-brand-body text-[clamp(10px,0.95vw,13px)] font-bold uppercase tracking-[0.2em] text-brand-muted">
+        {{SLIDE_LABEL}}
+      </p>
+    </header>
+
+    <p class="mb-3 font-brand-body text-[clamp(10px,0.9vw,12px)] font-black uppercase tracking-[0.28em]">
+      {{SLOT:panel_tag}}
+    </p>
+    <h1 class="mx-auto mb-4 max-w-[94%] font-brand-display text-[clamp(30px,4.4vw,68px)] font-black leading-[0.9] tracking-tighter uppercase">
+      {{HEADING}}
+    </h1>
+    <div class="mx-auto mb-5 max-w-[94%] font-brand-body text-[clamp(15px,1.75vw,26px)] leading-tight tracking-tight text-brand-secondary">
+      {{BODY}}
+    </div>
+
+    <footer class="flex items-center justify-between gap-4 border-t-2 border-brand-primary pt-3 text-left">
+      <p class="font-brand-body text-[clamp(10px,0.88vw,12px)] font-bold uppercase tracking-[0.22em] text-brand-muted">
+        {{SLOT:panel_meta}}
+      </p>
+      <p class="border-2 border-brand-primary px-3 py-1 font-brand-body text-[clamp(10px,0.88vw,12px)] font-black uppercase tracking-[0.24em]">
+        {{SLOT:cta_text}}
+      </p>
+    </footer>
+  </section>
+</div>

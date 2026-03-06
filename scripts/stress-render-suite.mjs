@@ -710,6 +710,10 @@ function deriveSlotValue(field, stressCase, imageUrl) {
   const defaultValue = typeof field?.default === "string" ? field.default.trim() : "";
   const type = typeof field?.type === "string" ? field.type : "text";
 
+  if (/(media_position|image_position|stack_position|layout_variant)/.test(key)) {
+    const caseKey = String(stressCase?.id ?? "").toLowerCase();
+    return /long|diagram|mixed/.test(caseKey) ? "bottom" : "top";
+  }
   if (type === "image_url" || type === "icon_url" || /(image|icon|photo|avatar|logo)/.test(key)) {
     return imageUrl;
   }
@@ -804,17 +808,94 @@ function buildRenderTasks(catalog, options, stressCases) {
   return options.maxTasks > 0 ? tasks.slice(0, options.maxTasks) : tasks;
 }
 
-function assertTemplateCoverage(tasks, catalog) {
-  const expectedTemplates = new Set(
-    Object.values(catalog.templates_by_format ?? {})
-      .flatMap((templateIds) => Array.isArray(templateIds) ? templateIds : [])
-      .map((templateId) => String(templateId ?? "").trim())
-      .filter(Boolean)
-  );
-  const coveredTemplates = new Set(tasks.map((task) => task.templateId));
-  const missing = [...expectedTemplates].filter((templateId) => !coveredTemplates.has(templateId));
-  if (missing.length > 0) {
-    throw new Error(`Stress task generation missed template(s): ${missing.join(", ")}`);
+function assertTaskMatrixCoverage(tasks, catalog, stressCases, colorModes, options = {}) {
+  const expectedCases = (stressCases ?? []).map((item) => String(item?.id ?? "").trim()).filter(Boolean);
+  const expectedColorModes = (colorModes ?? []).map((item) => String(item ?? "").trim()).filter(Boolean);
+  const expectedTaskCountPerTemplate = expectedCases.length * expectedColorModes.length;
+  const enforceAllCatalogTemplates = Boolean(options.enforceAllCatalogTemplates);
+  if (expectedTaskCountPerTemplate <= 0) {
+    throw new Error("Coverage assertion requires at least one case and one color mode");
+  }
+
+  const expectedByFormatTemplate = [];
+  for (const format of catalog.formats ?? []) {
+    const templateIds = [...new Set(
+      (Array.isArray(catalog.templates_by_format?.[format.id]) ? catalog.templates_by_format[format.id] : [])
+        .map((templateId) => String(templateId ?? "").trim())
+        .filter(Boolean)
+    )];
+    if (templateIds.length === 0) {
+      throw new Error(`Stress task generation coverage failed (format has no templates: ${format.id})`);
+    }
+    for (const templateId of templateIds) {
+      expectedByFormatTemplate.push({ formatId: format.id, templateId });
+    }
+  }
+
+  if (enforceAllCatalogTemplates) {
+    const catalogTemplateIds = new Set(
+      (catalog.templates ?? [])
+        .map((template) => String(template?.id ?? "").trim())
+        .filter(Boolean)
+    );
+    const mappedTemplateIds = new Set(expectedByFormatTemplate.map((item) => item.templateId));
+    const unmappedTemplates = [...catalogTemplateIds].filter((templateId) => !mappedTemplateIds.has(templateId));
+    if (unmappedTemplates.length > 0) {
+      throw new Error(
+        `Stress task generation coverage failed (catalog template(s) not mapped to any format: ${unmappedTemplates.join(", ")})`
+      );
+    }
+  }
+
+  const actualTemplateCounts = new Map();
+  const actualMatrixKeys = new Set();
+  for (const task of tasks) {
+    const formatId = String(task?.formatId ?? "").trim();
+    const templateId = String(task?.templateId ?? "").trim();
+    const caseId = String(task?.caseId ?? "").trim();
+    const colorMode = String(task?.colorMode ?? "").trim();
+    if (!formatId || !templateId || !caseId || !colorMode) continue;
+
+    const templateKey = `${formatId}|${templateId}`;
+    actualTemplateCounts.set(templateKey, (actualTemplateCounts.get(templateKey) ?? 0) + 1);
+    actualMatrixKeys.add(`${templateKey}|${caseId}|${colorMode}`);
+  }
+
+  const missingTemplates = [];
+  const mismatchedTemplateCounts = [];
+  const missingMatrix = [];
+  for (const pair of expectedByFormatTemplate) {
+    const templateKey = `${pair.formatId}|${pair.templateId}`;
+    const actualCount = actualTemplateCounts.get(templateKey) ?? 0;
+    if (actualCount === 0) {
+      missingTemplates.push(templateKey);
+      continue;
+    }
+    if (actualCount !== expectedTaskCountPerTemplate) {
+      mismatchedTemplateCounts.push(`${templateKey} expected=${expectedTaskCountPerTemplate} actual=${actualCount}`);
+    }
+    for (const caseId of expectedCases) {
+      for (const colorMode of expectedColorModes) {
+        const matrixKey = `${templateKey}|${caseId}|${colorMode}`;
+        if (!actualMatrixKeys.has(matrixKey)) {
+          missingMatrix.push(matrixKey);
+        }
+      }
+    }
+  }
+
+  if (missingTemplates.length > 0 || mismatchedTemplateCounts.length > 0 || missingMatrix.length > 0) {
+    const details = [];
+    if (missingTemplates.length > 0) {
+      details.push(`missing format/template pairs: ${missingTemplates.slice(0, 24).join(", ")}`);
+    }
+    if (mismatchedTemplateCounts.length > 0) {
+      details.push(`count mismatch: ${mismatchedTemplateCounts.slice(0, 24).join(", ")}`);
+    }
+    if (missingMatrix.length > 0) {
+      details.push(`missing case/color matrix entries: ${missingMatrix.slice(0, 24).join(", ")}`);
+    }
+    throw new Error(`Stress task generation coverage failed (${details.join(" | ")})`);
   }
 }
 
@@ -1080,6 +1161,55 @@ async function runWithConcurrency(tasks, concurrency, worker) {
 
   await Promise.all(workers);
   return { completed, success, failures, rendered };
+}
+
+async function detectSwapRegressionFailures(rendered) {
+  const groups = new Map();
+  for (const item of rendered) {
+    const key = [
+      item.task?.formatId,
+      item.task?.templateId,
+      item.task?.caseId,
+      item.task?.imageVariantId
+    ].join("|");
+    if (!groups.has(key)) {
+      groups.set(key, { normal: null, swap: null });
+    }
+    const group = groups.get(key);
+    if (item.task?.colorMode === "normal") {
+      group.normal = item;
+    } else if (item.task?.colorMode === "swap") {
+      group.swap = item;
+    }
+  }
+
+  const regressions = [];
+  for (const [, group] of groups) {
+    if (!group.normal || !group.swap) continue;
+    let normalBuffer = null;
+    let swapBuffer = null;
+    try {
+      [normalBuffer, swapBuffer] = await Promise.all([
+        readFile(group.normal.filePath),
+        readFile(group.swap.filePath)
+      ]);
+    } catch (error) {
+      regressions.push({
+        task: group.swap.task,
+        error: `Unable to compare swap output with normal output: ${error instanceof Error ? error.message : String(error)}`
+      });
+      continue;
+    }
+
+    if (normalBuffer.length === swapBuffer.length && normalBuffer.equals(swapBuffer)) {
+      regressions.push({
+        task: group.swap.task,
+        error: "Swap regression: rendered output is byte-identical to normal mode"
+      });
+    }
+  }
+
+  return regressions;
 }
 
 function buildGalleryIndexHtml(args) {
@@ -1362,6 +1492,7 @@ function buildGalleryIndexHtml(args) {
         <p id="viewer-case"></p>
         <p id="viewer-color"></p>
         <p id="viewer-image-variant"></p>
+        <p id="viewer-image-url"></p>
         <p id="viewer-file"></p>
       </div>
     </div>
@@ -1372,6 +1503,7 @@ function buildGalleryIndexHtml(args) {
     const entries = payload.entries || [];
     const failures = payload.failures || [];
     const summary = payload.summary || {};
+    const cacheBust = String(summary.generated_at || Date.now()).replace(/[^0-9]/g, "") || String(Date.now());
 
     const stats = document.getElementById("stats");
     const grid = document.getElementById("grid");
@@ -1393,6 +1525,7 @@ function buildGalleryIndexHtml(args) {
     const viewerCase = document.getElementById("viewer-case");
     const viewerColor = document.getElementById("viewer-color");
     const viewerImageVariant = document.getElementById("viewer-image-variant");
+    const viewerImageUrl = document.getElementById("viewer-image-url");
     const viewerFile = document.getElementById("viewer-file");
 
     function chip(label, value) {
@@ -1410,6 +1543,18 @@ function buildGalleryIndexHtml(args) {
 
     function uniqueValues(items, key) {
       return [...new Set(items.map((item) => item[key]).filter(Boolean))].sort();
+    }
+
+    function compactUrl(url) {
+      const value = String(url || "").trim();
+      if (!value) return "n/a";
+      if (value.startsWith("data:")) return "data:image";
+      try {
+        const parsed = new URL(value);
+        return parsed.host + parsed.pathname;
+      } catch {
+        return value.length > 64 ? value.slice(0, 61) + "..." : value;
+      }
     }
 
     function fillSelect(select, values, label) {
@@ -1440,6 +1585,7 @@ function buildGalleryIndexHtml(args) {
           entry.formatId,
           entry.colorMode,
           entry.imageVariantId,
+          entry.imageUrl,
           entry.file
         ].join(" ").toLowerCase();
         if (!haystack.includes(q)) return false;
@@ -1452,7 +1598,7 @@ function buildGalleryIndexHtml(args) {
     }
 
     function openViewer(entry) {
-      viewerImage.src = entry.file;
+      viewerImage.src = entry.file + "?v=" + cacheBust;
       viewerImage.alt = entry.templateId + " " + entry.caseId;
       viewerTitle.textContent = entry.caseLabel || entry.caseId;
       viewerFormat.textContent = "Format: " + entry.formatId;
@@ -1460,6 +1606,7 @@ function buildGalleryIndexHtml(args) {
       viewerCase.textContent = "Case ID: " + entry.caseId;
       viewerColor.textContent = "Color: " + (entry.colorMode || "normal");
       viewerImageVariant.textContent = "Image: " + (entry.imageVariantId || "img");
+      viewerImageUrl.textContent = "Image URL: " + compactUrl(entry.imageUrl);
       viewerFile.textContent = "File: " + entry.file;
       modal.classList.add("open");
       modal.setAttribute("aria-hidden", "false");
@@ -1489,12 +1636,13 @@ function buildGalleryIndexHtml(args) {
         card.className = "card";
         card.type = "button";
         card.innerHTML = [
-          '<img loading="lazy" src="' + entry.file + '" alt="' + entry.templateId + " " + entry.caseId + '">',
+          '<img loading="lazy" src="' + entry.file + '?v=' + cacheBust + '" alt="' + entry.templateId + " " + entry.caseId + '">',
           '<div class="meta">',
           "<strong>" + entry.templateId + "</strong>",
           "<span>" + entry.formatId + "</span>",
           "<span>" + (entry.caseLabel || entry.caseId) + "</span>",
           "<span>Color: " + (entry.colorMode || "normal") + " | " + (entry.imageVariantId || "img") + "</span>",
+          "<span>" + compactUrl(entry.imageUrl) + "</span>",
           "</div>"
         ].join("");
         card.addEventListener("click", () => openViewer(entry));
@@ -1524,6 +1672,7 @@ function buildGalleryIndexHtml(args) {
           failure.task?.formatId || "unknown-format",
           failure.task?.templateId || "unknown-template",
           failure.task?.caseId || "unknown-case",
+          compactUrl(failure.task?.imageUrl),
           failure.error || "unknown-error"
         ].join(" :: ");
         failureList.appendChild(li);
@@ -1540,7 +1689,9 @@ function summarizeFailures(tasks, failures, startedAt, outputRoot) {
   const byCase = {};
   const byFormat = {};
   const byColor = {};
+  const byImageVariant = {};
   const byTemplate = {};
+  const imageUrlsUsed = new Set();
   const failedKeySet = new Set(
     failures.map((item) => `${item.task.formatId}|${item.task.templateId}|${item.task.caseId}|${item.task.colorMode}`)
   );
@@ -1559,6 +1710,12 @@ function summarizeFailures(tasks, failures, startedAt, outputRoot) {
     byColor[task.colorMode] ??= { total: 0, failed: 0 };
     byColor[task.colorMode].total += 1;
     if (failed) byColor[task.colorMode].failed += 1;
+
+    byImageVariant[task.imageVariantId] ??= { total: 0, failed: 0 };
+    byImageVariant[task.imageVariantId].total += 1;
+    if (failed) byImageVariant[task.imageVariantId].failed += 1;
+
+    imageUrlsUsed.add(String(task.imageUrl ?? ""));
 
     byTemplate[task.templateId] ??= { total: 0, failed: 0, formats: {} };
     byTemplate[task.templateId].total += 1;
@@ -1580,7 +1737,9 @@ function summarizeFailures(tasks, failures, startedAt, outputRoot) {
     by_case: byCase,
     by_format: byFormat,
     by_color: byColor,
-    by_template: byTemplate
+    by_image_variant: byImageVariant,
+    by_template: byTemplate,
+    image_urls_used: [...imageUrlsUsed].filter(Boolean)
   };
 }
 
@@ -1626,7 +1785,9 @@ async function main() {
     const catalog = await loadTemplateCatalogFromGeneratedAssets(options.formats);
     const tasks = buildRenderTasks(catalog, options, stressCases);
     if (!options.maxTasks) {
-      assertTemplateCoverage(tasks, catalog);
+      assertTaskMatrixCoverage(tasks, catalog, stressCases, options.colorModes, {
+        enforceAllCatalogTemplates: options.formats.length === 0
+      });
     }
     if (tasks.length === 0) {
       throw new Error("No tasks generated. Check --formats/--cases filters.");
@@ -1653,6 +1814,14 @@ async function main() {
         : (task, index, total) => renderTaskCloudflare(task, options, outputRoot, headers, index, total)
     );
 
+    if (options.colorModes.includes("normal") && options.colorModes.includes("swap")) {
+      const swapRegressions = await detectSwapRegressionFailures(runSummary.rendered);
+      if (swapRegressions.length > 0) {
+        runSummary.failures.push(...swapRegressions);
+        console.error(`Detected ${swapRegressions.length} swap regression(s) where swap matched normal output.`);
+      }
+    }
+
     const summary = summarizeFailures(tasks, runSummary.failures, startedAt, outputRoot);
     const galleryEntries = runSummary.rendered.map((item) => ({
       formatId: item.task.formatId,
@@ -1661,6 +1830,7 @@ async function main() {
       caseLabel: item.task.caseLabel,
       colorMode: item.task.colorMode,
       imageVariantId: item.task.imageVariantId,
+      imageUrl: item.task.imageUrl,
       file: relative(outputRoot, item.filePath).split("\\\\").join("/")
     }));
 

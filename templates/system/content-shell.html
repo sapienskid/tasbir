@@ -40,27 +40,27 @@
       --color-black: #FFFFFF;
       --color-white: #000000;
       --token-color-text-primary: #FFFFFF;
-      --token-color-text-secondary: #DDDDDD;
-      --token-color-text-muted: #AAAAAA;
+      --token-color-text-secondary: #FFFFFF;
+      --token-color-text-muted: #FFFFFF;
       --token-color-surface-base: #000000;
-      --token-color-surface-elevated: #111111;
+      --token-color-surface-elevated: #000000;
       --token-color-border-subtle: #FFFFFF;
       --token-color-brand-accent: #FFFFFF;
       --token-color-brand-accent-foreground: #000000;
-      --token-color-overlay-strong: rgba(255, 255, 255, 0.45);
+      --token-color-overlay-strong: #FFFFFF;
       --color-text-primary: #FFFFFF;
-      --color-text-secondary: #DDDDDD;
-      --color-text-muted: #AAAAAA;
+      --color-text-secondary: #FFFFFF;
+      --color-text-muted: #FFFFFF;
       --color-surface-base: #000000;
-      --color-surface-elevated: #111111;
+      --color-surface-elevated: #000000;
       --color-border-subtle: #FFFFFF;
       --color-brand-accent: #FFFFFF;
       --color-brand-accent-foreground: #000000;
       --color-brand-primary: #FFFFFF;
-      --color-brand-secondary: #DDDDDD;
-      --color-brand-muted: #AAAAAA;
+      --color-brand-secondary: #FFFFFF;
+      --color-brand-muted: #FFFFFF;
       --color-brand-surface: #000000;
-      --color-brand-elevated: #111111;
+      --color-brand-elevated: #000000;
       --color-brand-border: #FFFFFF;
     }
 
@@ -68,41 +68,46 @@
       --color-black: #000000;
       --color-white: #FFFFFF;
       --token-color-text-primary: #000000;
-      --token-color-text-secondary: #222222;
-      --token-color-text-muted: #555555;
+      --token-color-text-secondary: #000000;
+      --token-color-text-muted: #000000;
       --token-color-surface-base: #FFFFFF;
-      --token-color-surface-elevated: #F8F8F8;
+      --token-color-surface-elevated: #FFFFFF;
       --token-color-border-subtle: #000000;
       --token-color-brand-accent: #000000;
       --token-color-brand-accent-foreground: #FFFFFF;
-      --token-color-overlay-strong: rgba(0, 0, 0, 0.6);
+      --token-color-overlay-strong: #000000;
       --color-text-primary: #000000;
-      --color-text-secondary: #222222;
-      --color-text-muted: #555555;
+      --color-text-secondary: #000000;
+      --color-text-muted: #000000;
       --color-surface-base: #FFFFFF;
-      --color-surface-elevated: #F8F8F8;
+      --color-surface-elevated: #FFFFFF;
       --color-border-subtle: #000000;
       --color-brand-accent: #000000;
       --color-brand-accent-foreground: #FFFFFF;
       --color-brand-primary: #000000;
-      --color-brand-secondary: #222222;
-      --color-brand-muted: #555555;
+      --color-brand-secondary: #000000;
+      --color-brand-muted: #000000;
       --color-brand-surface: #FFFFFF;
-      --color-brand-elevated: #F8F8F8;
+      --color-brand-elevated: #FFFFFF;
       --color-brand-border: #000000;
     }
 
-    [data-color-swap="swap"] .rich-mermaid {
-      border-color: rgba(241, 245, 249, 0.28);
-      background: rgba(15, 23, 42, 0.92);
-      color: #f8fafc;
+    [data-template-id] {
+      --token-image-filter: grayscale(100%) contrast(180%) brightness(92%) saturate(0%);
+      --token-brand-icon-filter: grayscale(100%) contrast(200%) brightness(102%) saturate(0%);
     }
 
-    [data-color-swap="swap"] .rich-text pre,
-    [data-color-swap="swap"] .rich-text code {
-      border-color: rgba(241, 245, 249, 0.24);
-      background: rgba(241, 245, 249, 0.12);
-      color: inherit;
+    [data-template-id][data-color-swap="swap"] {
+      --token-image-filter: grayscale(100%) contrast(180%) brightness(92%) saturate(0%) invert(100%);
+    }
+
+    .render-global-image,
+    .render-inline-image {
+      filter: var(--token-image-filter);
+    }
+
+    .render-brand-icon-image {
+      filter: var(--token-brand-icon-filter);
     }
 
     .rich-text {
@@ -137,15 +142,15 @@
       margin: 0.35em 0;
       padding: 0 0 0 0.6em;
       border-left: 2px solid currentColor;
-      opacity: 0.86;
     }
 
     .rich-text pre {
       margin: 0.35em 0;
       padding: 0.35em 0.45em;
       border-radius: 0.35em;
-      border: 1px solid rgba(15, 23, 42, 0.22);
-      background: rgba(15, 23, 42, 0.08);
+      border: 1px solid var(--token-color-border-subtle);
+      background: var(--token-color-surface-base);
+      color: var(--token-color-text-primary);
       overflow: hidden;
       white-space: pre-wrap;
       font-family: "Courier New", "Liberation Mono", monospace;
@@ -157,7 +162,9 @@
       font-family: "Courier New", "Liberation Mono", monospace;
       font-size: 0.8em;
       border-radius: 0.2em;
-      background: rgba(15, 23, 42, 0.08);
+      border: 1px solid var(--token-color-border-subtle);
+      background: var(--token-color-surface-base);
+      color: var(--token-color-text-primary);
       padding: 0.08em 0.26em;
     }
 
@@ -188,9 +195,9 @@
       margin: 0.35em 0;
       padding: 0.3em;
       border-radius: 0.35em;
-      border: 1px solid rgba(15, 23, 42, 0.2);
-      background: rgba(255, 255, 255, 0.92);
-      color: #0f172a;
+      border: 1px solid var(--token-color-border-subtle);
+      background: var(--token-color-surface-base);
+      color: var(--token-color-text-primary);
       overflow: hidden;
       display: block;
       line-height: 1;
@@ -208,6 +215,62 @@
       width: 100%;
       height: auto;
       max-width: 100%;
+    }
+
+    /* Force Mermaid internals to follow swap tokens across all diagrams */
+    .rich-mermaid svg .node rect,
+    .rich-mermaid svg .node circle,
+    .rich-mermaid svg .node ellipse,
+    .rich-mermaid svg .node polygon,
+    .rich-mermaid svg .node path,
+    .rich-mermaid svg .cluster rect,
+    .rich-mermaid svg .cluster polygon,
+    .rich-mermaid svg .cluster path,
+    .rich-mermaid svg .label-container,
+    .rich-mermaid svg .edgeLabel rect,
+    .rich-mermaid svg .actor,
+    .rich-mermaid svg .activation0,
+    .rich-mermaid svg .activation1,
+    .rich-mermaid svg .activation2,
+    .rich-mermaid svg .activation3,
+    .rich-mermaid svg .note,
+    .rich-mermaid svg .loopLine {
+      fill: var(--token-color-surface-base) !important;
+      stroke: var(--token-color-border-subtle) !important;
+    }
+
+    .rich-mermaid svg text,
+    .rich-mermaid svg tspan,
+    .rich-mermaid svg .nodeLabel,
+    .rich-mermaid svg .edgeLabel,
+    .rich-mermaid svg .messageText,
+    .rich-mermaid svg .label text,
+    .rich-mermaid svg .sectionTitle,
+    .rich-mermaid svg .taskText,
+    .rich-mermaid svg .noteText {
+      fill: var(--token-color-text-primary) !important;
+      color: var(--token-color-text-primary) !important;
+    }
+
+    .rich-mermaid svg .edgePath .path,
+    .rich-mermaid svg .flowchart-link,
+    .rich-mermaid svg .messageLine0,
+    .rich-mermaid svg .messageLine1,
+    .rich-mermaid svg .loopLine {
+      stroke: var(--token-color-border-subtle) !important;
+    }
+
+    .rich-mermaid svg marker path,
+    .rich-mermaid svg .arrowheadPath {
+      fill: var(--token-color-border-subtle) !important;
+      stroke: var(--token-color-border-subtle) !important;
+    }
+
+    .rich-mermaid svg foreignObject,
+    .rich-mermaid svg foreignObject * {
+      color: var(--token-color-text-primary) !important;
+      background: transparent !important;
+      border-color: var(--token-color-border-subtle) !important;
     }
 
     .rich-mermaid-inline svg {
@@ -231,20 +294,19 @@
     <!-- Background Content Layer -->
     <div class="absolute inset-0 z-0 {{IMAGE_VISIBILITY_CLASS}}">
       <img src="{{IMAGE_URL}}" alt=""
-        class="h-full w-full object-cover grayscale contrast-125 brightness-90 saturate-0" />
-      <div class="absolute inset-0 bg-brand-primary/10 mix-blend-multiply"></div>
+        class="render-global-image h-full w-full object-cover" />
     </div>
 
     <!-- Architectural Frame -->
     <div
-      class="pointer-events-none absolute inset-0 z-[50] border-[12px] border-brand-primary/5">
+      class="pointer-events-none absolute inset-0 z-[50] border-[12px] border-brand-primary">
     </div>
 
     <!-- Brand Icon -->
     <div class="pointer-events-none absolute z-[60] {{BRAND_ICON_VISIBILITY_CLASS}}"
       style="left: {{BRAND_ICON_LEFT}}%; top: {{BRAND_ICON_TOP}}%; width: {{BRAND_ICON_SIZE}}px; height: {{BRAND_ICON_SIZE}}px; transform: translate(-50%, -50%); opacity: {{BRAND_ICON_OPACITY}};">
       <img src="{{BRAND_ICON_URL}}" alt=""
-        class="h-full w-full object-contain {{BRAND_ICON_INVERT_CLASS}} {{BRAND_ICON_IMAGE_VISIBILITY_CLASS}}" />
+        class="render-brand-icon-image h-full w-full object-contain {{BRAND_ICON_INVERT_CLASS}} {{BRAND_ICON_IMAGE_VISIBILITY_CLASS}}" />
       <div
         class="flex h-full w-full items-center justify-center border-2 border-brand-primary bg-brand-surface font-brand-body font-black uppercase tracking-widest text-brand-primary {{BRAND_ICON_TEXT_VISIBILITY_CLASS}}"
         style="font-size: calc({{BRAND_ICON_SIZE}}px * 0.35);">
@@ -286,12 +348,48 @@
           return;
         }
 
+        const themeRoot = document.querySelector("[data-template-id]") || document.documentElement;
+        const rootStyles = getComputedStyle(themeRoot);
+        const mermaidTextColor = rootStyles.getPropertyValue("--token-color-text-primary").trim() || "#000000";
+        const mermaidSurfaceColor = rootStyles.getPropertyValue("--token-color-surface-base").trim() || "#FFFFFF";
+        const mermaidBorderColor = rootStyles.getPropertyValue("--token-color-border-subtle").trim() || mermaidTextColor;
+
         mermaidRuntime.initialize({
           startOnLoad: false,
           securityLevel: "strict",
-          theme: "neutral",
+          theme: "base",
           fontFamily: "Inter, Manrope, sans-serif",
-          suppressErrorRendering: true
+          suppressErrorRendering: true,
+          themeVariables: {
+            background: mermaidSurfaceColor,
+            mainBkg: mermaidSurfaceColor,
+            secondBkg: mermaidSurfaceColor,
+            tertiaryColor: mermaidSurfaceColor,
+            textColor: mermaidTextColor,
+            primaryColor: mermaidSurfaceColor,
+            primaryTextColor: mermaidTextColor,
+            primaryBorderColor: mermaidBorderColor,
+            secondaryColor: mermaidSurfaceColor,
+            secondaryTextColor: mermaidTextColor,
+            secondaryBorderColor: mermaidBorderColor,
+            tertiaryBorderColor: mermaidBorderColor,
+            lineColor: mermaidBorderColor,
+            edgeLabelBackground: mermaidSurfaceColor,
+            clusterBkg: mermaidSurfaceColor,
+            clusterBorder: mermaidBorderColor,
+            actorBkg: mermaidSurfaceColor,
+            actorBorder: mermaidBorderColor,
+            actorTextColor: mermaidTextColor,
+            labelBoxBkgColor: mermaidSurfaceColor,
+            labelBoxBorderColor: mermaidBorderColor,
+            labelTextColor: mermaidTextColor,
+            noteBkgColor: mermaidSurfaceColor,
+            noteTextColor: mermaidTextColor,
+            noteBorderColor: mermaidBorderColor,
+            activationBkgColor: mermaidSurfaceColor,
+            activationBorderColor: mermaidBorderColor,
+            sequenceNumberColor: mermaidTextColor
+          }
         });
 
         let index = 0;

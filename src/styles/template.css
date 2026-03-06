@@ -28,14 +28,14 @@
 
   /* Colors - Pure Monochromatic Palette */
   --token-color-text-primary: #000000;
-  --token-color-text-secondary: #222222;
-  --token-color-text-muted: #555555;
+  --token-color-text-secondary: #000000;
+  --token-color-text-muted: #000000;
   --token-color-surface-base: #FFFFFF;
-  --token-color-surface-elevated: #F8F8F8;
+  --token-color-surface-elevated: #FFFFFF;
   --token-color-border-subtle: #000000;
   --token-color-brand-accent: #000000;
   --token-color-brand-accent-foreground: #FFFFFF;
-  --token-color-overlay-strong: rgba(0, 0, 0, 0.6);
+  --token-color-overlay-strong: #000000;
 
   /* Semantic Colors */
   --color-text-primary: var(--token-color-text-primary);
@@ -81,11 +81,26 @@
 
 [data-template-tone="dark"] {
   --token-color-text-primary: #FFFFFF;
-  --token-color-text-secondary: #DDDDDD;
-  --token-color-text-muted: #AAAAAA;
+  --token-color-text-secondary: #FFFFFF;
+  --token-color-text-muted: #FFFFFF;
   --token-color-surface-base: #000000;
-  --token-color-surface-elevated: #111111;
+  --token-color-surface-elevated: #000000;
   --token-color-border-subtle: #FFFFFF;
+  --token-color-brand-accent: #FFFFFF;
+  --token-color-brand-accent-foreground: #000000;
+  --token-color-overlay-strong: #FFFFFF;
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #FFFFFF;
+  --color-text-muted: #FFFFFF;
+  --color-surface-base: #000000;
+  --color-surface-elevated: #000000;
+  --color-border-subtle: #FFFFFF;
+  --color-brand-primary: #FFFFFF;
+  --color-brand-secondary: #FFFFFF;
+  --color-brand-muted: #FFFFFF;
+  --color-brand-surface: #000000;
+  --color-brand-elevated: #000000;
+  --color-brand-border: #FFFFFF;
 }
 
 * {

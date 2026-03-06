@@ -1,0 +1,61 @@
+<!--
+@id: layout/center-image-bands
+@label: Center Image With Bands
+@description: Centered image frame with top and bottom copy bands
+@selection_hints: product spotlight, framed hero image, teaser with caption bands, visual module with text rails
+@formats: instagram-square,instagram-portrait,instagram-story,twitter-card,linkedin-post,carousel-post
+@background_image: inline
+
+@slot top_label | text | Label text in the top copy band  | 
+@slot image_caption | text | Caption text inside the image frame  | 
+@slot bottom_meta | text | Supporting metadata in bottom band  | 
+@slot cta_text | text | Call-to-action text in bottom band  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
+@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
+-->
+<div class="relative z-10 flex h-full w-full flex-col bg-brand-surface text-brand-primary">
+  <header class="border-b-4 border-brand-primary px-[clamp(16px,2.3vw,34px)] py-[clamp(14px,1.9vw,24px)]">
+    <div class="mb-2 flex items-center justify-between gap-4">
+      <p class="font-brand-body text-[clamp(11px,1.05vw,14px)] font-black uppercase tracking-[0.32em]">
+        {{BRAND_NAME}}
+      </p>
+      <p class="font-brand-body text-[clamp(10px,0.95vw,13px)] font-bold uppercase tracking-[0.2em] text-brand-muted">
+        {{SLIDE_LABEL}}
+      </p>
+    </div>
+    <p class="font-brand-body text-[clamp(10px,0.9vw,12px)] font-black uppercase tracking-[0.24em]">
+      {{SLOT:top_label}}
+    </p>
+  </header>
+
+  <main class="min-h-0 flex-1 px-[clamp(14px,2vw,30px)] py-[clamp(14px,2vw,28px)]">
+    <div class="relative h-full w-full overflow-hidden border-4 border-brand-primary bg-brand-elevated">
+      <img src="{{IMAGE_URL}}" alt="" class="render-inline-image absolute inset-0 h-full w-full object-cover" />
+      <div
+        class="absolute inset-x-0 bottom-0 border-t-2 border-brand-primary bg-brand-surface px-4 py-2 font-brand-body text-[clamp(10px,0.88vw,12px)] font-black uppercase tracking-[0.22em]">
+        {{SLOT:image_caption}}
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t-4 border-brand-primary px-[clamp(16px,2.3vw,34px)] py-[clamp(14px,1.9vw,24px)]">
+    <h1 class="mb-3 font-brand-display text-[clamp(28px,4vw,56px)] font-black leading-[0.92] tracking-tighter uppercase">
+      {{HEADING}}
+    </h1>
+    <div class="mb-4 font-brand-body text-[clamp(14px,1.55vw,22px)] leading-tight tracking-tight text-brand-secondary">
+      {{BODY}}
+    </div>
+    <div class="flex items-end justify-between gap-4 border-t-2 border-brand-primary pt-3">
+      <p class="font-brand-body text-[clamp(10px,0.88vw,12px)] font-bold uppercase tracking-[0.22em] text-brand-muted">
+        {{SLOT:bottom_meta}}
+      </p>
+      <p class="border-2 border-brand-primary px-3 py-1 font-brand-body text-[clamp(10px,0.88vw,12px)] font-black uppercase tracking-[0.22em]">
+        {{SLOT:cta_text}}
+      </p>
+    </div>
+  </footer>
+</div>

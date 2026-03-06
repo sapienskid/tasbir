@@ -1,0 +1,50 @@
+<!--
+@id: layout/image-bg-justified-block
+@label: Image Background Justified Block
+@description: Full-bleed image with a centered justified editorial text block
+@selection_hints: article teaser, long-form quote, explanatory summary, structured narrative over image
+@formats: instagram-square,instagram-portrait,instagram-story,twitter-card,linkedin-post,carousel-post
+@background_image: global
+
+@slot block_kicker | text | Kicker text shown above heading  | 
+@slot block_meta_left | text | Left footer metadata text  | 
+@slot block_meta_right | text | Right footer metadata text  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
+@slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
+-->
+<div class="relative z-10 grid h-full w-full grid-rows-[auto_1fr_auto] p-[clamp(18px,2.8vw,46px)] text-brand-primary">
+  <header class="flex items-start justify-between gap-4">
+    <p class="font-brand-body text-[clamp(11px,1.05vw,14px)] font-black uppercase tracking-[0.34em]">
+      {{BRAND_NAME}}
+    </p>
+    <p class="font-brand-body text-[clamp(10px,0.95vw,13px)] font-bold uppercase tracking-[0.2em] text-brand-muted">
+      {{SLIDE_LABEL}}
+    </p>
+  </header>
+
+  <section
+    class="my-auto border-4 border-brand-primary bg-brand-surface p-[clamp(18px,2.5vw,34px)] max-w-[94%] justify-self-center">
+    <p class="mb-4 font-brand-body text-[clamp(10px,0.9vw,12px)] font-black uppercase tracking-[0.28em]">
+      {{SLOT:block_kicker}}
+    </p>
+    <h1 class="mb-4 font-brand-display text-[clamp(30px,4.2vw,62px)] font-black leading-[0.92] tracking-tighter uppercase">
+      {{HEADING}}
+    </h1>
+    <div class="font-brand-body text-[clamp(15px,1.75vw,24px)] leading-tight text-justify tracking-tight text-brand-secondary">
+      {{BODY}}
+    </div>
+  </section>
+
+  <footer class="flex items-end justify-between gap-4 border-t-2 border-brand-primary bg-brand-surface px-4 py-3">
+    <p class="font-brand-body text-[clamp(10px,0.88vw,12px)] font-bold uppercase tracking-[0.22em] text-brand-muted">
+      {{SLOT:block_meta_left}}
+    </p>
+    <p class="font-brand-body text-[clamp(10px,0.88vw,12px)] font-black uppercase tracking-[0.24em]">
+      {{SLOT:block_meta_right}}
+    </p>
+  </footer>
+</div>

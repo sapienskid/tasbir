@@ -1,7 +1,7 @@
 <!--
 @id: layout/split-hero
 @label: Split Copy Media
-@description: Swiss-style split layout with copy and media integration
+@description: Swiss-style stacked media and copy layout
 @selection_hints: before-after framing, copy plus media, comparison story, balanced narrative
 @formats: instagram-story,twitter-card,linkedin-post,instagram-portrait,carousel-post
 @background_image: inline
@@ -9,6 +9,7 @@
 @slot byline | text | Author/byline text  | 
 @slot publish_date | text | Publish date text  | 
 @slot media_caption | text | Caption or annotation for media  | 
+@slot media_position | text | Media placement: top or bottom | top
 @slot footer_meta | text | Bottom footer metadata line  | 
 @slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
 @slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
@@ -17,49 +18,58 @@
 @slot brand_icon_opacity | number | Brand icon opacity | 0.95
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
-<div class="relative z-10 flex h-full w-full bg-brand-surface text-brand-primary">
+<style>
+  .split-hero[data-media-position="bottom"] .split-hero-media {
+    order: 2;
+    border-bottom-width: 0;
+    border-top-width: 4px;
+  }
+
+  .split-hero[data-media-position="bottom"] .split-hero-copy {
+    order: 1;
+  }
+</style>
+
+<div class="split-hero relative z-10 flex h-full w-full flex-col bg-brand-surface text-brand-primary"
+  data-media-position="{{SLOT:media_position}}">
+  <!-- Media Panel -->
+  <section class="split-hero-media relative min-h-0 flex-[1.05] overflow-hidden border-b-4 border-brand-primary">
+    <img src="{{IMAGE_URL}}" alt="" class="render-inline-image absolute inset-0 h-full w-full object-cover" />
+    <div
+      class="absolute inset-x-0 bottom-0 bg-brand-primary px-[clamp(18px,2.2vw,30px)] py-[clamp(12px,1.8vw,20px)] text-brand-surface font-brand-body text-[clamp(12px,1.4vw,16px)] font-black uppercase tracking-[0.22em]">
+      {{SLOT:media_caption}}
+    </div>
+  </section>
+
   <!-- Copy Panel -->
-  <section class="w-1/2 p-[var(--token-space-gutter)] flex flex-col justify-between border-r-4 border-brand-primary">
-    <header class="mb-12">
-      <div class="font-brand-body text-[16px] font-black uppercase tracking-[0.4em] mb-2">
+  <section class="split-hero-copy min-h-0 flex-[0.95] p-[clamp(24px,3vw,var(--token-space-gutter))] flex flex-col justify-between">
+    <header class="mb-5">
+      <div class="mb-2 font-brand-body text-[clamp(12px,1.3vw,16px)] font-black uppercase tracking-[0.38em]">
         {{BRAND_NAME}}
       </div>
-      <div class="font-brand-body text-[14px] font-bold uppercase tracking-[0.2em] text-brand-muted">
+      <div class="font-brand-body text-[clamp(11px,1.1vw,14px)] font-bold uppercase tracking-[0.2em] text-brand-muted">
         {{SLIDE_LABEL}}
       </div>
     </header>
 
-    <main class="flex-1 flex flex-col justify-center">
-      <h1
-        class="font-brand-display text-[clamp(44px,6vw,84px)] font-black leading-[0.9] tracking-tighter uppercase mb-8">
+    <main class="flex-1 min-h-0 flex flex-col">
+      <h1 class="mb-4 font-brand-display text-[clamp(30px,4.2vw,62px)] font-black leading-[0.94] tracking-tighter uppercase">
         {{HEADING}}
       </h1>
-      <div
-        class="font-brand-body text-[clamp(20px,2.5vw,30px)] leading-tight text-justify tracking-tight text-brand-secondary mb-10">
+      <div class="font-brand-body text-[clamp(16px,1.9vw,26px)] leading-tight tracking-tight text-brand-secondary text-justify">
         {{BODY}}
-      </div>
-      <div class="flex items-center gap-6 pt-6 border-t-2 border-brand-primary/20">
-        <span
-          class="font-brand-body text-[12px] font-black uppercase tracking-widest border-2 border-brand-primary px-3 py-1">{{SLOT:byline}}</span>
-        <span
-          class="font-brand-body text-[12px] font-bold uppercase tracking-[0.3em] text-brand-muted">{{SLOT:publish_date}}</span>
       </div>
     </main>
 
-    <footer class="mt-12 text-[10px] font-brand-body font-bold uppercase tracking-[0.4em] text-brand-muted">
-      {{SLOT:footer_meta}}
-    </footer>
-  </section>
-
-  <!-- Media Panel -->
-  <section class="w-1/2 relative bg-brand-elevated overflow-hidden p-8">
-    <div class="absolute inset-0 m-8 border-2 border-brand-primary overflow-hidden">
-      <img src="{{IMAGE_URL}}" alt=""
-        class="absolute inset-0 h-full w-full object-cover grayscale contrast-125 brightness-105" />
-      <div
-        class="absolute bottom-4 left-4 right-4 bg-brand-primary text-brand-surface p-4 font-brand-body text-[14px] font-black uppercase tracking-widest text-center shadow-2xl">
-        {{SLOT:media_caption}}
+    <footer class="mt-6 flex items-end justify-between gap-6 border-t-2 border-brand-primary pt-4">
+      <div class="flex items-center gap-4">
+        <span
+          class="font-brand-body text-[11px] font-black uppercase tracking-widest border-2 border-brand-primary px-3 py-1">{{SLOT:byline}}</span>
+        <span class="font-brand-body text-[11px] font-bold uppercase tracking-[0.24em] text-brand-muted">{{SLOT:publish_date}}</span>
       </div>
-    </div>
+      <div class="max-w-[48%] text-right text-[10px] font-brand-body font-bold uppercase tracking-[0.34em] text-brand-muted">
+        {{SLOT:footer_meta}}
+      </div>
+    </footer>
   </section>
 </div>
