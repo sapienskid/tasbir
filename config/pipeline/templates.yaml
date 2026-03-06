@@ -1,5 +1,6 @@
 brand:
   default_name: Tasbir Blog
+  icon_svg_url: /images/brand/icon.svg
 
 formats:
   instagram-portrait:
@@ -92,6 +93,6 @@ preview_defaults:
   caption: A practical system for turning one source article into platform-native outputs with consistent structure, language discipline, and reusable visual identity.
   heading: Structure first. Style through tokens.
   body: Templates stay skeletal while one centralized tokenized CSS system controls color, typography, spacing, and tone so every output remains cohesive as your template library evolves.
-  image_url: /images/preview/default.svg
+  image_url: "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201200%20900%22%3E%3Crect%20width=%221200%22%20height=%22900%22%20fill=%22%230b0b0b%22/%3E%3C/svg%3E"
   slide_number: 1
   total_slides: 5

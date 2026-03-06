@@ -1,31 +1,17 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { access, mkdir, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import process from "node:process";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8787";
-const DEFAULT_IMAGE_URL = "/images/preview/default.svg";
+const DEFAULT_IMAGE_URL = "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201200%20900%22%3E%3Crect%20width=%221200%22%20height=%22900%22%20fill=%22%230b0b0b%22/%3E%3C/svg%3E";
 const DEFAULT_VARIATION_COUNT = 3;
 const DEFAULT_CONCURRENCY = 2;
 const HEALTH_TIMEOUT_MS = 60_000;
 const HEALTH_POLL_MS = 500;
 const MAX_RETRY_ATTEMPTS = 6;
-const DEFAULT_PREVIEW_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-label="Preview image">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f6f6f6" />
-      <stop offset="100%" stop-color="#d8d8d8" />
-    </linearGradient>
-  </defs>
-  <rect width="1600" height="1000" fill="url(#bg)" />
-  <rect x="80" y="80" width="1440" height="840" fill="none" stroke="#111" stroke-width="10" />
-  <text x="120" y="190" font-family="Inter, Arial, sans-serif" font-size="56" fill="#111" letter-spacing="2">LOCAL PREVIEW IMAGE</text>
-  <text x="120" y="250" font-family="Inter, Arial, sans-serif" font-size="30" fill="#333">/public/images/preview/default.svg</text>
-</svg>
-`;
-
 const PRESET_VARIATIONS = [
   {
     id: "default",
@@ -306,24 +292,6 @@ async function wait(ms) {
   await new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
 }
 
-async function ensureLocalAssets(options) {
-  const publicDir = resolve(process.cwd(), "public");
-  await mkdir(publicDir, { recursive: true });
-
-  if (options.imageUrl !== DEFAULT_IMAGE_URL) {
-    return;
-  }
-
-  const imagePath = resolve(process.cwd(), "public/images/preview/default.svg");
-  await mkdir(dirname(imagePath), { recursive: true });
-
-  try {
-    await access(imagePath);
-  } catch (_error) {
-    await writeFile(imagePath, DEFAULT_PREVIEW_SVG, "utf8");
-  }
-}
-
 function authHeaders(options) {
   if (!options.apiKey) {
     return undefined;
@@ -582,8 +550,6 @@ async function main() {
   let serverLogTail = [];
 
   try {
-    await ensureLocalAssets(options);
-
     if (options.build) {
       console.log("Running build before render...");
       await runCommand("pnpm", ["run", "build"], { stdio: "inherit" });
