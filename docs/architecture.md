@@ -70,7 +70,7 @@ When `agent.mode` resolves to `agentic` (default from config), runtime invokes t
 flowchart TD
     A[POST /generate or /generate-from-content] --> B[Resolve agent mode/profile/policy]
     B --> C{mode == agentic?}
-    C -->|No| D[Run classic template + copy flow]
+    C -->|No (reserved)| D[Use profile-only agentic defaults]
     C -->|Yes| E[Call MARKETING_ORCHESTRATOR Durable Object]
     E --> F[Receive strategic_brief + planner/copy/visual notes]
     F --> G[Apply planner overrides in template selection]
@@ -79,7 +79,7 @@ flowchart TD
     I --> J[Render + R2 store + response]
 ```
 
-If the Durable Object binding is missing or orchestration fails, runtime falls back safely to the classic path and emits `agentic.warnings`.
+If the Durable Object binding is missing or orchestration fails, runtime keeps agentic defaults from the central prompt profile and emits `agentic.warnings`.
 
 ## Template Dependency Model
 

@@ -209,15 +209,14 @@ No TypeScript template registration is required.
 
 Request payloads may include:
 
-- `agent.mode`: `classic` or `agentic`
+- `agent.mode`: `agentic`
 - `agent.promptProfile`: selects profile from `generation.agents.prompt_profiles`
 - `agent.renderPolicy`: per-request render policy overrides
 - `agent.platformGoals`: optional platform planning intent signals
 
 System prompt sources:
 
-- base copy prompts: `generation.llm.*`
-- template planner prompts: `generation.llm.template_planner.*`
+- agent copy/planner prompts: `generation.agents.prompts.*`
 - agent roles: `generation.agents.prompt_profiles.*`
 - image policy prompts: `generation.image.*`
 

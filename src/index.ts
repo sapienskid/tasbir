@@ -93,7 +93,7 @@ interface AgentPlatformGoals {
 }
 
 interface AgentOptions {
-  mode?: "classic" | "agentic";
+  mode?: "agentic";
   promptProfile?: string;
   platformGoals?: AgentPlatformGoals;
   renderPolicy?: AgentRenderPolicy;
@@ -108,7 +108,6 @@ interface GenerateRequestBody {
   slotOverrides?: Record<string, string>;
   storage?: StorageOptions;
   notifyUrl?: string;
-  llm?: LlmPromptOverrides;
   image?: ImageGenerationOptions;
   output?: OutputOptions;
   campaign?: CampaignOptions;
@@ -131,7 +130,6 @@ interface DirectContentRequestBody {
   slotOverrides?: Record<string, string>;
   storage?: StorageOptions;
   notifyUrl?: string;
-  llm?: LlmPromptOverrides;
   image?: ImageGenerationOptions;
   output?: OutputOptions;
   campaign?: CampaignOptions;
@@ -227,7 +225,7 @@ interface CampaignPostOutput {
 }
 
 interface AgentExecutionSummary {
-  mode: "classic" | "agentic";
+  mode: "agentic";
   prompt_profile?: string;
   applied_roles: string[];
   warnings: string[];
@@ -414,7 +412,7 @@ interface ResolvedAgentPromptProfile {
 }
 
 interface AgentExecutionContext {
-  mode: "classic" | "agentic";
+  mode: "agentic";
   promptProfile: ResolvedAgentPromptProfile;
   renderPolicy: ResolvedAgentRenderPolicy;
   plannerOverrides?: TemplatePlannerPromptOverrides;
@@ -956,12 +954,9 @@ function splitCsv(value: string | undefined): string[] {
 function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentExecutionContext {
   const warnings: string[] = [];
   const agentsConfig = ((PIPELINE_CONFIG.generation as any).agents ?? {}) as Record<string, unknown>;
+  const agentPrompts = asRecord(agentsConfig.prompts);
   const featureEnabled = Boolean(PIPELINE_CONFIG.features?.enable_agentic_orchestration);
-
-  const requestedMode = (options?.mode ?? toSingleLineString(agentsConfig.default_mode) ?? "classic").toLowerCase();
-  let mode: AgentExecutionContext["mode"] = requestedMode === "agentic" ? "agentic" : "classic";
-  if (mode === "agentic" && !featureEnabled) {
-    mode = "classic";
+  if (!featureEnabled) {
     warnings.push("agentic_disabled_by_feature_flag");
   }
 
@@ -981,11 +976,11 @@ function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentE
   };
 
   const plannerSystemPrompt = mergePromptField(
-    PIPELINE_CONFIG.generation.llm?.template_planner?.system_prompt as string[] | string | undefined,
+    agentPrompts?.template_planner_system_prompt as string[] | string | undefined,
     [...promptProfile.mastermind, ...promptProfile.templatePlanner]
   );
   const copySystemPrompt = mergePromptField(
-    PIPELINE_CONFIG.generation.llm?.system_prompt as string[] | string | undefined,
+    agentPrompts?.copy_system_prompt as string[] | string | undefined,
     [...promptProfile.mastermind, ...promptProfile.copywriter]
   );
 
@@ -995,22 +990,16 @@ function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentE
   const baseInstructionAppend = [strategistNotes, renderGuardNotes].filter(Boolean).join("\n");
 
   return {
-    mode,
+    mode: "agentic",
     promptProfile,
     renderPolicy,
-    plannerOverrides:
-      mode === "agentic"
-        ? {
-          systemPrompt: plannerSystemPrompt
-        }
-        : undefined,
-    copyOverrides:
-      mode === "agentic"
-        ? {
-          systemPrompt: copySystemPrompt,
-          userInstructionsAppend: baseInstructionAppend || undefined
-        }
-        : undefined,
+    plannerOverrides: {
+      systemPrompt: plannerSystemPrompt
+    },
+    copyOverrides: {
+      systemPrompt: copySystemPrompt,
+      userInstructionsAppend: baseInstructionAppend || undefined
+    },
     strategicBrief: "",
     visualNotes,
     warnings
@@ -1072,9 +1061,6 @@ async function resolveAgentContextForRun(args: {
   variantIndex?: number;
 }): Promise<AgentExecutionContext> {
   const context = cloneAgentExecutionContext(args.baseContext);
-  if (context.mode !== "agentic") {
-    return context;
-  }
   if (!args.env.MARKETING_ORCHESTRATOR) {
     context.warnings.push("agent_binding_missing");
     return context;
@@ -1208,25 +1194,6 @@ function appendStrategicBrief(prompt: string | undefined, brief: string): string
   return `${normalizedPrompt}\nStrategic brief: ${normalizedBrief}`;
 }
 
-function mergeLlmOverrides(
-  base: LlmPromptOverrides | undefined,
-  agent: LlmPromptOverrides | undefined
-): LlmPromptOverrides | undefined {
-  if (!base && !agent) {
-    return undefined;
-  }
-  const merged: LlmPromptOverrides = {
-    systemPrompt: mergePromptField(agent?.systemPrompt, base?.systemPrompt),
-    userInstructions: mergePromptField(agent?.userInstructions, base?.userInstructions),
-    userInstructionsAppend: [agent?.userInstructionsAppend, base?.userInstructionsAppend]
-      .filter(Boolean)
-      .join("\n") || undefined,
-    temperature: base?.temperature ?? agent?.temperature,
-    maxTokens: base?.maxTokens ?? agent?.maxTokens
-  };
-  return Object.values(merged).some((value) => value !== undefined) ? merged : undefined;
-}
-
 function mergePromptField(
   primary: string | string[] | undefined,
   secondary: string | string[] | undefined
@@ -1277,10 +1244,6 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 function applyAgentPoliciesToLlmOutput(base: LlmOutput, context: AgentExecutionContext): LlmOutput {
-  if (context.mode !== "agentic") {
-    return base;
-  }
-
   const limits = PIPELINE_CONFIG.generation.limits;
   const sanitizeVisual = (value: string): string => sanitizeVisualText(value, context.renderPolicy);
 
@@ -1383,14 +1346,13 @@ function ensureSentenceCompletion(value: string): string {
 }
 
 function summarizeAgentExecution(contexts: AgentExecutionContext[]): AgentExecutionSummary | undefined {
-  const agenticContexts = contexts.filter((context) => context.mode === "agentic");
-  if (agenticContexts.length === 0) {
+  if (contexts.length === 0) {
     return undefined;
   }
-  const warnings = [...new Set(agenticContexts.flatMap((context) => context.warnings).filter(Boolean))];
+  const warnings = [...new Set(contexts.flatMap((context) => context.warnings).filter(Boolean))];
   return {
     mode: "agentic",
-    prompt_profile: agenticContexts[0].promptProfile.name,
+    prompt_profile: contexts[0].promptProfile.name,
     applied_roles: [...AGENT_APPLIED_ROLES],
     warnings
   };
@@ -1414,7 +1376,6 @@ interface PipelineRunInput {
   templateIds?: Partial<Record<TemplateKind, string>>;
   slotOverrides?: Record<string, string>;
   storage?: StorageOptions;
-  llm?: LlmPromptOverrides;
   image?: ImageGenerationOptions;
   output?: OutputOptions;
   campaign?: CampaignOptions;
@@ -1473,7 +1434,7 @@ async function runPipelineFromPost(
         requiredSlotKeys: templatePlan.requiredSlotKeys,
         slotFields: templatePlan.slotFields,
         userPrompt: orchestratedPrompt,
-        llmOverrides: mergeLlmOverrides(brandInput.llm, agentContext.copyOverrides),
+        llmOverrides: agentContext.copyOverrides,
         normalizeSlotContent
       }),
       agentContext
@@ -1600,7 +1561,7 @@ async function runCampaignPipelineFromPost(
           requiredSlotKeys: postPlan.slot_keys,
           slotFields: listTemplateFields(postPlan.template_id),
           userPrompt: orchestratedPrompt,
-          llmOverrides: mergeLlmOverrides(brandInput.llm, agentContext.copyOverrides),
+          llmOverrides: agentContext.copyOverrides,
           normalizeSlotContent
         }),
         agentContext
@@ -2967,10 +2928,10 @@ function arrayBufferToBase64(bytes: Uint8Array): string {
 
 function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityConfig): GenerateRequestBody {
   const body = requireObject(input, "Request body");
+  assertNoLegacyLlmOverrides(body);
   const templateIds = parseTemplateIds(body.templateIds, security);
   const slotOverrides = parseSlotOverrides(body.slotOverrides, security);
   const storage = parseStorageOptions(body.storage);
-  const llm = parseLlmOverrides(body.llm);
   const image = parseImageOptions(body.image);
   const output = parseOutputOptions(body.output);
   const campaign = parseCampaignOptions(body.campaign);
@@ -2985,7 +2946,6 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
     slotOverrides,
     storage,
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
-    llm,
     image,
     output,
     campaign,
@@ -2995,6 +2955,7 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
 
 function validateDirectContentRequestBody(input: unknown, security: ResolvedSecurityConfig): DirectContentRequestBody {
   const body = requireObject(input, "Request body");
+  assertNoLegacyLlmOverrides(body);
   const directContentMaxChars = Math.max(
     1_000,
     Number(PIPELINE_CONFIG.generation?.limits?.direct_content_max_chars ?? 30_000)
@@ -3023,7 +2984,6 @@ function validateDirectContentRequestBody(input: unknown, security: ResolvedSecu
     slotOverrides: parseSlotOverrides(body.slotOverrides, security),
     storage: parseStorageOptions(body.storage),
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
-    llm: parseLlmOverrides(body.llm),
     image: parseImageOptions(body.image),
     output: parseOutputOptions(body.output),
     campaign: parseCampaignOptions(body.campaign),
@@ -3031,6 +2991,12 @@ function validateDirectContentRequestBody(input: unknown, security: ResolvedSecu
   } satisfies DirectContentRequestBody;
 
   return request;
+}
+
+function assertNoLegacyLlmOverrides(body: Record<string, unknown>): void {
+  if (body.llm !== undefined) {
+    throw new HttpError(400, "Legacy llm overrides are removed. Use agent.promptProfile and agent.renderPolicy.");
+  }
 }
 
 function validateWebhookPayload(input: unknown): GhostWebhookPayload {
@@ -3136,50 +3102,6 @@ function parseStorageOptions(input: unknown): StorageOptions | undefined {
   };
 }
 
-function parseLlmOverrides(input: unknown): LlmPromptOverrides | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  const object = requireObject(input, "llm");
-  const systemPrompt = parsePromptField(object.systemPrompt, "llm.systemPrompt");
-  const userInstructions = parsePromptField(object.userInstructions, "llm.userInstructions");
-  const userInstructionsAppend = optionalString(object.userInstructionsAppend, "llm.userInstructionsAppend", 2_000);
-  const temperature =
-    object.temperature !== undefined
-      ? clampNumber(requiredNumber(object.temperature, "llm.temperature"), 0, 2, PIPELINE_CONFIG.generation.llm.temperature)
-      : undefined;
-  const maxTokens =
-    object.maxTokens !== undefined
-      ? Math.round(clampNumber(requiredNumber(object.maxTokens, "llm.maxTokens"), 256, 4096, PIPELINE_CONFIG.generation.llm.max_tokens))
-      : undefined;
-
-  const parsed: LlmPromptOverrides = {
-    systemPrompt,
-    userInstructions,
-    userInstructionsAppend,
-    temperature,
-    maxTokens
-  };
-  return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
-}
-
-function parsePromptField(input: unknown, field: string): string | string[] | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  if (typeof input === "string") {
-    return ensureLength(input.trim(), 2_000, input.trim());
-  }
-  if (Array.isArray(input)) {
-    const lines = input.map((line, index) => optionalString(line, `${field}[${index}]`, 300)).filter((line): line is string => Boolean(line));
-    if (lines.length > 80) {
-      throw new HttpError(400, `${field} accepts up to 80 lines`);
-    }
-    return lines;
-  }
-  throw new HttpError(400, `${field} must be a string or an array of strings`);
-}
-
 function parseImageOptions(input: unknown): ImageGenerationOptions | undefined {
   if (input === undefined) {
     return undefined;
@@ -3205,8 +3127,8 @@ function parseAgentOptions(input: unknown): AgentOptions | undefined {
   }
   const object = requireObject(input, "agent");
   const mode = optionalString(object.mode, "agent.mode", 20);
-  if (mode && mode !== "classic" && mode !== "agentic") {
-    throw new HttpError(400, "agent.mode must be classic or agentic");
+  if (mode && mode !== "agentic") {
+    throw new HttpError(400, "agent.mode must be agentic");
   }
 
   const renderPolicyRaw = object.renderPolicy;

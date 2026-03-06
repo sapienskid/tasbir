@@ -52,8 +52,27 @@ export interface TemplateChoiceCandidate {
   fields?: TemplateFieldDeclaration[];
 }
 
-const DEFAULT_LLM_MODEL = PIPELINE_CONFIG.generation.llm.default_model;
-const DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT = PIPELINE_CONFIG.generation.llm.system_prompt.join(" ");
+const AGENT_CONFIG = (PIPELINE_CONFIG.generation?.agents ?? {}) as Record<string, unknown>;
+const AGENT_MODELS = (AGENT_CONFIG.models ?? {}) as Record<string, unknown>;
+const AGENT_RUNTIME = (AGENT_CONFIG.runtime ?? {}) as Record<string, unknown>;
+const AGENT_PROMPTS = (AGENT_CONFIG.prompts ?? {}) as Record<string, unknown>;
+const DEFAULT_LLM_MODEL = toText(AGENT_MODELS.copy_model) || "@cf/openai/gpt-oss-120b";
+const DEFAULT_TEMPLATE_PLANNER_MODEL = toText(AGENT_MODELS.template_planner_model) || DEFAULT_LLM_MODEL;
+const DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT = normalizePromptLines(AGENT_PROMPTS.copy_system_prompt).join(" ");
+const DEFAULT_COPY_USER_INSTRUCTIONS = normalizePromptLines(AGENT_PROMPTS.copy_user_instructions);
+const DEFAULT_TEMPLATE_PLANNER_SYSTEM_PROMPT = normalizePromptLines(AGENT_PROMPTS.template_planner_system_prompt);
+const DEFAULT_TEMPLATE_PLANNER_USER_INSTRUCTIONS = normalizePromptLines(AGENT_PROMPTS.template_planner_user_instructions);
+const DEFAULT_COPY_TEMPERATURE = clampNumber(toFiniteNumber(AGENT_RUNTIME.copy_temperature), 0, 2, 0.2);
+const DEFAULT_COPY_MAX_TOKENS = Math.round(clampNumber(toFiniteNumber(AGENT_RUNTIME.copy_max_tokens), 256, 4096, 2200));
+const DEFAULT_PLANNER_TEMPERATURE = clampNumber(
+  toFiniteNumber(AGENT_RUNTIME.template_planner_temperature),
+  0,
+  2,
+  0.1
+);
+const DEFAULT_PLANNER_MAX_TOKENS = Math.round(
+  clampNumber(toFiniteNumber(AGENT_RUNTIME.template_planner_max_tokens), 256, 4096, 900)
+);
 const TEMPLATE_COMPOSITION_DIRECTIVES = [
   "Treat templates as structure-only skeletons and place all design decisions in CSS classes.",
   "Fill slot_content comprehensively so every likely template slot has useful copy.",
@@ -137,7 +156,7 @@ export async function generateStructuredCopy(args: {
     .join("\n");
   const userInstructionsTemplate = buildPromptTemplate(
     args.llmOverrides?.userInstructions,
-    PIPELINE_CONFIG.generation.llm.user_instructions
+    DEFAULT_COPY_USER_INSTRUCTIONS
   );
   const userInstructions = userInstructionsTemplate
     .replace("<required_carousel_slides>", String(args.requiredCarouselSlides))
@@ -164,7 +183,7 @@ export async function generateStructuredCopy(args: {
   const mergedInstructions = appendedInstructions
     ? `${mergedBaseInstructions}\n${appendedInstructions}`
     : mergedBaseInstructions;
-  const systemPrompt = buildPromptTemplate(args.llmOverrides?.systemPrompt, PIPELINE_CONFIG.generation.llm.system_prompt);
+  const systemPrompt = buildPromptTemplate(args.llmOverrides?.systemPrompt, normalizePromptLines(AGENT_PROMPTS.copy_system_prompt));
   const title = args.post.title.trim();
   const excerpt = (args.post.custom_excerpt || args.post.excerpt || "").trim();
   const plainBody = (args.post.plaintext || stripHtml(args.post.html || "")).trim();
@@ -209,10 +228,8 @@ export async function generateStructuredCopy(args: {
       type: "json_schema",
       json_schema: buildLlmJsonSchema(args.requiredSlotKeys)
     },
-    temperature: clampNumber(args.llmOverrides?.temperature, 0, 2, PIPELINE_CONFIG.generation.llm.temperature),
-    max_tokens: Math.round(
-      clampNumber(args.llmOverrides?.maxTokens, 256, 4096, PIPELINE_CONFIG.generation.llm.max_tokens)
-    )
+    temperature: clampNumber(args.llmOverrides?.temperature, 0, 2, DEFAULT_COPY_TEMPERATURE),
+    max_tokens: Math.round(clampNumber(args.llmOverrides?.maxTokens, 256, 4096, DEFAULT_COPY_MAX_TOKENS))
   });
 
   const parsed = parseModelJson(raw);
@@ -235,7 +252,7 @@ export async function chooseTemplateAssignments(args: {
   userPrompt?: string;
   plannerOverrides?: TemplatePlannerPromptOverrides;
 }): Promise<Record<string, string>> {
-  const textModel = (args.llmModel || DEFAULT_LLM_MODEL) as keyof AiModels;
+  const textModel = (args.llmModel || DEFAULT_TEMPLATE_PLANNER_MODEL) as keyof AiModels;
   const requestedFormats = [...new Set(args.requestedFormats.map((format) => format.trim()).filter(Boolean))];
   if (requestedFormats.length === 0) {
     return {};
@@ -270,7 +287,7 @@ export async function chooseTemplateAssignments(args: {
 
   const plannerInstructionsTemplate = buildPromptTemplate(
     args.plannerOverrides?.userInstructions,
-    PIPELINE_CONFIG.generation.llm.template_planner.user_instructions
+    DEFAULT_TEMPLATE_PLANNER_USER_INSTRUCTIONS
   );
   const plannerInstructions = [
     plannerInstructionsTemplate,
@@ -288,7 +305,7 @@ export async function chooseTemplateAssignments(args: {
   ].join("\n");
   const plannerSystemPrompt = buildPromptTemplate(
     args.plannerOverrides?.systemPrompt,
-    PIPELINE_CONFIG.generation.llm.template_planner.system_prompt
+    DEFAULT_TEMPLATE_PLANNER_SYSTEM_PROMPT
   );
 
   try {
@@ -307,8 +324,8 @@ export async function chooseTemplateAssignments(args: {
         type: "json_schema",
         json_schema: buildTemplateAssignmentSchema(requestedFormats, args.templateCandidates)
       },
-      temperature: clampNumber(args.plannerOverrides?.temperature, 0, 2, 0.1),
-      max_tokens: Math.round(clampNumber(args.plannerOverrides?.maxTokens, 256, 4096, 900))
+      temperature: clampNumber(args.plannerOverrides?.temperature, 0, 2, DEFAULT_PLANNER_TEMPERATURE),
+      max_tokens: Math.round(clampNumber(args.plannerOverrides?.maxTokens, 256, 4096, DEFAULT_PLANNER_MAX_TOKENS))
     });
 
     const parsed = parseModelJson(raw);
@@ -440,7 +457,7 @@ function normalizePromptAppend(value: string | undefined): string {
   return ensureLength(trimmed, 2_000, trimmed);
 }
 
-function normalizePromptLines(input: string | string[] | undefined): string[] {
+function normalizePromptLines(input: unknown): string[] {
   if (!input) {
     return [];
   }
@@ -880,6 +897,13 @@ function toText(value: unknown): string {
     return String(value);
   }
   return "";
+}
+
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  return value;
 }
 
 function toSingleSentence(text: string): string {

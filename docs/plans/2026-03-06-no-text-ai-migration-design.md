@@ -65,15 +65,13 @@ Request-level prompt customization should reference a `promptProfile` key instea
 
 All active prompt sources now live in `config/pipeline/content.yaml`.
 
-1. Base structured copy prompts
-- `generation.llm.system_prompt`
-- `generation.llm.user_instructions`
+1. Agentic planner/copy prompts
+- `generation.agents.prompts.copy_system_prompt`
+- `generation.agents.prompts.copy_user_instructions`
+- `generation.agents.prompts.template_planner_system_prompt`
+- `generation.agents.prompts.template_planner_user_instructions`
 
-2. Template planner prompts
-- `generation.llm.template_planner.system_prompt`
-- `generation.llm.template_planner.user_instructions`
-
-3. Agentic profile prompts
+2. Agentic profile prompts
 - `generation.agents.prompt_profiles.<profile>.mastermind`
 - `generation.agents.prompt_profiles.<profile>.roles.strategist`
 - `generation.agents.prompt_profiles.<profile>.roles.template_planner`
@@ -81,7 +79,7 @@ All active prompt sources now live in `config/pipeline/content.yaml`.
 - `generation.agents.prompt_profiles.<profile>.roles.visual_director`
 - `generation.agents.prompt_profiles.<profile>.roles.render_guard`
 
-4. Image prompt policy
+3. Image prompt policy
 - `generation.image.prompt_prefix`
 - `generation.image.prompt_composition`
 - `generation.image.negative_clauses`

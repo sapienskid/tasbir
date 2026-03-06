@@ -164,7 +164,11 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
     ].join("\n");
 
     try {
-      const model = (this.env.LLM_MODEL || PIPELINE_CONFIG.generation.llm.default_model) as keyof AiModels;
+      const orchestratorModel =
+        ((PIPELINE_CONFIG.generation?.agents?.models as Record<string, unknown> | undefined)?.orchestrator_model as
+          | string
+          | undefined) || "@cf/openai/gpt-oss-120b";
+      const model = (this.env.LLM_MODEL || orchestratorModel) as keyof AiModels;
       const raw = await this.env.AI.run(model, {
         messages: [
           { role: "system", content: systemPrompt },

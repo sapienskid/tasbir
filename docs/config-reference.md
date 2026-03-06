@@ -123,17 +123,30 @@ Hard limits for:
 
 Fallback strings used when model output is incomplete.
 
-### `llm`
+### `agents`
 
-- `default_model`
-- `temperature`
-- `max_tokens`
-- `system_prompt` (string array)
-- `user_instructions` (string array)
-- `template_planner.system_prompt` (string array)
-- `template_planner.user_instructions` (string array)
+Agentic-only prompt/model controls live here now.
 
-Supported placeholders in `user_instructions`:
+`generation.agents` keys:
+
+- `default_mode` (must be `agentic`)
+- `default_prompt_profile`
+- `models.orchestrator_model`
+- `models.template_planner_model`
+- `models.copy_model`
+- `runtime.copy_temperature`
+- `runtime.copy_max_tokens`
+- `runtime.template_planner_temperature`
+- `runtime.template_planner_max_tokens`
+- `prompts.copy_system_prompt` (string array)
+- `prompts.copy_user_instructions` (string array)
+- `prompts.template_planner_system_prompt` (string array)
+- `prompts.template_planner_user_instructions` (string array)
+- `prompt_profiles.<profile>.mastermind`
+- `prompt_profiles.<profile>.roles.*`
+- `render_policy.*`
+
+Supported placeholders in `prompts.copy_user_instructions`:
 
 - `<required_carousel_slides>`
 - `<instagram_caption_max_chars>`
@@ -147,68 +160,16 @@ Supported placeholders in `user_instructions`:
 - `<required_slot_keys>`
 - `<template_composition_directives>`
 
-### Current System Prompts (Verbatim)
+### Current Runtime Directives
 
-`generation.llm.system_prompt`:
-
-```yaml
-generation:
-  llm:
-    system_prompt:
-      - "You are a senior social growth strategist and marketing copywriter for a personal tech/lifestyle brand."
-      - "Write persuasive but credible platform-native copy with a clear value proposition."
-      - "Use concrete benefits, audience pain points, and action-oriented language."
-      - "Do not invent facts that are not present in the source material."
-      - "Always respond with strict JSON matching the required schema."
-```
-
-`generation.llm.template_planner.system_prompt`:
-
-```yaml
-generation:
-  llm:
-    template_planner:
-      system_prompt:
-        - "You are an expert template planner for social content automation."
-```
-
-Additional runtime directives injected in code for text generation:
+Additional directives injected in code for text generation:
 
 - `Treat templates as structure-only skeletons and place all design decisions in CSS classes.`
 - `Fill slot_content comprehensively so every likely template slot has useful copy.`
 - `Never request generated text in images; typography is always rendered by the template system.`
 - `Keep slot values concise, specific, and directly usable without extra formatting.`
 
-### Proposed Central Prompt Registry (Design Only)
-
-To support role-based agent orchestration with one place to customize behavior, add a central prompt map:
-
-```yaml
-generation:
-  agents:
-    prompt_profiles:
-      default:
-        mastermind: |
-          You are the marketing mastermind for multi-platform campaign generation.
-          Optimize for clarity, novelty, platform-native behavior, and visual-text balance.
-        roles:
-          strategist: |
-            Plan platform counts, narrative arcs, and audience intent.
-          template_planner: |
-            Choose templates that match content semantics and slot constraints.
-          copywriter: |
-            Create copy per platform and per post type with strict length controls.
-          visual_director: |
-            Select image strategy and enforce no text artifacts in generated images.
-          render_guard: |
-            Validate markdown/math/diagram rendering and prevent overflow/hidden text.
-```
-
-Recommended behavior:
-
-- each role prompt inherits `mastermind` baseline instructions
-- profile key can be selected per request (`agent.promptProfile`)
-- prompt versions should be tracked in responses for reproducibility
+Role-based prompt profiles under `generation.agents.prompt_profiles` are now active runtime behavior, not design-only.
 
 ### `image`
 

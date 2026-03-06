@@ -116,6 +116,65 @@
       "agents": {
         "default_mode": "agentic",
         "default_prompt_profile": "default",
+        "models": {
+          "orchestrator_model": "@cf/openai/gpt-oss-120b",
+          "template_planner_model": "@cf/openai/gpt-oss-120b",
+          "copy_model": "@cf/openai/gpt-oss-120b"
+        },
+        "runtime": {
+          "copy_temperature": 0.2,
+          "copy_max_tokens": 2200,
+          "template_planner_temperature": 0.1,
+          "template_planner_max_tokens": 900
+        },
+        "prompts": {
+          "copy_system_prompt": [
+            "You are an elite multi-platform marketing strategist and conversion copywriter.",
+            "Produce precise, persuasive, and platform-native content from the provided source context.",
+            "Do not invent facts not present in source content.",
+            "Output strict JSON only and satisfy all schema requirements."
+          ],
+          "copy_user_instructions": [
+            "Create platform-ready campaign copy from the source content.",
+            "Primary goal: convert attention into clear intent (read, save, share, click, follow).",
+            "Constraints:",
+            "- Keep one coherent campaign angle across platforms, adapted to each platform's tone.",
+            "- instagram_caption: emotionally engaging hook + practical value + soft CTA, max <instagram_caption_max_chars> characters.",
+            "- twitter_caption: concise high-signal insight + payoff + direct CTA, max <twitter_caption_max_chars> characters.",
+            "- linkedin_caption: problem -> insight -> action narrative for professionals, max <linkedin_caption_max_chars> characters.",
+            "- Captions must be plain text; no markdown headings, no list markers, no leading #.",
+            "- Keep language specific and credible; avoid vague hype.",
+            "- carousel_slides: exactly <required_carousel_slides> slides with narrative flow.",
+            "- Carousel flow: slide 1 hook/intro, middle slides distinct support, final slide concrete next step.",
+            "- Carousel heading: specific 2-6 words, max <carousel_heading_max_chars> chars; never placeholders.",
+            "- Carousel body: one complete sentence, max <carousel_body_max_chars> chars.",
+            "- Each carousel slide must introduce new information.",
+            "- hashtags: <hashtag_min_count>-<hashtag_max_count> relevant tags, #prefix, no spaces.",
+            "- image_prompt: background-only art direction, no text, no UI, no logos.",
+            "- use_feature_image: true only when source feature image fits the campaign.",
+            "- stock_search_query: focused keyword phrase (<= 10 words), no metadata.",
+            "- slot_content: include ALL keys from <required_slot_keys> with render-ready values.",
+            "- Apply template composition directives exactly:",
+            "<template_composition_directives>",
+            "Output JSON only."
+          ],
+          "template_planner_system_prompt": [
+            "You are an expert social template planner and slot-contract matcher.",
+            "Select the best template per format for clarity, readability, and semantic fit.",
+            "Output strict JSON only."
+          ],
+          "template_planner_user_instructions": [
+            "Choose exactly one template per requested format.",
+            "Rules:",
+            "- Return strict JSON only.",
+            "- Use only template ids listed for each format.",
+            "- Use template selection hints and slot requirements to find semantic fit.",
+            "- Prefer templates whose slot requirements naturally match the source content density.",
+            "- Avoid selecting text-heavy templates when the copy is already dense.",
+            "- Encourage visual variety across formats where possible.",
+            "- Ensure all requested formats have a selected template id."
+          ]
+        },
         "render_policy": {
           "allow_markdown": true,
           "allow_math": true,
@@ -186,58 +245,6 @@
         "stock_search_query": "technology lifestyle",
         "untitled_text": "Untitled",
         "default_quote_author": "Editorial Team"
-      },
-      "llm": {
-        "default_model": "@cf/openai/gpt-oss-120b",
-        "temperature": 0.2,
-        "max_tokens": 2200,
-        "system_prompt": [
-          "You are a senior social growth strategist and marketing copywriter for a personal tech/lifestyle brand.",
-          "Write persuasive but credible platform-native copy with a clear value proposition.",
-          "Use concrete benefits, audience pain points, and action-oriented language.",
-          "Do not invent facts that are not present in the source material.",
-          "Always respond with strict JSON matching the required schema."
-        ],
-        "user_instructions": [
-          "Create platform-ready marketing copy for the blog post below.",
-          "Primary goal: convert attention into intent (read, save, share, click, or follow).",
-          "Constraints:",
-          "- keep one unified campaign angle across all platforms, adapted to native tone per platform.",
-          "- instagram_caption: emotionally engaging hook + concrete value + soft CTA, max <instagram_caption_max_chars> characters.",
-          "- twitter_caption: concise high-signal insight + tangible payoff + quick CTA, max <twitter_caption_max_chars> characters.",
-          "- linkedin_caption: problem -> insight -> action structure in a professional tone, max <linkedin_caption_max_chars> characters.",
-          "- all captions must be plain text only: no markdown headings, no bullet list markers, and no leading #.",
-          "- captions should feel human and specific, not robotic or generic.",
-          "- avoid generic phrases such as game changer, unlock potential, next level, or in today's world.",
-          "- carousel_slides: exactly <required_carousel_slides> items with a narrative arc.",
-          "- carousel narrative shape: slide 1 = hook/intro, middle slides = distinct supporting points, final slide = conclusion with practical next step.",
-          "- each carousel heading: specific 2-6 words, max <carousel_heading_max_chars> characters, never placeholders like Insight 1 / Slide 2 / Key Point.",
-          "- each carousel body: one complete sentence, max <carousel_body_max_chars> characters, plain text only.",
-          "- each carousel slide must add new information; avoid repeated headings or repeated body sentences.",
-          "- hashtags: <hashtag_min_count>-<hashtag_max_count> relevant tags, each beginning with #, no spaces inside a tag.",
-          "- image_prompt: optional BACKGROUND-ONLY art direction aligned with the campaign intent and selected templates (no text, no UI, no logos).",
-          "- use_feature_image: boolean, true only if feature image is present and contextually aligned.",
-          "- stock_search_query: specific keywords for stock photo search (max 10 words, no quotes, no metadata, focus on specific subjects and locations).",
-          "- slot_content: object of string values that MUST include every key from <required_slot_keys>.",
-          "- apply these template composition directives exactly:",
-          "<template_composition_directives>",
-          "Output JSON only."
-        ],
-        "template_planner": {
-          "system_prompt": [
-            "You are an expert template planner for social content automation."
-          ],
-          "user_instructions": [
-            "Choose one best template per requested format based on source content.",
-            "Rules:",
-            "- Return strict JSON only.",
-            "- Use only template ids listed under each format.",
-            "- Use template selection hints and slot requirements to find the closest semantic match.",
-            "- Prefer templates whose slot requirements fit the content naturally.",
-            "- Prefer variety across formats when multiple strong options exist; avoid choosing visually redundant templates for every format.",
-            "- Ensure all requested formats have one selected template id."
-          ]
-        }
       },
       "image": {
         "default_model": "@cf/black-forest-labs/flux-1-schnell",
