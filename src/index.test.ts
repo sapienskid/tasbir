@@ -38,7 +38,7 @@ describe("social pipeline worker", () => {
 
   it("renders template endpoint without CDN script and with token variables", async () => {
     const response = await worker.fetch(
-      authorizedRequest("https://worker.test/template/instagram-portrait?title=Hello&caption=World&brandingColor=%230a8fa5"),
+      authorizedRequest("https://worker.test/template/instagram-portrait?title=Hello&caption=World"),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
