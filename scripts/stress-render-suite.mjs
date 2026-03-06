@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { constants as FS_CONSTANTS } from "node:fs";
+import { access, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import process from "node:process";
 
@@ -9,6 +11,7 @@ const DEFAULT_BASE_URL = "http://127.0.0.1:8787";
 const DEFAULT_IMAGE_URL =
   "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201200%20900%22%3E%3Crect%20width=%221200%22%20height=%22900%22%20fill=%22%230a0a0a%22/%3E%3C/svg%3E";
 const DEFAULT_CONCURRENCY = 2;
+const DEFAULT_RENDERER = "local-browser";
 const HEALTH_TIMEOUT_MS = 60_000;
 const HEALTH_POLL_MS = 500;
 const MAX_RETRY_ATTEMPTS = 6;
@@ -60,6 +63,8 @@ Usage:
   node scripts/stress-render-suite.mjs [options]
 
 Options:
+  --renderer <mode>       Renderer mode: local-browser | cloudflare (default: ${DEFAULT_RENDERER})
+  --chrome-path <path>    Optional Chromium executable path for local-browser mode
   --base-url <url>        Worker URL (default: ${DEFAULT_BASE_URL})
   --out-dir <path>        Output directory (default: renders/stress-suite-<timestamp>)
   --image-url <url>       Image URL for preview renders
@@ -79,6 +84,8 @@ Options:
 function parseArgs(argv) {
   const timestamp = new Date().toISOString().replaceAll(":", "").replaceAll(".", "").replace("T", "-").slice(0, 15);
   const options = {
+    renderer: DEFAULT_RENDERER,
+    chromePath: process.env.LOCAL_CHROME_EXECUTABLE?.trim() || process.env.PUPPETEER_EXECUTABLE_PATH?.trim() || "",
     baseUrl: DEFAULT_BASE_URL,
     outDir: `renders/stress-suite-${timestamp}`,
     imageUrl: DEFAULT_IMAGE_URL,
@@ -116,6 +123,24 @@ function parseArgs(argv) {
     }
     if (arg === "--verbose") {
       options.verbose = true;
+      continue;
+    }
+    if (arg === "--renderer" && next) {
+      options.renderer = next.trim().toLowerCase();
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--renderer=")) {
+      options.renderer = arg.slice("--renderer=".length).trim().toLowerCase();
+      continue;
+    }
+    if (arg === "--chrome-path" && next) {
+      options.chromePath = next.trim();
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--chrome-path=")) {
+      options.chromePath = arg.slice("--chrome-path=".length).trim();
       continue;
     }
 
@@ -208,6 +233,9 @@ function parseArgs(argv) {
   if (options.maxTasks && (!Number.isInteger(options.maxTasks) || options.maxTasks < 1)) {
     throw new Error("--max-tasks must be a positive integer");
   }
+  if (!["local-browser", "cloudflare"].includes(options.renderer)) {
+    throw new Error("--renderer must be one of: local-browser, cloudflare");
+  }
 
   const parsed = new URL(options.baseUrl);
   if (parsed.protocol !== "http:") {
@@ -260,11 +288,14 @@ function startWranglerServer(options) {
       "--port",
       port,
       "--var",
-      "API_AUTH_REQUIRE_FOR_PREVIEW:false"
+      "API_AUTH_REQUIRE_FOR_PREVIEW:false",
+      "--var",
+      "RATE_LIMIT_ENABLED:false"
     ],
     {
       cwd: process.cwd(),
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
+      detached: true
     }
   );
 
@@ -290,13 +321,21 @@ async function stopProcess(child) {
   if (!child || child.exitCode !== null) {
     return;
   }
-  child.kill("SIGTERM");
+  try {
+    process.kill(-child.pid, "SIGTERM");
+  } catch {
+    child.kill("SIGTERM");
+  }
   await Promise.race([
     new Promise((resolvePromise) => child.once("exit", resolvePromise)),
     wait(4_000)
   ]);
   if (child.exitCode === null) {
-    child.kill("SIGKILL");
+    try {
+      process.kill(-child.pid, "SIGKILL");
+    } catch {
+      child.kill("SIGKILL");
+    }
   }
 }
 
@@ -355,12 +394,17 @@ async function loadTemplateCatalogFromGeneratedAssets(formatFilter) {
   const raw = await readFile(GENERATED_ASSETS_PATH, "utf8");
   const generated = JSON.parse(raw);
   const pipelineConfig = generated?.pipeline_config ?? {};
+  const formatConfig = pipelineConfig.formats ?? {};
   const templates = Array.isArray(pipelineConfig.templates) ? pipelineConfig.templates : [];
-  const availableFormats = Object.keys(pipelineConfig.formats ?? {});
+  const availableFormats = Object.keys(formatConfig);
   const activeFormats = formatFilter.length > 0
     ? availableFormats.filter((formatId) => formatFilter.includes(formatId))
     : availableFormats;
-  const formats = activeFormats.map((id) => ({ id }));
+  const formats = activeFormats.map((id) => ({
+    id,
+    width: Number(formatConfig?.[id]?.width ?? 1080),
+    height: Number(formatConfig?.[id]?.height ?? 1080)
+  }));
   const templatesByFormat = {};
 
   for (const format of formats) {
@@ -669,8 +713,8 @@ function buildRenderTasks(catalog, options, stressCases) {
   return options.maxTasks > 0 ? tasks.slice(0, options.maxTasks) : tasks;
 }
 
-async function renderTask(task, options, outputRoot, headers, index, total) {
-  const url = new URL("/preview/screenshot", options.baseUrl);
+function buildTemplatePreviewUrl(task, options) {
+  const url = new URL(`/template/${task.formatId}`, options.baseUrl);
   url.searchParams.set("format", task.formatId);
   url.searchParams.set("templateId", task.templateId);
   url.searchParams.set("title", task.payload.title);
@@ -686,12 +730,15 @@ async function renderTask(task, options, outputRoot, headers, index, total) {
     if (!slotValue) continue;
     url.searchParams.set(`slot.${slotKey}`, slotValue);
   }
+  return url;
+}
 
+async function fetchWithRetry(url, headers) {
   let response = null;
   for (let attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt += 1) {
     response = await fetch(url, { headers });
     if (response.ok) {
-      break;
+      return response;
     }
 
     const bodyPreview = (await response.text()).slice(0, 220).replaceAll(/\s+/g, " ").trim();
@@ -710,17 +757,43 @@ async function renderTask(task, options, outputRoot, headers, index, total) {
     await wait(waitMs);
   }
 
-  if (!response || !response.ok) {
-    throw new Error("Failed to render screenshot after retry attempts");
-  }
+  return response;
+}
 
-  const png = Buffer.from(await response.arrayBuffer());
+function outputFilePathForTask(task, outputRoot) {
   const fileName = [
     sanitizeFilePart(task.templateId),
     sanitizeFilePart(task.caseId),
     sanitizeFilePart(task.templateVersion.slice(0, 8))
   ].join("--") + ".png";
-  const filePath = join(outputRoot, task.formatId, task.caseId, fileName);
+  return join(outputRoot, task.formatId, task.caseId, fileName);
+}
+
+async function renderTaskCloudflare(task, options, outputRoot, headers, index, total) {
+  const url = new URL("/preview/screenshot", options.baseUrl);
+  url.searchParams.set("format", task.formatId);
+  url.searchParams.set("templateId", task.templateId);
+  url.searchParams.set("title", task.payload.title);
+  url.searchParams.set("caption", task.payload.caption);
+  url.searchParams.set("heading", task.payload.heading);
+  url.searchParams.set("body", task.payload.body);
+  url.searchParams.set("brandName", task.payload.brandName);
+  url.searchParams.set("imageUrl", options.imageUrl);
+  url.searchParams.set("slide", task.payload.slide);
+  url.searchParams.set("total", task.payload.total);
+
+  for (const [slotKey, slotValue] of Object.entries(task.slots)) {
+    if (!slotValue) continue;
+    url.searchParams.set(`slot.${slotKey}`, slotValue);
+  }
+
+  const response = await fetchWithRetry(url, headers);
+  if (!response || !response.ok) {
+    throw new Error("Failed to render screenshot after retry attempts");
+  }
+
+  const png = Buffer.from(await response.arrayBuffer());
+  const filePath = outputFilePathForTask(task, outputRoot);
   await mkdir(join(outputRoot, task.formatId, task.caseId), { recursive: true });
   await writeFile(filePath, png);
 
@@ -728,6 +801,141 @@ async function renderTask(task, options, outputRoot, headers, index, total) {
     `[${String(index + 1).padStart(4, "0")}/${String(total).padStart(4, "0")}] ${task.formatId} :: ${task.templateId} :: ${task.caseId} -> ${filePath}`
   );
   return filePath;
+}
+
+async function resolveChromeExecutablePath(explicitPath) {
+  const candidates = [];
+  if (explicitPath?.trim()) {
+    candidates.push(explicitPath.trim());
+  }
+  if (process.env.PUPPETEER_EXECUTABLE_PATH?.trim()) {
+    candidates.push(process.env.PUPPETEER_EXECUTABLE_PATH.trim());
+  }
+  if (process.env.LOCAL_CHROME_EXECUTABLE?.trim()) {
+    candidates.push(process.env.LOCAL_CHROME_EXECUTABLE.trim());
+  }
+
+  candidates.push(
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium"
+  );
+
+  const wranglerChromeRoot = resolve(homedir(), ".cache/.wrangler/chrome");
+  try {
+    const entries = await readdir(wranglerChromeRoot, { withFileTypes: true });
+    const sorted = entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort((a, b) => b.localeCompare(a));
+    for (const versionDir of sorted) {
+      candidates.push(resolve(wranglerChromeRoot, versionDir, "chrome-linux64/chrome"));
+    }
+  } catch {
+    // ignore missing wrangler cache directory
+  }
+
+  const visited = new Set();
+  for (const candidate of candidates) {
+    const normalized = resolve(candidate);
+    if (visited.has(normalized)) continue;
+    visited.add(normalized);
+    try {
+      await access(normalized, FS_CONSTANTS.X_OK);
+      return normalized;
+    } catch {
+      // keep checking
+    }
+  }
+
+  throw new Error(
+    "Unable to find a local Chromium executable for --renderer local-browser. " +
+    "Provide --chrome-path /path/to/chrome or install Chromium/Google Chrome locally."
+  );
+}
+
+async function createLocalBrowserRenderer(options, catalog) {
+  const [{ default: puppeteer }, executablePath] = await Promise.all([
+    import("puppeteer-core"),
+    resolveChromeExecutablePath(options.chromePath)
+  ]);
+
+  const browser = await puppeteer.launch({
+    executablePath,
+    headless: true,
+    args: ["--disable-dev-shm-usage"]
+  });
+
+  const dimensionsByFormat = new Map(
+    (catalog.formats ?? []).map((format) => [
+      format.id,
+      {
+        width: Math.max(1, Number(format.width) || 1080),
+        height: Math.max(1, Number(format.height) || 1080)
+      }
+    ])
+  );
+
+  return {
+    executablePath,
+    async close() {
+      await browser.close();
+    },
+    async renderTask(task, outputRoot, headers, index, total) {
+      const htmlUrl = buildTemplatePreviewUrl(task, options);
+      const response = await fetchWithRetry(htmlUrl, headers);
+      if (!response || !response.ok) {
+        throw new Error("Failed to fetch template HTML after retry attempts");
+      }
+
+      const html = await response.text();
+      const size = dimensionsByFormat.get(task.formatId) ?? { width: 1080, height: 1080 };
+      const page = await browser.newPage();
+      const filePath = outputFilePathForTask(task, outputRoot);
+      await mkdir(join(outputRoot, task.formatId, task.caseId), { recursive: true });
+
+      try {
+        await page.setViewport({ width: size.width, height: size.height, deviceScaleFactor: 1 });
+        await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15_000 });
+        await page.waitForFunction(
+          "() => typeof window.__RICH_RENDER_DONE__ === 'undefined' || window.__RICH_RENDER_DONE__ === true",
+          { timeout: 7_000 }
+        );
+        await page.evaluate(async () => {
+          const timeout = (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+          try {
+            await Promise.race([document.fonts.ready, timeout(4_000)]);
+          } catch {
+            // ignore font waiting failures
+          }
+          const images = Array.from(document.images);
+          await Promise.all(
+            images.map(async (image) => {
+              try {
+                await image.decode();
+              } catch {
+                // ignore image decode failures
+              }
+            })
+          );
+        });
+
+        const png = await page.screenshot({
+          type: "png",
+          clip: { x: 0, y: 0, width: size.width, height: size.height }
+        });
+        await writeFile(filePath, png);
+      } finally {
+        await page.close();
+      }
+
+      console.log(
+        `[${String(index + 1).padStart(4, "0")}/${String(total).padStart(4, "0")}] ${task.formatId} :: ${task.templateId} :: ${task.caseId} -> ${filePath}`
+      );
+      return filePath;
+    }
+  };
 }
 
 async function runWithConcurrency(tasks, concurrency, worker) {
@@ -1249,6 +1457,7 @@ async function main() {
   let startedServer = false;
   let serverProcess = null;
   let serverLogTail = [];
+  let localBrowserRenderer = null;
 
   try {
     if (options.build) {
@@ -1281,8 +1490,19 @@ async function main() {
 
     await mkdir(outputRoot, { recursive: true });
     console.log(`Rendering ${tasks.length} stress screenshots (${stressCases.length} case(s))...`);
-    const runSummary = await runWithConcurrency(tasks, options.concurrency, (task, index, total) =>
-      renderTask(task, options, outputRoot, headers, index, total)
+    console.log(`Renderer mode: ${options.renderer}`);
+
+    if (options.renderer === "local-browser") {
+      localBrowserRenderer = await createLocalBrowserRenderer(options, catalog);
+      console.log(`Using Chromium executable: ${localBrowserRenderer.executablePath}`);
+    }
+
+    const runSummary = await runWithConcurrency(
+      tasks,
+      options.concurrency,
+      options.renderer === "local-browser"
+        ? (task, index, total) => localBrowserRenderer.renderTask(task, outputRoot, headers, index, total)
+        : (task, index, total) => renderTaskCloudflare(task, options, outputRoot, headers, index, total)
     );
 
     const summary = summarizeFailures(tasks, runSummary.failures, startedAt, outputRoot);
@@ -1318,6 +1538,9 @@ async function main() {
       process.exitCode = 1;
     }
   } finally {
+    if (localBrowserRenderer) {
+      await localBrowserRenderer.close();
+    }
     if (startedServer && serverProcess && !options.keepServer) {
       await stopProcess(serverProcess);
     }

@@ -17,6 +17,7 @@
     "@types/markdown-it": "^14.1.2",
     "chokidar-cli": "^3.0.0",
     "concurrently": "^9.2.1",
+    "puppeteer-core": "^24.38.0",
     "tailwindcss": "^4.1.0",
     "typescript": "latest",
     "vitest": "^3.2.4",
