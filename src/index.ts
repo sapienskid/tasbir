@@ -224,7 +224,7 @@ interface GenerationResult {
   }>;
 }
 
-type ProtectedRoute = "preview" | "catalog" | "generate" | "generate-from-content" | "webhook";
+type ProtectedRoute = "preview" | "generate" | "generate-from-content" | "webhook";
 
 interface SecurityConfig {
   api_auth: {
@@ -299,7 +299,7 @@ const SECURITY_DEFAULTS: SecurityConfig = {
 };
 
 const RATE_LIMIT_BUCKETS = new Map<string, { count: number; resetAt: number }>();
-const PROTECTED_ROUTE_SET = new Set<ProtectedRoute>(["preview", "catalog", "generate", "generate-from-content", "webhook"]);
+const PROTECTED_ROUTE_SET = new Set<ProtectedRoute>(["preview", "generate", "generate-from-content", "webhook"]);
 
 const DEFAULT_IMAGE_MODEL = PIPELINE_CONFIG.generation.image.default_model;
 const DEFAULT_CAROUSEL_SLIDES = PIPELINE_CONFIG.generation.carousel_required_slides;
@@ -379,27 +379,6 @@ export default {
         return finalizeResponse(request, security, await handlePreviewScreenshot(url, env));
       }
 
-      if (request.method === "GET" && url.pathname === "/preview") {
-        enforceRouteSecurity(request, security, "preview");
-        if (!PIPELINE_CONFIG.features.enable_template_preview) {
-          throw new HttpError(403, "Template preview route is disabled by configuration");
-        }
-        return finalizeResponse(request, security, handlePreviewWorkspace());
-      }
-
-      if (request.method === "GET" && url.pathname === "/preview/gallery") {
-        enforceRouteSecurity(request, security, "preview");
-        if (!PIPELINE_CONFIG.features.enable_template_preview) {
-          throw new HttpError(403, "Template preview route is disabled by configuration");
-        }
-        return finalizeResponse(request, security, handlePreviewGallery());
-      }
-
-      if (request.method === "GET" && url.pathname === "/template-catalog") {
-        enforceRouteSecurity(request, security, "catalog");
-        return finalizeResponse(request, security, handleTemplateCatalog());
-      }
-
       if (request.method === "GET" && url.pathname === "/health") {
         return finalizeResponse(request, security, json({ ok: true }));
       }
@@ -469,9 +448,6 @@ export default {
               "POST /generate-from-content",
               "POST /webhook/ghost",
               "GET /preview/screenshot?format=...&templateId=...",
-              "GET /preview",
-              "GET /preview/gallery",
-              "GET /template-catalog",
               ...TEMPLATE_KINDS.map((kind) => `GET /template/${kind}?...`)
             ]
           },
@@ -498,49 +474,6 @@ function handleTemplatePreview(url: URL): Response {
       "cache-control": "no-store"
     }
   });
-}
-
-function handleTemplateCatalog(): Response {
-  return json(buildTemplateCatalogPayload());
-}
-
-function handlePreviewWorkspace(): Response {
-  return renderPreviewSystemTemplate("@system/preview-index");
-}
-
-function handlePreviewGallery(): Response {
-  return renderPreviewSystemTemplate("@system/preview-gallery");
-}
-
-function renderPreviewSystemTemplate(templateId: string): Response {
-  const template = (TEMPLATE_FILES as Record<string, string>)[templateId];
-  if (!template) {
-    throw new HttpError(500, `Missing system template: ${templateId}`);
-  }
-
-  const html = interpolateHtmlTemplate(template, {
-    TEMPLATE_CSS: TEMPLATE_CSS.replaceAll("</style", "<\\/style"),
-    PREVIEW_DEFAULTS_JSON: escapeJsonForHtml(JSON.stringify(buildPreviewDefaultsPayload()))
-  });
-
-  return new Response(html, {
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-store"
-    }
-  });
-}
-
-function buildPreviewDefaultsPayload() {
-  const defaultImageUrl = getPreviewDefaultImageUrl();
-  return {
-    title: PIPELINE_CONFIG.preview_defaults.title,
-    caption: PIPELINE_CONFIG.preview_defaults.caption,
-    heading: PIPELINE_CONFIG.preview_defaults.heading,
-    body: PIPELINE_CONFIG.preview_defaults.body,
-    brandName: PIPELINE_CONFIG.brand.default_name,
-    imageUrl: defaultImageUrl
-  };
 }
 
 async function maybeServeStaticAsset(request: Request, env: Env): Promise<Response | null> {
@@ -581,98 +514,6 @@ async function handlePreviewScreenshot(url: URL, env: Env): Promise<Response> {
   } finally {
     await browser.close();
   }
-}
-
-function buildTemplateCatalogPayload() {
-  const defaultImageUrl = getPreviewDefaultImageUrl();
-  const templateFileMap = TEMPLATE_FILES as Record<string, string>;
-  const allKinds = listTemplateKinds();
-
-  const templates = (PIPELINE_CONFIG.templates as ReadonlyArray<{
-    id: string;
-    label: string;
-    description?: string;
-    file: string;
-    format?: TemplateKind;
-    formats?: TemplateKind[];
-  }>).map((template) => {
-    const templateMarkup = templateFileMap[template.id] ?? "";
-    const fields = listTemplateFields(template.id);
-    return {
-      id: template.id,
-      label: template.label,
-      description: template.description ?? "",
-      file: template.file,
-      format: template.format,
-      formats: template.formats,
-      fields,
-      required_slot_keys: fields.map((f) => f.key),
-      version: stableShortHash(`${template.id}:${templateMarkup}`)
-    };
-  });
-
-  const templatesByFormat = allKinds.reduce(
-    (acc, kind) => {
-      acc[kind] = templates.filter((template) => templateSupportsFormat(template, kind)).map((t) => t.id);
-      return acc;
-    },
-    {} as Record<TemplateKind, string[]>
-  );
-
-  const formats = allKinds.map((kind) => ({
-    id: kind,
-    width: PIPELINE_CONFIG.formats[kind].width,
-    height: PIPELINE_CONFIG.formats[kind].height,
-    caption_source: PIPELINE_CONFIG.formats[kind].caption_source,
-    hashtag_count: PIPELINE_CONFIG.formats[kind].hashtag_count,
-    default_template_id: PIPELINE_CONFIG.formats[kind].default_template_id
-  }));
-
-  const catalogVersion = stableShortHash(
-    JSON.stringify({
-      schema_version: PIPELINE_CONFIG.schema_version,
-      templates: templates.map((template) => `${template.id}:${template.version}`)
-    })
-  );
-
-  return {
-    ok: true,
-    schema_version: PIPELINE_CONFIG.schema_version,
-    catalog_version: catalogVersion,
-    defaults: {
-      carousel_required_slides: PIPELINE_CONFIG.generation.carousel_required_slides,
-      preview: {
-        title: PIPELINE_CONFIG.preview_defaults.title,
-        caption: PIPELINE_CONFIG.preview_defaults.caption,
-        heading: PIPELINE_CONFIG.preview_defaults.heading,
-        body: PIPELINE_CONFIG.preview_defaults.body,
-        brandName: PIPELINE_CONFIG.brand.default_name,
-        imageUrl: defaultImageUrl
-      }
-    },
-    formats,
-    templates,
-    templates_by_format: templatesByFormat
-  };
-}
-
-function getPreviewDefaultImageUrl(): string {
-  const defaults = PIPELINE_CONFIG.preview_defaults as Record<string, unknown>;
-  return typeof defaults.image_url === "string" ? defaults.image_url : "";
-}
-
-function interpolateHtmlTemplate(template: string, tokens: Record<string, string>): string {
-  return template.replace(/\{\{\s*([A-Z0-9_:-]+)\s*\}\}/g, (_match, rawKey: string) => {
-    const key = rawKey.trim().toUpperCase();
-    return tokens[key] ?? "";
-  });
-}
-
-function escapeJsonForHtml(value: string): string {
-  return value
-    .replaceAll("&", "\\u0026")
-    .replaceAll("<", "\\u003c")
-    .replaceAll(">", "\\u003e");
 }
 
 function matchTemplateKind(pathname: string): TemplateKind | null {
@@ -836,7 +677,6 @@ function enforceApiAuth(request: Request, security: ResolvedSecurityConfig, rout
   }
   const routeNeedsAuth =
     (route === "preview" && security.api_auth.require_for_preview) ||
-    (route === "catalog" && security.api_auth.require_for_preview) ||
     (route === "generate" && security.api_auth.require_for_generate) ||
     (route === "generate-from-content" && security.api_auth.require_for_direct_content) ||
     (route === "webhook" && security.api_auth.require_for_webhook);
@@ -2454,7 +2294,7 @@ function inferSlotFallbackValue(slotKey: string, context: SlotFallbackContext): 
   const stepMatch = normalized.match(/^step_(\d+)$/);
   if (stepMatch?.[1]) {
     const stepIndex = Math.max(Number.parseInt(stepMatch[1], 10) - 1, 0);
-    return context.slideHeadings[stepIndex] || `Step ${stepIndex + 1}`;
+    return context.slideHeadings[stepIndex] || context.title;
   }
 
   if (normalized === "step_number" || normalized.endsWith("_number")) {
@@ -2465,16 +2305,16 @@ function inferSlotFallbackValue(slotKey: string, context: SlotFallbackContext): 
   }
 
   if (normalized.includes("metric") && normalized.includes("value")) {
-    return "2.4K";
+    return extractNumericHint(context.fallbackLine) || String(Math.max(context.slideCount, 1));
   }
   if (normalized.includes("metric") && (normalized.includes("label") || normalized.includes("name"))) {
-    return "Weekly readers";
+    return context.title;
   }
   if (normalized.includes("cta")) {
-    return "Read more";
+    return deriveLeadingPhrase(context.title, 4);
   }
   if (normalized === "kicker" || normalized.endsWith("_kicker")) {
-    return "INSIGHT";
+    return deriveLeadingPhrase(context.title, 3);
   }
   if (normalized === "quote_author" || normalized.endsWith("_author")) {
     return context.brandName || context.defaultQuoteAuthor;
@@ -2505,6 +2345,23 @@ function inferSlotFallbackValue(slotKey: string, context: SlotFallbackContext): 
   }
 
   return context.fallbackLine;
+}
+
+function extractNumericHint(value: string): string {
+  const match = value.match(/\d+(?:[.,]\d+)?\s*[KkMmBb%]?/);
+  if (!match?.[0]) {
+    return "";
+  }
+  return match[0].trim();
+}
+
+function deriveLeadingPhrase(value: string, maxWords: number): string {
+  const words = value
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter(Boolean)
+    .slice(0, Math.max(maxWords, 1));
+  return words.join(" ");
 }
 
 function normalizeSlotKey(input: string): string {

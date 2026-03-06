@@ -64,22 +64,20 @@ describe("social pipeline worker", () => {
     expect(html).not.toContain("CAROUSEL");
   });
 
-  it("renders preview gallery endpoint", async () => {
+  it("returns 404 for removed preview gallery endpoint", async () => {
     const response = await worker.fetch(
       authorizedRequest("https://worker.test/preview/gallery"),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
 
-    expect(response.status).toBe(200);
-    const html = await response.text();
-    expect(html).toContain("Premium Template Gallery");
+    expect(response.status).toBe(404);
   });
 
   it("resolves preview templates with slot values", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/instagram-portrait?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal+that+compounds"
+        "https://worker.test/template/instagram-portrait?templateId=layout/grid-feature&slot.item_title=Signal+that+compounds&slot.item_body=Metric+context+from+LLM&slot.item_tag=Engagement"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -87,9 +85,9 @@ describe("social pipeline worker", () => {
 
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('data-template-id="layout/single-metric-focus"');
+    expect(html).toContain('data-template-id="layout/grid-feature"');
     expect(html).not.toContain("data-template-archetype=");
-    expect(html).toContain("9.8K");
+    expect(html).toContain("Engagement");
     expect(html).toContain("Signal that compounds");
   });
 
@@ -120,46 +118,24 @@ describe("social pipeline worker", () => {
     expect(html).not.toContain("style-data");
   });
 
-  it("returns template catalog with template versions", async () => {
+  it("returns 404 for removed template catalog endpoint", async () => {
     const response = await worker.fetch(
       authorizedRequest("https://worker.test/template-catalog"),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
 
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      ok: boolean;
-      schema_version: number;
-      catalog_version: string;
-      templates: Array<{ id: string; version: string }>;
-      templates_by_format: Record<string, string[]>;
-    };
-
-    expect(body.ok).toBe(true);
-    expect(body.schema_version).toBe(1);
-    expect(typeof body.catalog_version).toBe("string");
-    expect(body.templates.length).toBeGreaterThan(0);
-    expect(body.templates[0].version.length).toBeGreaterThan(0);
-    expect(body.templates_by_format["instagram-portrait"].length).toBeGreaterThan(0);
+    expect(response.status).toBe(404);
   });
 
-  it("filters template catalog by explicit template format compatibility", async () => {
+  it("returns 404 for removed preview workspace endpoint", async () => {
     const response = await worker.fetch(
-      authorizedRequest("https://worker.test/template-catalog"),
+      authorizedRequest("https://worker.test/preview"),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
     );
 
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as {
-      templates_by_format: Record<string, string[]>;
-    };
-
-    expect(body.templates_by_format["carousel-post"]).toContain("layout/carousel-cover-hero");
-    expect(body.templates_by_format["carousel-post"]).toContain("layout/carousel-step-content");
-    expect(body.templates_by_format["twitter-card"]).not.toContain("layout/carousel-cover-hero");
-    expect(body.templates_by_format["twitter-card"]).not.toContain("layout/carousel-step-content");
+    expect(response.status).toBe(404);
   });
 
   it("generates assets from direct plain-content endpoint", async () => {
