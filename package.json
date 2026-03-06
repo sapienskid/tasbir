@@ -4,17 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --local --live-reload",
+    "dev": "pnpm run preview",
+    "dev:api": "wrangler dev --local --live-reload",
     "dev:remote": "wrangler dev --remote",
     "deploy": "wrangler deploy",
     "check": "tsc --noEmit",
     "build:styles": "pnpm exec tailwindcss -i ./src/styles/template.css -o ./src/generated/template.css",
-    "build:templates": "pnpm run build:styles && node ./scripts/embed-template-assets.mjs",
-    "build:assets": "pnpm run build:templates",
-    "watch:assets": "pnpm exec chokidar \"templates/**/*.html\" \"src/styles/**/*.css\" \"config/pipeline/**/*.yaml\" \"src/templates.ts\" \"src/template-theme.ts\" \"scripts/embed-template-assets.mjs\" -c \"pnpm run build:assets\" --debounce 250",
-    "render:previews": "node ./scripts/render-template-previews.mjs",
-    "render:previews:ig-portrait": "node ./scripts/render-instagram-portrait-previews.mjs",
-    "dev:templates": "pnpm run build:assets && pnpm exec concurrently --kill-others-on-fail --names \"assets,worker\" --prefix-colors \"yellow,cyan\" \"pnpm run watch:assets\" \"pnpm exec wrangler dev --local --live-reload --ip 127.0.0.1 --port 8787 --var API_AUTH_REQUIRE_FOR_PREVIEW:false\"",
+    "build:assets": "pnpm run build:styles && node ./scripts/embed-template-assets.mjs",
+    "watch:assets": "pnpm exec chokidar \"templates/**/*.html\" \"src/styles/**/*.css\" \"config/pipeline/**/*.yaml\" \"scripts/embed-template-assets.mjs\" -c \"pnpm run build:assets\" --debounce 250",
+    "preview": "pnpm run build:assets && pnpm exec concurrently --kill-others-on-fail --names \"assets,worker\" --prefix-colors \"yellow,cyan\" \"pnpm run watch:assets\" \"pnpm exec wrangler dev --local --live-reload --ip 127.0.0.1 --port 8787 --var API_AUTH_REQUIRE_FOR_PREVIEW:false\"",
     "test": "vitest run"
   },
   "devDependencies": {
