@@ -205,6 +205,25 @@ No TypeScript template registration is required.
 - `POST /generate-from-content`
 - `POST /webhook/ghost`
 
+## Local Stress Render Suite
+
+Run a local screenshot stress sweep with synthetic payloads (plain short/long, markdown-heavy, math-heavy, mermaid-style diagram strings, mixed payloads).
+
+```bash
+pnpm run render:stress -- --build --concurrency 1
+```
+
+Useful targeted run:
+
+```bash
+pnpm run render:stress -- --cases plain-short,markdown-rich,math-heavy --formats instagram-square,twitter-card --max-tasks 30
+```
+
+Outputs:
+
+- `renders/stress-suite-*/report.json`
+- `renders/stress-suite-*/failures.json`
+
 ## Agentic Controls
 
 Request payloads may include:
