@@ -5,9 +5,15 @@
 @formats: instagram-story,twitter-card,linkedin-post,instagram-portrait,carousel-post
 @background_image: inline
 
-@slot byline | text | Author/byline text | ANALYST: J. DOE
-@slot publish_date | text | Publish date text | Q1 2026
-@slot media_caption | text | Caption or annotation for media | FIG. 01 / PROTOTYPE
+@slot byline | text | Author/byline text  | 
+@slot publish_date | text | Publish date text  | 
+@slot media_caption | text | Caption or annotation for media  | 
+@slot footer_meta | text | Bottom footer metadata line  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
 <div class="relative z-10 flex h-full w-full bg-brand-surface text-brand-primary">
@@ -40,7 +46,7 @@
     </main>
 
     <footer class="mt-12 text-[10px] font-brand-body font-bold uppercase tracking-[0.4em] text-brand-muted">
-      VERIFIED / 2024 SYSTEM RECORD
+      {{SLOT:footer_meta}}
     </footer>
   </section>
 

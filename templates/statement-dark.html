@@ -5,8 +5,13 @@
 @formats: instagram-square,instagram-portrait,carousel-post,linkedin-post
 @frame_tone: dark
 
-@slot cta_text | text | Short call-to-action button label | VIEW CASE
-@slot footer_label | text | Small footer metadata | ARCHIVE-01
+@slot cta_text | text | Short call-to-action button label  | 
+@slot footer_label | text | Small footer metadata  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
 <div
@@ -42,7 +47,7 @@
       {{SLOT:cta_text}}
     </div>
     <div class="text-[12px] font-brand-body font-bold uppercase tracking-[0.4em] text-brand-muted">
-      {{SLOT:footer_label}} / 2024
+      {{SLOT:footer_label}}
     </div>
   </footer>
 </div>

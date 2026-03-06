@@ -4,8 +4,14 @@
 @description: High-impact Swiss-style closing card to drive specific actions
 @formats: instagram-square,instagram-portrait,carousel-post,linkedin-post
 
-@slot cta_text | text | Short call-to-action button label | EXPLORE NOW
-@slot footer_note | text | Small footer text | LIMITED RELEASE
+@slot cta_text | text | Short call-to-action button label  | 
+@slot footer_note | text | Small footer text  | 
+@slot rights_note | text | Footer legal or archival note  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
 <div
@@ -41,7 +47,7 @@
       {{SLOT:footer_note}}
     </div>
     <div class="font-brand-body text-[12px] font-bold uppercase tracking-[0.1em] text-brand-surface/60">
-      EST. 2024 / ALL RIGHTS RESERVED
+      {{SLOT:rights_note}}
     </div>
   </footer>
 </div>

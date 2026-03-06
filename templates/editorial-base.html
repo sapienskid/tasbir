@@ -4,7 +4,14 @@
 @description: Modern Swiss editorial layout with asymmetric grid and high contrast
 @formats: instagram-square,instagram-portrait,carousel-post,linkedin-post
 
-@slot sidebar_label | text | Small vertical label for the sidebar | PERSPECTIVES
+@slot sidebar_label | text | Small vertical label for the sidebar  | 
+@slot issue_meta | text | Header metadata line  | 
+@slot footer_meta | text | Footer metadata line  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
 <div class="relative z-10 flex h-full w-full bg-brand-surface text-brand-primary">
@@ -28,7 +35,7 @@
         {{SLIDE_LABEL}}
       </div>
       <div class="font-brand-body text-[14px] font-bold uppercase tracking-[0.2em] text-brand-muted">
-        VOL. 01 / ISSUE 04
+        {{SLOT:issue_meta}}
       </div>
     </header>
 
@@ -48,7 +55,7 @@
 
     <footer class="mt-16 w-full h-1 bg-brand-primary relative">
       <div class="absolute right-0 top-3 font-brand-body text-[12px] font-bold uppercase tracking-[0.4em]">
-        PUBLISHED SYSTEM RECORD / 2024
+        {{SLOT:footer_meta}}
       </div>
     </footer>
   </main>

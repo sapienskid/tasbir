@@ -4,9 +4,14 @@
 @description: High-impact Swiss-style pull-quote layout with author attribution
 @formats: instagram-square,instagram-portrait,carousel-post,linkedin-post
 
-@slot quote_text | text | The quote or pull-quote text to display prominently
-@slot quote_author | text | Name of the person being quoted | Editorial Team
-@slot author_role | text | Role or title of the quoted person | CREATIVE DIRECTOR
+@slot quote_text | text | The quote or pull-quote text to display prominently | 
+@slot quote_author | text | Name of the person being quoted  | 
+@slot author_role | text | Role or title of the quoted person  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
 <div class="relative z-10 flex h-full w-full bg-brand-surface text-brand-primary p-[var(--token-space-gutter)]">

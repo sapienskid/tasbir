@@ -4,7 +4,15 @@
 @description: Swiss-style opening slide for carousel narratives
 @formats: carousel-post
 
-@slot series_label | text | Short series or topic label displayed above the headline | SERIES / VOL. 1
+@slot series_label | text | Short series or topic label displayed above the headline  | 
+@slot sidebar_prompt | text | Left vertical prompt label  | 
+@slot swipe_prompt | text | Footer continuation label  | 
+@slot footer_meta | text | Footer metadata label  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
 <div class="relative z-10 grid h-full w-full grid-cols-12 bg-brand-surface text-brand-primary">
@@ -13,7 +21,7 @@
     class="col-span-1 border-r border-brand-primary flex flex-col items-center justify-center py-10 bg-brand-primary text-brand-surface">
     <div
       class="rotate-[-90deg] whitespace-nowrap font-brand-body text-[14px] font-black uppercase tracking-[0.5em] origin-center">
-      START HERE
+      {{SLOT:sidebar_prompt}}
     </div>
   </aside>
 
@@ -48,10 +56,10 @@
     <footer class="mt-auto px-4 py-8 flex items-center justify-between border-t-2 border-brand-primary/10">
       <div class="flex items-center gap-4">
         <span class="w-12 h-1 bg-brand-primary"></span>
-        <span class="font-brand-body text-[12px] font-black uppercase tracking-[0.3em]">CONTINUE SWIPING</span>
+        <span class="font-brand-body text-[12px] font-black uppercase tracking-[0.3em]">{{SLOT:swipe_prompt}}</span>
       </div>
       <div class="font-brand-body text-[12px] font-bold uppercase tracking-[0.2em] text-brand-muted">
-        2024 / SYSTEM RECORD
+        {{SLOT:footer_meta}}
       </div>
     </footer>
   </main>

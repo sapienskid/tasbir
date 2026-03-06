@@ -4,8 +4,14 @@
 @description: High-impact Swiss-style statement layout with a primary CTA block
 @formats: instagram-square,instagram-portrait,carousel-post,linkedin-post
 
-@slot cta_text | text | Short call-to-action button label | Read More
-@slot kicker_text | text | Small label above heading | CASE STUDY
+@slot cta_text | text | Short call-to-action button label  | 
+@slot kicker_text | text | Small label above heading  | 
+@slot footer_meta | text | Footer metadata label  | 
+@slot brand_icon_url | image_url | SVG or image URL for the brand icon layer | /images/brand/icon.svg
+@slot brand_icon_x | number | Brand icon horizontal position in percent | 95.6
+@slot brand_icon_y | number | Brand icon vertical position in percent | 96.3
+@slot brand_icon_size | number | Brand icon size in px | 34
+@slot brand_icon_opacity | number | Brand icon opacity | 0.95
 @slot brand_icon_visible | text | Set to 0 to hide icon layer | 1
 -->
 <div
@@ -47,7 +53,7 @@
       {{SLOT:cta_text}}
     </div>
     <div class="text-[12px] font-brand-body font-bold uppercase tracking-[0.4em] text-brand-muted">
-      2024 / DESIGN SYSTEM
+      {{SLOT:footer_meta}}
     </div>
   </footer>
 </div>
