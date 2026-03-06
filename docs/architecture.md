@@ -6,13 +6,13 @@ This document describes the current runtime architecture (as of March 6, 2026), 
 
 ```mermaid
 flowchart TD
-    A[Author templates + config + CSS] --> B[pnpm run build:assets]
+    A[Author templates + config + CSS] --> B[pnpm run build]
     B --> C[scripts/embed-template-assets.mjs]
     C --> D[src/generated/template-assets.json]
     D --> E[Worker runtime imports generated assets]
 ```
 
-`pnpm run build:assets`:
+`pnpm run build`:
 
 1. loads and merges `config/pipeline.config.yaml` + fragments
 2. discovers templates from `templates/*.html` and system templates
@@ -125,8 +125,8 @@ Runtime behavior:
 - Instagram feed: portrait/square variants
 - Instagram carousel: intro, middle, ending slides planned by strategist agent
 - Instagram story: short, CTA-forward sequence planned separately from feed
-- Facebook: mapped from Instagram strategy/assets with platform-native copy adaptation
 - LinkedIn and X/Twitter: unique post variants, not resized duplicates
+- Facebook is not a first-class render format yet; reuse/export from existing rendered formats.
 
 ## Content and Render Guardrails
 
@@ -135,10 +135,8 @@ Runtime behavior:
 - render math syntax (`$...$`, `$$...$$`) via server-side KaTeX (MathML output)
 - render Mermaid fenced blocks via shell-side Mermaid runtime to SVG
 - screenshot capture waits for `window.__RICH_RENDER_DONE__` to prevent half-rendered diagrams
-- preflight text-fit checks per slot:
-- estimate line-wrap and bounding boxes
-- adjust font-size/line-height or switch template variant
-- reject/post-process outputs that would overflow or hide text
+- apply slot/content length bounds before render
+- sanitize visual text according to render policy (hashtags/markdown/math/diagram rules)
 - avoid mid-sentence truncation via completion-aware clipping and sentence-boundary rules
 
 ## Cloudflare Research Notes

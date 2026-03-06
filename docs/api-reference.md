@@ -77,7 +77,7 @@ Slot values:
 ### Example
 
 ```bash
-curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context" \
+curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/statement-cta&slot.headline=Signal%20that%20compounds&slot.supporting_line=One%20pipeline%20for%20all%20formats&slot.cta_text=Read%20Guide" \
   -H 'x-api-key: your-api-key'
 ```
 
@@ -98,10 +98,10 @@ Optional:
 - `slotOverrides` (`{ [slotKey]: value }`)
 - `storage`
 - `notifyUrl`
-- `llm`
 - `image`
 - `output`
 - `campaign`
+- `agent`
 
 ### Minimal Example
 
@@ -118,16 +118,28 @@ Optional:
   "url": "https://blog.example.com/future-of-content-ops/",
   "prompt": "Practical tone for technical founders.",
   "templateIds": {
-    "instagram-square": "layout/single-metric-focus",
+    "instagram-square": "layout/statement-cta",
     "twitter-card": "layout/statement-cta"
   },
   "slotOverrides": {
-    "metric_value": "2.4K",
-    "metric_label": "Weekly readers"
+    "headline": "Signal that compounds",
+    "supporting_line": "Weekly readers up 24%",
+    "cta_text": "Read now"
   },
   "image": {
     "mode": "custom",
     "customUrl": "https://images.example.com/backgrounds/launch.jpg"
+  },
+  "agent": {
+    "mode": "agentic",
+    "promptProfile": "default",
+    "renderPolicy": {
+      "allowMarkdown": true,
+      "allowMath": true,
+      "allowDiagrams": true,
+      "allowTextInAiImages": false,
+      "stripHashtagsInVisualSlots": true
+    }
   },
   "output": {
     "formats": ["twitter-card", "linkedin-post"],
@@ -245,15 +257,11 @@ Top-level response contains:
 - `linkedin_post`
 - `carousel` (array)
 
-## LLM Overrides (`llm`)
+## Legacy LLM Overrides (`llm`)
 
-Optional field accepted by both generation endpoints:
+Legacy `llm` overrides are removed. Sending `llm` now returns:
 
-- `systemPrompt` (`string` or `string[]`)
-- `userInstructions` (`string` or `string[]`)
-- `userInstructionsAppend` (`string`)
-- `temperature` (`number`, clamped to `0..2`)
-- `maxTokens` (`number`, clamped to `256..4096`)
+- `400 Legacy llm overrides are removed. Use agent.promptProfile and agent.renderPolicy.`
 
 ## Image Options (`image`)
 
@@ -265,33 +273,31 @@ Optional field accepted by both generation endpoints:
 - `allowAi`: optional boolean override
 - `preferFeature`: optional boolean override
 
-## Proposed Agentic Contract (Design Only)
+## Agent Options (`agent`)
 
-This contract is planned and not currently implemented.
+`agent` is implemented and accepted by both generation endpoints.
 
-Goal: use an orchestrator agent to plan and generate multi-platform campaigns from source content.
+Supported fields:
 
-Recommended request additions:
+- `mode`: `agentic` (only supported value)
+- `promptProfile`: profile key from `config/pipeline/content.yaml`
+- `platformGoals`: optional platform targeting hints
 
-- `agent.mode`: `orchestrated`
-- `agent.promptProfile`: central prompt profile key (for behavior customization)
-- `agent.platformGoals.instagram`: feed/carousel/story counts
-- `agent.platformGoals.facebook`: reuse/mutate Instagram plan
-- `agent.platformGoals.linkedin`: post count and tone controls
-- `agent.platformGoals.twitter`: post count and brevity controls
-- `agent.renderPolicy.allowMarkdown`: boolean
-- `agent.renderPolicy.allowMath`: boolean
-- `agent.renderPolicy.allowDiagrams`: boolean
-- `agent.renderPolicy.allowTextInAiImages`: default `false`
+`platformGoals.<platform>` supports:
 
-Recommended response additions:
+- `posts`, `feed`, `carousel`, `story` (integers, `0..20`)
 
-- `campaign_plan.platform_posts[]` with platform, post_type, angle, template_id
-- `creative_decisions[]` with rationale for template and format choices
-- `render_checks[]` with overflow/fit/markup validation status
-- `prompt_trace` (optional) with prompt profile/version IDs used by each agent role
+Supported `renderPolicy` fields:
 
-Recommended error behavior:
+- `allowMarkdown`
+- `allowMath`
+- `allowDiagrams`
+- `allowTextInAiImages`
+- `stripHashtagsInVisualSlots`
 
-- `422` when required template slot keys are missing after retries/fallback
-- `422` when render fit checks fail and no valid fallback template is found
+Response includes `agentic` metadata:
+
+- `mode`
+- `prompt_profile`
+- `applied_roles`
+- `warnings`

@@ -14,7 +14,7 @@ Composed fragments:
 
 ## Build Integration
 
-`pnpm run build:templates`:
+`pnpm run build`:
 
 1. merges config fragments
 2. auto-discovers templates from `templates/*.html`
@@ -193,6 +193,7 @@ Runtime constants:
 Feature toggles:
 
 - `enable_template_preview`
+- `enable_agentic_orchestration`
 - `enable_ai_image_generation`
 - `prefer_feature_image`
 - `enable_notifications`

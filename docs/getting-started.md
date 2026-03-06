@@ -24,6 +24,7 @@ Check `wrangler.jsonc` contains bindings used by runtime:
 - `AI`
 - `BROWSER`
 - `OUTPUT_BUCKET`
+- `MARKETING_ORCHESTRATOR` (recommended for agentic orchestration)
 
 Keep binding names aligned with `src/index.ts`.
 
@@ -45,10 +46,11 @@ Required for Ghost-backed flow (`/generate`, `/webhook/ghost`):
 - `GHOST_CONTENT_API_KEY`
 - `GHOST_WEBHOOK_TOKEN` (webhook route)
 
+If you only use direct-content flow (`/generate-from-content`), you can leave Ghost vars unset.
+
 Common optional values:
 
 - `R2_PUBLIC_BASE_URL`
-- `DEFAULT_BRAND_COLOR`
 - `BRAND_NAME`
 - `LLM_MODEL`
 - `IMAGE_MODEL`
@@ -64,7 +66,7 @@ Run after any change in:
 Command:
 
 ```bash
-pnpm run build:assets
+pnpm run build
 ```
 
 This regenerates `src/generated/template-assets.json`.
@@ -72,7 +74,7 @@ This regenerates `src/generated/template-assets.json`.
 ## 5. Run Locally
 
 ```bash
-pnpm run dev:design
+pnpm run dev
 ```
 
 Health check:
@@ -150,7 +152,7 @@ You can also pass `url` instead of `slug`.
 3. Run:
 
 ```bash
-pnpm run build:templates
+pnpm run build
 ```
 
 4. Verify:
@@ -160,8 +162,7 @@ pnpm run build:templates
 ## 10. Validate Before Commit
 
 ```bash
-pnpm run build:assets
-pnpm run check
+pnpm run build
 pnpm run test
 ```
 

@@ -5,13 +5,12 @@ Production deployment workflow for the Cloudflare Worker runtime.
 ## 1. Validate Before Deploy
 
 ```bash
-pnpm run build:assets
-pnpm run check
+pnpm run build
 pnpm run test
-pnpm run deploy:dry-run
+pnpm exec wrangler deploy --env staging --dry-run
 ```
 
-`deploy:dry-run` builds the Worker bundle without publishing.
+`wrangler deploy --dry-run` builds the Worker bundle without publishing.
 
 ## 2. Configure Environment Secrets
 
@@ -56,16 +55,16 @@ If you use separate staging/production buckets, update `r2_buckets` in each env 
 Staging:
 
 ```bash
-pnpm run deploy:staging
+pnpm exec wrangler deploy --env staging
 ```
 
 Production:
 
 ```bash
-pnpm run deploy:production
+pnpm run deploy
 ```
 
-Default `pnpm run deploy` maps to production.
+`pnpm run deploy` maps to `wrangler deploy --env production`.
 
 ## 5. Verify
 
@@ -84,8 +83,8 @@ curl "https://<your-worker-domain>/template/instagram-square?templateId=layout/s
 ## 6. Observe
 
 ```bash
-pnpm run tail:staging
-pnpm run tail:production
+pnpm exec wrangler tail --env staging
+pnpm exec wrangler tail --env production
 ```
 
 Use tailing after deploys to confirm request volume, errors, and latency patterns.

@@ -121,7 +121,7 @@ This fixes literal markdown/math/mermaid source appearing in final PNGs.
 3. Rebuild assets:
 
 ```bash
-pnpm run build:templates
+pnpm run build
 ```
 
 4. Verify:
@@ -159,7 +159,7 @@ Screenshot preview:
 ## Troubleshooting Quick Checks
 
 1. confirm template file exists under `templates/`
-2. run `pnpm run build:templates`
+2. run `pnpm run build`
 3. verify `default_template_id` for target format
 4. test direct preview with `templateId`
 5. verify slot keys match template `{{SLOT:key}}` names

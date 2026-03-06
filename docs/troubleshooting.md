@@ -13,7 +13,7 @@ Cause:
 Fix:
 
 - make IDs unique
-- rerun `pnpm run build:templates`
+- rerun `pnpm run build`
 
 ### `Template <id> references unknown format`
 
@@ -50,13 +50,12 @@ Fix:
 Cause:
 
 - required system templates are missing:
-- `templates/system/head-shell.html`
-- `templates/system/frame-shell.html`
+- `templates/system/content-shell.html`
 
 Fix:
 
 - restore missing file(s)
-- rerun build
+- rerun `pnpm run build`
 
 ## Auth and Security Errors
 
@@ -124,6 +123,17 @@ Fix:
 
 - provide `title` and one of `content`/`body`
 
+### `Legacy llm overrides are removed`
+
+Cause:
+
+- request body still sends legacy `llm` overrides
+
+Fix:
+
+- remove `llm` from request
+- use `agent.promptProfile` and `agent.renderPolicy` instead
+
 ### `templateIds.<format> references unknown template`
 
 Cause:
@@ -132,7 +142,7 @@ Cause:
 
 Fix:
 
-- verify template ID exists in `templates/` and was included by `pnpm run build:assets`
+- verify template ID exists in `templates/` and was included by `pnpm run build`
 - use valid template ID for target format
 
 ## Template/Rendering Issues
@@ -147,7 +157,7 @@ Check in order:
 
 Debug steps:
 
-- run `pnpm run build:assets` and check for template validation output
+- run `pnpm run build` and check for template validation output
 - preview with explicit `templateId`
 - verify selected IDs in response `template_plan.template_ids`
 
@@ -171,7 +181,7 @@ Cause:
 
 Fix:
 
-- run `pnpm run build:assets`
+- run `pnpm run build`
 - restart dev server
 
 ### Unexpected colors/contrast
@@ -235,10 +245,9 @@ Fix:
 
 ## Fast Recovery Checklist
 
-1. `pnpm run build:assets`
-2. `pnpm run check`
-3. `pnpm run test`
-4. `GET /health`
-5. `GET /template/<format>?templateId=<known-template-id>`
-6. preview one template with explicit `templateId`
-7. run minimal `POST /generate-from-content`
+1. `pnpm run build`
+2. `pnpm run test`
+3. `GET /health`
+4. `GET /template/<format>?templateId=<known-template-id>`
+5. preview one template with explicit `templateId`
+6. run minimal `POST /generate-from-content`
