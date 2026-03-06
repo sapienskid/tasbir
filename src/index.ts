@@ -16,10 +16,8 @@ import {
   previewParamsFromUrl,
   resolveTemplateId,
   renderTemplate,
-  type BrandTokenOverrides,
   type BaseTemplateParams,
   type CarouselTemplateParams,
-  type TemplateControlSet,
   type TemplateKind
 } from "./templates";
 import { PIPELINE_CONFIG, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/template-assets";
@@ -33,7 +31,6 @@ interface Env {
   GHOST_WEBHOOK_TOKEN?: string;
   PEXELS_API_KEY?: string;
   R2_PUBLIC_BASE_URL?: string;
-  DEFAULT_BRAND_COLOR?: string;
   BRAND_NAME?: string;
   LLM_MODEL?: string;
   IMAGE_MODEL?: string;
@@ -74,13 +71,10 @@ interface CampaignOptions {
 interface GenerateRequestBody {
   slug?: string;
   url?: string;
-  brandingColor?: string;
   brandName?: string;
   prompt?: string;
   templateIds?: Partial<Record<TemplateKind, string>>;
   slotOverrides?: Record<string, string>;
-  brandTokens?: BrandTokenOverrides;
-  design?: TemplateControlSet;
   storage?: StorageOptions;
   notifyUrl?: string;
   llm?: LlmPromptOverrides;
@@ -99,13 +93,10 @@ interface DirectContentRequestBody {
   feature_image?: string;
   tags?: string[] | string;
   primary_tag?: string;
-  brandingColor?: string;
   brandName?: string;
   prompt?: string;
   templateIds?: Partial<Record<TemplateKind, string>>;
   slotOverrides?: Record<string, string>;
-  brandTokens?: BrandTokenOverrides;
-  design?: TemplateControlSet;
   storage?: StorageOptions;
   notifyUrl?: string;
   llm?: LlmPromptOverrides;
@@ -511,7 +502,6 @@ function handlePreviewWorkspace(): Response {
         heading: PIPELINE_CONFIG.preview_defaults.heading,
         body: PIPELINE_CONFIG.preview_defaults.body,
         brandName: PIPELINE_CONFIG.brand.default_name,
-        brandingColor: PIPELINE_CONFIG.brand.default_color,
         imageUrl: ""
       })
     )
@@ -616,7 +606,6 @@ function buildTemplateCatalogPayload() {
         heading: PIPELINE_CONFIG.preview_defaults.heading,
         body: PIPELINE_CONFIG.preview_defaults.body,
         brandName: PIPELINE_CONFIG.brand.default_name,
-        brandingColor: PIPELINE_CONFIG.brand.default_color,
         imageUrl: ""
       }
     },
@@ -986,13 +975,10 @@ async function runPipeline(input: GenerateRequestBody, env: Env, security: Resol
 }
 
 interface PipelineRunInput {
-  brandingColor?: string;
   brandName?: string;
   prompt?: string;
   templateIds?: Partial<Record<TemplateKind, string>>;
   slotOverrides?: Record<string, string>;
-  brandTokens?: BrandTokenOverrides;
-  design?: TemplateControlSet;
   storage?: StorageOptions;
   llm?: LlmPromptOverrides;
   image?: ImageGenerationOptions;
@@ -1011,7 +997,6 @@ async function runPipelineFromPost(
   }
 
   const outputPlan = resolveOutputPlan(brandInput.output);
-  const brandColor = brandInput.brandingColor ?? env.DEFAULT_BRAND_COLOR ?? PIPELINE_CONFIG.brand.default_color;
   const brandName = brandInput.brandName ?? env.BRAND_NAME ?? PIPELINE_CONFIG.brand.default_name;
   const variants: NonNullable<GenerationResult["variants"]> = [];
 
@@ -1058,13 +1043,10 @@ async function runPipelineFromPost(
         ...llmOutput,
         slot_content: mergedSlotContent
       },
-      brandColor,
       brandName,
       templateIds: templatePlan.templateIds,
       requiredSlotKeys: templatePlan.requiredSlotKeys,
       slotContent: mergedSlotContent,
-      brandTokens: brandInput.brandTokens,
-      design: brandInput.design,
       storage: storageForVariant(brandInput.storage, index, outputPlan.postCount),
       requestedFormats: outputPlan.formats
     });
@@ -1115,7 +1097,6 @@ async function runCampaignPipelineFromPost(
     output: brandInput.output,
     templateIds: brandInput.templateIds
   });
-  const brandColor = brandInput.brandingColor ?? env.DEFAULT_BRAND_COLOR ?? PIPELINE_CONFIG.brand.default_color;
   const brandName = brandInput.brandName ?? env.BRAND_NAME ?? PIPELINE_CONFIG.brand.default_name;
   const deterministicImageOptions = enforceDeterministicImagePolicy(brandInput.image);
   const campaignOutputs: CampaignPostOutput[] = [];
@@ -1173,15 +1154,12 @@ async function runCampaignPipelineFromPost(
           ...llmOutput,
           slot_content: mergedSlotContent
         },
-        brandColor,
         brandName,
         templateIds: {
           [postPlan.platform]: postPlan.template_id
         },
         requiredSlotKeys: postPlan.slot_keys,
         slotContent: mergedSlotContent,
-        brandTokens: brandInput.brandTokens,
-        design: brandInput.design,
         storage: storageForCampaignPost(brandInput.storage, postPlan.platform, postPlan.index),
         requestedFormats: new Set([postPlan.platform])
       });
@@ -1947,13 +1925,10 @@ async function renderAndStoreAssets(
     postTitle: string;
     imageUrl: string;
     llmOutput: LlmOutput;
-    brandColor: string;
     brandName: string;
     templateIds?: Partial<Record<TemplateKind, string>>;
     requiredSlotKeys: string[];
     slotContent: Record<string, string>;
-    brandTokens?: BrandTokenOverrides;
-    design?: TemplateControlSet;
     storage?: StorageOptions;
     requestedFormats: Set<TemplateKind>;
   }
@@ -1968,11 +1943,8 @@ async function renderAndStoreAssets(
     title: args.postTitle,
     caption: args.llmOutput.instagram_caption,
     imageUrl: args.imageUrl,
-    brandColor: args.brandColor,
     brandName: args.brandName,
-    slots: sharedSlots,
-    brandTokens: args.brandTokens,
-    design: args.design
+    slots: sharedSlots
   };
 
   const browser = await puppeteer.launch(env.BROWSER, { keep_alive: PIPELINE_CONFIG.runtime.browser_keep_alive_ms });
@@ -2580,8 +2552,6 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
   const body = requireObject(input, "Request body");
   const templateIds = parseTemplateIds(body.templateIds, security);
   const slotOverrides = parseSlotOverrides(body.slotOverrides, security);
-  const brandTokens = parseBrandTokens(body.brandTokens);
-  const design = parseDesignOverrides(body.design, security);
   const storage = parseStorageOptions(body.storage);
   const llm = parseLlmOverrides(body.llm);
   const image = parseImageOptions(body.image);
@@ -2591,13 +2561,10 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
   return {
     slug: optionalString(body.slug, "slug", 200),
     url: optionalString(body.url, "url", 400),
-    brandingColor: optionalColor(body.brandingColor, "brandingColor"),
     brandName: optionalString(body.brandName, "brandName", 120),
     prompt: optionalString(body.prompt, "prompt", 1200),
     templateIds,
     slotOverrides,
-    brandTokens,
-    design,
     storage,
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
     llm,
@@ -2631,13 +2598,10 @@ function validateDirectContentRequestBody(input: unknown, security: ResolvedSecu
     feature_image: optionalString(body.feature_image, "feature_image", 2_000),
     tags: tagValue,
     primary_tag: optionalString(body.primary_tag, "primary_tag", 80),
-    brandingColor: optionalColor(body.brandingColor, "brandingColor"),
     brandName: optionalString(body.brandName, "brandName", 120),
     prompt: optionalString(body.prompt, "prompt", 1200),
     templateIds: parseTemplateIds(body.templateIds, security),
     slotOverrides: parseSlotOverrides(body.slotOverrides, security),
-    brandTokens: parseBrandTokens(body.brandTokens),
-    design: parseDesignOverrides(body.design, security),
     storage: parseStorageOptions(body.storage),
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
     llm: parseLlmOverrides(body.llm),
@@ -2733,123 +2697,6 @@ function parseSlotOverrides(input: unknown, security: ResolvedSecurityConfig): R
     }
     parsed[normalizedKey] = text;
   }
-  return Object.keys(parsed).length > 0 ? parsed : undefined;
-}
-
-function parseBrandTokens(input: unknown): BrandTokenOverrides | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  const object = requireObject(input, "brandTokens");
-  const parsed: BrandTokenOverrides = {};
-  const tokenKeys: Array<keyof BrandTokenOverrides> = [
-    "primaryText",
-    "secondaryText",
-    "mutedText",
-    "surfaceBase",
-    "surfaceElevated",
-    "borderSubtle",
-    "accent",
-    "accentForeground"
-  ];
-  for (const tokenKey of tokenKeys) {
-    const value = optionalColor(object[tokenKey], `brandTokens.${tokenKey}`);
-    if (value) {
-      parsed[tokenKey] = value;
-    }
-  }
-  return Object.keys(parsed).length > 0 ? parsed : undefined;
-}
-
-function parseDesignOverrides(input: unknown, security?: ResolvedSecurityConfig): TemplateControlSet | undefined {
-  if (input === undefined) {
-    return undefined;
-  }
-  const object = requireObject(input, "design");
-  const parsed: TemplateControlSet = {};
-
-  if (object.showBrandBadge !== undefined) {
-    parsed.showBrandBadge = requiredBoolean(object.showBrandBadge, "design.showBrandBadge");
-  }
-  if (object.showSlideBadge !== undefined) {
-    parsed.showSlideBadge = requiredBoolean(object.showSlideBadge, "design.showSlideBadge");
-  }
-  if (object.showMetaFooter !== undefined) {
-    parsed.showMetaFooter = requiredBoolean(object.showMetaFooter, "design.showMetaFooter");
-  }
-  if (object.showTitleKicker !== undefined) {
-    parsed.showTitleKicker = requiredBoolean(object.showTitleKicker, "design.showTitleKicker");
-  }
-  if (object.showDecorLayers !== undefined) {
-    parsed.showDecorLayers = requiredBoolean(object.showDecorLayers, "design.showDecorLayers");
-  }
-  if (object.textAlign !== undefined) {
-    const textAlign = optionalString(object.textAlign, "design.textAlign", 20);
-    if (textAlign && textAlign !== "left" && textAlign !== "center" && textAlign !== "justify") {
-      throw new HttpError(400, "design.textAlign must be left, center, or justify");
-    }
-    parsed.textAlign = textAlign as TemplateControlSet["textAlign"];
-  }
-  if (object.contentPosition !== undefined) {
-    const contentPosition = optionalString(object.contentPosition, "design.contentPosition", 20);
-    if (contentPosition && contentPosition !== "top" && contentPosition !== "center" && contentPosition !== "bottom") {
-      throw new HttpError(400, "design.contentPosition must be top, center, or bottom");
-    }
-    parsed.contentPosition = contentPosition as TemplateControlSet["contentPosition"];
-  }
-  if (object.imageOpacity !== undefined) {
-    parsed.imageOpacity = clampNumber(
-      requiredNumber(object.imageOpacity, "design.imageOpacity"),
-      0,
-      1,
-      1
-    );
-  }
-  if (object.contentMaxWidth !== undefined) {
-    parsed.contentMaxWidth = Math.round(
-      clampNumber(requiredNumber(object.contentMaxWidth, "design.contentMaxWidth"), 320, 2000, 1020)
-    );
-  }
-  if (object.contentInset !== undefined) {
-    parsed.contentInset = Math.round(
-      clampNumber(requiredNumber(object.contentInset, "design.contentInset"), 0, 220, 48)
-    );
-  }
-  parsed.metaLeftText = optionalString(object.metaLeftText, "design.metaLeftText", 120);
-  parsed.metaRightText = optionalString(object.metaRightText, "design.metaRightText", 120);
-  if (object.brandIconUrl !== undefined) {
-    const rawBrandIconUrl = optionalString(object.brandIconUrl, "design.brandIconUrl", 2_000);
-    parsed.brandIconUrl = rawBrandIconUrl
-      ? security
-        ? sanitizeImageUrl(rawBrandIconUrl, security, "design.brandIconUrl", {
-          allowDataUrl: false,
-          requireAllowedHost: false
-        })
-        : rawBrandIconUrl
-      : undefined;
-  }
-  if (object.brandIconPosition !== undefined) {
-    const brandIconPosition = optionalString(object.brandIconPosition, "design.brandIconPosition", 20);
-    const allowedPositions = new Set(["top-left", "top-right", "bottom-left", "bottom-right"]);
-    if (brandIconPosition && !allowedPositions.has(brandIconPosition)) {
-      throw new HttpError(400, "design.brandIconPosition must be top-left, top-right, bottom-left, or bottom-right");
-    }
-    parsed.brandIconPosition = brandIconPosition as TemplateControlSet["brandIconPosition"];
-  }
-
-  const formatOverridesRaw = object.formatOverrides;
-  if (formatOverridesRaw !== undefined) {
-    const formatOverridesObj = requireObject(formatOverridesRaw, "design.formatOverrides");
-    const formatOverrides: Partial<Record<TemplateKind, TemplateControlSet>> = {};
-    for (const [rawFormat, rawControl] of Object.entries(formatOverridesObj)) {
-      if (!isTemplateKind(rawFormat)) {
-        throw new HttpError(400, `design.formatOverrides contains unsupported format: ${rawFormat}`);
-      }
-      formatOverrides[rawFormat] = parseDesignOverrides(rawControl, security) ?? {};
-    }
-    parsed.formatOverrides = formatOverrides;
-  }
-
   return Object.keys(parsed).length > 0 ? parsed : undefined;
 }
 
@@ -3057,28 +2904,6 @@ function optionalString(input: unknown, field: string, maxLength: number): strin
     throw new HttpError(400, `${field} exceeds maximum length ${maxLength}`);
   }
   return trimmed;
-}
-
-function optionalEnumString(input: unknown, field: string, allowed: Set<string>): string | undefined {
-  const value = optionalString(input, field, 120);
-  if (!value) {
-    return undefined;
-  }
-  if (!allowed.has(value)) {
-    throw new HttpError(400, `${field} must be one of: ${[...allowed].join(", ")}`);
-  }
-  return value;
-}
-
-function optionalColor(input: unknown, field: string): string | undefined {
-  const value = optionalString(input, field, 20);
-  if (!value) {
-    return undefined;
-  }
-  if (!/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(value)) {
-    throw new HttpError(400, `${field} must be a valid hex color`);
-  }
-  return value;
 }
 
 function requiredBoolean(input: unknown, field: string): boolean {

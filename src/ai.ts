@@ -1,4 +1,3 @@
-import { listTemplateCompositionDirectives } from "./template-theme";
 import { type TemplateFieldDeclaration } from "./templates";
 import { PIPELINE_CONFIG } from "./generated/template-assets";
 
@@ -47,6 +46,12 @@ export interface TemplateChoiceCandidate {
 
 const DEFAULT_LLM_MODEL = PIPELINE_CONFIG.generation.llm.default_model;
 const DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT = PIPELINE_CONFIG.generation.llm.system_prompt.join(" ");
+const TEMPLATE_COMPOSITION_DIRECTIVES = [
+  "Treat templates as structure-only skeletons and place all design decisions in CSS classes.",
+  "Fill slot_content comprehensively so every likely template slot has useful copy.",
+  "Never request generated text in images; typography is always rendered by the template system.",
+  "Keep slot values concise, specific, and directly usable without extra formatting."
+] as const;
 
 function buildLlmJsonSchema(requiredSlotKeys: string[]): Record<string, unknown> {
   const normalizedRequiredSlotKeys = [...new Set(requiredSlotKeys.map((key) => key.trim()).filter(Boolean))];
@@ -118,7 +123,7 @@ export async function generateStructuredCopy(args: {
   const slotHints = buildSlotHintLines(args.requiredSlotKeys, args.slotFields);
 
   const limits = PIPELINE_CONFIG.generation.limits;
-  const templateCompositionPromptHints = listTemplateCompositionDirectives()
+  const templateCompositionPromptHints = [...TEMPLATE_COMPOSITION_DIRECTIVES]
     .slice(0, 12)
     .map((line) => `- ${line}`)
     .join("\n");

@@ -23,6 +23,25 @@
   --token-font-display: "Playfair Display", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
   --token-font-body: "Inter", "Helvetica Neue", Helvetica, Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
+  --token-color-text-primary: #121212;
+  --token-color-text-secondary: #2d2d2d;
+  --token-color-text-muted: #6a6a6a;
+  --token-color-surface-base: #f8f8f5;
+  --token-color-surface-elevated: #f1f1ee;
+  --token-color-border-subtle: #1a1a1a;
+  --token-color-brand-accent: #101010;
+  --token-color-brand-accent-foreground: #ffffff;
+  --token-color-overlay-strong: rgba(0, 0, 0, 0.45);
+
+  --color-text-primary: var(--token-color-text-primary);
+  --color-text-secondary: var(--token-color-text-secondary);
+  --color-text-muted: var(--token-color-text-muted);
+  --color-surface-base: var(--token-color-surface-base);
+  --color-surface-elevated: var(--token-color-surface-elevated);
+  --color-border-subtle: var(--token-color-border-subtle);
+  --color-brand-accent: var(--token-color-brand-accent);
+  --color-brand-accent-foreground: var(--token-color-brand-accent-foreground);
+
   --token-space-2xs: 8px;
   --token-space-xs: 12px;
   --token-space-sm: 16px;
@@ -37,12 +56,26 @@
   --token-type-metric-value: 66px;
   --token-type-metric-label: 20px;
 
+  --radius-card: 0px;
+  --radius-pill: 0px;
+  --frame-title-shadow: none;
+  --frame-caption-shadow: none;
+
   --token-radius-card: var(--radius-card);
   --token-radius-pill: var(--radius-pill);
   --token-shadow-title: var(--frame-title-shadow);
   --token-shadow-caption: var(--frame-caption-shadow);
 
   --heading-max-lines: 5;
+}
+
+[data-template-tone="dark"] {
+  --token-color-text-primary: #f2f2f2;
+  --token-color-text-secondary: #d1d1d1;
+  --token-color-text-muted: #9a9a9a;
+  --token-color-surface-base: #070707;
+  --token-color-surface-elevated: #131313;
+  --token-color-border-subtle: #2b2b2b;
 }
 
 * {

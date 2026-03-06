@@ -1,21 +1,6 @@
-import {
-  brandConfig,
-  createBrandTheme,
-  renderTemplateHead,
-  resolveTemplateControl,
-  templateControlSetFromQuery,
-  tokenOverridesFromQuery,
-  type BrandIconPosition,
-  type BrandTokenOverrides,
-  type ResolvedTemplateControl,
-  type TemplateControlSet,
-  type TemplateFormatKey
-} from "./template-theme";
-import { PIPELINE_CONFIG, TEMPLATE_FILES } from "./generated/template-assets";
+import { PIPELINE_CONFIG, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/template-assets";
 
-export type { BrandTokenOverrides, TemplateControlSet };
-
-export type TemplateKind = TemplateFormatKey;
+export type TemplateKind = string;
 
 export interface TemplateFieldDeclaration {
   key: string;
@@ -36,8 +21,6 @@ interface TemplateDefinition {
   fields?: TemplateFieldDeclaration[];
 }
 
-type FrameTone = "default" | "dark";
-
 export interface SlotHintOption {
   id: string;
   type: string;
@@ -49,12 +32,9 @@ export interface BaseTemplateParams {
   title: string;
   caption: string;
   imageUrl: string;
-  brandColor: string;
   brandName: string;
   templateId?: string;
   slots?: Record<string, string>;
-  brandTokens?: BrandTokenOverrides;
-  design?: TemplateControlSet;
 }
 
 export interface CarouselTemplateParams extends BaseTemplateParams {
@@ -70,8 +50,7 @@ const TEMPLATE_FIELD_CACHE = new Map<string, TemplateFieldDeclaration[]>();
 const SLOT_TOKEN_PATTERN = /\{\{\s*SLOT:([A-Za-z0-9_:-]+)\s*\}\}/gi;
 
 const DEFAULT_VISUAL_LAYERS = {
-  useBackgroundImageOnly: true,
-  useHtmlDecorLayers: true
+  useBackgroundImageOnly: true
 } as const;
 
 export function listTemplateKinds(): TemplateKind[] {
@@ -122,7 +101,6 @@ export function listTemplateFields(templateId: string): TemplateFieldDeclaration
     return definition.fields;
   }
 
-  // Auto-discover from slot tokens in HTML
   const slotKeys = listTemplateSlotKeys(templateId);
   const autoFields: TemplateFieldDeclaration[] = slotKeys.map((key) => ({
     key,
@@ -149,18 +127,7 @@ export function resolveTemplateId(kind: TemplateKind, options?: { templateId?: s
 export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | CarouselTemplateParams): string {
   const format = PIPELINE_CONFIG.formats[kind];
   const selectedTemplate = selectTemplateDefinition(kind, params.templateId);
-  const control = resolveTemplateControl(kind, params.design);
-  const safeImageUrl = escapeHtml(params.imageUrl);
-
-  const header = renderTopBar(
-    kind,
-    control,
-    params.brandName,
-    kind === "carousel-post" ? `${(params as CarouselTemplateParams).slideNumber}/${(params as CarouselTemplateParams).totalSlides}` : undefined
-  );
-  const footer = renderMetaFooter(kind, control, defaultMetaLeft(kind), defaultMetaRight(kind));
-  const kicker = renderKicker(kind, control, params.title);
-
+  const frameTone = resolveFrameTone(selectedTemplate);
   const slotValues = resolveSlotValues(kind, params, selectedTemplate.id);
 
   const tokens: Record<string, string> = {
@@ -168,31 +135,28 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     CAPTION: escapeHtml(params.caption),
     HEADING: escapeHtml(kind === "carousel-post" ? (params as CarouselTemplateParams).heading : params.title),
     BODY: escapeHtml(kind === "carousel-post" ? (params as CarouselTemplateParams).body : params.caption),
-    IMAGE_URL: safeImageUrl,
+    IMAGE_URL: escapeHtml(params.imageUrl),
     BRAND_NAME: escapeHtml(params.brandName),
-    HEADER: header,
-    FOOTER: footer,
-    KICKER: kicker
+    SLIDE_LABEL: escapeHtml(
+      kind === "carousel-post" ? `${(params as CarouselTemplateParams).slideNumber}/${(params as CarouselTemplateParams).totalSlides}` : ""
+    ),
+    KICKER_TEXT: escapeHtml(kind === "carousel-post" ? params.title : "")
   };
 
   const templateMarkup = loadTemplateMarkup(selectedTemplate.id);
-  const frameTone = resolveFrameTone(selectedTemplate);
   const visualLayers = resolveVisualLayerSettings(selectedTemplate, templateMarkup);
   const content = interpolateTemplate(templateMarkup, tokens, slotValues);
 
-  return renderFrame(
-    {
-      kind,
-      width: format.width,
-      height: format.height,
-      params,
-      control,
-      content,
-      frameTone,
-      visualLayers
-    },
-    selectedTemplate.id
-  );
+  return renderDocumentShell({
+    width: format.width,
+    height: format.height,
+    templateId: selectedTemplate.id,
+    frameTone,
+    title: params.title,
+    imageUrl: params.imageUrl,
+    content,
+    visualLayers
+  });
 }
 
 function selectTemplateDefinition(
@@ -200,25 +164,21 @@ function selectTemplateDefinition(
   requestedTemplateId?: string
 ): TemplateDefinition {
   if (TEMPLATE_DEFINITIONS.length === 0) {
-    throw new Error(`No templates found. Add HTML files to the templates/ directory.`);
+    throw new Error("No templates found. Add HTML files to the templates/ directory.");
   }
 
-  // If user/AI explicitly requests a template by ID, honour it
   if (requestedTemplateId) {
     const direct = TEMPLATE_DEFINITIONS.find(
       (d) => d.id === requestedTemplateId.trim() && templateSupportsFormat(d, kind)
     );
     if (direct) return direct;
-    // Unknown ID — fall through to format default (don't 404)
     console.warn(`Unknown templateId "${requestedTemplateId}" — falling back to format default`);
   }
 
-  // Use the format's configured default
   const defaultId = PIPELINE_CONFIG.formats[kind].default_template_id;
   const defaultTemplate = TEMPLATE_DEFINITIONS.find((d) => d.id === defaultId && templateSupportsFormat(d, kind));
   if (defaultTemplate) return defaultTemplate;
 
-  // Ultimate fallback: first template compatible with this format
   const compatible = TEMPLATE_DEFINITIONS.find((definition) => templateSupportsFormat(definition, kind));
   if (compatible) {
     return compatible;
@@ -236,7 +196,6 @@ function templateSupportsFormat(definition: TemplateDefinition, kind: TemplateKi
   return true;
 }
 
-
 function loadTemplateMarkup(templateId: string): string {
   const key = templateId as keyof typeof TEMPLATE_FILES;
   const content = TEMPLATE_FILES[key];
@@ -246,7 +205,14 @@ function loadTemplateMarkup(templateId: string): string {
   return content;
 }
 
-function resolveFrameTone(template: TemplateDefinition): FrameTone {
+function normalizeBackgroundImageMode(value: unknown): "global" | "inline" | undefined {
+  if (value === "global" || value === "inline") {
+    return value;
+  }
+  return undefined;
+}
+
+function resolveFrameTone(template: TemplateDefinition): "default" | "dark" {
   const explicitTone = normalizeFrameTone(template.frameTone);
   if (explicitTone) {
     return explicitTone;
@@ -254,15 +220,8 @@ function resolveFrameTone(template: TemplateDefinition): FrameTone {
   return "default";
 }
 
-function normalizeFrameTone(value: unknown): FrameTone | undefined {
+function normalizeFrameTone(value: unknown): "default" | "dark" | undefined {
   if (value === "default" || value === "dark") {
-    return value;
-  }
-  return undefined;
-}
-
-function normalizeBackgroundImageMode(value: unknown): "global" | "inline" | undefined {
-  if (value === "global" || value === "inline") {
     return value;
   }
   return undefined;
@@ -289,7 +248,6 @@ function resolveSlotValues(
 ): Record<string, string> {
   const resolved: Record<string, string> = {};
 
-  // 1. Apply field defaults from template declaration
   const fields = listTemplateFields(templateId);
   for (const field of fields) {
     const normalizedKey = normalizeSlotKey(field.key);
@@ -298,7 +256,6 @@ function resolveSlotValues(
     }
   }
 
-  // 2. Apply structural fallbacks (heading/body/headline/subheadline)
   resolved.headline = params.title;
   resolved.subheadline = params.caption;
   resolved.short_hook = params.title;
@@ -310,7 +267,6 @@ function resolveSlotValues(
   resolved.item_body = params.caption;
   resolved.item_meta = "";
 
-  // 3. Apply carousel-specific overrides
   if (kind === "carousel-post") {
     const carouselParams = params as CarouselTemplateParams;
     resolved.headline = carouselParams.heading;
@@ -321,7 +277,6 @@ function resolveSlotValues(
     resolved.step_total = String(carouselParams.totalSlides);
   }
 
-  // 4. Apply user-provided slot overrides (highest priority)
   if (params.slots) {
     for (const [slotKey, slotValue] of Object.entries(params.slots)) {
       const normalizedKey = normalizeSlotKey(slotKey);
@@ -393,97 +348,51 @@ function listTemplateSlotKeys(templateId: string): string[] {
   return keys;
 }
 
-function renderFrame(
-  args: {
-    kind: TemplateKind;
-    width: number;
-    height: number;
-    params: BaseTemplateParams;
-    control: ResolvedTemplateControl;
-    content: string;
-    frameTone: FrameTone;
-    visualLayers: VisualLayerSettings;
-  },
-  templateId: string
-): string {
-  const theme = createBrandTheme({
-    brandName: args.params.brandName,
-    brandColor: args.params.brandColor,
-    overrides: args.params.brandTokens
-  });
-  applyFrameToneToTheme(theme, args.frameTone);
-
-  const safeTitle = escapeHtml(args.params.title);
-  const safeImageUrl = escapeHtml(args.params.imageUrl.trim());
+function renderDocumentShell(args: {
+  width: number;
+  height: number;
+  templateId: string;
+  frameTone: "default" | "dark";
+  title: string;
+  imageUrl: string;
+  content: string;
+  visualLayers: VisualLayerSettings;
+}): string {
+  const safeTitle = escapeHtml(args.title);
+  const safeImageUrl = escapeHtml(args.imageUrl.trim());
   const hasImage = safeImageUrl.length > 0;
   const shouldRenderBackgroundImage = hasImage && args.visualLayers.useBackgroundImageOnly;
   const imageVisibilityClass = shouldRenderBackgroundImage ? "" : "hidden";
+  const safeCss = TEMPLATE_CSS.replaceAll("</style", "<\\/style");
+  const shell = loadTemplateMarkup("@system/content-shell");
 
-  const brandIconUrl = escapeHtml(args.control.brandIconUrl.trim());
-  const hasBrandIcon = brandIconUrl.length > 0;
-  const brandIconCornerClass = hasBrandIcon
-    ? brandIconCornerClassName(args.control.brandIconPosition)
-    : "hidden";
-
-  const frameShell = loadTemplateMarkup("@system/frame-shell");
   return interpolateTemplate(
-    frameShell,
+    shell,
     {
-      HEAD_HTML: renderTemplateHead({ safeTitle, width: args.width, height: args.height, theme }),
-      TEMPLATE_ID: escapeHtml(templateId),
-      FRAME_TONE: args.frameTone,
+      SAFE_TITLE: safeTitle,
+      TEMPLATE_CSS: safeCss,
+      CANVAS_WIDTH: String(args.width),
+      CANVAS_HEIGHT: String(args.height),
+      TEMPLATE_ID: escapeHtml(args.templateId),
+      TEMPLATE_TONE: args.frameTone,
       IMAGE_VISIBILITY_CLASS: imageVisibilityClass,
       IMAGE_URL: safeImageUrl,
-      BRAND_ICON_CORNER_CLASS: brandIconCornerClass,
-      BRAND_ICON_URL: brandIconUrl,
       CONTENT: args.content
     },
     {}
   );
 }
 
-function applyFrameToneToTheme(
-  theme: ReturnType<typeof createBrandTheme>,
-  frameTone: FrameTone
-): void {
-  if (frameTone !== "dark") {
-    return;
-  }
-
-  theme.tokens.primaryText = "#f2f2f2";
-  theme.tokens.secondaryText = "#d1d1d1";
-  theme.tokens.mutedText = "#9a9a9a";
-  theme.tokens.surfaceBase = "#070707";
-  theme.tokens.surfaceElevated = "#131313";
-  theme.tokens.borderSubtle = "#2b2b2b";
-}
-
 interface VisualLayerSettings {
   useBackgroundImageOnly: boolean;
-  useHtmlDecorLayers: boolean;
 }
 
 function resolveVisualLayerSettings(
   template: TemplateDefinition,
   templateMarkup: string
 ): VisualLayerSettings {
-  const defaults: VisualLayerSettings = {
-    useBackgroundImageOnly: DEFAULT_VISUAL_LAYERS.useBackgroundImageOnly,
-    useHtmlDecorLayers: DEFAULT_VISUAL_LAYERS.useHtmlDecorLayers
-  };
-
-  const renderConfig = (PIPELINE_CONFIG as unknown as {
-    render?: {
-      visual_layers?: {
-        use_background_image_only?: boolean;
-        use_html_decor_layers?: boolean;
-      };
-    };
-  }).render;
-  const visual = renderConfig?.visual_layers;
   const configured: VisualLayerSettings = {
-    useBackgroundImageOnly: visual?.use_background_image_only ?? defaults.useBackgroundImageOnly,
-    useHtmlDecorLayers: visual?.use_html_decor_layers ?? defaults.useHtmlDecorLayers
+    useBackgroundImageOnly: DEFAULT_VISUAL_LAYERS.useBackgroundImageOnly
   };
 
   const explicitBackgroundMode = normalizeBackgroundImageMode(template.backgroundImage);
@@ -496,86 +405,11 @@ function resolveVisualLayerSettings(
     return configured;
   }
 
-  // Fallback when metadata is missing: templates with inline IMAGE_URL usage disable global background image.
   if (/\{\{\s*IMAGE_URL\s*\}\}/i.test(templateMarkup)) {
     configured.useBackgroundImageOnly = false;
   }
 
   return configured;
-}
-
-function renderTopBar(
-  kind: TemplateKind,
-  control: ResolvedTemplateControl,
-  brandName: string,
-  slideLabel?: string
-): string {
-  const showLeft = control.showBrandBadge;
-  const showRight = kind === "carousel-post" && control.showSlideBadge && Boolean(slideLabel?.trim());
-  const showTopBar = showLeft || showRight;
-  const topBarVisibilityClass = showTopBar ? "" : " hidden";
-  const leftPillVisibilityClass = showLeft ? "" : " hidden";
-  const rightPillVisibilityClass = showRight ? "" : " hidden";
-  const brandIconUrl = escapeHtml(control.brandIconUrl.trim());
-  const brandIconVisibilityClass = brandIconUrl.length > 0 ? "" : " hidden";
-
-  return `<div class="flex w-full items-center justify-between gap-5${topBarVisibilityClass}">
-  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary${leftPillVisibilityClass}"><img class="mr-1.5 h-[1em] w-auto object-contain${brandIconVisibilityClass}" src="${brandIconUrl}" alt="" />${escapeHtml(brandName)}</span>
-  <span class="ml-auto">
-    <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary${rightPillVisibilityClass}">${escapeHtml(slideLabel ?? "")}</span>
-  </span>
-</div>`;
-}
-
-function renderMetaFooter(
-  kind: TemplateKind,
-  control: ResolvedTemplateControl,
-  defaultLeft: string,
-  defaultRight: string
-): string {
-  const left = control.metaLeftText ?? defaultLeft;
-  const right = control.metaRightText ?? defaultRight;
-  const visibilityClass = control.showMetaFooter ? "" : " hidden";
-
-  return `<div class="mt-auto flex w-full items-center justify-between font-brand-body text-base font-medium uppercase tracking-[0.1em] leading-[1.2] text-brand-muted${visibilityClass}">
-  <span>${escapeHtml(left)}</span>
-  <span>${escapeHtml(right)}</span>
-</div>`;
-}
-
-function renderKicker(
-  kind: TemplateKind,
-  control: ResolvedTemplateControl,
-  title: string
-): string {
-  const shouldShowKicker = kind === "carousel-post" && control.showTitleKicker;
-  const visibilityClass = shouldShowKicker ? "" : " hidden";
-  return `<p class="max-w-5xl font-brand-body text-xl font-medium uppercase tracking-[0.14em] leading-[1.1] text-brand-muted${visibilityClass}">${escapeHtml(title)}</p>`;
-}
-
-function defaultMetaLeft(kind: TemplateKind): string {
-  const formatConfig = PIPELINE_CONFIG.formats?.[kind] as { meta_left_label?: string } | undefined;
-  return formatConfig?.meta_left_label ?? "";
-}
-
-function defaultMetaRight(kind: TemplateKind): string {
-  const formatConfig = PIPELINE_CONFIG.formats?.[kind] as { meta_right_label?: string } | undefined;
-  return formatConfig?.meta_right_label ?? "";
-}
-
-function brandIconCornerClassName(position: BrandIconPosition): string {
-  switch (position) {
-    case "top-left":
-      return "top-0 left-0";
-    case "top-right":
-      return "top-0 right-0";
-    case "bottom-left":
-      return "bottom-0 left-0";
-    case "bottom-right":
-      return "bottom-0 right-0";
-    default:
-      return "top-0 left-0";
-  }
 }
 
 function escapeHtml(value: string): string {
@@ -595,12 +429,9 @@ export function previewParamsFromUrl(kind: TemplateKind, url: URL): BaseTemplate
     title: url.searchParams.get("title") ?? defaults.title,
     caption: url.searchParams.get("caption") ?? defaults.caption,
     imageUrl: url.searchParams.get("imageUrl") ?? "",
-    brandColor: url.searchParams.get("brandingColor") ?? PIPELINE_CONFIG.brand.default_color,
     brandName: url.searchParams.get("brand") ?? url.searchParams.get("brandName") ?? PIPELINE_CONFIG.brand.default_name,
     templateId: url.searchParams.get("templateId") ?? undefined,
-    slots: slotValues,
-    brandTokens: tokenOverridesFromQuery(url.searchParams),
-    design: templateControlSetFromQuery(url.searchParams)
+    slots: slotValues
   };
 
   if (kind !== "carousel-post") {

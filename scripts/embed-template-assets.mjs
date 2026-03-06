@@ -9,7 +9,7 @@ const templateCssPath = resolve(projectRoot, "src/generated/template.css");
 const templatesDir = resolve(projectRoot, "templates");
 const systemTemplateDir = resolve(templatesDir, "system");
 
-// ─── Load config (theming / formats / brand only — no templates array needed) ───
+// ─── Load config (formats / brand / runtime only — no templates array needed) ───
 
 const loadedConfig = await loadConfigWithExtends(configPath);
 const config = assertConfigShape(loadedConfig);
@@ -298,8 +298,8 @@ function assertConfigShape(value) {
   if (!config.brand || typeof config.brand !== "object") {
     throw new Error("pipeline.config.yaml must define brand");
   }
-  if (typeof config.brand.default_name !== "string" || typeof config.brand.default_color !== "string") {
-    throw new Error("brand.default_name and brand.default_color are required");
+  if (typeof config.brand.default_name !== "string") {
+    throw new Error("brand.default_name is required");
   }
   if (!config.generation || typeof config.generation !== "object") {
     throw new Error("pipeline.config.yaml must define generation");
@@ -375,40 +375,19 @@ async function loadSystemTemplateFiles(directoryPath) {
     loaded[templateId] = await readFile(fullPath, "utf8");
   }
 
-  if (!loaded["@system/head-shell"]) {
-    throw new Error("Missing required system template: templates/system/head-shell.html");
-  }
-  if (!loaded["@system/frame-shell"]) {
-    throw new Error("Missing required system template: templates/system/frame-shell.html");
+  if (!loaded["@system/content-shell"]) {
+    throw new Error("Missing required system template: templates/system/content-shell.html");
   }
 
-  assertSystemTemplateTokenSet(loaded["@system/head-shell"], "@system/head-shell", [
+  assertSystemTemplateTokenSet(loaded["@system/content-shell"], "@system/content-shell", [
     "SAFE_TITLE",
     "TEMPLATE_CSS",
     "CANVAS_WIDTH",
     "CANVAS_HEIGHT",
-    "TOKEN_PRIMARY_TEXT",
-    "TOKEN_SECONDARY_TEXT",
-    "TOKEN_MUTED_TEXT",
-    "TOKEN_SURFACE_BASE",
-    "TOKEN_SURFACE_ELEVATED",
-    "TOKEN_BORDER_SUBTLE",
-    "TOKEN_ACCENT",
-    "TOKEN_ACCENT_FOREGROUND",
-    "TOKEN_ACCENT_GLOW",
-    "TOKEN_OVERLAY_STRONG",
-    "TOKEN_RADIUS_CARD",
-    "TOKEN_RADIUS_PILL"
-  ]);
-
-  assertSystemTemplateTokenSet(loaded["@system/frame-shell"], "@system/frame-shell", [
-    "HEAD_HTML",
     "TEMPLATE_ID",
-    "FRAME_TONE",
+    "TEMPLATE_TONE",
     "IMAGE_VISIBILITY_CLASS",
     "IMAGE_URL",
-    "BRAND_ICON_CORNER_CLASS",
-    "BRAND_ICON_URL",
     "CONTENT"
   ]);
 

@@ -7,9 +7,12 @@
 -->
 <div
   class="relative z-10 flex h-full w-full flex-col p-14 items-start text-left">
-  {{HEADER}}
+  <div class="flex w-full items-center justify-between gap-5">
+  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary">{{BRAND_NAME}}</span>
+  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary empty:hidden">{{SLIDE_LABEL}}</span>
+</div>
   <div class="relative isolate z-0 mt-auto p-8">
-    {{KICKER}}
+    <p class="max-w-5xl font-brand-body text-xl font-medium uppercase tracking-[0.14em] leading-[1.1] text-brand-muted empty:hidden">{{KICKER_TEXT}}</p>
     <h1
       class="mt-2 max-w-5xl font-brand-display text-brand-primary text-6xl leading-tight tracking-tight drop-shadow-sm text-balance [overflow-wrap:anywhere] break-words">
       {{HEADING}}</h1>
@@ -20,6 +23,5 @@
     <div
       class="mt-6 inline-flex w-fit items-center bg-brand-primary px-6 py-3 font-brand-body text-2xl font-semibold uppercase tracking-[0.06em] leading-[1.1] text-brand-surface">
       {{SLOT:cta_text}}</div>
-    {{FOOTER}}
   </div>
 </div>

@@ -12,7 +12,10 @@
 -->
 <div class="relative z-10 flex h-full w-full flex-col items-start text-left">
   <div class="px-6 pt-6">
-    {{HEADER}}
+    <div class="flex w-full items-center justify-between gap-5">
+  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary">{{BRAND_NAME}}</span>
+  <span class="inline-flex w-fit items-center border border-brand-border bg-transparent px-4 py-2 font-brand-body text-sm font-medium uppercase tracking-[0.12em] leading-[1.1] text-brand-primary empty:hidden">{{SLIDE_LABEL}}</span>
+</div>
   </div>
   <div class="relative isolate z-0 mt-auto flex h-full min-h-0 flex-col p-0">
     <article class="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-transparent">
@@ -36,6 +39,5 @@
           {{SLOT:item_meta}}</p>
       </div>
     </article>
-    {{FOOTER}}
   </div>
 </div>
