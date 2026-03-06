@@ -223,6 +223,7 @@ Outputs:
 
 - `renders/stress-suite-*/report.json`
 - `renders/stress-suite-*/failures.json`
+- `renders/stress-suite-*/index.html` (grid gallery + click-to-open viewer)
 
 ## Agentic Controls
 

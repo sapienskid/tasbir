@@ -2,7 +2,7 @@
 
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import process from "node:process";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:8787";
@@ -735,6 +735,7 @@ async function runWithConcurrency(tasks, concurrency, worker) {
   let completed = 0;
   let success = 0;
   const failures = [];
+  const rendered = [];
 
   const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, async () => {
     while (true) {
@@ -743,7 +744,11 @@ async function runWithConcurrency(tasks, concurrency, worker) {
       if (index >= tasks.length) return;
 
       try {
-        await worker(tasks[index], index, tasks.length);
+        const filePath = await worker(tasks[index], index, tasks.length);
+        rendered.push({
+          task: tasks[index],
+          filePath
+        });
         success += 1;
       } catch (error) {
         failures.push({
@@ -757,7 +762,437 @@ async function runWithConcurrency(tasks, concurrency, worker) {
   });
 
   await Promise.all(workers);
-  return { completed, success, failures };
+  return { completed, success, failures, rendered };
+}
+
+function buildGalleryIndexHtml(args) {
+  const entries = args.entries ?? [];
+  const failures = args.failures ?? [];
+  const summary = args.summary ?? {};
+  const payloadJson = JSON.stringify({ entries, failures, summary }).replace(/</g, "\\u003c");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stress Render Gallery</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #161a24;
+      --surface-2: #1e2432;
+      --text: #e7ebf3;
+      --muted: #9ba8c7;
+      --accent: #5ea0ff;
+      --border: #2a3348;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(1200px 600px at 20% -10%, #1b2440, transparent), var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    .header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .title {
+      margin: 0;
+      font-size: 1.4rem;
+    }
+    .sub {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .stats {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .control {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px 10px;
+    }
+    .control label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.75rem;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .control input,
+    .control select {
+      width: 100%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 8px;
+      font-size: 0.9rem;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: #3b4a6a;
+    }
+    .card img {
+      width: 100%;
+      aspect-ratio: 1/1;
+      object-fit: cover;
+      background: #080a10;
+      display: block;
+    }
+    .meta {
+      padding: 10px;
+      display: grid;
+      gap: 4px;
+    }
+    .meta strong {
+      font-size: 0.86rem;
+      line-height: 1.2;
+    }
+    .meta span {
+      color: var(--muted);
+      font-size: 0.76rem;
+      line-height: 1.2;
+    }
+    .empty {
+      margin: 20px 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .failures {
+      margin-top: 26px;
+      background: #261617;
+      border: 1px solid #513032;
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .failures h2 {
+      margin: 0 0 8px;
+      font-size: 0.95rem;
+      color: #ffb3b8;
+    }
+    .failures ul {
+      margin: 0;
+      padding-left: 16px;
+      color: #f5c8cc;
+      font-size: 0.8rem;
+      display: grid;
+      gap: 6px;
+      max-height: 220px;
+      overflow: auto;
+    }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(6, 8, 14, 0.85);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 9999;
+    }
+    .modal.open { display: flex; }
+    .viewer {
+      width: min(980px, 100%);
+      background: #111522;
+      border: 1px solid #2f3a56;
+      border-radius: 16px;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(220px, 58%) minmax(220px, 42%);
+      max-height: 90vh;
+    }
+    .viewer-media {
+      background: #05070d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 280px;
+    }
+    .viewer-media img {
+      max-width: 100%;
+      max-height: 90vh;
+      object-fit: contain;
+      display: block;
+    }
+    .viewer-info {
+      padding: 16px;
+      overflow: auto;
+      border-left: 1px solid #2f3a56;
+    }
+    .viewer-info h3 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+    }
+    .viewer-info p {
+      margin: 0 0 6px;
+      font-size: 0.88rem;
+      color: var(--muted);
+    }
+    .close {
+      position: absolute;
+      top: 18px;
+      right: 22px;
+      background: transparent;
+      border: 0;
+      color: #e9eefc;
+      font-size: 1.8rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    @media (max-width: 860px) {
+      .viewer {
+        grid-template-columns: 1fr;
+        max-height: 94vh;
+      }
+      .viewer-info {
+        border-left: 0;
+        border-top: 1px solid #2f3a56;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="header">
+      <div>
+        <h1 class="title">Stress Render Gallery</h1>
+        <p class="sub">Grid + Instagram-style click preview for rendered template stress cases.</p>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="controls">
+      <div class="control">
+        <label for="search">Search</label>
+        <input id="search" type="text" placeholder="template id / case / format" />
+      </div>
+      <div class="control">
+        <label for="format">Format</label>
+        <select id="format"></select>
+      </div>
+      <div class="control">
+        <label for="case">Case</label>
+        <select id="case"></select>
+      </div>
+      <div class="control">
+        <label for="template">Template</label>
+        <select id="template"></select>
+      </div>
+    </div>
+    <div id="count" class="empty"></div>
+    <div id="grid" class="grid"></div>
+    <div id="failures" class="failures" style="display:none;">
+      <h2>Failures</h2>
+      <ul id="failure-list"></ul>
+    </div>
+  </div>
+
+  <div id="modal" class="modal" aria-hidden="true">
+    <button class="close" id="close" aria-label="Close">×</button>
+    <div class="viewer">
+      <div class="viewer-media"><img id="viewer-image" alt="" /></div>
+      <div class="viewer-info">
+        <h3 id="viewer-title"></h3>
+        <p id="viewer-format"></p>
+        <p id="viewer-template"></p>
+        <p id="viewer-case"></p>
+        <p id="viewer-file"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const payload = ${payloadJson};
+    const entries = payload.entries || [];
+    const failures = payload.failures || [];
+    const summary = payload.summary || {};
+
+    const stats = document.getElementById("stats");
+    const grid = document.getElementById("grid");
+    const count = document.getElementById("count");
+    const search = document.getElementById("search");
+    const formatSelect = document.getElementById("format");
+    const caseSelect = document.getElementById("case");
+    const templateSelect = document.getElementById("template");
+    const failureBox = document.getElementById("failures");
+    const failureList = document.getElementById("failure-list");
+
+    const modal = document.getElementById("modal");
+    const closeBtn = document.getElementById("close");
+    const viewerImage = document.getElementById("viewer-image");
+    const viewerTitle = document.getElementById("viewer-title");
+    const viewerFormat = document.getElementById("viewer-format");
+    const viewerTemplate = document.getElementById("viewer-template");
+    const viewerCase = document.getElementById("viewer-case");
+    const viewerFile = document.getElementById("viewer-file");
+
+    function chip(label, value) {
+      const el = document.createElement("div");
+      el.className = "chip";
+      el.textContent = label + ": " + value;
+      return el;
+    }
+
+    stats.appendChild(chip("Tasks", summary.totals?.tasks ?? entries.length));
+    stats.appendChild(chip("Passed", summary.totals?.passed ?? entries.length));
+    stats.appendChild(chip("Failed", summary.totals?.failed ?? failures.length));
+    stats.appendChild(chip("Duration", (summary.duration_seconds ?? 0) + "s"));
+
+    function uniqueValues(items, key) {
+      return [...new Set(items.map((item) => item[key]).filter(Boolean))].sort();
+    }
+
+    function fillSelect(select, values, label) {
+      const all = document.createElement("option");
+      all.value = "";
+      all.textContent = "All " + label;
+      select.appendChild(all);
+      for (const value of values) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+      }
+    }
+
+    fillSelect(formatSelect, uniqueValues(entries, "formatId"), "formats");
+    fillSelect(caseSelect, uniqueValues(entries, "caseId"), "cases");
+    fillSelect(templateSelect, uniqueValues(entries, "templateId"), "templates");
+
+    function matches(entry) {
+      const q = search.value.trim().toLowerCase();
+      if (q) {
+        const haystack = [entry.templateId, entry.caseId, entry.caseLabel, entry.formatId, entry.file].join(" ").toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      if (formatSelect.value && entry.formatId !== formatSelect.value) return false;
+      if (caseSelect.value && entry.caseId !== caseSelect.value) return false;
+      if (templateSelect.value && entry.templateId !== templateSelect.value) return false;
+      return true;
+    }
+
+    function openViewer(entry) {
+      viewerImage.src = entry.file;
+      viewerImage.alt = entry.templateId + " " + entry.caseId;
+      viewerTitle.textContent = entry.caseLabel || entry.caseId;
+      viewerFormat.textContent = "Format: " + entry.formatId;
+      viewerTemplate.textContent = "Template: " + entry.templateId;
+      viewerCase.textContent = "Case ID: " + entry.caseId;
+      viewerFile.textContent = "File: " + entry.file;
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeViewer() {
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      viewerImage.src = "";
+    }
+
+    function renderGrid() {
+      const visible = entries.filter(matches);
+      grid.innerHTML = "";
+      count.textContent = visible.length + " image(s) visible";
+
+      if (visible.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No images match current filters.";
+        grid.appendChild(empty);
+        return;
+      }
+
+      for (const entry of visible) {
+        const card = document.createElement("button");
+        card.className = "card";
+        card.type = "button";
+        card.innerHTML = [
+          '<img loading="lazy" src="' + entry.file + '" alt="' + entry.templateId + " " + entry.caseId + '">',
+          '<div class="meta">',
+          "<strong>" + entry.templateId + "</strong>",
+          "<span>" + entry.formatId + "</span>",
+          "<span>" + (entry.caseLabel || entry.caseId) + "</span>",
+          "</div>"
+        ].join("");
+        card.addEventListener("click", () => openViewer(entry));
+        grid.appendChild(card);
+      }
+    }
+
+    search.addEventListener("input", renderGrid);
+    formatSelect.addEventListener("change", renderGrid);
+    caseSelect.addEventListener("change", renderGrid);
+    templateSelect.addEventListener("change", renderGrid);
+
+    closeBtn.addEventListener("click", closeViewer);
+    modal.addEventListener("click", (event) => {
+      if (event.target === modal) closeViewer();
+    });
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeViewer();
+    });
+
+    if (failures.length > 0) {
+      failureBox.style.display = "block";
+      for (const failure of failures.slice(0, 200)) {
+        const li = document.createElement("li");
+        li.textContent = [
+          failure.task?.formatId || "unknown-format",
+          failure.task?.templateId || "unknown-template",
+          failure.task?.caseId || "unknown-case",
+          failure.error || "unknown-error"
+        ].join(" :: ");
+        failureList.appendChild(li);
+      }
+    }
+
+    renderGrid();
+  </script>
+</body>
+</html>`;
 }
 
 function summarizeFailures(tasks, failures, startedAt, outputRoot) {
@@ -851,8 +1286,24 @@ async function main() {
     );
 
     const summary = summarizeFailures(tasks, runSummary.failures, startedAt, outputRoot);
+    const galleryEntries = runSummary.rendered.map((item) => ({
+      formatId: item.task.formatId,
+      templateId: item.task.templateId,
+      caseId: item.task.caseId,
+      caseLabel: item.task.caseLabel,
+      file: relative(outputRoot, item.filePath).split("\\\\").join("/")
+    }));
+
     await writeFile(join(outputRoot, "report.json"), JSON.stringify(summary, null, 2));
     await writeFile(join(outputRoot, "failures.json"), JSON.stringify(runSummary.failures, null, 2));
+    await writeFile(
+      join(outputRoot, "index.html"),
+      buildGalleryIndexHtml({
+        entries: galleryEntries,
+        failures: runSummary.failures,
+        summary
+      })
+    );
 
     console.log("");
     console.log("Stress render summary");
@@ -861,6 +1312,7 @@ async function main() {
     console.log(`- Failed: ${summary.totals.failed}`);
     console.log(`- Output: ${outputRoot}`);
     console.log(`- Report: ${join(outputRoot, "report.json")}`);
+    console.log(`- Gallery: ${join(outputRoot, "index.html")}`);
 
     if (runSummary.failures.length > 0) {
       process.exitCode = 1;

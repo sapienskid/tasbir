@@ -718,6 +718,111 @@ describe("social pipeline worker", () => {
     }
   });
 
+  it("handles lorem ipsum heading and paragraph size variants", async () => {
+    launchMock.mockResolvedValue(fakeBrowser());
+
+    const variants = [
+      {
+        id: "short",
+        headingWords: 4,
+        paragraphSentences: 1,
+        wordsPerSentence: 12
+      },
+      {
+        id: "medium",
+        headingWords: 8,
+        paragraphSentences: 2,
+        wordsPerSentence: 18
+      },
+      {
+        id: "long",
+        headingWords: 16,
+        paragraphSentences: 4,
+        wordsPerSentence: 28
+      }
+    ];
+
+    for (const [index, variant] of variants.entries()) {
+      const headingText = loremSentence(variant.headingWords, index * 17).replace(/\.$/, "");
+      const paragraphText = loremParagraph(variant.paragraphSentences, variant.wordsPerSentence, index * 23);
+
+      const env = {
+        AI: {
+          run: vi.fn(async () => ({
+            response: JSON.stringify({
+              instagram_caption: paragraphText,
+              twitter_caption: paragraphText,
+              linkedin_caption: paragraphText,
+              carousel_slides: [
+                { heading: headingText, body: paragraphText },
+                { heading: headingText, body: paragraphText },
+                { heading: headingText, body: paragraphText },
+                { heading: headingText, body: paragraphText },
+                { heading: headingText, body: paragraphText }
+              ],
+              hashtags: ["#workflow", "#contentops", "#socialmedia", "#automation", "#cloudflare"],
+              image_prompt: "A neutral editorial gradient background with clean negative space",
+              stock_search_query: "lorem stress",
+              use_feature_image: false,
+              slot_content: {
+                headline: headingText,
+                body: paragraphText
+              }
+            })
+          }))
+        },
+        BROWSER: {},
+        OUTPUT_BUCKET: {
+          put: vi.fn(async () => null)
+        },
+        API_KEYS: TEST_API_KEY,
+        R2_KEY_PREFIX: "social-assets"
+      } as never;
+
+      const response = await worker.fetch(
+        authorizedRequest("https://worker.test/generate-from-content", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            title: `Lorem Variant ${variant.id}`,
+            content: paragraphText,
+            output: {
+              formats: ["carousel-post"],
+              carouselSlides: 5
+            },
+            image: {
+              mode: "none"
+            }
+          })
+        }),
+        env,
+        fakeExecutionContext()
+      );
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as {
+        llm_output: {
+          instagram_caption: string;
+          twitter_caption: string;
+          linkedin_caption: string;
+          carousel_slides: Array<{ heading: string; body: string }>;
+        };
+      };
+
+      expect(body.llm_output.carousel_slides).toHaveLength(5);
+      expect(body.llm_output.instagram_caption.length).toBeLessThanOrEqual(600);
+      expect(body.llm_output.twitter_caption.length).toBeLessThanOrEqual(280);
+      expect(body.llm_output.linkedin_caption.length).toBeLessThanOrEqual(900);
+
+      for (const slide of body.llm_output.carousel_slides) {
+        expect(slide.heading.length).toBeGreaterThan(0);
+        expect(slide.heading.length).toBeLessThanOrEqual(72);
+        expect(slide.body.length).toBeGreaterThan(0);
+        expect(slide.body.length).toBeLessThanOrEqual(260);
+      }
+    }
+  });
+
   it("returns 400 when plain-content payload misses required content", async () => {
     const response = await worker.fetch(
       authorizedRequest("https://worker.test/generate-from-content", {
@@ -761,4 +866,59 @@ function fakeExecutionContext(): ExecutionContext {
     waitUntil: vi.fn(),
     passThroughOnException: vi.fn()
   } as unknown as ExecutionContext;
+}
+
+function loremWords(wordCount: number, seed = 0): string {
+  const words = [
+    "lorem",
+    "ipsum",
+    "dolor",
+    "sit",
+    "amet",
+    "consectetur",
+    "adipiscing",
+    "elit",
+    "sed",
+    "do",
+    "eiusmod",
+    "tempor",
+    "incididunt",
+    "ut",
+    "labore",
+    "et",
+    "dolore",
+    "magna",
+    "aliqua",
+    "enim",
+    "minim",
+    "veniam",
+    "quis",
+    "nostrud",
+    "exercitation",
+    "ullamco",
+    "laboris",
+    "nisi",
+    "aliquip",
+    "commodo",
+    "consequat"
+  ];
+  const count = Math.max(1, Math.floor(wordCount));
+  const output: string[] = [];
+  for (let index = 0; index < count; index += 1) {
+    output.push(words[(seed + index) % words.length]);
+  }
+  return output.join(" ");
+}
+
+function loremSentence(wordCount: number, seed = 0): string {
+  const base = loremWords(wordCount, seed);
+  return `${base.slice(0, 1).toUpperCase()}${base.slice(1)}.`;
+}
+
+function loremParagraph(sentenceCount: number, wordsPerSentence: number, seed = 0): string {
+  const sentences: string[] = [];
+  for (let index = 0; index < sentenceCount; index += 1) {
+    sentences.push(loremSentence(wordsPerSentence, seed + index * 7));
+  }
+  return sentences.join(" ");
 }
