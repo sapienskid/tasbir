@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import process from "node:process";
 
@@ -12,6 +12,7 @@ const DEFAULT_CONCURRENCY = 2;
 const HEALTH_TIMEOUT_MS = 60_000;
 const HEALTH_POLL_MS = 500;
 const MAX_RETRY_ATTEMPTS = 6;
+const GENERATED_ASSETS_PATH = resolve(process.cwd(), "src/generated/template-assets.json");
 const PRESET_VARIATIONS = [
   {
     id: "default",
@@ -444,6 +445,45 @@ function buildRenderTasks(catalog, options, profiles) {
   return tasks;
 }
 
+function templateSupportsFormat(template, formatId) {
+  const single = typeof template?.format === "string" ? template.format.trim() : "";
+  if (single) {
+    return single === formatId;
+  }
+  const formats = Array.isArray(template?.formats)
+    ? template.formats.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)
+    : [];
+  if (formats.length > 0) {
+    return formats.includes(formatId);
+  }
+  return true;
+}
+
+async function loadTemplateCatalogFromGeneratedAssets() {
+  const raw = await readFile(GENERATED_ASSETS_PATH, "utf8");
+  const generated = JSON.parse(raw);
+  const pipelineConfig = generated?.pipeline_config ?? {};
+  const templates = Array.isArray(pipelineConfig.templates) ? pipelineConfig.templates : [];
+  const formats = Object.keys(pipelineConfig.formats ?? {}).map((id) => ({ id }));
+  const templatesByFormat = {};
+
+  for (const format of formats) {
+    templatesByFormat[format.id] = templates
+      .filter((template) => templateSupportsFormat(template, format.id))
+      .map((template) => String(template.id ?? "").trim())
+      .filter(Boolean);
+  }
+
+  return {
+    formats,
+    templates: templates.map((template) => ({
+      ...template,
+      version: String(template?.version ?? template?.file ?? template?.id ?? "unknown")
+    })),
+    templates_by_format: templatesByFormat
+  };
+}
+
 async function runWithConcurrency(tasks, concurrency, worker) {
   let cursor = 0;
   let completed = 0;
@@ -571,12 +611,8 @@ async function main() {
       console.log(`Using existing worker at ${options.baseUrl}`);
     }
 
-    console.log("Fetching template catalog...");
-    const catalogResponse = await fetch(new URL("/template-catalog", options.baseUrl), { headers });
-    if (!catalogResponse.ok) {
-      throw new Error(`Failed to load /template-catalog (HTTP ${catalogResponse.status})`);
-    }
-    const catalog = await catalogResponse.json();
+    console.log("Loading template catalog from generated assets...");
+    const catalog = await loadTemplateCatalogFromGeneratedAssets();
 
     const profiles = buildVariationProfiles(options.variations);
     const tasks = buildRenderTasks(catalog, options, profiles);
