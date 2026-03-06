@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the current runtime architecture (as of March 6, 2026) and a proposed evolution to a Cloudflare Agents-based orchestration model.
+This document describes the current runtime architecture (as of March 6, 2026), including the Cloudflare Agents SDK orchestration path.
 
 ## Build-Time Flow
 
@@ -23,10 +23,12 @@ flowchart TD
 
 - `src/index.ts`: routes, validation, orchestration
 - `src/ai.ts`: template planner + structured copy generation + normalization
+- `src/agents/marketing-orchestrator.ts`: Cloudflare Agent (Durable Object) that creates strategic briefs and role guidance
 - `src/templates.ts`: template resolution, slot extraction, HTML assembly
 - Cloudflare Workers AI (`AI`)
 - Cloudflare Browser Rendering (`BROWSER`)
 - Cloudflare R2 (`OUTPUT_BUCKET`)
+- Cloudflare Agents SDK Durable Object binding (`MARKETING_ORCHESTRATOR`)
 
 ## Active Routes
 
@@ -60,6 +62,25 @@ flowchart TD
     O --> P[Return response + optional notify webhook]
 ```
 
+## Agentic SDK Flow (Implemented)
+
+When `agent.mode` resolves to `agentic` (default from config), runtime invokes the `MarketingOrchestratorAgent` before template/copy generation.
+
+```mermaid
+flowchart TD
+    A[POST /generate or /generate-from-content] --> B[Resolve agent mode/profile/policy]
+    B --> C{mode == agentic?}
+    C -->|No| D[Run classic template + copy flow]
+    C -->|Yes| E[Call MARKETING_ORCHESTRATOR Durable Object]
+    E --> F[Receive strategic_brief + planner/copy/visual notes]
+    F --> G[Apply planner overrides in template selection]
+    G --> H[Apply copy overrides in structured generation]
+    H --> I[Apply render policy guardrails to slot/carousel/image prompt]
+    I --> J[Render + R2 store + response]
+```
+
+If the Durable Object binding is missing or orchestration fails, runtime falls back safely to the classic path and emits `agentic.warnings`.
+
 ## Template Dependency Model
 
 Templates define dynamic slot contracts through `{{SLOT:key}}`. Runtime behavior:
@@ -82,38 +103,24 @@ Because slot keys vary by template, text generation and template selection are t
 - `none`: no image
 - `auto`: try AI first (if enabled), then feature fallbacks
 
-## Proposed Agentic Flow (Design)
+## Central Prompt System (Implemented)
 
-The goal is to evolve the current pipeline into an agentic orchestration system on Cloudflare Agents, with centralized behavior prompts and role-based sub-agents.
+Prompt control is centralized in `config/pipeline/content.yaml` under:
 
-```mermaid
-flowchart TD
-    A[Request: direct content or Ghost slug/url] --> B[Ingestion Agent]
-    B --> C[Campaign Strategist Agent]
-    C --> D[Template Planner Agent]
-    D --> E[Copy Composer Agent]
-    E --> F[Visual Director Agent]
-    F --> G[Render Guard Agent]
-    G --> H[Render template HTML to PNG]
-    H --> I[Store assets in R2]
-    I --> J[Return campaign plan + assets]
-```
+- `generation.agents.default_mode`
+- `generation.agents.default_prompt_profile`
+- `generation.agents.prompt_profiles.<profile>.mastermind`
+- `generation.agents.prompt_profiles.<profile>.roles.{strategist,template_planner,copywriter,visual_director,render_guard}`
+- `generation.agents.render_policy`
 
-Recommended Cloudflare implementation model:
+Runtime behavior:
 
-- root `MarketingOrchestratorAgent` (extends `AIChatAgent`) handles the request/session
-- role sub-agents implemented as callable methods and/or dedicated Agent instances
-- long-running or approval-heavy tasks delegated to `AgentWorkflow`
-- campaign memory persisted in Agent state + embedded SQLite per instance
-- progress and partial outputs streamed over WebSockets/SSE when needed
+1. resolve prompt profile + render policy from config and request `agent` overrides
+2. send profile + source content to `MarketingOrchestratorAgent`
+3. merge orchestration outputs into planner/copy prompts
+4. enforce render policy in postprocessing (hashtags in visual slots, markdown/math/diagram text sanitation, image no-text directive)
 
-Central prompt control (design):
-
-- maintain one central prompt registry in config
-- each role prompt inherits from the central master prompt
-- runtime `llm` overrides append role-specific controls without duplicating policy text
-
-## Platform Strategy (Planned)
+## Platform Strategy Scope
 
 - Instagram feed: portrait/square variants
 - Instagram carousel: intro, middle, ending slides planned by strategist agent
@@ -121,7 +128,7 @@ Central prompt control (design):
 - Facebook: mapped from Instagram strategy/assets with platform-native copy adaptation
 - LinkedIn and X/Twitter: unique post variants, not resized duplicates
 
-## Content and Render Guardrails (Planned)
+## Content and Render Guardrails
 
 - enforce "no typography in AI-generated backgrounds" in visual prompts
 - if markdown-like syntax appears in visual slots, either:
@@ -137,7 +144,7 @@ Central prompt control (design):
 
 ## Cloudflare Research Notes
 
-Design choices above align with Cloudflare Agents capabilities:
+Current implementation and next-step design choices align with Cloudflare Agents capabilities:
 
 - Agents are stateful and built on Durable Objects
 - each instance is globally unique and can be routed back to preserve context

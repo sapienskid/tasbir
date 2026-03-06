@@ -9,6 +9,10 @@ vi.mock("@cloudflare/puppeteer", () => ({
   }
 }));
 
+vi.mock("agents", () => ({
+  Agent: class {}
+}));
+
 const { default: worker } = await import("./index");
 
 describe("social pipeline worker", () => {

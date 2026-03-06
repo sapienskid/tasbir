@@ -41,6 +41,12 @@ No runtime style CDN/script injection, no style/archetype/font-profile matrix.
 7. HTML is rendered and screenshotted via Cloudflare Browser Rendering.
 8. PNG files are stored in R2 and returned in API response.
 
+When agentic mode is enabled (default), an additional orchestration step runs first:
+
+1. `MarketingOrchestratorAgent` (Cloudflare Agents SDK + Durable Objects) receives source context + prompt profile.
+2. Agent returns strategic brief and role notes.
+3. Worker merges those notes into template planner/copy prompts and render policy checks.
+
 ## Project Layout
 
 - `config/pipeline.config.yaml`: composed config entrypoint (`extends`)
@@ -54,6 +60,7 @@ No runtime style CDN/script injection, no style/archetype/font-profile matrix.
 - `src/generated/template-assets.json`: generated runtime bundle
 - `src/generated/template-assets.ts`: typed wrapper over generated JSON
 - `src/index.ts`: API routes + orchestration pipeline
+- `src/agents/marketing-orchestrator.ts`: Cloudflare Agents SDK orchestrator (Durable Object)
 - `src/ai.ts`: structured generation + template assignment planner
 - `src/templates.ts`: template slot extraction/interpolation + render assembly
 - `src/template-theme.ts`: token derivation and render-time controls
@@ -197,6 +204,22 @@ No TypeScript template registration is required.
 - `POST /generate`
 - `POST /generate-from-content`
 - `POST /webhook/ghost`
+
+## Agentic Controls
+
+Request payloads may include:
+
+- `agent.mode`: `classic` or `agentic`
+- `agent.promptProfile`: selects profile from `generation.agents.prompt_profiles`
+- `agent.renderPolicy`: per-request render policy overrides
+- `agent.platformGoals`: optional platform planning intent signals
+
+System prompt sources:
+
+- base copy prompts: `generation.llm.*`
+- template planner prompts: `generation.llm.template_planner.*`
+- agent roles: `generation.agents.prompt_profiles.*`
+- image policy prompts: `generation.image.*`
 
 ## Deployment
 

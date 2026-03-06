@@ -6,6 +6,7 @@ runtime:
 
 features:
   enable_template_preview: true
+  enable_agentic_orchestration: true
   enable_ai_image_generation: true
   prefer_feature_image: false
   enable_notifications: true

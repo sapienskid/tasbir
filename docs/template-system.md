@@ -74,6 +74,21 @@ Recommended contract:
 
 This keeps template evolution safe without silent rendering failures.
 
+## Agentic Prompt + Render Policy Integration
+
+With SDK-based orchestration enabled, template selection and slot generation are influenced by central prompt profiles:
+
+- profile source: `config/pipeline/content.yaml` (`generation.agents.prompt_profiles`)
+- planner guidance: `template_planner` role notes are merged into template planner instructions
+- copy guidance: `copywriter` and `strategist` notes are merged into structured copy generation
+- visual safety: render policy sanitizes visual slot text before template render
+
+Current render-policy actions in runtime:
+
+- strip hashtags from visual slot payloads when `strip_hashtags_in_visual_slots` is enabled
+- remove markdown/math/diagram syntax from visual text when those modes are disabled
+- append explicit no-text directives to AI image prompts when `allow_text_in_ai_images=false`
+
 ## Planned Rich Content Slot Types
 
 For richer authored content, add slot-type-aware rendering policy:

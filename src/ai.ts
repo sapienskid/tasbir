@@ -9,6 +9,13 @@ export interface LlmPromptOverrides {
   maxTokens?: number;
 }
 
+export interface TemplatePlannerPromptOverrides {
+  systemPrompt?: string | string[];
+  userInstructions?: string | string[];
+  temperature?: number;
+  maxTokens?: number;
+}
+
 export interface CarouselSlide {
   heading: string;
   body: string;
@@ -226,6 +233,7 @@ export async function chooseTemplateAssignments(args: {
   requestedFormats: string[];
   templateCandidates: Record<string, TemplateChoiceCandidate[]>;
   userPrompt?: string;
+  plannerOverrides?: TemplatePlannerPromptOverrides;
 }): Promise<Record<string, string>> {
   const textModel = (args.llmModel || DEFAULT_LLM_MODEL) as keyof AiModels;
   const requestedFormats = [...new Set(args.requestedFormats.map((format) => format.trim()).filter(Boolean))];
@@ -260,8 +268,12 @@ export async function chooseTemplateAssignments(args: {
       ? `\n<user_brief>${args.userPrompt.trim()}</user_brief>`
       : "";
 
+  const plannerInstructionsTemplate = buildPromptTemplate(
+    args.plannerOverrides?.userInstructions,
+    PIPELINE_CONFIG.generation.llm.template_planner.user_instructions
+  );
   const plannerInstructions = [
-    ...PIPELINE_CONFIG.generation.llm.template_planner.user_instructions,
+    plannerInstructionsTemplate,
     "",
     "Requested formats and candidate templates:",
     promptLines.join("\n\n"),
@@ -274,13 +286,17 @@ export async function chooseTemplateAssignments(args: {
     "</body>",
     userBrief
   ].join("\n");
+  const plannerSystemPrompt = buildPromptTemplate(
+    args.plannerOverrides?.systemPrompt,
+    PIPELINE_CONFIG.generation.llm.template_planner.system_prompt
+  );
 
   try {
     const raw = await args.ai.run(textModel, {
       messages: [
         {
           role: "system",
-          content: PIPELINE_CONFIG.generation.llm.template_planner.system_prompt.join("\n")
+          content: plannerSystemPrompt
         },
         {
           role: "user",
@@ -291,8 +307,8 @@ export async function chooseTemplateAssignments(args: {
         type: "json_schema",
         json_schema: buildTemplateAssignmentSchema(requestedFormats, args.templateCandidates)
       },
-      temperature: 0.1,
-      max_tokens: 900
+      temperature: clampNumber(args.plannerOverrides?.temperature, 0, 2, 0.1),
+      max_tokens: Math.round(clampNumber(args.plannerOverrides?.maxTokens, 256, 4096, 900))
     });
 
     const parsed = parseModelJson(raw);

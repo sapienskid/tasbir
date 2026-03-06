@@ -1,11 +1,13 @@
 import puppeteer from "@cloudflare/puppeteer";
+import type { MarketingOrchestratorAgent } from "./agents/marketing-orchestrator";
 import {
   chooseTemplateAssignments,
   generateStructuredCopy,
   normalizeSourceContent,
   type LlmOutput,
   type LlmPromptOverrides,
-  type TemplateChoiceCandidate
+  type TemplateChoiceCandidate,
+  type TemplatePlannerPromptOverrides
 } from "./ai";
 import {
   getTemplateDimensions,
@@ -25,6 +27,7 @@ import { PIPELINE_CONFIG, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/templ
 interface Env {
   AI: Ai;
   BROWSER: Fetcher;
+  MARKETING_ORCHESTRATOR?: DurableObjectNamespace<MarketingOrchestratorAgent>;
   ASSETS?: Fetcher;
   OUTPUT_BUCKET: R2Bucket;
   GHOST_API_URL: string;
@@ -67,6 +70,35 @@ interface CampaignOptions {
   strategy?: "template-rotation-angle-presets";
 }
 
+interface AgentRenderPolicy {
+  allowMarkdown?: boolean;
+  allowMath?: boolean;
+  allowDiagrams?: boolean;
+  allowTextInAiImages?: boolean;
+  stripHashtagsInVisualSlots?: boolean;
+}
+
+interface AgentPlatformGoal {
+  posts?: number;
+  feed?: number;
+  carousel?: number;
+  story?: number;
+}
+
+interface AgentPlatformGoals {
+  instagram?: AgentPlatformGoal;
+  facebook?: AgentPlatformGoal;
+  linkedin?: AgentPlatformGoal;
+  twitter?: AgentPlatformGoal;
+}
+
+interface AgentOptions {
+  mode?: "classic" | "agentic";
+  promptProfile?: string;
+  platformGoals?: AgentPlatformGoals;
+  renderPolicy?: AgentRenderPolicy;
+}
+
 interface GenerateRequestBody {
   slug?: string;
   url?: string;
@@ -80,6 +112,7 @@ interface GenerateRequestBody {
   image?: ImageGenerationOptions;
   output?: OutputOptions;
   campaign?: CampaignOptions;
+  agent?: AgentOptions;
 }
 
 interface DirectContentRequestBody {
@@ -102,6 +135,7 @@ interface DirectContentRequestBody {
   image?: ImageGenerationOptions;
   output?: OutputOptions;
   campaign?: CampaignOptions;
+  agent?: AgentOptions;
 }
 
 interface StorageOptions {
@@ -192,6 +226,21 @@ interface CampaignPostOutput {
   assets: StoredAsset[];
 }
 
+interface AgentExecutionSummary {
+  mode: "classic" | "agentic";
+  prompt_profile?: string;
+  applied_roles: string[];
+  warnings: string[];
+}
+
+interface AgentOrchestrationResponse {
+  strategic_brief: string;
+  template_planner_notes: string;
+  copywriter_notes: string;
+  visual_notes: string;
+  warnings: string[];
+}
+
 interface GenerationResult {
   ok: true;
   slug: string;
@@ -205,6 +254,7 @@ interface GenerationResult {
   llm_output: LlmOutput;
   campaign_plan?: CampaignPlan;
   campaign_outputs?: CampaignPostOutput[];
+  agentic?: AgentExecutionSummary;
   assets: {
     instagram_portrait: StoredAsset | null;
     instagram_square: StoredAsset | null;
@@ -344,6 +394,62 @@ const ANGLE_PRESETS_BY_PLATFORM: Record<TemplateKind, string[]> = TEMPLATE_KINDS
   },
   {} as Record<TemplateKind, string[]>
 );
+
+interface ResolvedAgentRenderPolicy {
+  allowMarkdown: boolean;
+  allowMath: boolean;
+  allowDiagrams: boolean;
+  allowTextInAiImages: boolean;
+  stripHashtagsInVisualSlots: boolean;
+}
+
+interface ResolvedAgentPromptProfile {
+  name: string;
+  mastermind: string[];
+  strategist: string[];
+  templatePlanner: string[];
+  copywriter: string[];
+  visualDirector: string[];
+  renderGuard: string[];
+}
+
+interface AgentExecutionContext {
+  mode: "classic" | "agentic";
+  promptProfile: ResolvedAgentPromptProfile;
+  renderPolicy: ResolvedAgentRenderPolicy;
+  plannerOverrides?: TemplatePlannerPromptOverrides;
+  copyOverrides?: LlmPromptOverrides;
+  strategicBrief: string;
+  visualNotes: string;
+  warnings: string[];
+}
+
+const DEFAULT_AGENT_PROFILE: ResolvedAgentPromptProfile = {
+  name: "default",
+  mastermind: [],
+  strategist: [],
+  templatePlanner: [],
+  copywriter: [],
+  visualDirector: [],
+  renderGuard: []
+};
+
+const DEFAULT_AGENT_RENDER_POLICY: ResolvedAgentRenderPolicy = {
+  allowMarkdown: true,
+  allowMath: true,
+  allowDiagrams: true,
+  allowTextInAiImages: false,
+  stripHashtagsInVisualSlots: true
+};
+
+const AGENT_APPLIED_ROLES = [
+  "mastermind",
+  "strategist",
+  "template_planner",
+  "copywriter",
+  "visual_director",
+  "render_guard"
+] as const;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -847,6 +953,449 @@ function splitCsv(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
+function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentExecutionContext {
+  const warnings: string[] = [];
+  const agentsConfig = ((PIPELINE_CONFIG.generation as any).agents ?? {}) as Record<string, unknown>;
+  const featureEnabled = Boolean(PIPELINE_CONFIG.features?.enable_agentic_orchestration);
+
+  const requestedMode = (options?.mode ?? toSingleLineString(agentsConfig.default_mode) ?? "classic").toLowerCase();
+  let mode: AgentExecutionContext["mode"] = requestedMode === "agentic" ? "agentic" : "classic";
+  if (mode === "agentic" && !featureEnabled) {
+    mode = "classic";
+    warnings.push("agentic_disabled_by_feature_flag");
+  }
+
+  const requestedProfile =
+    options?.promptProfile?.trim() ||
+    toSingleLineString(agentsConfig.default_prompt_profile) ||
+    DEFAULT_AGENT_PROFILE.name;
+  const promptProfile = resolveAgentPromptProfile(requestedProfile, agentsConfig, warnings);
+  const renderPolicyDefaults = resolveAgentRenderPolicyDefaults(agentsConfig);
+  const renderPolicy: ResolvedAgentRenderPolicy = {
+    allowMarkdown: options?.renderPolicy?.allowMarkdown ?? renderPolicyDefaults.allowMarkdown,
+    allowMath: options?.renderPolicy?.allowMath ?? renderPolicyDefaults.allowMath,
+    allowDiagrams: options?.renderPolicy?.allowDiagrams ?? renderPolicyDefaults.allowDiagrams,
+    allowTextInAiImages: options?.renderPolicy?.allowTextInAiImages ?? renderPolicyDefaults.allowTextInAiImages,
+    stripHashtagsInVisualSlots:
+      options?.renderPolicy?.stripHashtagsInVisualSlots ?? renderPolicyDefaults.stripHashtagsInVisualSlots
+  };
+
+  const plannerSystemPrompt = mergePromptField(
+    PIPELINE_CONFIG.generation.llm?.template_planner?.system_prompt as string[] | string | undefined,
+    [...promptProfile.mastermind, ...promptProfile.templatePlanner]
+  );
+  const copySystemPrompt = mergePromptField(
+    PIPELINE_CONFIG.generation.llm?.system_prompt as string[] | string | undefined,
+    [...promptProfile.mastermind, ...promptProfile.copywriter]
+  );
+
+  const strategistNotes = promptProfile.strategist.join(" ").trim();
+  const renderGuardNotes = promptProfile.renderGuard.join(" ").trim();
+  const visualNotes = promptProfile.visualDirector.join(" ").trim();
+  const baseInstructionAppend = [strategistNotes, renderGuardNotes].filter(Boolean).join("\n");
+
+  return {
+    mode,
+    promptProfile,
+    renderPolicy,
+    plannerOverrides:
+      mode === "agentic"
+        ? {
+          systemPrompt: plannerSystemPrompt
+        }
+        : undefined,
+    copyOverrides:
+      mode === "agentic"
+        ? {
+          systemPrompt: copySystemPrompt,
+          userInstructionsAppend: baseInstructionAppend || undefined
+        }
+        : undefined,
+    strategicBrief: "",
+    visualNotes,
+    warnings
+  };
+}
+
+function resolveAgentPromptProfile(
+  requestedName: string,
+  agentsConfig: Record<string, unknown>,
+  warnings: string[]
+): ResolvedAgentPromptProfile {
+  const profilesRaw = asRecord(agentsConfig.prompt_profiles);
+  const profileRaw = asRecord(profilesRaw?.[requestedName]) ?? asRecord(profilesRaw?.default);
+  if (!profileRaw) {
+    warnings.push("agent_prompt_profile_missing_default");
+    return {
+      ...DEFAULT_AGENT_PROFILE,
+      name: requestedName || DEFAULT_AGENT_PROFILE.name
+    };
+  }
+
+  const roles = asRecord(profileRaw.roles);
+  return {
+    name: requestedName || DEFAULT_AGENT_PROFILE.name,
+    mastermind: toPromptLines(profileRaw.mastermind),
+    strategist: toPromptLines(roles?.strategist),
+    templatePlanner: toPromptLines(roles?.template_planner),
+    copywriter: toPromptLines(roles?.copywriter),
+    visualDirector: toPromptLines(roles?.visual_director),
+    renderGuard: toPromptLines(roles?.render_guard)
+  };
+}
+
+function resolveAgentRenderPolicyDefaults(agentsConfig: Record<string, unknown>): ResolvedAgentRenderPolicy {
+  const renderPolicy = asRecord(agentsConfig.render_policy);
+  return {
+    allowMarkdown: toBoolean(renderPolicy?.allow_markdown, DEFAULT_AGENT_RENDER_POLICY.allowMarkdown),
+    allowMath: toBoolean(renderPolicy?.allow_math, DEFAULT_AGENT_RENDER_POLICY.allowMath),
+    allowDiagrams: toBoolean(renderPolicy?.allow_diagrams, DEFAULT_AGENT_RENDER_POLICY.allowDiagrams),
+    allowTextInAiImages: toBoolean(
+      renderPolicy?.allow_text_in_ai_images,
+      DEFAULT_AGENT_RENDER_POLICY.allowTextInAiImages
+    ),
+    stripHashtagsInVisualSlots: toBoolean(
+      renderPolicy?.strip_hashtags_in_visual_slots,
+      DEFAULT_AGENT_RENDER_POLICY.stripHashtagsInVisualSlots
+    )
+  };
+}
+
+async function resolveAgentContextForRun(args: {
+  env: Env;
+  post: GhostPost;
+  baseContext: AgentExecutionContext;
+  userPrompt?: string;
+  requestedFormats: TemplateKind[];
+  platformGoals?: AgentPlatformGoals;
+  platform?: TemplateKind;
+  variantIndex?: number;
+}): Promise<AgentExecutionContext> {
+  const context = cloneAgentExecutionContext(args.baseContext);
+  if (context.mode !== "agentic") {
+    return context;
+  }
+  if (!args.env.MARKETING_ORCHESTRATOR) {
+    context.warnings.push("agent_binding_missing");
+    return context;
+  }
+
+  const orchestratorId = args.env.MARKETING_ORCHESTRATOR.idFromName(`marketing-${args.post.slug}`);
+  const orchestratorStub = args.env.MARKETING_ORCHESTRATOR.get(orchestratorId);
+
+  const payload = {
+    post: {
+      title: args.post.title,
+      excerpt: args.post.custom_excerpt || args.post.excerpt || "",
+      plaintext: args.post.plaintext || stripHtml(args.post.html || ""),
+      tags: (args.post.tags ?? []).map((item) => item.name ?? "").filter(Boolean)
+    },
+    requestedFormats: args.requestedFormats,
+    userPrompt: args.userPrompt,
+    promptProfile: {
+      mastermind: context.promptProfile.mastermind,
+      strategist: context.promptProfile.strategist,
+      templatePlanner: context.promptProfile.templatePlanner,
+      copywriter: context.promptProfile.copywriter,
+      visualDirector: context.promptProfile.visualDirector,
+      renderGuard: context.promptProfile.renderGuard
+    },
+    renderPolicy: context.renderPolicy,
+    platformGoals: args.platformGoals,
+    variantContext: {
+      platform: args.platform,
+      variantIndex: args.variantIndex
+    }
+  };
+
+  try {
+    const response = await orchestratorStub.fetch("https://marketing-agent.local/orchestrate", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      context.warnings.push(`agent_orchestrator_http_${response.status}`);
+      return context;
+    }
+    const raw = (await response.json()) as unknown;
+    const parsed = parseAgentOrchestrationResponse(raw);
+    if (!parsed) {
+      context.warnings.push("agent_orchestrator_invalid_payload");
+      return context;
+    }
+
+    context.strategicBrief = parsed.strategic_brief;
+    context.visualNotes = [context.visualNotes, parsed.visual_notes].filter(Boolean).join("\n");
+    context.plannerOverrides = {
+      ...context.plannerOverrides,
+      userInstructions: mergePromptField(
+        context.plannerOverrides?.userInstructions,
+        `Agent planner guidance: ${parsed.template_planner_notes}`
+      )
+    };
+    context.copyOverrides = {
+      ...context.copyOverrides,
+      userInstructionsAppend: [context.copyOverrides?.userInstructionsAppend, parsed.copywriter_notes]
+        .filter(Boolean)
+        .join("\n")
+    };
+    context.warnings = [...new Set([...context.warnings, ...parsed.warnings])];
+    return context;
+  } catch {
+    context.warnings.push("agent_orchestrator_request_failed");
+    return context;
+  }
+}
+
+function cloneAgentExecutionContext(context: AgentExecutionContext): AgentExecutionContext {
+  return {
+    mode: context.mode,
+    promptProfile: {
+      ...context.promptProfile,
+      mastermind: [...context.promptProfile.mastermind],
+      strategist: [...context.promptProfile.strategist],
+      templatePlanner: [...context.promptProfile.templatePlanner],
+      copywriter: [...context.promptProfile.copywriter],
+      visualDirector: [...context.promptProfile.visualDirector],
+      renderGuard: [...context.promptProfile.renderGuard]
+    },
+    renderPolicy: { ...context.renderPolicy },
+    plannerOverrides: context.plannerOverrides ? { ...context.plannerOverrides } : undefined,
+    copyOverrides: context.copyOverrides ? { ...context.copyOverrides } : undefined,
+    strategicBrief: context.strategicBrief,
+    visualNotes: context.visualNotes,
+    warnings: [...context.warnings]
+  };
+}
+
+function parseAgentOrchestrationResponse(input: unknown): AgentOrchestrationResponse | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+  const object = input as Record<string, unknown>;
+  const warnings = Array.isArray(object.warnings)
+    ? object.warnings.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean)
+    : [];
+
+  const strategicBrief = toSingleLineString(object.strategic_brief);
+  const plannerNotes = toSingleLineString(object.template_planner_notes);
+  const copywriterNotes = toSingleLineString(object.copywriter_notes);
+  const visualNotes = toSingleLineString(object.visual_notes);
+  if (!strategicBrief || !plannerNotes || !copywriterNotes || !visualNotes) {
+    return null;
+  }
+  return {
+    strategic_brief: strategicBrief,
+    template_planner_notes: plannerNotes,
+    copywriter_notes: copywriterNotes,
+    visual_notes: visualNotes,
+    warnings
+  };
+}
+
+function appendStrategicBrief(prompt: string | undefined, brief: string): string | undefined {
+  const normalizedPrompt = prompt?.trim() || "";
+  const normalizedBrief = brief.trim();
+  if (!normalizedBrief) {
+    return normalizedPrompt || undefined;
+  }
+  if (!normalizedPrompt) {
+    return `Strategic brief: ${normalizedBrief}`;
+  }
+  return `${normalizedPrompt}\nStrategic brief: ${normalizedBrief}`;
+}
+
+function mergeLlmOverrides(
+  base: LlmPromptOverrides | undefined,
+  agent: LlmPromptOverrides | undefined
+): LlmPromptOverrides | undefined {
+  if (!base && !agent) {
+    return undefined;
+  }
+  const merged: LlmPromptOverrides = {
+    systemPrompt: mergePromptField(agent?.systemPrompt, base?.systemPrompt),
+    userInstructions: mergePromptField(agent?.userInstructions, base?.userInstructions),
+    userInstructionsAppend: [agent?.userInstructionsAppend, base?.userInstructionsAppend]
+      .filter(Boolean)
+      .join("\n") || undefined,
+    temperature: base?.temperature ?? agent?.temperature,
+    maxTokens: base?.maxTokens ?? agent?.maxTokens
+  };
+  return Object.values(merged).some((value) => value !== undefined) ? merged : undefined;
+}
+
+function mergePromptField(
+  primary: string | string[] | undefined,
+  secondary: string | string[] | undefined
+): string | string[] | undefined {
+  const combined = [...toPromptLines(primary), ...toPromptLines(secondary)];
+  if (combined.length === 0) {
+    return undefined;
+  }
+  return combined;
+}
+
+function toPromptLines(input: unknown): string[] {
+  if (typeof input === "string") {
+    const trimmed = input.trim();
+    return trimmed ? [trimmed] : [];
+  }
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  return input
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter(Boolean);
+}
+
+function toSingleLineString(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized || null;
+}
+
+function toBoolean(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    return parseBooleanString(value, fallback);
+  }
+  return fallback;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function applyAgentPoliciesToLlmOutput(base: LlmOutput, context: AgentExecutionContext): LlmOutput {
+  if (context.mode !== "agentic") {
+    return base;
+  }
+
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const sanitizeVisual = (value: string): string => sanitizeVisualText(value, context.renderPolicy);
+
+  const slotContent = Object.fromEntries(
+    Object.entries(base.slot_content).map(([key, value]) => [
+      key,
+      ensureLength(sanitizeVisual(value), limits.slot_text_max_chars, value)
+    ])
+  );
+
+  const carouselSlides = base.carousel_slides.map((slide) => {
+    const heading = ensureLength(
+      sanitizeVisual(slide.heading),
+      limits.carousel_heading_max_chars,
+      slide.heading
+    );
+    const body = ensureLength(
+      ensureSentenceCompletion(sanitizeVisual(slide.body)),
+      limits.carousel_body_max_chars,
+      slide.body
+    );
+    return { heading, body };
+  });
+
+  const imagePrompt = ensureLength(
+    buildAgentImagePrompt(base.image_prompt, context),
+    limits.image_prompt_max_chars,
+    base.image_prompt
+  );
+
+  return {
+    ...base,
+    carousel_slides: carouselSlides,
+    slot_content: slotContent,
+    image_prompt: imagePrompt
+  };
+}
+
+function sanitizeVisualText(value: string, policy: ResolvedAgentRenderPolicy): string {
+  let text = value.trim();
+  if (!text) {
+    return text;
+  }
+  if (!policy.allowDiagrams) {
+    text = text.replace(/```mermaid[\s\S]*?```/gi, " ");
+  }
+  if (!policy.allowMath) {
+    text = text.replace(/\$\$[\s\S]*?\$\$/g, " ");
+    text = text.replace(/\$[^$\n]+\$/g, " ");
+  }
+  if (!policy.allowMarkdown) {
+    text = stripMarkdownSyntax(text);
+  }
+  if (policy.stripHashtagsInVisualSlots) {
+    text = text.replace(/(^|\s)#[A-Za-z0-9_]+/g, " ");
+  }
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function stripMarkdownSyntax(value: string): string {
+  return value
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/~~([^~]+)~~/g, "$1")
+    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/^\s*>\s?/gm, "");
+}
+
+function buildAgentImagePrompt(prompt: string, context: AgentExecutionContext): string {
+  const additions: string[] = [];
+  if (context.visualNotes.trim()) {
+    additions.push(context.visualNotes.trim());
+  }
+  if (!context.renderPolicy.allowTextInAiImages) {
+    additions.push("No text, no letters, no logos, no typographic artifacts in the image.");
+  }
+  if (additions.length === 0) {
+    return prompt;
+  }
+  return `${prompt.trim()} ${additions.join(" ")}`.trim();
+}
+
+function ensureSentenceCompletion(value: string): string {
+  const text = value.trim();
+  if (!text) {
+    return text;
+  }
+  if (/[.!?]$/.test(text)) {
+    return text;
+  }
+  const trimmedTail = text.replace(/[,:;\-–—]+$/g, "").trim();
+  return trimmedTail ? `${trimmedTail}.` : text;
+}
+
+function summarizeAgentExecution(contexts: AgentExecutionContext[]): AgentExecutionSummary | undefined {
+  const agenticContexts = contexts.filter((context) => context.mode === "agentic");
+  if (agenticContexts.length === 0) {
+    return undefined;
+  }
+  const warnings = [...new Set(agenticContexts.flatMap((context) => context.warnings).filter(Boolean))];
+  return {
+    mode: "agentic",
+    prompt_profile: agenticContexts[0].promptProfile.name,
+    applied_roles: [...AGENT_APPLIED_ROLES],
+    warnings
+  };
+}
+
 async function runPipeline(input: GenerateRequestBody, env: Env, security: ResolvedSecurityConfig): Promise<GenerationResult> {
   assertRequiredEnv(env);
 
@@ -869,6 +1418,7 @@ interface PipelineRunInput {
   image?: ImageGenerationOptions;
   output?: OutputOptions;
   campaign?: CampaignOptions;
+  agent?: AgentOptions;
 }
 
 async function runPipelineFromPost(
@@ -884,33 +1434,50 @@ async function runPipelineFromPost(
   const outputPlan = resolveOutputPlan(brandInput.output);
   const brandName = brandInput.brandName ?? env.BRAND_NAME ?? PIPELINE_CONFIG.brand.default_name;
   const variants: NonNullable<GenerationResult["variants"]> = [];
+  const baseAgentContext = resolveAgentExecutionContext(brandInput.agent);
+  const agentContexts: AgentExecutionContext[] = [];
 
   for (let index = 0; index < outputPlan.postCount; index += 1) {
     const variantPrompt =
       outputPlan.postCount > 1
         ? [brandInput.prompt?.trim(), `Variation index ${index + 1} of ${outputPlan.postCount}.`].filter(Boolean).join(" ")
         : brandInput.prompt;
+    const agentContext = await resolveAgentContextForRun({
+      env,
+      post,
+      baseContext: baseAgentContext,
+      userPrompt: variantPrompt,
+      requestedFormats: [...outputPlan.formats],
+      platformGoals: brandInput.agent?.platformGoals,
+      variantIndex: index + 1
+    });
+    agentContexts.push(agentContext);
+    const orchestratedPrompt = appendStrategicBrief(variantPrompt, agentContext.strategicBrief);
 
     const templatePlan = await buildTemplatePlan({
       ai: env.AI,
       llmModel: env.LLM_MODEL,
       post,
-      userPrompt: variantPrompt,
+      userPrompt: orchestratedPrompt,
       outputFormats: outputPlan.formats,
-      templateIds: brandInput.templateIds
+      templateIds: brandInput.templateIds,
+      plannerOverrides: agentContext.plannerOverrides
     });
 
-    const llmOutput = await generateStructuredCopy({
-      ai: env.AI,
-      llmModel: env.LLM_MODEL,
-      post,
-      requiredCarouselSlides: outputPlan.carouselSlides,
-      requiredSlotKeys: templatePlan.requiredSlotKeys,
-      slotFields: templatePlan.slotFields,
-      userPrompt: variantPrompt,
-      llmOverrides: brandInput.llm,
-      normalizeSlotContent
-    });
+    const llmOutput = applyAgentPoliciesToLlmOutput(
+      await generateStructuredCopy({
+        ai: env.AI,
+        llmModel: env.LLM_MODEL,
+        post,
+        requiredCarouselSlides: outputPlan.carouselSlides,
+        requiredSlotKeys: templatePlan.requiredSlotKeys,
+        slotFields: templatePlan.slotFields,
+        userPrompt: orchestratedPrompt,
+        llmOverrides: mergeLlmOverrides(brandInput.llm, agentContext.copyOverrides),
+        normalizeSlotContent
+      }),
+      agentContext
+    );
     const mergedSlotContent = mergeSlotContent(
       llmOutput.slot_content,
       normalizeSlotContent(brandInput.slotOverrides, {
@@ -964,6 +1531,7 @@ async function runPipelineFromPost(
     image_source: primaryVariant.image_source,
     template_plan: primaryVariant.template_plan,
     llm_output: primaryVariant.llm_output,
+    agentic: summarizeAgentExecution(agentContexts),
     assets: primaryVariant.assets,
     variants: outputPlan.postCount > 1 ? variants : undefined
   };
@@ -988,6 +1556,8 @@ async function runCampaignPipelineFromPost(
   const legacyAssets = emptyLegacyAssetSet();
   const templateIdsByPlatform: Partial<Record<TemplateKind, string>> = {};
   const requiredSlotKeySet = new Set<string>();
+  const baseAgentContext = resolveAgentExecutionContext(brandInput.agent);
+  const agentContexts: AgentExecutionContext[] = [];
 
   for (const platformPlan of campaignPlan.platforms) {
     if (platformPlan.posts[0]) {
@@ -1008,18 +1578,33 @@ async function runCampaignPipelineFromPost(
       ]
         .filter(Boolean)
         .join(" ");
-
-      const llmOutput = await generateStructuredCopy({
-        ai: env.AI,
-        llmModel: env.LLM_MODEL,
+      const agentContext = await resolveAgentContextForRun({
+        env,
         post,
-        requiredCarouselSlides: outputPlan.carouselSlides,
-        requiredSlotKeys: postPlan.slot_keys,
-        slotFields: listTemplateFields(postPlan.template_id),
+        baseContext: baseAgentContext,
         userPrompt: perPostPrompt,
-        llmOverrides: brandInput.llm,
-        normalizeSlotContent
+        requestedFormats: [postPlan.platform],
+        platform: postPlan.platform,
+        platformGoals: brandInput.agent?.platformGoals,
+        variantIndex: postPlan.index
       });
+      agentContexts.push(agentContext);
+      const orchestratedPrompt = appendStrategicBrief(perPostPrompt, agentContext.strategicBrief);
+
+      const llmOutput = applyAgentPoliciesToLlmOutput(
+        await generateStructuredCopy({
+          ai: env.AI,
+          llmModel: env.LLM_MODEL,
+          post,
+          requiredCarouselSlides: outputPlan.carouselSlides,
+          requiredSlotKeys: postPlan.slot_keys,
+          slotFields: listTemplateFields(postPlan.template_id),
+          userPrompt: orchestratedPrompt,
+          llmOverrides: mergeLlmOverrides(brandInput.llm, agentContext.copyOverrides),
+          normalizeSlotContent
+        }),
+        agentContext
+      );
 
       const mergedSlotContent = mergeSlotContent(
         llmOutput.slot_content,
@@ -1086,6 +1671,7 @@ async function runCampaignPipelineFromPost(
     llm_output: primaryPost.llm_output,
     campaign_plan: campaignPlan,
     campaign_outputs: campaignOutputs,
+    agentic: summarizeAgentExecution(agentContexts),
     assets: legacyAssets
   };
 }
@@ -1325,6 +1911,7 @@ async function buildTemplatePlan(args: {
   userPrompt?: string;
   outputFormats: Set<TemplateKind>;
   templateIds?: Partial<Record<TemplateKind, string>>;
+  plannerOverrides?: TemplatePlannerPromptOverrides;
 }): Promise<TemplatePlan> {
   const requestedFormats = [...args.outputFormats];
   const templateCandidates = buildTemplateCandidates(requestedFormats);
@@ -1347,7 +1934,8 @@ async function buildTemplatePlan(args: {
       post: args.post,
       requestedFormats: formatsForLlm,
       templateCandidates,
-      userPrompt: args.userPrompt
+      userPrompt: args.userPrompt,
+      plannerOverrides: args.plannerOverrides
     })
     : {};
 
@@ -2386,6 +2974,7 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
   const image = parseImageOptions(body.image);
   const output = parseOutputOptions(body.output);
   const campaign = parseCampaignOptions(body.campaign);
+  const agent = parseAgentOptions(body.agent);
 
   return {
     slug: optionalString(body.slug, "slug", 200),
@@ -2399,7 +2988,8 @@ function validateGenerateRequestBody(input: unknown, security: ResolvedSecurityC
     llm,
     image,
     output,
-    campaign
+    campaign,
+    agent
   };
 }
 
@@ -2436,7 +3026,8 @@ function validateDirectContentRequestBody(input: unknown, security: ResolvedSecu
     llm: parseLlmOverrides(body.llm),
     image: parseImageOptions(body.image),
     output: parseOutputOptions(body.output),
-    campaign: parseCampaignOptions(body.campaign)
+    campaign: parseCampaignOptions(body.campaign),
+    agent: parseAgentOptions(body.agent)
   } satisfies DirectContentRequestBody;
 
   return request;
@@ -2604,6 +3195,91 @@ function parseImageOptions(input: unknown): ImageGenerationOptions | undefined {
     prompt: optionalString(object.prompt, "image.prompt", PIPELINE_CONFIG.generation.limits.image_prompt_max_chars),
     allowAi: object.allowAi !== undefined ? requiredBoolean(object.allowAi, "image.allowAi") : undefined,
     preferFeature: object.preferFeature !== undefined ? requiredBoolean(object.preferFeature, "image.preferFeature") : undefined
+  };
+  return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
+}
+
+function parseAgentOptions(input: unknown): AgentOptions | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, "agent");
+  const mode = optionalString(object.mode, "agent.mode", 20);
+  if (mode && mode !== "classic" && mode !== "agentic") {
+    throw new HttpError(400, "agent.mode must be classic or agentic");
+  }
+
+  const renderPolicyRaw = object.renderPolicy;
+  let renderPolicy: AgentRenderPolicy | undefined;
+  if (renderPolicyRaw !== undefined) {
+    const renderObject = requireObject(renderPolicyRaw, "agent.renderPolicy");
+    renderPolicy = {
+      allowMarkdown:
+        renderObject.allowMarkdown !== undefined
+          ? requiredBoolean(renderObject.allowMarkdown, "agent.renderPolicy.allowMarkdown")
+          : undefined,
+      allowMath:
+        renderObject.allowMath !== undefined
+          ? requiredBoolean(renderObject.allowMath, "agent.renderPolicy.allowMath")
+          : undefined,
+      allowDiagrams:
+        renderObject.allowDiagrams !== undefined
+          ? requiredBoolean(renderObject.allowDiagrams, "agent.renderPolicy.allowDiagrams")
+          : undefined,
+      allowTextInAiImages:
+        renderObject.allowTextInAiImages !== undefined
+          ? requiredBoolean(renderObject.allowTextInAiImages, "agent.renderPolicy.allowTextInAiImages")
+          : undefined,
+      stripHashtagsInVisualSlots:
+        renderObject.stripHashtagsInVisualSlots !== undefined
+          ? requiredBoolean(renderObject.stripHashtagsInVisualSlots, "agent.renderPolicy.stripHashtagsInVisualSlots")
+          : undefined
+    };
+  }
+
+  const platformGoalsRaw = object.platformGoals;
+  let platformGoals: AgentPlatformGoals | undefined;
+  if (platformGoalsRaw !== undefined) {
+    const platformObject = requireObject(platformGoalsRaw, "agent.platformGoals");
+    platformGoals = {
+      instagram: parseAgentPlatformGoal(platformObject.instagram, "agent.platformGoals.instagram"),
+      facebook: parseAgentPlatformGoal(platformObject.facebook, "agent.platformGoals.facebook"),
+      linkedin: parseAgentPlatformGoal(platformObject.linkedin, "agent.platformGoals.linkedin"),
+      twitter: parseAgentPlatformGoal(platformObject.twitter, "agent.platformGoals.twitter")
+    };
+    if (Object.values(platformGoals).every((value) => value === undefined)) {
+      platformGoals = undefined;
+    }
+  }
+
+  const parsed: AgentOptions = {
+    mode: mode as AgentOptions["mode"],
+    promptProfile: optionalString(object.promptProfile, "agent.promptProfile", 120),
+    renderPolicy,
+    platformGoals
+  };
+
+  return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
+}
+
+function parseAgentPlatformGoal(input: unknown, field: string): AgentPlatformGoal | undefined {
+  if (input === undefined) {
+    return undefined;
+  }
+  const object = requireObject(input, field);
+  const parsed: AgentPlatformGoal = {
+    posts:
+      object.posts !== undefined ? Math.round(clampNumber(requiredNumber(object.posts, `${field}.posts`), 0, 20, 0)) : undefined,
+    feed:
+      object.feed !== undefined ? Math.round(clampNumber(requiredNumber(object.feed, `${field}.feed`), 0, 20, 0)) : undefined,
+    carousel:
+      object.carousel !== undefined
+        ? Math.round(clampNumber(requiredNumber(object.carousel, `${field}.carousel`), 0, 20, 0))
+        : undefined,
+    story:
+      object.story !== undefined
+        ? Math.round(clampNumber(requiredNumber(object.story, `${field}.story`), 0, 20, 0))
+        : undefined
   };
   return Object.values(parsed).some((value) => value !== undefined) ? parsed : undefined;
 }
@@ -2959,3 +3635,5 @@ class HttpError extends Error {
     this.headers = headers;
   }
 }
+
+export { MarketingOrchestratorAgent } from "./agents/marketing-orchestrator";
