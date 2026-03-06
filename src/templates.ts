@@ -61,6 +61,15 @@ const MARKDOWN_BLOCK_HINT_PATTERN = /(^|\n)\s*(?:[-*+]\s+\S+|\d+\.\s+\S+|>\s+\S+
 const MERMAID_FENCE_PATTERN = /```mermaid\s*([\s\S]*?)```/gi;
 const BLOCK_MATH_PATTERN = /\$\$([\s\S]+?)\$\$/g;
 const INLINE_MATH_PATTERN = /(?<!\\)\$([^\n$]+?)(?<!\\)\$/g;
+const COLOR_SWAP_SLOT_KEYS = [
+  "color_swap",
+  "swap_colors",
+  "invert_colors",
+  "invert_color_scheme",
+  "foreground_background_swap",
+  "bw_swap"
+] as const;
+const COLOR_SWAP_QUERY_KEYS = ["colorswap", "swapcolors", "invertcolors", "bwswap", "foregroundbackgroundswap"] as const;
 const MARKDOWN = new MarkdownIt({
   html: false,
   linkify: true,
@@ -148,7 +157,9 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const selectedTemplate = selectTemplateDefinition(kind, params.templateId);
   const frameTone = resolveFrameTone(selectedTemplate);
   const slotValues = resolveSlotValues(kind, params, selectedTemplate.id);
+  const colorSwapMode = resolveColorSwapMode(slotValues);
   const brandIcon = resolveBrandIconLayerSettings(params.brandName, slotValues);
+  const shouldInvertBrandIcon = frameTone === "dark" ? colorSwapMode === "normal" : colorSwapMode === "swap";
   const slotFieldTypeByKey = new Map(
     listTemplateFields(selectedTemplate.id).map((field) => [normalizeSlotKey(field.key), field.type] as const)
   );
@@ -178,11 +189,13 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     height: format.height,
     templateId: selectedTemplate.id,
     frameTone,
+    colorSwapMode,
     title: params.title,
     imageUrl: params.imageUrl,
     content,
     visualLayers,
-    brandIcon
+    brandIcon,
+    shouldInvertBrandIcon
   });
 }
 
@@ -279,6 +292,7 @@ function interpolateTemplate(
 }
 
 type RichRenderMode = "inline" | "block";
+type ColorSwapMode = "normal" | "swap";
 
 function renderTokenRichText(tokenKey: string, value: string): string {
   const rawValue = value.trim();
@@ -518,11 +532,13 @@ function renderDocumentShell(args: {
   height: number;
   templateId: string;
   frameTone: "default" | "dark";
+  colorSwapMode: ColorSwapMode;
   title: string;
   imageUrl: string;
   content: string;
   visualLayers: VisualLayerSettings;
   brandIcon: BrandIconLayerSettings;
+  shouldInvertBrandIcon: boolean;
 }): string {
   const safeTitle = escapeHtml(args.title);
   const safeImageUrl = escapeHtml(args.imageUrl.trim());
@@ -542,6 +558,7 @@ function renderDocumentShell(args: {
       CANVAS_HEIGHT: String(args.height),
       TEMPLATE_ID: escapeHtml(args.templateId),
       TEMPLATE_TONE: args.frameTone,
+      COLOR_SWAP_MODE: args.colorSwapMode,
       IMAGE_VISIBILITY_CLASS: imageVisibilityClass,
       IMAGE_URL: safeImageUrl,
       BRAND_ICON_URL: escapeHtml(args.brandIcon.url),
@@ -552,6 +569,7 @@ function renderDocumentShell(args: {
       BRAND_ICON_OPACITY: formatCssNumber(args.brandIcon.opacity),
       BRAND_ICON_VISIBILITY_CLASS: args.brandIcon.visible ? "" : "hidden",
       BRAND_ICON_IMAGE_VISIBILITY_CLASS: args.brandIcon.useImage ? "" : "hidden",
+      BRAND_ICON_INVERT_CLASS: args.shouldInvertBrandIcon ? "invert" : "",
       BRAND_ICON_TEXT_VISIBILITY_CLASS: args.brandIcon.useImage ? "hidden" : "",
       CONTENT: args.content,
       MERMAID_RUNTIME_JS: safeMermaidRuntime
@@ -708,6 +726,36 @@ function parseBooleanFlag(rawValue: string | undefined, fallback: boolean): bool
   return fallback;
 }
 
+function resolveColorSwapMode(slots: Record<string, string>): ColorSwapMode {
+  for (const slotKey of COLOR_SWAP_SLOT_KEYS) {
+    const parsed = parseBooleanSlot(slots[slotKey]);
+    if (parsed === true) {
+      return "swap";
+    }
+    if (parsed === false) {
+      return "normal";
+    }
+  }
+  return "normal";
+}
+
+function parseBooleanSlot(rawValue: string | undefined): boolean | undefined {
+  if (!rawValue) {
+    return undefined;
+  }
+  const normalized = rawValue.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+  if (["1", "true", "on", "yes", "swap", "invert", "black"].includes(normalized)) {
+    return true;
+  }
+  if (["0", "false", "off", "no", "normal", "default", "white"].includes(normalized)) {
+    return false;
+  }
+  return undefined;
+}
+
 function formatCssNumber(value: number): string {
   return Number(value.toFixed(2)).toString();
 }
@@ -724,7 +772,12 @@ function escapeHtml(value: string): string {
 export function previewParamsFromUrl(kind: TemplateKind, url: URL): BaseTemplateParams | CarouselTemplateParams {
   const defaults = PIPELINE_CONFIG.preview_defaults;
   const defaultImageUrl = typeof defaults.image_url === "string" ? defaults.image_url : "";
-  const slotValues = slotValuesFromQuery(url.searchParams);
+  const slotValues = slotValuesFromQuery(url.searchParams) ?? {};
+  const colorSwapOverride = colorSwapValueFromQuery(url.searchParams);
+  if (colorSwapOverride) {
+    slotValues.color_swap = colorSwapOverride;
+  }
+  const resolvedSlotValues = Object.keys(slotValues).length > 0 ? slotValues : undefined;
 
   const base: BaseTemplateParams = {
     title: url.searchParams.get("title") ?? defaults.title,
@@ -732,7 +785,7 @@ export function previewParamsFromUrl(kind: TemplateKind, url: URL): BaseTemplate
     imageUrl: url.searchParams.get("imageUrl") ?? defaultImageUrl,
     brandName: url.searchParams.get("brand") ?? url.searchParams.get("brandName") ?? PIPELINE_CONFIG.brand.default_name,
     templateId: url.searchParams.get("templateId") ?? undefined,
-    slots: slotValues
+    slots: resolvedSlotValues
   };
 
   if (kind !== "carousel-post") {
@@ -777,4 +830,18 @@ function slotValuesFromQuery(searchParams: URLSearchParams): Record<string, stri
   }
 
   return Object.keys(slots).length > 0 ? slots : undefined;
+}
+
+function colorSwapValueFromQuery(searchParams: URLSearchParams): string | undefined {
+  for (const [rawKey, rawValue] of searchParams.entries()) {
+    const normalizedKey = rawKey.trim().toLowerCase();
+    if (!(COLOR_SWAP_QUERY_KEYS as readonly string[]).includes(normalizedKey)) {
+      continue;
+    }
+    const value = rawValue.trim();
+    if (value) {
+      return value;
+    }
+  }
+  return undefined;
 }

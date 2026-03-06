@@ -36,6 +36,75 @@
       -webkit-font-smoothing: antialiased;
     }
 
+    [data-color-swap="swap"][data-template-tone="default"] {
+      --color-black: #FFFFFF;
+      --color-white: #000000;
+      --token-color-text-primary: #FFFFFF;
+      --token-color-text-secondary: #DDDDDD;
+      --token-color-text-muted: #AAAAAA;
+      --token-color-surface-base: #000000;
+      --token-color-surface-elevated: #111111;
+      --token-color-border-subtle: #FFFFFF;
+      --token-color-brand-accent: #FFFFFF;
+      --token-color-brand-accent-foreground: #000000;
+      --token-color-overlay-strong: rgba(255, 255, 255, 0.45);
+      --color-text-primary: #FFFFFF;
+      --color-text-secondary: #DDDDDD;
+      --color-text-muted: #AAAAAA;
+      --color-surface-base: #000000;
+      --color-surface-elevated: #111111;
+      --color-border-subtle: #FFFFFF;
+      --color-brand-accent: #FFFFFF;
+      --color-brand-accent-foreground: #000000;
+      --color-brand-primary: #FFFFFF;
+      --color-brand-secondary: #DDDDDD;
+      --color-brand-muted: #AAAAAA;
+      --color-brand-surface: #000000;
+      --color-brand-elevated: #111111;
+      --color-brand-border: #FFFFFF;
+    }
+
+    [data-color-swap="swap"][data-template-tone="dark"] {
+      --color-black: #000000;
+      --color-white: #FFFFFF;
+      --token-color-text-primary: #000000;
+      --token-color-text-secondary: #222222;
+      --token-color-text-muted: #555555;
+      --token-color-surface-base: #FFFFFF;
+      --token-color-surface-elevated: #F8F8F8;
+      --token-color-border-subtle: #000000;
+      --token-color-brand-accent: #000000;
+      --token-color-brand-accent-foreground: #FFFFFF;
+      --token-color-overlay-strong: rgba(0, 0, 0, 0.6);
+      --color-text-primary: #000000;
+      --color-text-secondary: #222222;
+      --color-text-muted: #555555;
+      --color-surface-base: #FFFFFF;
+      --color-surface-elevated: #F8F8F8;
+      --color-border-subtle: #000000;
+      --color-brand-accent: #000000;
+      --color-brand-accent-foreground: #FFFFFF;
+      --color-brand-primary: #000000;
+      --color-brand-secondary: #222222;
+      --color-brand-muted: #555555;
+      --color-brand-surface: #FFFFFF;
+      --color-brand-elevated: #F8F8F8;
+      --color-brand-border: #000000;
+    }
+
+    [data-color-swap="swap"] .rich-mermaid {
+      border-color: rgba(241, 245, 249, 0.28);
+      background: rgba(15, 23, 42, 0.92);
+      color: #f8fafc;
+    }
+
+    [data-color-swap="swap"] .rich-text pre,
+    [data-color-swap="swap"] .rich-text code {
+      border-color: rgba(241, 245, 249, 0.24);
+      background: rgba(241, 245, 249, 0.12);
+      color: inherit;
+    }
+
     .rich-text {
       display: block;
       max-width: 100%;
@@ -157,7 +226,7 @@
 
 <body>
   <div class="group relative isolate h-full w-full overflow-hidden bg-brand-surface" data-template-id="{{TEMPLATE_ID}}"
-    data-template-tone="{{TEMPLATE_TONE}}">
+    data-template-tone="{{TEMPLATE_TONE}}" data-color-swap="{{COLOR_SWAP_MODE}}">
 
     <!-- Background Content Layer -->
     <div class="absolute inset-0 z-0 {{IMAGE_VISIBILITY_CLASS}}">
@@ -168,14 +237,14 @@
 
     <!-- Architectural Frame -->
     <div
-      class="pointer-events-none absolute inset-0 z-[50] border-[12px] border-brand-primary/5 group-data-[template-tone=dark]:border-white/5">
+      class="pointer-events-none absolute inset-0 z-[50] border-[12px] border-brand-primary/5">
     </div>
 
     <!-- Brand Icon -->
     <div class="pointer-events-none absolute z-[60] {{BRAND_ICON_VISIBILITY_CLASS}}"
       style="left: {{BRAND_ICON_LEFT}}%; top: {{BRAND_ICON_TOP}}%; width: {{BRAND_ICON_SIZE}}px; height: {{BRAND_ICON_SIZE}}px; transform: translate(-50%, -50%); opacity: {{BRAND_ICON_OPACITY}};">
       <img src="{{BRAND_ICON_URL}}" alt=""
-        class="h-full w-full object-contain group-data-[template-tone=dark]:invert {{BRAND_ICON_IMAGE_VISIBILITY_CLASS}}" />
+        class="h-full w-full object-contain {{BRAND_ICON_INVERT_CLASS}} {{BRAND_ICON_IMAGE_VISIBILITY_CLASS}}" />
       <div
         class="flex h-full w-full items-center justify-center border-2 border-brand-primary bg-brand-surface font-brand-body font-black uppercase tracking-widest text-brand-primary {{BRAND_ICON_TEXT_VISIBILITY_CLASS}}"
         style="font-size: calc({{BRAND_ICON_SIZE}}px * 0.35);">

@@ -393,6 +393,7 @@ async function loadSystemTemplateFiles(directoryPath) {
     "CANVAS_HEIGHT",
     "TEMPLATE_ID",
     "TEMPLATE_TONE",
+    "COLOR_SWAP_MODE",
     "IMAGE_VISIBILITY_CLASS",
     "IMAGE_URL",
     "BRAND_ICON_URL",
@@ -403,6 +404,7 @@ async function loadSystemTemplateFiles(directoryPath) {
     "BRAND_ICON_OPACITY",
     "BRAND_ICON_VISIBILITY_CLASS",
     "BRAND_ICON_IMAGE_VISIBILITY_CLASS",
+    "BRAND_ICON_INVERT_CLASS",
     "BRAND_ICON_TEXT_VISIBILITY_CLASS",
     "CONTENT",
     "MERMAID_RUNTIME_JS"

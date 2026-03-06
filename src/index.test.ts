@@ -58,7 +58,7 @@ describe("social pipeline worker", () => {
   it("renders markdown and math syntax into rich html wrappers", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/instagram-portrait?templateId=layout/editorial" +
+        "https://worker.test/template/instagram-portrait?templateId=layout/statement-cta" +
           "&title=%2A%2ABold%2A%2A%20headline" +
           "&caption=Inline%20math%20%24a%5E2%2Bb%5E2%3Dc%5E2%24%0A%0A-%20item%20one%0A-%20item%20two"
       ),
@@ -129,6 +129,21 @@ describe("social pipeline worker", () => {
     expect(html).not.toContain("data-template-archetype=");
     expect(html).toContain("Read More");
     expect(html).toContain("Issue 01");
+  });
+
+  it("supports black-white foreground/background swap in preview", async () => {
+    const response = await worker.fetch(
+      authorizedRequest(
+        "https://worker.test/template/twitter-card?templateId=layout/split-hero&title=Signal&caption=Keep+it+simple&colorSwap=swap"
+      ),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain('data-color-swap="swap"');
+    expect(html).toContain('object-contain invert');
   });
 
   it("applies font variables from css-based template head", async () => {
