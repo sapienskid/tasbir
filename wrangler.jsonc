@@ -39,6 +39,12 @@
 	"env": {
 		"staging": {
 			"name": "social-post-pipeline-staging",
+			"ai": {
+				"binding": "AI"
+			},
+			"browser": {
+				"binding": "BROWSER"
+			},
 			"vars": {
 				"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
 			},
@@ -56,6 +62,12 @@
 		},
 		"production": {
 			"name": "social-post-pipeline",
+			"ai": {
+				"binding": "AI"
+			},
+			"browser": {
+				"binding": "BROWSER"
+			},
 			"vars": {
 				"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
 			},

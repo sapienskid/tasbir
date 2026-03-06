@@ -309,6 +309,7 @@ const TEMPLATE_REGISTRY = PIPELINE_CONFIG.templates as ReadonlyArray<{
   id: string;
   label: string;
   description?: string;
+  selectionHints?: string;
   format?: TemplateKind;
   formats?: TemplateKind[];
 }>;
@@ -1395,6 +1396,7 @@ function buildTemplateCandidates(formats: TemplateKind[]): Record<string, Templa
       id: template.id,
       label: template.label,
       description: template.description,
+      selectionHints: template.selectionHints,
       requiredSlotKeys: listRequiredSlotKeys(format, { templateId: template.id }),
       fields: listTemplateFields(template.id)
     }));

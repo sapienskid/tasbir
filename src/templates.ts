@@ -15,6 +15,7 @@ interface TemplateDefinition {
   formats?: readonly TemplateKind[];
   label: string;
   description?: string;
+  selectionHints?: string;
   file: string;
   frameTone?: "default" | "dark";
   backgroundImage?: "global" | "inline";

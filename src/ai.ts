@@ -40,6 +40,7 @@ export interface TemplateChoiceCandidate {
   id: string;
   label: string;
   description?: string;
+  selectionHints?: string;
   requiredSlotKeys: string[];
   fields?: TemplateFieldDeclaration[];
 }
@@ -240,7 +241,8 @@ export async function chooseTemplateAssignments(args: {
           ? candidate.fields.map((f) => `${f.key}(${f.type})`).join(", ")
           : candidate.requiredSlotKeys.length > 0 ? candidate.requiredSlotKeys.join(", ") : "(no explicit SLOT keys)";
         const description = candidate.description ? ` - ${candidate.description}` : "";
-        return `  - ${candidate.id}: ${candidate.label}${description}; fields: ${fieldSummary}`;
+        const selectionHints = candidate.selectionHints ? `; selection hints: ${candidate.selectionHints}` : "";
+        return `  - ${candidate.id}: ${candidate.label}${description}; fields: ${fieldSummary}${selectionHints}`;
       })
       .join("\n");
     return `format: ${format}\n${candidateLines}`;
@@ -309,8 +311,9 @@ export async function chooseTemplateAssignments(args: {
         selected[format] = requestedTemplateId;
         continue;
       }
-      if (candidates[0]) {
-        selected[format] = candidates[0].id;
+      const fallbackTemplateId = resolveFallbackTemplateId(format, candidates);
+      if (fallbackTemplateId) {
+        selected[format] = fallbackTemplateId;
       }
     }
 
@@ -318,13 +321,25 @@ export async function chooseTemplateAssignments(args: {
   } catch {
     const fallback: Record<string, string> = {};
     for (const format of requestedFormats) {
-      const first = args.templateCandidates[format]?.[0];
-      if (first) {
-        fallback[format] = first.id;
+      const fallbackTemplateId = resolveFallbackTemplateId(format, args.templateCandidates[format] ?? []);
+      if (fallbackTemplateId) {
+        fallback[format] = fallbackTemplateId;
       }
     }
     return fallback;
   }
+}
+
+function resolveFallbackTemplateId(format: string, candidates: TemplateChoiceCandidate[]): string | null {
+  if (candidates.length === 0) {
+    return null;
+  }
+  const candidateIdSet = new Set(candidates.map((candidate) => candidate.id));
+  const defaultTemplateId = toText((PIPELINE_CONFIG.formats as Record<string, { default_template_id?: string }>)[format]?.default_template_id);
+  if (defaultTemplateId && candidateIdSet.has(defaultTemplateId)) {
+    return defaultTemplateId;
+  }
+  return candidates[0]?.id ?? null;
 }
 
 function buildTemplateAssignmentSchema(

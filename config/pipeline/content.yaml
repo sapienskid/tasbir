@@ -71,7 +71,9 @@ generation:
         - "Rules:"
         - "- Return strict JSON only."
         - "- Use only template ids listed under each format."
+        - "- Use template selection hints and slot requirements to find the closest semantic match."
         - "- Prefer templates whose slot requirements fit the content naturally."
+        - "- Prefer variety across formats when multiple strong options exist; avoid choosing visually redundant templates for every format."
         - "- Ensure all requested formats have one selected template id."
   image:
     default_model: "@cf/black-forest-labs/flux-1-schnell"

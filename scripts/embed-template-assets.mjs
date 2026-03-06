@@ -85,6 +85,7 @@ console.log(
  *   @id: layout/my-template
  *   @label: My Template
  *   @description: A one-line description
+ *   @selection_hints: brief comma-separated relevance hints for the planner
  *   @frame_tone: default|dark
  *   @background_image: global|inline
  *
@@ -171,6 +172,7 @@ function parseTemplateFrontMatter(html, filePath, templatesDir) {
     id: fallbackId,
     label: fallbackLabel,
     description: "",
+    selectionHints: undefined,
     frameTone: undefined,
     backgroundImage: undefined,
     fields: [],
@@ -185,7 +187,7 @@ function parseTemplateFrontMatter(html, filePath, templatesDir) {
   const comment = commentMatch[1];
 
   // Check if it looks like our @-directive front-matter
-  if (!/@(id|label|description|frame_tone|background_image|slot)\b/.test(comment)) return defaults;
+  if (!/@(id|label|description|selection_hints|frame_tone|background_image|slot)\b/.test(comment)) return defaults;
 
   const result = { ...defaults };
 
@@ -198,6 +200,9 @@ function parseTemplateFrontMatter(html, filePath, templatesDir) {
 
   const descMatch = comment.match(/^[ \t]*@description[ \t]*:[ \t]*(.+)$/m);
   if (descMatch?.[1]?.trim()) result.description = descMatch[1].trim();
+
+  const selectionHintsMatch = comment.match(/^[ \t]*@selection_hints[ \t]*:[ \t]*(.+)$/m);
+  if (selectionHintsMatch?.[1]?.trim()) result.selectionHints = selectionHintsMatch[1].trim();
 
   const frameToneMatch = comment.match(/^[ \t]*@frame_tone[ \t]*:[ \t]*(.+)$/m);
   if (frameToneMatch?.[1]?.trim()) {
