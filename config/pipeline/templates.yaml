@@ -8,7 +8,7 @@ formats:
     height: 1350
     caption_source: instagram_caption
     hashtag_count: 3
-    default_template_id: layout/editorial
+    default_template_id: layout/statement-cta
     meta_left_label: "Instagram"
     meta_right_label: ""
     layout:
@@ -78,7 +78,7 @@ formats:
     height: 627
     caption_source: linkedin_caption
     hashtag_count: 0
-    default_template_id: layout/editorial
+    default_template_id: layout/split-hero
     meta_left_label: "LinkedIn"
     meta_right_label: ""
     layout:

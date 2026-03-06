@@ -153,7 +153,7 @@ Slot override preview:
 Screenshot preview:
 
 ```text
-/preview/screenshot?format=linkedin-post&templateId=layout/editorial-classic
+/preview/screenshot?format=linkedin-post&templateId=layout/split-hero
 ```
 
 ## Troubleshooting Quick Checks
