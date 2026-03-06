@@ -37,7 +37,7 @@ flowchart TD
 1. Loads and merges config from `config/pipeline.config.yaml` and fragments.
 2. Validates template registry and format defaults.
 3. Loads all `templates/*.html` and `templates/system/*.html`.
-4. Loads `src/styles/template.css`.
+4. Builds `src/styles/template.css` into `src/generated/template.css`, then embeds that compiled stylesheet.
 5. Emits `src/generated/template-assets.json`.
 
 `src/generated/template-assets.ts` is a typed wrapper around that JSON.
@@ -82,12 +82,12 @@ This keeps selection dynamic and aligned with whatever templates are currently r
 
 ## Design System Boundaries
 
-- CSS source of truth: `src/styles/template.css`
+- CSS source of truth: `src/styles/template.css` (compiled output: `src/generated/template.css`)
 - Shared wrappers: `templates/system/head-shell.html` and `templates/system/frame-shell.html`
 - Optional shared fragments (top bar, kicker, footer): `templates/system/*.html`
 - Brand/design overrides are injected as CSS variables and render controls
 
-No CSS or full HTML layouts are hardcoded inside TypeScript modules.
+No runtime style CDN/script injection and no full HTML layouts are hardcoded inside TypeScript modules.
 
 ## Image Source Selection
 

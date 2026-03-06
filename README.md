@@ -22,10 +22,10 @@ This project is template-driven and CSS-token-driven:
 
 - templates are structural skeletons in `templates/*.html`
 - shared wrapper fragments are in `templates/system/*.html`
-- all styling is centralized in `src/styles/template.css`
+- utility-first styles are authored in `src/styles/template.css` and compiled to `src/generated/template.css`
 - runtime assets are compiled into `src/generated/template-assets.json`
 
-No Tailwind runtime, no style/archetype/font-profile matrix.
+No runtime style CDN/script injection, no style/archetype/font-profile matrix.
 
 ## High-Level Flow
 

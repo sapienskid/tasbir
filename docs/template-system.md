@@ -1,6 +1,6 @@
 # Template System
 
-Templates define structure. CSS tokens define design.
+Templates define structure. Utility-first CSS tokens define design.
 
 ## Purpose
 
@@ -16,6 +16,8 @@ The template system lets you:
 - `templates/system/head-shell.html`: document head + stylesheet/token injection
 - `templates/system/frame-shell.html`: common frame/background wrapper
 - `templates/system/*.html`: reusable UI fragments
+- `src/styles/template.css`: style source compiled during build
+- `src/generated/template.css`: compiled stylesheet embedded into runtime assets
 
 ## Placeholder Types
 
