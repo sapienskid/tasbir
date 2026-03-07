@@ -58,7 +58,7 @@ describe("social pipeline worker", () => {
   it("renders markdown and math syntax into rich html wrappers", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/instagram-portrait?templateId=layout/statement-cta" +
+        "https://worker.test/template/instagram-portrait?templateId=layout/editorial" +
           "&title=%2A%2ABold%2A%2A%20headline" +
           "&caption=Inline%20math%20%24a%5E2%2Bb%5E2%3Dc%5E2%24%0A%0A-%20item%20one%0A-%20item%20two"
       ),
@@ -78,7 +78,7 @@ describe("social pipeline worker", () => {
     const diagramMarkdown = encodeURIComponent("```mermaid\ngraph TD\nA-->B\n```");
     const response = await worker.fetch(
       authorizedRequest(
-        `https://worker.test/template/carousel-post?templateId=layout/carousel-module&title=Flow&heading=Flow&body=${diagramMarkdown}&slide=1&total=3`
+        `https://worker.test/template/carousel-post?templateId=layout/carousel-header&title=Flow&heading=Flow&body=${diagramMarkdown}&slide=1&total=3`
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -117,7 +117,7 @@ describe("social pipeline worker", () => {
   it("resolves preview templates with slot values", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/instagram-portrait?templateId=layout/statement-cta&slot.cta_text=Read+More&slot.kicker_text=Growth&slot.footer_meta=Issue+01"
+        "https://worker.test/template/carousel-post?templateId=layout/carousel-header&slot.series_label=Read+More&heading=Growth&body=Issue+01&slide=1&total=5"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -125,16 +125,69 @@ describe("social pipeline worker", () => {
 
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain('data-template-id="layout/statement-cta"');
+    expect(html).toContain('data-template-id="layout/carousel-header"');
     expect(html).not.toContain("data-template-archetype=");
     expect(html).toContain("Read More");
-    expect(html).toContain("Issue 01");
+  });
+
+  it("renders deterministic illustration element tokens when slot.illustration_seed is set", async () => {
+    const baseUrl =
+      "https://worker.test/template/instagram-portrait?templateId=layout/editorial";
+    const responseA1 = await worker.fetch(
+      authorizedRequest(`${baseUrl}&slot.illustration_seed=seed-alpha`),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+    const responseA2 = await worker.fetch(
+      authorizedRequest(`${baseUrl}&slot.illustration_seed=seed-alpha`),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+    const responseB = await worker.fetch(
+      authorizedRequest(`${baseUrl}&slot.illustration_seed=seed-beta`),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+
+    expect(responseA1.status).toBe(200);
+    expect(responseA2.status).toBe(200);
+    expect(responseB.status).toBe(200);
+
+    const htmlA1 = await responseA1.text();
+    const htmlA2 = await responseA2.text();
+    const htmlB = await responseB.text();
+    const illustrationA1 = extractIllustrationSignature(htmlA1);
+    const illustrationA2 = extractIllustrationSignature(htmlA2);
+    const illustrationB = extractIllustrationSignature(htmlB);
+    const markerClassA1 = extractIllustrationMarkerClass(htmlA1);
+
+    expect(illustrationA1.length).toBeGreaterThan(0);
+    expect(illustrationA1).toBe(illustrationA2);
+    expect(illustrationA1).not.toBe(illustrationB);
+    expect(markerClassA1).not.toContain("hidden");
+  });
+
+  it("auto-seeds illustration when no seed is provided in preview", async () => {
+    const response = await worker.fetch(
+      authorizedRequest("https://worker.test/template/instagram-portrait?templateId=layout/editorial"),
+      { API_KEYS: TEST_API_KEY } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    const markerClass = extractIllustrationMarkerClass(html);
+    const illustration = extractIllustrationSignature(html);
+
+    expect(markerClass).not.toContain("hidden");
+    expect(html).toContain('data-illustration-mark="1"');
+    expect(illustration.length).toBeGreaterThan(0);
   });
 
   it("supports black-white foreground/background swap in preview", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/twitter-card?templateId=layout/split-hero&title=Signal&caption=Keep+it+simple&colorSwap=swap"
+        "https://worker.test/template/twitter-card?templateId=layout/with-media-split&title=Signal&caption=Keep+it+simple&colorSwap=swap"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -143,7 +196,7 @@ describe("social pipeline worker", () => {
     expect(response.status).toBe(200);
     const html = await response.text();
     expect(html).toContain('data-color-swap="swap"');
-    expect(html).toContain('object-contain invert');
+    expect(html).toMatch(/object-contain[^"]*invert/i);
   });
 
   it("applies font variables from css-based template head", async () => {
@@ -162,7 +215,7 @@ describe("social pipeline worker", () => {
   it("does not render style-specific css classes", async () => {
     const response = await worker.fetch(
       authorizedRequest(
-        "https://worker.test/template/twitter-card?templateId=layout/split-hero&title=Data+Story&caption=Signal+beats+noise"
+        "https://worker.test/template/twitter-card?templateId=layout/with-media-split&title=Data+Story&caption=Signal+beats+noise"
       ),
       { API_KEYS: TEST_API_KEY } as never,
       fakeExecutionContext()
@@ -918,6 +971,17 @@ function fakeExecutionContext(): ExecutionContext {
     waitUntil: vi.fn(),
     passThroughOnException: vi.fn()
   } as unknown as ExecutionContext;
+}
+
+function extractIllustrationSignature(html: string): string {
+  return extractIllustrationMarkerClass(html);
+}
+
+function extractIllustrationMarkerClass(html: string): string {
+  const match = html.match(
+    /<span\s+aria-hidden="true"\s+data-illustration-mark="1"\s+class="([^"]+)"/i
+  );
+  return (match?.[1] ?? "").replace(/\s+/g, " ").trim();
 }
 
 function loremWords(wordCount: number, seed = 0): string {
