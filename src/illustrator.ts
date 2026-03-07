@@ -17,14 +17,14 @@ const DEFAULT_WIDTH = 1200;
 const DEFAULT_HEIGHT = 1200;
 const SHAPE_TYPES = ["circle", "rect", "line", "triangle", "ring", "arc", "cross"] as const;
 const ELEMENT_POSITIONS = [
-  "absolute top-0 right-0",
-  "absolute top-0 right-4",
-  "absolute top-3 right-8",
-  "absolute top-4 left-4",
-  "absolute top-4 right-5",
-  "absolute bottom-4 right-4",
-  "absolute bottom-5 left-4",
-  "absolute bottom-0 right-8"
+  " top-0 right-0",
+  " top-0 right-4",
+  " top-3 right-8",
+  " top-4 left-4",
+  " top-4 right-5",
+  " bottom-4 right-4",
+  " bottom-5 left-4",
+  " bottom-0 right-8"
 ] as const;
 const ELEMENT_ROTATIONS = ["rotate-0", "rotate-12", "-rotate-12", "rotate-45", "-rotate-45", "rotate-90"] as const;
 const ELEMENT_SQUARE_SIZES = ["h-16 w-16", "h-20 w-20", "h-24 w-24", "h-28 w-28"] as const;

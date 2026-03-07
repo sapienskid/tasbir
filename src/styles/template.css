@@ -56,12 +56,12 @@
   --token-space-lg: 32px;
   --token-space-xl: 48px;
   --token-space-2xl: 64px;
-  --token-space-gutter: 40px;
+  --token-space-gutter: 64px;
 
   /* Font Sizes */
   --token-type-kicker: clamp(0.6875rem, 1vw, 0.875rem);
   --token-type-heading: clamp(2.125rem, 4.6vw, 5.75rem);
-  --token-type-body: clamp(1.125rem, 2vw, 2rem);
+  --token-type-body: clamp(1.125rem, 2vw, 3rem);
   --token-type-small: clamp(0.625rem, 0.88vw, 0.75rem);
   --token-type-metric-value: 84px;
   --token-type-metric-label: 16px;
