@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 @source "../../templates/**/*.html";
 @source "../**/*.ts";
 
@@ -58,10 +59,10 @@
   --token-space-gutter: 40px;
 
   /* Font Sizes */
-  --token-type-kicker: 14px;
-  --token-type-heading: 72px;
-  --token-type-body: 28px;
-  --token-type-small: 12px;
+  --token-type-kicker: clamp(0.6875rem, 1vw, 0.875rem);
+  --token-type-heading: clamp(2.125rem, 4.6vw, 5.75rem);
+  --token-type-body: clamp(1.125rem, 2vw, 2rem);
+  --token-type-small: clamp(0.625rem, 0.88vw, 0.75rem);
   --token-type-metric-value: 84px;
   --token-type-metric-label: 16px;
 
@@ -116,6 +117,30 @@ body {
   background-color: var(--color-surface-base);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Global typography theme for Tailwind Typography plugin. */
+.prose {
+  --tw-prose-body: var(--token-color-text-secondary);
+  --tw-prose-headings: var(--token-color-text-primary);
+  --tw-prose-bold: var(--token-color-text-primary);
+  --tw-prose-links: var(--token-color-text-primary);
+  --tw-prose-counters: var(--token-color-text-muted);
+  --tw-prose-bullets: var(--token-color-border-subtle);
+  --tw-prose-quotes: var(--token-color-text-primary);
+  --tw-prose-quote-borders: var(--token-color-border-subtle);
+  --tw-prose-captions: var(--token-color-text-muted);
+  --tw-prose-code: var(--token-color-text-primary);
+  --tw-prose-pre-code: var(--token-color-text-primary);
+  --tw-prose-pre-bg: var(--token-color-surface-base);
+}
+
+.prose .rich-text-block > :first-child {
+  margin-top: 0;
+}
+
+.prose .rich-text-block > :last-child {
+  margin-bottom: 0;
 }
 
 /* Utilities */
