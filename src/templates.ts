@@ -1,6 +1,7 @@
 import katex from "katex";
 import MarkdownIt from "markdown-it";
 import { PIPELINE_CONFIG, RUNTIME_SCRIPTS, TEMPLATE_CSS, TEMPLATE_FILES } from "./generated/template-assets";
+import { generateIllustrationElement } from "./illustrator";
 
 export type TemplateKind = string;
 
@@ -78,7 +79,7 @@ const MARKDOWN = new MarkdownIt({
 });
 
 const DEFAULT_VISUAL_LAYERS = {
-  useBackgroundImageOnly: true
+  useBackgroundImageOnly: false
 } as const;
 
 export function listTemplateKinds(): TemplateKind[] {
@@ -158,6 +159,17 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
   const frameTone = resolveFrameTone(selectedTemplate);
   const slotValues = resolveSlotValues(kind, params, selectedTemplate.id);
   const colorSwapMode = resolveColorSwapMode(slotValues);
+  const providedIllustrationSeed = slotValues.illustration_seed?.trim() ?? "";
+  const illustrationSeed = providedIllustrationSeed || buildDefaultIllustrationSeed(kind, selectedTemplate.id, params);
+  const illustrationElement = illustrationSeed
+    ? generateIllustrationElement({
+      width: format.width,
+      height: format.height,
+      tone: frameTone,
+      seed: illustrationSeed
+    })
+    : undefined;
+  const hasIllustration = Boolean(illustrationElement);
   const brandIcon = resolveBrandIconLayerSettings(params.brandName, slotValues);
   const shouldInvertBrandIcon = frameTone === "dark" ? colorSwapMode === "normal" : colorSwapMode === "swap";
   const slotFieldTypeByKey = new Map(
@@ -174,7 +186,10 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     SLIDE_LABEL: kind === "carousel-post"
       ? `${(params as CarouselTemplateParams).slideNumber}/${(params as CarouselTemplateParams).totalSlides}`
       : "",
-    KICKER_TEXT: kind === "carousel-post" ? params.title : ""
+    KICKER_TEXT: kind === "carousel-post" ? params.title : "",
+    ILLUSTRATION_VISIBILITY_CLASS: hasIllustration ? "" : "hidden",
+    ILLUSTRATION_ELEMENT_CLASS:
+      illustrationElement?.elementClass ?? "top-[12%] right-[10%] rotate-12 text-black h-20 w-20 rounded-full border-[3px] border-current bg-transparent"
   };
 
   const templateMarkup = loadTemplateMarkup(selectedTemplate.id);
@@ -197,6 +212,30 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     brandIcon,
     shouldInvertBrandIcon
   });
+}
+
+function buildDefaultIllustrationSeed(
+  kind: TemplateKind,
+  templateId: string,
+  params: BaseTemplateParams | CarouselTemplateParams
+): string {
+  const parts = [
+    kind,
+    templateId,
+    params.title,
+    params.caption,
+    params.imageUrl,
+    params.brandName
+  ];
+  if (kind === "carousel-post") {
+    const carouselParams = params as CarouselTemplateParams;
+    parts.push(carouselParams.heading, carouselParams.body, String(carouselParams.slideNumber), String(carouselParams.totalSlides));
+  }
+  return parts
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .join("|")
+    .slice(0, 220);
 }
 
 function selectTemplateDefinition(
@@ -568,7 +607,7 @@ function renderDocumentShell(args: {
       TEMPLATE_TONE: args.frameTone,
       COLOR_SWAP_MODE: args.colorSwapMode,
       IMAGE_VISIBILITY_CLASS: imageVisibilityClass,
-      IMAGE_URL: safeImageUrl,
+      IMAGE_URL: shouldRenderBackgroundImage ? safeImageUrl : "",
       BRAND_ICON_URL: escapeHtml(args.brandIcon.url),
       BRAND_ICON_TEXT: escapeHtml(args.brandIcon.text),
       BRAND_ICON_LEFT: formatCssNumber(args.brandIcon.left),
@@ -785,14 +824,29 @@ export function previewParamsFromUrl(kind: TemplateKind, url: URL): BaseTemplate
   if (colorSwapOverride) {
     slotValues.color_swap = colorSwapOverride;
   }
+  const templateId = url.searchParams.get("templateId") ?? undefined;
+  const title = url.searchParams.get("title") ?? defaults.title;
+  const caption = url.searchParams.get("caption") ?? defaults.caption;
+  if (!slotValues.illustration_seed) {
+    const heading = kind === "carousel-post" ? url.searchParams.get("heading") ?? defaults.heading : "";
+    const body = kind === "carousel-post" ? url.searchParams.get("body") ?? defaults.body : "";
+    slotValues.illustration_seed = buildPreviewIllustrationSeed({
+      kind,
+      templateId,
+      title,
+      caption,
+      heading,
+      body
+    });
+  }
   const resolvedSlotValues = Object.keys(slotValues).length > 0 ? slotValues : undefined;
 
   const base: BaseTemplateParams = {
-    title: url.searchParams.get("title") ?? defaults.title,
-    caption: url.searchParams.get("caption") ?? defaults.caption,
+    title,
+    caption,
     imageUrl: url.searchParams.get("imageUrl") ?? defaultImageUrl,
     brandName: url.searchParams.get("brand") ?? url.searchParams.get("brandName") ?? PIPELINE_CONFIG.brand.default_name,
-    templateId: url.searchParams.get("templateId") ?? undefined,
+    templateId,
     slots: resolvedSlotValues
   };
 
@@ -810,6 +864,27 @@ export function previewParamsFromUrl(kind: TemplateKind, url: URL): BaseTemplate
     slideNumber: Number.isFinite(slideNumber) ? slideNumber : defaults.slide_number,
     totalSlides: Number.isFinite(totalSlides) ? totalSlides : defaults.total_slides
   };
+}
+
+function buildPreviewIllustrationSeed(args: {
+  kind: TemplateKind;
+  templateId?: string;
+  title: string;
+  caption: string;
+  heading?: string;
+  body?: string;
+}): string {
+  return [
+    args.kind,
+    args.templateId ?? "",
+    args.title,
+    args.caption,
+    args.heading ?? "",
+    args.body ?? ""
+  ]
+    .filter((part) => part.trim().length > 0)
+    .join("|")
+    .slice(0, 180);
 }
 
 function slotValuesFromQuery(searchParams: URLSearchParams): Record<string, string> | undefined {
