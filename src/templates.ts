@@ -54,6 +54,7 @@ const TEMPLATE_FIELD_CACHE = new Map<string, TemplateFieldDeclaration[]>();
 const SLOT_TOKEN_PATTERN = /\{\{\s*SLOT(?:_RAW)?:([A-Za-z0-9_:-]+)\s*\}\}/gi;
 const RICH_TEXT_TOKEN_KEYS = new Set(["TITLE", "CAPTION", "HEADING", "BODY", "BRAND_NAME", "SLIDE_LABEL", "KICKER_TEXT"]);
 const BLOCK_RICH_TOKEN_KEYS = new Set(["CAPTION", "BODY"]);
+const RAW_TOKEN_KEYS = new Set(["ILLUSTRATION_ELEMENT_SVG"]);
 const INLINE_SLOT_PATTERN =
   /(?:^|_)(cta|action|button|label|tag|badge|meta|date|index|number|count|score|percent|pct|step|total|slide|author|role|name|brand|icon|x|y|size|opacity|visible|url|prompt|rights)(?:_|$)/i;
 const BLOCK_SLOT_PATTERN =
@@ -189,7 +190,9 @@ export function renderTemplate(kind: TemplateKind, params: BaseTemplateParams | 
     KICKER_TEXT: kind === "carousel-post" ? params.title : "",
     ILLUSTRATION_VISIBILITY_CLASS: hasIllustration ? "" : "hidden",
     ILLUSTRATION_ELEMENT_CLASS:
-      illustrationElement?.elementClass ?? "top-[12%] right-[10%] rotate-12 text-black h-20 w-20 rounded-full border-[3px] border-current bg-transparent"
+      illustrationElement?.elementClass ?? "absolute top-4 right-4 block h-20 w-20 rotate-12 text-black",
+    ILLUSTRATION_ELEMENT_SVG:
+      illustrationElement?.elementSvg ?? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="h-full w-full" fill="none" aria-hidden="true" role="presentation"><polygon points="50,10 90,90 10,90" stroke="currentColor" stroke-width="2" fill="none"/></svg>'
   };
 
   const templateMarkup = loadTemplateMarkup(selectedTemplate.id);
@@ -345,6 +348,9 @@ function renderTokenRichText(tokenKey: string, value: string): string {
   const rawValue = value.trim();
   if (!rawValue) {
     return "";
+  }
+  if (RAW_TOKEN_KEYS.has(tokenKey)) {
+    return value;
   }
   if (!RICH_TEXT_TOKEN_KEYS.has(tokenKey)) {
     return escapeHtml(value);
