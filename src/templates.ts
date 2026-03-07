@@ -50,7 +50,7 @@ export interface CarouselTemplateParams extends BaseTemplateParams {
 const TEMPLATE_DEFINITIONS = PIPELINE_CONFIG.templates as readonly TemplateDefinition[];
 const TEMPLATE_SLOT_KEY_CACHE = new Map<string, string[]>();
 const TEMPLATE_FIELD_CACHE = new Map<string, TemplateFieldDeclaration[]>();
-const SLOT_TOKEN_PATTERN = /\{\{\s*SLOT:([A-Za-z0-9_:-]+)\s*\}\}/gi;
+const SLOT_TOKEN_PATTERN = /\{\{\s*SLOT(?:_RAW)?:([A-Za-z0-9_:-]+)\s*\}\}/gi;
 const RICH_TEXT_TOKEN_KEYS = new Set(["TITLE", "CAPTION", "HEADING", "BODY", "BRAND_NAME", "SLIDE_LABEL", "KICKER_TEXT"]);
 const BLOCK_RICH_TOKEN_KEYS = new Set(["CAPTION", "BODY"]);
 const INLINE_SLOT_PATTERN =
@@ -257,7 +257,8 @@ function resolveFrameTone(template: TemplateDefinition): "default" | "dark" {
   if (explicitTone) {
     return explicitTone;
   }
-  return "default";
+  // Dark-first default across templates unless a template explicitly opts into "default".
+  return "dark";
 }
 
 function normalizeFrameTone(value: unknown): "default" | "dark" | undefined {
@@ -278,6 +279,13 @@ function interpolateTemplate(
 ): string {
   return template.replace(/\{\{\s*([A-Za-z0-9_:-]+)\s*\}\}/g, (_match, rawKey: string) => {
     const key = rawKey.trim();
+    const slotRawMatch = key.match(/^slot_raw:(.+)$/i);
+    if (slotRawMatch?.[1]) {
+      const slotKey = normalizeSlotKey(slotRawMatch[1]);
+      const slotValue = slots[slotKey] ?? "";
+      return escapeHtml(slotValue);
+    }
+
     const slotMatch = key.match(/^slot:(.+)$/i);
     if (slotMatch?.[1]) {
       const slotKey = normalizeSlotKey(slotMatch[1]);
