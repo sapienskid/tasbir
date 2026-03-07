@@ -9,35 +9,36 @@ export interface IllustrationOptions {
 
 export interface IllustrationElement {
   elementClass: string;
+  elementSvg: string;
 }
 
 const ACCENTS = ["#D40000", "#0038A8", "#007A3D", "#E06000", "#6B0FAD", "#00868A", "#C8006A", "#C8A800"];
 const DEFAULT_WIDTH = 1200;
 const DEFAULT_HEIGHT = 1200;
 const SHAPE_TYPES = ["circle", "rect", "line", "triangle", "ring", "arc", "cross"] as const;
-const ELEMENT_SHAPES = ["dot", "ring", "line", "square", "triangle"] as const;
 const ELEMENT_POSITIONS = [
-  "top-[10%] right-[8%]",
-  "top-[14%] right-[14%]",
-  "top-[18%] left-[10%]",
-  "bottom-[14%] right-[10%]",
-  "bottom-[16%] left-[10%]",
-  "top-[48%] right-[7%]"
+  "absolute top-0 right-0",
+  "absolute top-0 right-4",
+  "absolute top-3 right-8",
+  "absolute top-4 left-4",
+  "absolute top-4 right-5",
+  "absolute bottom-4 right-4",
+  "absolute bottom-5 left-4",
+  "absolute bottom-0 right-8"
 ] as const;
 const ELEMENT_ROTATIONS = ["rotate-0", "rotate-12", "-rotate-12", "rotate-45", "-rotate-45", "rotate-90"] as const;
-const ELEMENT_STANDARD_SIZES = ["h-16 w-16", "h-20 w-20", "h-24 w-24", "h-28 w-28"] as const;
-const ELEMENT_LINE_SIZES = ["h-[3px] w-20", "h-[4px] w-24", "h-[5px] w-28"] as const;
-const ELEMENT_TRIANGLE_SIZES = [
-  "h-0 w-0 border-l-[14px] border-r-[14px] border-b-[24px]",
-  "h-0 w-0 border-l-[18px] border-r-[18px] border-b-[30px]",
-  "h-0 w-0 border-l-[22px] border-r-[22px] border-b-[36px]"
-] as const;
+const ELEMENT_SQUARE_SIZES = ["h-16 w-16", "h-20 w-20", "h-24 w-24", "h-28 w-28"] as const;
+const ELEMENT_RECTANGLE_SIZES = ["h-12 w-24", "h-12 w-32", "h-16 w-28", "h-20 w-32"] as const;
+const ELEMENT_CONTAINER_SIZES = [...ELEMENT_SQUARE_SIZES, ...ELEMENT_RECTANGLE_SIZES] as const;
 const ELEMENT_COLORS_DARK = ["text-white", "text-zinc-200", "text-red-400", "text-sky-400", "text-emerald-400", "text-amber-400"] as const;
 const ELEMENT_COLORS_LIGHT = ["text-black", "text-zinc-800", "text-red-700", "text-blue-700", "text-emerald-700", "text-amber-700"] as const;
+const ELEMENT_PRIMITIVE_TYPES = ["polygon", "star", "polyline", "smooth", "curve", "arc"] as const;
 
 type ShapeType = (typeof SHAPE_TYPES)[number];
+type ElementPrimitiveType = (typeof ELEMENT_PRIMITIVE_TYPES)[number];
 
 type RandomSource = () => number;
+type Point = { x: number; y: number };
 
 export function generateIllustrationDataUrl(options: IllustrationOptions = {}): string {
   const svg = generateIllustrationSvg(options);
@@ -82,28 +83,32 @@ export function generateIllustrationElement(options: IllustrationOptions = {}): 
   const tone: IllustrationTone = options.tone === "dark" ? "dark" : "default";
   const seed = options.seed?.trim() || createRandomSeed();
   const random = createRng(hashSeed(seed));
-  const shape = pick(random, ELEMENT_SHAPES);
   const positionClass = pick(random, ELEMENT_POSITIONS);
+  const sizeClass = pick(random, ELEMENT_CONTAINER_SIZES);
   const rotationClass = pick(random, ELEMENT_ROTATIONS);
   const colorClass = tone === "dark"
     ? pick(random, ELEMENT_COLORS_DARK)
     : pick(random, ELEMENT_COLORS_LIGHT);
+  const primitiveCount = 2 + Math.floor(random() * 3);
+  const primitives: string[] = [];
 
-  let shapeClass = "";
-  if (shape === "dot") {
-    shapeClass = `${pick(random, ELEMENT_STANDARD_SIZES)} rounded-full bg-current`;
-  } else if (shape === "ring") {
-    shapeClass = `${pick(random, ELEMENT_STANDARD_SIZES)} rounded-full border-[3px] border-current bg-transparent`;
-  } else if (shape === "line") {
-    shapeClass = `${pick(random, ELEMENT_LINE_SIZES)} rounded-full bg-current`;
-  } else if (shape === "square") {
-    shapeClass = `${pick(random, ELEMENT_STANDARD_SIZES)} border-[3px] border-current bg-transparent`;
-  } else {
-    shapeClass = `${pick(random, ELEMENT_TRIANGLE_SIZES)} border-l-transparent border-r-transparent border-b-current`;
+  for (let index = 0; index < primitiveCount; index += 1) {
+    const primitiveType = pick(random, ELEMENT_PRIMITIVE_TYPES);
+    const strokeWidth = snap(1.4 + random() * 2.4, 0.1);
+    const opacity = snap(0.5 + random() * 0.45, 0.01);
+    const fillOpacity = snap(random() * 0.26, 0.01);
+    primitives.push(renderElementPrimitive(random, primitiveType, strokeWidth, opacity, fillOpacity));
   }
 
+  const elementSvg = [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" class="h-full w-full" fill="none" aria-hidden="true" role="presentation">`,
+    ...primitives,
+    "</svg>"
+  ].join("");
+
   return {
-    elementClass: `${positionClass} ${rotationClass} ${colorClass} ${shapeClass}`.replace(/\s+/g, " ").trim()
+    elementClass: `${positionClass} block ${sizeClass} ${rotationClass} ${colorClass}`.replace(/\s+/g, " ").trim(),
+    elementSvg
   };
 }
 
@@ -237,6 +242,152 @@ function createRng(seed: number): RandomSource {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+function renderElementPrimitive(
+  random: RandomSource,
+  type: ElementPrimitiveType,
+  strokeWidth: number,
+  opacity: number,
+  fillOpacity: number
+): string {
+  switch (type) {
+    case "polygon": {
+      const count = 3 + Math.floor(random() * 5);
+      const points = buildRadialPoints(random, count, 50, 50, 16, 44, 0.28);
+      return `<polygon points="${formatPoints(points)}" stroke="currentColor" stroke-width="${strokeWidth}" fill="currentColor" fill-opacity="${fillOpacity}" opacity="${opacity}"/>`;
+    }
+    case "star": {
+      const spikes = 5 + Math.floor(random() * 3);
+      const points = buildStarPoints(random, spikes, 50, 50, 14, 42, 0.1);
+      return `<polygon points="${formatPoints(points)}" stroke="currentColor" stroke-width="${strokeWidth}" fill="none" opacity="${opacity}"/>`;
+    }
+    case "polyline": {
+      const points = buildPolylinePoints(random, 4 + Math.floor(random() * 4));
+      return `<polyline points="${formatPoints(points)}" stroke="currentColor" stroke-width="${strokeWidth}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${opacity}"/>`;
+    }
+    case "smooth": {
+      const count = 5 + Math.floor(random() * 4);
+      const points = buildRadialPoints(random, count, 50, 50, 12, 40, 0.4);
+      const path = buildSmoothClosedPath(points);
+      return `<path d="${path}" stroke="currentColor" stroke-width="${strokeWidth}" fill="currentColor" fill-opacity="${fillOpacity}" opacity="${opacity}"/>`;
+    }
+    case "curve": {
+      const p0 = randomPoint(random, 8, 92);
+      const c1 = randomPoint(random, 10, 90);
+      const c2 = randomPoint(random, 10, 90);
+      const p1 = randomPoint(random, 8, 92);
+      return `<path d="M ${p0.x} ${p0.y} C ${c1.x} ${c1.y} ${c2.x} ${c2.y} ${p1.x} ${p1.y}" stroke="currentColor" stroke-width="${strokeWidth}" fill="none" stroke-linecap="round" opacity="${opacity}"/>`;
+    }
+    case "arc": {
+      const cx = snap(20 + random() * 60, 1);
+      const cy = snap(20 + random() * 60, 1);
+      const radius = snap(10 + random() * 26, 1);
+      const startAngle = random() * Math.PI * 2;
+      const sweep = (0.35 + random() * 1.2) * Math.PI;
+      const x1 = snap(cx + Math.cos(startAngle) * radius, 1);
+      const y1 = snap(cy + Math.sin(startAngle) * radius, 1);
+      const x2 = snap(cx + Math.cos(startAngle + sweep) * radius, 1);
+      const y2 = snap(cy + Math.sin(startAngle + sweep) * radius, 1);
+      const largeArcFlag = sweep > Math.PI ? 1 : 0;
+      const sweepFlag = random() < 0.5 ? 1 : 0;
+      return `<path d="M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${x2} ${y2}" stroke="currentColor" stroke-width="${strokeWidth}" fill="none" stroke-linecap="round" opacity="${opacity}"/>`;
+    }
+    default:
+      return "";
+  }
+}
+
+function buildRadialPoints(
+  random: RandomSource,
+  count: number,
+  cx: number,
+  cy: number,
+  minRadius: number,
+  maxRadius: number,
+  angleJitterFactor: number
+): Point[] {
+  const points: Point[] = [];
+  const baseAngle = random() * Math.PI * 2;
+  const jitter = ((Math.PI * 2) / count) * angleJitterFactor;
+  for (let index = 0; index < count; index += 1) {
+    const angle = baseAngle + (index * Math.PI * 2) / count + (random() - 0.5) * jitter;
+    const radius = minRadius + random() * (maxRadius - minRadius);
+    points.push({
+      x: snap(cx + Math.cos(angle) * radius, 1),
+      y: snap(cy + Math.sin(angle) * radius, 1)
+    });
+  }
+  return points;
+}
+
+function buildStarPoints(
+  random: RandomSource,
+  spikes: number,
+  cx: number,
+  cy: number,
+  innerRadius: number,
+  outerRadius: number,
+  angleJitterFactor: number
+): Point[] {
+  const points: Point[] = [];
+  const total = spikes * 2;
+  const baseAngle = random() * Math.PI * 2;
+  const jitter = ((Math.PI * 2) / total) * angleJitterFactor;
+  for (let index = 0; index < total; index += 1) {
+    const radius = index % 2 === 0
+      ? outerRadius * (0.86 + random() * 0.16)
+      : innerRadius * (0.84 + random() * 0.2);
+    const angle = baseAngle + (index * Math.PI * 2) / total + (random() - 0.5) * jitter;
+    points.push({
+      x: snap(cx + Math.cos(angle) * radius, 1),
+      y: snap(cy + Math.sin(angle) * radius, 1)
+    });
+  }
+  return points;
+}
+
+function buildPolylinePoints(random: RandomSource, count: number): Point[] {
+  const points: Point[] = [];
+  for (let index = 0; index < count; index += 1) {
+    points.push(randomPoint(random, 6, 94));
+  }
+  return points;
+}
+
+function randomPoint(random: RandomSource, min: number, max: number): Point {
+  return {
+    x: snap(min + random() * (max - min), 1),
+    y: snap(min + random() * (max - min), 1)
+  };
+}
+
+function buildSmoothClosedPath(points: Point[]): string {
+  if (points.length < 2) {
+    return "";
+  }
+  const first = points[0];
+  const last = points[points.length - 1];
+  const start = midpoint(last, first);
+  let path = `M ${start.x} ${start.y}`;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    const mid = midpoint(current, next);
+    path += ` Q ${current.x} ${current.y} ${mid.x} ${mid.y}`;
+  }
+  return `${path} Z`;
+}
+
+function midpoint(a: Point, b: Point): Point {
+  return {
+    x: snap((a.x + b.x) / 2, 1),
+    y: snap((a.y + b.y) / 2, 1)
+  };
+}
+
+function formatPoints(points: Point[]): string {
+  return points.map((point) => `${point.x},${point.y}`).join(" ");
 }
 
 function pick<T>(random: RandomSource, values: readonly T[]): T {
