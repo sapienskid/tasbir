@@ -8,85 +8,37 @@ formats:
     height: 1350
     caption_source: instagram_caption
     hashtag_count: 3
-    default_template_id: layout/statement-cta
-    meta_left_label: "Instagram"
-    meta_right_label: ""
-    layout:
-      content_max_width: 1020
-      content_inset: 68
-      text_align: left
-      caption_width_add: 20
-      caption_width_max: 960
+    default_template_id: layout/editorial
   instagram-square:
     width: 1080
     height: 1080
     caption_source: instagram_caption
     hashtag_count: 3
-    default_template_id: layout/statement-cta
-    meta_left_label: "Instagram"
-    meta_right_label: ""
-    layout:
-      content_max_width: 1020
-      content_inset: 68
-      text_align: left
-      caption_width_add: 20
-      caption_width_max: 960
+    default_template_id: layout/editorial
   instagram-story:
     width: 1080
     height: 1920
     caption_source: instagram_caption
     hashtag_count: 2
-    default_template_id: layout/split-hero
-    meta_left_label: "Story"
-    meta_right_label: ""
-    layout:
-      content_max_width: 930
-      content_inset: 82
-      text_align: left
-      caption_width_add: 30
-      caption_width_max: 980
+    default_template_id: layout/with-media-split
   carousel-post:
     width: 1080
     height: 1350
     caption_source: carousel_slides
     hashtag_count: 0
     default_template_id: layout/carousel-header
-    meta_left_label: ""
-    meta_right_label: ""
-    layout:
-      content_max_width: 1020
-      content_inset: 68
-      text_align: left
-      caption_width_add: 30
-      caption_width_max: 980
   twitter-card:
     width: 1200
     height: 628
     caption_source: twitter_caption
     hashtag_count: 0
-    default_template_id: layout/split-hero
-    meta_left_label: "X / Twitter"
-    meta_right_label: ""
-    layout:
-      content_max_width: 1020
-      content_inset: 48
-      text_align: left
-      caption_width_add: 40
-      caption_width_max: 1020
+    default_template_id: layout/with-media-split
   linkedin-post:
     width: 1200
     height: 627
     caption_source: linkedin_caption
     hashtag_count: 0
-    default_template_id: layout/split-hero
-    meta_left_label: "LinkedIn"
-    meta_right_label: ""
-    layout:
-      content_max_width: 1020
-      content_inset: 48
-      text_align: left
-      caption_width_add: 40
-      caption_width_max: 1020
+    default_template_id: layout/with-media-split
 
 preview_defaults:
   title: Building a Monochromatic Swiss Content Engine That Scales Across Every Platform
