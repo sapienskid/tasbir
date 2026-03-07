@@ -31,6 +31,7 @@ Options:
   --body <text>          Override carousel body
   --brand-name <text>    Override brand name
   --image-url <url>      Override preview image URL
+  --illustration-seed <text>  Deterministic seed for generated illustration layer
   --slide <number>       Override carousel slide number
   --total <number>       Override carousel total slides
   --list                 List templates compatible with --format and exit
@@ -58,6 +59,7 @@ function parseArgs(argv) {
     body: "",
     brandName: "",
     imageUrl: "",
+    illustrationSeed: "",
     slide: "",
     total: "",
     list: false,
@@ -100,7 +102,7 @@ function parseArgs(argv) {
       continue;
     }
 
-    if ((arg === "--format" || arg === "--template" || arg === "--template-id" || arg === "--base-url" || arg === "--api-key" || arg === "--title" || arg === "--caption" || arg === "--heading" || arg === "--body" || arg === "--brand-name" || arg === "--image-url" || arg === "--slide" || arg === "--total") && next) {
+    if ((arg === "--format" || arg === "--template" || arg === "--template-id" || arg === "--base-url" || arg === "--api-key" || arg === "--title" || arg === "--caption" || arg === "--heading" || arg === "--body" || arg === "--brand-name" || arg === "--image-url" || arg === "--illustration-seed" || arg === "--slide" || arg === "--total") && next) {
       if (arg === "--format") options.format = next.trim();
       else if (arg === "--template" || arg === "--template-id") options.template = next.trim();
       else if (arg === "--base-url") options.baseUrl = next.trim();
@@ -111,6 +113,7 @@ function parseArgs(argv) {
       else if (arg === "--body") options.body = next.trim();
       else if (arg === "--brand-name") options.brandName = next.trim();
       else if (arg === "--image-url") options.imageUrl = next.trim();
+      else if (arg === "--illustration-seed") options.illustrationSeed = next.trim();
       else if (arg === "--slide") options.slide = next.trim();
       else if (arg === "--total") options.total = next.trim();
       index += 1;
@@ -159,6 +162,10 @@ function parseArgs(argv) {
     }
     if (arg.startsWith("--image-url=")) {
       options.imageUrl = arg.slice("--image-url=".length).trim();
+      continue;
+    }
+    if (arg.startsWith("--illustration-seed=")) {
+      options.illustrationSeed = arg.slice("--illustration-seed=".length).trim();
       continue;
     }
     if (arg.startsWith("--slide=")) {
@@ -346,6 +353,7 @@ function buildPreviewPayload(catalog, options) {
 
   return {
     ...payload,
+    illustrationSeed: options.illustrationSeed || `${payload.title}|${payload.caption}`.slice(0, 180),
     slotHeadline: truncate(payload.heading || payload.title, 120),
     slotBody: truncate(payload.body || payload.caption, 240),
     slotTag: "PREVIEW",
@@ -363,6 +371,9 @@ function deriveSlotValue(field, previewPayload) {
   const defaultValue = typeof field?.default === "string" ? field.default.trim() : "";
   const type = typeof field?.type === "string" ? field.type : "text";
 
+  if (key === "illustration_seed") {
+    return previewPayload.illustrationSeed;
+  }
   if (defaultValue.length > 0) {
     return defaultValue;
   }
@@ -602,6 +613,7 @@ async function main() {
 
     console.log(`Format:    ${options.format}`);
     console.log(`Template:  ${templateId}`);
+    console.log(`Seed:      ${previewPayload.illustrationSeed}`);
     console.log(`Preview:   ${previewUrl.toString()}`);
 
     if (options.open) {

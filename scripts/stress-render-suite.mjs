@@ -704,11 +704,18 @@ function humanizeKey(key) {
     .trim();
 }
 
-function deriveSlotValue(field, stressCase, imageUrl) {
+function deriveSlotValue(field, stressCase, imageUrl, context = {}) {
   const rawKey = String(field?.key ?? "").trim();
   const key = rawKey.toLowerCase();
   const defaultValue = typeof field?.default === "string" ? field.default.trim() : "";
   const type = typeof field?.type === "string" ? field.type : "text";
+  const contextFormat = String(context.formatId ?? "").trim();
+  const contextTemplate = String(context.templateId ?? "").trim();
+  const contextImageVariant = String(context.imageVariantId ?? "").trim();
+
+  if (key === "illustration_seed") {
+    return `${stressCase.id}:${contextFormat}:${contextTemplate}:${contextImageVariant}`.slice(0, 220);
+  }
 
   if (/(media_position|image_position|stack_position|layout_variant)/.test(key)) {
     const caseKey = String(stressCase?.id ?? "").toLowerCase();
@@ -780,7 +787,11 @@ function buildRenderTasks(catalog, options, stressCases) {
         for (const field of fields) {
           const slotKey = String(field?.key ?? "").trim();
           if (!slotKey) continue;
-          slots[slotKey] = truncateForQuery(deriveSlotValue(field, stressCase, imageVariant.url), 240, {
+          slots[slotKey] = truncateForQuery(deriveSlotValue(field, stressCase, imageVariant.url, {
+            formatId,
+            templateId,
+            imageVariantId: imageVariant.id
+          }), 240, {
             preserveWhitespace: Boolean(stressCase.preserveFormatting)
           });
         }

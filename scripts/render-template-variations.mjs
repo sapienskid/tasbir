@@ -360,11 +360,17 @@ function humanizeKey(value) {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-function deriveSlotValue(field, profile, imageUrl) {
+function deriveSlotValue(field, profile, imageUrl, context = {}) {
   const rawKey = String(field?.key ?? "").trim();
   const key = rawKey.toLowerCase();
   const defaultValue = typeof field?.default === "string" ? field.default.trim() : "";
   const type = typeof field?.type === "string" ? field.type : "text";
+  const contextFormat = String(context.formatId ?? "").trim();
+  const contextTemplate = String(context.templateId ?? "").trim();
+
+  if (key === "illustration_seed") {
+    return `${profile.id}:${contextFormat}:${contextTemplate}`.slice(0, 180);
+  }
 
   if (profile.id === "default" && defaultValue.length > 0) {
     return defaultValue;
@@ -428,7 +434,10 @@ function buildRenderTasks(catalog, options, profiles) {
         for (const field of fields) {
           const slotKey = String(field?.key ?? "").trim();
           if (!slotKey) continue;
-          slots[slotKey] = deriveSlotValue(field, profile, options.imageUrl);
+          slots[slotKey] = deriveSlotValue(field, profile, options.imageUrl, {
+            formatId,
+            templateId
+          });
         }
 
         tasks.push({
