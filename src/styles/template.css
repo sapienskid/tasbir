@@ -23,8 +23,8 @@
 
 :root {
   /* Typography */
-  --token-font-display: "Cormorant Garamond", "Bodoni MT", serif;
-  --token-font-body: "Inter", "Manrope", "Helvetica", "Arial", sans-serif;
+  --token-font-display: "Playfair Display", serif;
+  --token-font-body: "Poppins",  "Helvetica", sans-serif;
 
   /* Colors - Pure Monochromatic Palette */
   --token-color-text-primary: #000000;
