@@ -9,7 +9,7 @@ import process from "node:process";
 const DEFAULT_BASE_URL = "http://127.0.0.1:8787";
 const DEFAULT_FORMAT = "instagram-square";
 const DEFAULT_IMAGE_URL =
-  "data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%201200%20900%22%3E%3Crect%20width=%221200%22%20height=%22900%22%20fill=%22%230b0b0b%22/%3E%3C/svg%3E";
+  "https://picsum.photos/seed/tasbir-template-preview/1600/1200";
 const HEALTH_TIMEOUT_MS = 60_000;
 const HEALTH_POLL_MS = 500;
 const GENERATED_ASSETS_PATH = resolve(process.cwd(), "src/generated/template-assets.json");
@@ -328,8 +328,9 @@ function buildPreviewPayload(catalog, options) {
   const defaults = catalog.previewDefaults ?? {};
   const slideDefault = String(defaults.slide_number ?? 1);
   const totalDefault = String(defaults.total_slides ?? 5);
-  const imageDefault = typeof defaults.image_url === "string" && defaults.image_url.trim()
-    ? defaults.image_url.trim()
+  const configuredImageDefault = typeof defaults.image_url === "string" ? defaults.image_url.trim() : "";
+  const imageDefault = configuredImageDefault && !configuredImageDefault.startsWith("data:")
+    ? configuredImageDefault
     : DEFAULT_IMAGE_URL;
 
   const payload = {
