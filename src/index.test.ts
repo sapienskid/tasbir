@@ -974,12 +974,21 @@ function fakeExecutionContext(): ExecutionContext {
 }
 
 function extractIllustrationSignature(html: string): string {
-  return extractIllustrationMarkerClass(html);
+  const classSignature = extractIllustrationMarkerClass(html);
+  const svgSignature = extractIllustrationMarkerSvg(html);
+  return `${classSignature}|${svgSignature}`;
 }
 
 function extractIllustrationMarkerClass(html: string): string {
   const match = html.match(
     /<span\s+aria-hidden="true"\s+data-illustration-mark="1"\s+class="([^"]+)"/i
+  );
+  return (match?.[1] ?? "").replace(/\s+/g, " ").trim();
+}
+
+function extractIllustrationMarkerSvg(html: string): string {
+  const match = html.match(
+    /<span\s+aria-hidden="true"\s+data-illustration-mark="1"\s+class="[^"]*">([\s\S]*?)<\/span>/i
   );
   return (match?.[1] ?? "").replace(/\s+/g, " ").trim();
 }
