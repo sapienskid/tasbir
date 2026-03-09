@@ -33,6 +33,7 @@ interface Env {
   GHOST_API_URL: string;
   GHOST_CONTENT_API_KEY: string;
   GHOST_WEBHOOK_TOKEN?: string;
+  GHOST_WEBHOOK_SECRET?: string;
   R2_PUBLIC_BASE_URL?: string;
   BRAND_NAME?: string;
   LLM_MODEL?: string;
@@ -520,16 +521,9 @@ export default {
 
       if (request.method === "POST" && url.pathname === "/webhook/ghost") {
         enforceRouteSecurity(request, security, "webhook");
-        const expected = env.GHOST_WEBHOOK_TOKEN?.trim();
-        if (!expected) {
-          throw new HttpError(500, "Missing env var GHOST_WEBHOOK_TOKEN");
-        }
-        const provided = request.headers.get("x-webhook-token")?.trim();
-        if (!provided || provided !== expected) {
-          throw new HttpError(401, "Unauthorized webhook token");
-        }
-
-        const payload = validateWebhookPayload(await readJsonBody(request, security.request_limits.max_json_body_bytes));
+        const rawPayload = await readJsonBodyWithRaw(request, security.request_limits.max_json_body_bytes);
+        await verifyGhostWebhookRequest(request, env, rawPayload.raw);
+        const payload = validateWebhookPayload(rawPayload.body);
         const slug = extractSlugFromWebhook(payload);
         if (!slug) {
           throw new HttpError(400, "Could not resolve slug from Ghost webhook payload");
@@ -1418,6 +1412,7 @@ async function runPipelineFromPost(
   const variants: NonNullable<GenerationResult["variants"]> = [];
   const baseAgentContext = resolveAgentExecutionContext(brandInput.agent);
   const agentContexts: AgentExecutionContext[] = [];
+  const sharedStorage = resolveBatchStorageOptions(brandInput.storage);
 
   for (let index = 0; index < outputPlan.postCount; index += 1) {
     const variantPrompt =
@@ -1481,8 +1476,9 @@ async function runPipelineFromPost(
       templateIds: templatePlan.templateIds,
       requiredSlotKeys: templatePlan.requiredSlotKeys,
       slotContent: mergedSlotContent,
-      storage: storageForVariant(brandInput.storage, index, outputPlan.postCount),
-      requestedFormats: outputPlan.formats
+      storage: sharedStorage,
+      requestedFormats: outputPlan.formats,
+      assetNameSuffix: assetNameSuffixForVariant(index, outputPlan.postCount)
     });
 
     variants.push({
@@ -1540,6 +1536,7 @@ async function runCampaignPipelineFromPost(
   const requiredSlotKeySet = new Set<string>();
   const baseAgentContext = resolveAgentExecutionContext(brandInput.agent);
   const agentContexts: AgentExecutionContext[] = [];
+  const sharedStorage = resolveBatchStorageOptions(brandInput.storage);
 
   for (const platformPlan of campaignPlan.platforms) {
     if (platformPlan.posts[0]) {
@@ -1612,8 +1609,9 @@ async function runCampaignPipelineFromPost(
         },
         requiredSlotKeys: postPlan.slot_keys,
         slotContent: mergedSlotContent,
-        storage: storageForCampaignPost(brandInput.storage, postPlan.platform, postPlan.index),
-        requestedFormats: new Set([postPlan.platform])
+        storage: sharedStorage,
+        requestedFormats: new Set([postPlan.platform]),
+        assetNameSuffix: assetNameSuffixForCampaignPost(postPlan.index)
       });
 
       const assetsForPlatform = extractAssetsForPlatform(postPlan.platform, renderAssets);
@@ -1771,17 +1769,18 @@ function resolveAnglePreset(platform: TemplateKind, index: number): string {
   return presets[index % presets.length];
 }
 
-function storageForCampaignPost(
-  storage: StorageOptions | undefined,
-  platform: TemplateKind,
-  index: number
-): StorageOptions {
-  const existing = sanitizeRunId(storage?.runId) ?? "campaign";
+function resolveBatchStorageOptions(storage: StorageOptions | undefined): StorageOptions | undefined {
+  if (!storage || storage.mode !== "versioned") {
+    return storage;
+  }
   return {
-    mode: "versioned",
-    includeDate: storage?.includeDate,
-    runId: `${existing}-${platform}-p${index}`
+    ...storage,
+    runId: sanitizeRunId(storage.runId) ?? crypto.randomUUID().split("-")[0]
   };
+}
+
+function assetNameSuffixForCampaignPost(index: number): string | undefined {
+  return index > 1 ? `p${index}` : undefined;
 }
 
 function emptyLegacyAssetSet(): GenerationResult["assets"] {
@@ -1844,18 +1843,11 @@ function extractAssetsForPlatform(platform: TemplateKind, assets: GenerationResu
   return assets.carousel;
 }
 
-function storageForVariant(storage: StorageOptions | undefined, index: number, totalCount: number): StorageOptions | undefined {
+function assetNameSuffixForVariant(index: number, totalCount: number): string | undefined {
   if (totalCount <= 1 || index === 0) {
-    return storage;
+    return undefined;
   }
-
-  const existing = storage?.runId ? sanitizeRunId(storage.runId) : null;
-  const variantRunId = [existing ?? "variant", `v${index + 1}`].join("-");
-  return {
-    mode: "versioned",
-    includeDate: storage?.includeDate,
-    runId: variantRunId
-  };
+  return `v${index + 1}`;
 }
 
 function resolveOutputPlan(output: OutputOptions | undefined): {
@@ -2056,6 +2048,95 @@ function extractSlugFromWebhook(payload: GhostWebhookPayload): string | null {
     return null;
   }
   return sanitizeSlug(direct);
+}
+
+async function verifyGhostWebhookRequest(request: Request, env: Env, rawBody: string): Promise<void> {
+  const ghostSignature = request.headers.get("x-ghost-signature")?.trim();
+  if (ghostSignature) {
+    const signingSecret = env.GHOST_WEBHOOK_SECRET?.trim() || env.GHOST_WEBHOOK_TOKEN?.trim();
+    if (!signingSecret) {
+      throw new HttpError(500, "Missing env var GHOST_WEBHOOK_SECRET (or GHOST_WEBHOOK_TOKEN fallback)");
+    }
+
+    const parsed = parseGhostSignatureHeader(ghostSignature);
+    if (!parsed) {
+      throw new HttpError(401, "Invalid X-Ghost-Signature header");
+    }
+
+    const expectedDigest = await computeHmacSha256Hex(signingSecret, `${rawBody}${parsed.timestamp}`);
+    if (!constantTimeEqual(parsed.sha256, expectedDigest)) {
+      throw new HttpError(401, "Unauthorized webhook signature");
+    }
+    return;
+  }
+
+  const expectedToken = env.GHOST_WEBHOOK_TOKEN?.trim();
+  if (!expectedToken) {
+    throw new HttpError(500, "Missing env var GHOST_WEBHOOK_TOKEN");
+  }
+  const providedToken = request.headers.get("x-webhook-token")?.trim();
+  if (!providedToken || !constantTimeEqual(providedToken, expectedToken)) {
+    throw new HttpError(401, "Unauthorized webhook token");
+  }
+}
+
+function parseGhostSignatureHeader(value: string): { sha256: string; timestamp: string } | null {
+  const parts = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  let sha256 = "";
+  let timestamp = "";
+
+  for (const part of parts) {
+    const [rawKey, ...rawValue] = part.split("=");
+    if (!rawKey || rawValue.length === 0) {
+      continue;
+    }
+    const key = rawKey.trim().toLowerCase();
+    const resolvedValue = rawValue.join("=").trim();
+
+    if (key === "sha256") {
+      sha256 = resolvedValue.toLowerCase();
+    } else if (key === "t") {
+      timestamp = resolvedValue;
+    }
+  }
+
+  if (!/^[a-f0-9]{64}$/.test(sha256) || !/^\d{10,16}$/.test(timestamp)) {
+    return null;
+  }
+  return { sha256, timestamp };
+}
+
+async function computeHmacSha256Hex(secret: string, payload: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return bytesToHex(new Uint8Array(signature));
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function constantTimeEqual(left: string, right: string): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  let mismatch = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    mismatch |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return mismatch === 0;
 }
 
 function sanitizeSlug(value: string): string {
@@ -2313,6 +2394,7 @@ async function renderAndStoreAssets(
     slotContent: Record<string, string>;
     storage?: StorageOptions;
     requestedFormats: Set<TemplateKind>;
+    assetNameSuffix?: string;
   }
 ): Promise<GenerationResult["assets"]> {
   const keyPrefix = buildR2KeyPrefix(env, args.slug, args.storage);
@@ -2334,7 +2416,7 @@ async function renderAndStoreAssets(
   try {
     const instagramPortraitAsset = args.requestedFormats.has("instagram-portrait")
       ? await renderStoreSingleAsset(env, browser, {
-        key: `${keyPrefix}/instagram-portrait.png`,
+        key: `${keyPrefix}/${buildAssetFileName("instagram-portrait", args.assetNameSuffix)}`,
         kind: "instagram-portrait",
         params: {
           ...commonTemplateValues,
@@ -2356,7 +2438,7 @@ async function renderAndStoreAssets(
 
     const instagramSquareAsset = args.requestedFormats.has("instagram-square")
       ? await renderStoreSingleAsset(env, browser, {
-        key: `${keyPrefix}/instagram-square.png`,
+        key: `${keyPrefix}/${buildAssetFileName("instagram-square", args.assetNameSuffix)}`,
         kind: "instagram-square",
         params: {
           ...commonTemplateValues,
@@ -2378,7 +2460,7 @@ async function renderAndStoreAssets(
 
     const instagramStoryAsset = args.requestedFormats.has("instagram-story")
       ? await renderStoreSingleAsset(env, browser, {
-        key: `${keyPrefix}/instagram-story.png`,
+        key: `${keyPrefix}/${buildAssetFileName("instagram-story", args.assetNameSuffix)}`,
         kind: "instagram-story",
         params: {
           ...commonTemplateValues,
@@ -2400,7 +2482,7 @@ async function renderAndStoreAssets(
 
     const twitterCardAsset = args.requestedFormats.has("twitter-card")
       ? await renderStoreSingleAsset(env, browser, {
-        key: `${keyPrefix}/twitter-card.png`,
+        key: `${keyPrefix}/${buildAssetFileName("twitter-card", args.assetNameSuffix)}`,
         kind: "twitter-card",
         params: {
           ...commonTemplateValues,
@@ -2422,7 +2504,7 @@ async function renderAndStoreAssets(
 
     const linkedInAsset = args.requestedFormats.has("linkedin-post")
       ? await renderStoreSingleAsset(env, browser, {
-        key: `${keyPrefix}/linkedin-post.png`,
+        key: `${keyPrefix}/${buildAssetFileName("linkedin-post", args.assetNameSuffix)}`,
         kind: "linkedin-post",
         params: {
           ...commonTemplateValues,
@@ -2446,7 +2528,7 @@ async function renderAndStoreAssets(
     if (args.requestedFormats.has("carousel-post")) {
       for (const [index, slide] of args.llmOutput.carousel_slides.entries()) {
         const slideAsset = await renderStoreSingleAsset(env, browser, {
-          key: `${keyPrefix}/carousel-post-${index + 1}.png`,
+          key: `${keyPrefix}/${buildAssetFileName(`carousel-post-${index + 1}`, args.assetNameSuffix)}`,
           kind: "carousel-post",
           params: {
             ...commonTemplateValues,
@@ -2578,6 +2660,25 @@ function buildR2KeyPrefix(env: Env, slug: string, storage?: StorageOptions): str
   const runId = sanitizeRunId(storage?.runId) ?? crypto.randomUUID().split("-")[0];
   const datePart = includeDate ? `/${new Date().toISOString().slice(0, 10)}` : "";
   return `${basePrefix}/${slug}${datePart}/${runId}`;
+}
+
+function buildAssetFileName(baseName: string, suffix: string | undefined): string {
+  const normalizedSuffix = normalizeAssetSuffix(suffix);
+  return normalizedSuffix ? `${baseName}-${normalizedSuffix}.png` : `${baseName}.png`;
+}
+
+function normalizeAssetSuffix(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const cleaned = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]/g, "");
+  if (!cleaned) {
+    return null;
+  }
+  return cleaned.slice(0, 40);
 }
 
 function sanitizeRunId(input: string | undefined): string | null {
@@ -3528,7 +3629,7 @@ function assertRequiredEnv(env: Env): void {
   }
 }
 
-async function readJsonBody<T>(request: Request, maxBytes: number): Promise<T> {
+async function readJsonBodyWithRaw(request: Request, maxBytes: number): Promise<{ raw: string; body: unknown }> {
   const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
   if (!contentType.includes("application/json")) {
     throw new HttpError(415, "Request content-type must be application/json");
@@ -3557,6 +3658,11 @@ async function readJsonBody<T>(request: Request, maxBytes: number): Promise<T> {
     }
     throw new HttpError(400, "Invalid JSON body");
   }
+  return { raw, body };
+}
+
+async function readJsonBody<T>(request: Request, maxBytes: number): Promise<T> {
+  const { body } = await readJsonBodyWithRaw(request, maxBytes);
   return body as T;
 }
 

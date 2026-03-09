@@ -7,7 +7,10 @@ API_AUTH_REQUIRE_FOR_PREVIEW="false"
 # Optional but recommended for public URLs in API responses.
 R2_PUBLIC_BASE_URL="https://pub-xxxxxxxx.r2.dev"
 
-# Required webhook security for /webhook/ghost
+# Webhook security for /webhook/ghost.
+# Ghost-native mode: set GHOST_WEBHOOK_SECRET and configure the same value in Ghost webhook secret.
+GHOST_WEBHOOK_SECRET="replace-with-ghost-webhook-secret"
+# Legacy/manual mode: x-webhook-token must match this value.
 GHOST_WEBHOOK_TOKEN="replace-with-random-secret"
 
 # Optional callback after generation completes.

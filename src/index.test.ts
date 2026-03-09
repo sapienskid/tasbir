@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const launchMock = vi.fn();
 const TEST_API_KEY = "test-key";
+const TEST_WEBHOOK_SECRET = "ghost-webhook-secret";
+const TEST_WEBHOOK_TOKEN = "ghost-webhook-token";
 
 vi.mock("@cloudflare/puppeteer", () => ({
   default: {
@@ -244,6 +246,202 @@ describe("social pipeline worker", () => {
     );
 
     expect(response.status).toBe(404);
+  });
+
+  it("accepts Ghost-signed webhook requests", async () => {
+    launchMock.mockResolvedValue(fakeBrowser());
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          posts: [
+            {
+              id: "post-1",
+              title: "Webhook Triggered Post",
+              slug: "webhook-triggered-post",
+              url: "https://blog.example.com/webhook-triggered-post/",
+              plaintext: "Webhook content body",
+              excerpt: "Webhook excerpt"
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      )
+    );
+
+    const env = {
+      AI: {
+        run: vi.fn(async () => ({
+          response: JSON.stringify({
+            instagram_caption: "Webhook caption for instagram.",
+            twitter_caption: "Webhook caption for twitter.",
+            linkedin_caption: "Webhook caption for linkedin.",
+            carousel_slides: [
+              { heading: "One", body: "First body." },
+              { heading: "Two", body: "Second body." },
+              { heading: "Three", body: "Third body." },
+              { heading: "Four", body: "Fourth body." },
+              { heading: "Five", body: "Fifth body." }
+            ],
+            hashtags: ["#workflow", "#ghost", "#webhook", "#content", "#automation"],
+            image_prompt: "Minimal editorial visual",
+            use_feature_image: false,
+            slot_content: {
+              headline: "Webhook headline"
+            }
+          })
+        }))
+      },
+      BROWSER: {},
+      OUTPUT_BUCKET: {
+        put: vi.fn(async () => null)
+      },
+      GHOST_API_URL: "https://blog.example.com/ghost/api/content",
+      GHOST_CONTENT_API_KEY: "content-api-key",
+      GHOST_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET,
+      R2_KEY_PREFIX: "social-assets"
+    } as never;
+
+    const payload = {
+      post: {
+        current: {
+          slug: "webhook-triggered-post"
+        }
+      }
+    };
+    const rawPayload = JSON.stringify(payload);
+    const timestamp = String(Date.now());
+    const signature = await computeHmacSha256Hex(TEST_WEBHOOK_SECRET, `${rawPayload}${timestamp}`);
+
+    const response = await worker.fetch(
+      new Request("https://worker.test/webhook/ghost", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-ghost-signature": `sha256=${signature}, t=${timestamp}`
+        },
+        body: rawPayload
+      }),
+      env,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { ok: boolean; slug: string };
+    expect(body.ok).toBe(true);
+    expect(body.slug).toBe("webhook-triggered-post");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain("/posts/slug/webhook-triggered-post/");
+    fetchSpy.mockRestore();
+  });
+
+  it("accepts legacy x-webhook-token requests", async () => {
+    launchMock.mockResolvedValue(fakeBrowser());
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          posts: [
+            {
+              id: "post-2",
+              title: "Legacy Token Webhook Post",
+              slug: "legacy-token-post",
+              url: "https://blog.example.com/legacy-token-post/",
+              plaintext: "Webhook content body",
+              excerpt: "Webhook excerpt"
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      )
+    );
+
+    const env = {
+      AI: {
+        run: vi.fn(async () => ({
+          response: JSON.stringify({
+            instagram_caption: "Webhook caption for instagram.",
+            twitter_caption: "Webhook caption for twitter.",
+            linkedin_caption: "Webhook caption for linkedin.",
+            carousel_slides: [
+              { heading: "One", body: "First body." },
+              { heading: "Two", body: "Second body." },
+              { heading: "Three", body: "Third body." },
+              { heading: "Four", body: "Fourth body." },
+              { heading: "Five", body: "Fifth body." }
+            ],
+            hashtags: ["#workflow", "#ghost", "#webhook", "#content", "#automation"],
+            image_prompt: "Minimal editorial visual",
+            use_feature_image: false,
+            slot_content: {
+              headline: "Webhook headline"
+            }
+          })
+        }))
+      },
+      BROWSER: {},
+      OUTPUT_BUCKET: {
+        put: vi.fn(async () => null)
+      },
+      GHOST_API_URL: "https://blog.example.com/ghost/api/content",
+      GHOST_CONTENT_API_KEY: "content-api-key",
+      GHOST_WEBHOOK_TOKEN: TEST_WEBHOOK_TOKEN,
+      R2_KEY_PREFIX: "social-assets"
+    } as never;
+
+    const response = await worker.fetch(
+      new Request("https://worker.test/webhook/ghost", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-webhook-token": TEST_WEBHOOK_TOKEN
+        },
+        body: JSON.stringify({
+          post: {
+            current: {
+              slug: "legacy-token-post"
+            }
+          }
+        })
+      }),
+      env,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { ok: boolean; slug: string };
+    expect(body.ok).toBe(true);
+    expect(body.slug).toBe("legacy-token-post");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toContain("/posts/slug/legacy-token-post/");
+    fetchSpy.mockRestore();
+  });
+
+  it("rejects Ghost webhook when signature is invalid", async () => {
+    const response = await worker.fetch(
+      new Request("https://worker.test/webhook/ghost", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-ghost-signature": "sha256=deadbeef, t=1234567890123"
+        },
+        body: JSON.stringify({
+          post: {
+            current: {
+              slug: "invalid-signature-post"
+            }
+          }
+        })
+      }),
+      { GHOST_WEBHOOK_SECRET: TEST_WEBHOOK_SECRET } as never,
+      fakeExecutionContext()
+    );
+
+    expect(response.status).toBe(401);
   });
 
   it("generates assets from direct plain-content endpoint", async () => {
@@ -547,6 +745,7 @@ describe("social pipeline worker", () => {
 
     const assetKeys = body.campaign_outputs.flatMap((output) => output.assets.map((asset) => asset.key));
     expect(new Set(assetKeys).size).toBe(assetKeys.length);
+    expect(assetKeys.some((key) => /\/campaign-[^/]+-p\d+\//.test(key))).toBe(false);
     expect(body.assets.instagram_square?.key).toContain("instagram-square.png");
     expect(body.assets.twitter_card?.key).toContain("twitter-card.png");
   });
@@ -971,6 +1170,21 @@ function fakeExecutionContext(): ExecutionContext {
     waitUntil: vi.fn(),
     passThroughOnException: vi.fn()
   } as unknown as ExecutionContext;
+}
+
+async function computeHmacSha256Hex(secret: string, payload: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return Array.from(new Uint8Array(signature))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function extractIllustrationSignature(html: string): string {

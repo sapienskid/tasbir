@@ -39,11 +39,6 @@
 		{
 			"binding": "OUTPUT_BUCKET",
 			"bucket_name": "social-post-assets"
-		},
-		{
-			"bucket_name": "social-post-assets",
-			"binding": "social_post_assets",
-			"remote": true
 		}
 	],
 	"observability": {
@@ -68,11 +63,6 @@
 				{
 					"binding": "OUTPUT_BUCKET",
 					"bucket_name": "social-post-assets"
-				},
-				{
-					"bucket_name": "social-post-assets",
-					"binding": "social_post_assets",
-					"remote": true
 				}
 			]
 		},
@@ -91,11 +81,6 @@
 				{
 					"binding": "OUTPUT_BUCKET",
 					"bucket_name": "social-post-assets"
-				},
-				{
-					"bucket_name": "social-post-assets",
-					"binding": "social_post_assets",
-					"remote": true
 				}
 			]
 		}
