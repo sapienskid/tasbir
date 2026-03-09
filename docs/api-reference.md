@@ -16,7 +16,12 @@ Use either:
 - `x-api-key: <one API_KEYS value>`
 - `Authorization: Bearer <one API_KEYS value>`
 
-`POST /webhook/ghost` always requires `x-webhook-token` and may also require API auth depending on `security.api_auth.require_for_webhook`.
+`POST /webhook/ghost` requires webhook auth and may also require API auth depending on `security.api_auth.require_for_webhook`.
+
+Webhook auth modes:
+
+- Ghost-native signature header: `x-ghost-signature: sha256=<hex>, t=<timestamp-ms>`
+- Legacy/manual token header: `x-webhook-token: <GHOST_WEBHOOK_TOKEN>`
 
 ## `GET /health`
 
@@ -204,9 +209,10 @@ Supports the same optional overrides as `/generate`.
 
 Ghost-triggered generation endpoint.
 
-Required header:
+Required header (choose one mode):
 
-- `x-webhook-token: <GHOST_WEBHOOK_TOKEN>`
+- `x-ghost-signature: sha256=<hex>, t=<timestamp-ms>` using `GHOST_WEBHOOK_SECRET` (recommended)
+- `x-webhook-token: <GHOST_WEBHOOK_TOKEN>` (legacy/manual mode)
 
 Slug can be resolved from:
 
@@ -215,6 +221,12 @@ Slug can be resolved from:
 - `payload.slug`
 - `payload.post.current.url`
 - `payload.url`
+
+Signature verification uses Ghost's native format:
+
+- digest: `HMAC_SHA256(secret, rawBody + timestamp)`
+- header: `x-ghost-signature: sha256=<digest>, t=<timestamp>`
+- secret source: `GHOST_WEBHOOK_SECRET` (fallback: `GHOST_WEBHOOK_TOKEN`)
 
 ## Common Response Fields (`/generate*`)
 

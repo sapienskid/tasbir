@@ -205,6 +205,18 @@ No TypeScript template registration is required.
 - `POST /generate-from-content`
 - `POST /webhook/ghost`
 
+## R2 Key Layout
+
+Default (`storage.mode=overwrite`) stores assets under one slug prefix:
+
+- `social-assets/<slug>/<asset>.png`
+
+Versioned mode stores one extra version prefix:
+
+- `social-assets/<slug>/<YYYY-MM-DD>/<runId>/<asset>.png`
+
+For multi-post/campaign outputs, uniqueness is now in filename suffixes (`-v2`, `-p2`) instead of extra nested folders.
+
 ## Local Stress Render Suite
 
 Run a local screenshot stress sweep with synthetic payloads (plain short/long, markdown-heavy, math-heavy, mermaid-style diagram strings, mixed payloads).
@@ -274,6 +286,11 @@ Protected routes accept either:
 - `x-api-key: <API_KEYS entry>`
 - `Authorization: Bearer <API_KEYS entry>`
 
+`POST /webhook/ghost` supports either:
+
+- `x-ghost-signature` (Ghost-native signed webhook; recommended)
+- `x-webhook-token` (legacy/manual caller flow)
+
 ## Daily Commands
 
 ```bash
@@ -288,7 +305,9 @@ Required:
 
 - `API_KEYS`
 - `GHOST_API_URL` and `GHOST_CONTENT_API_KEY` (for Ghost-backed generation)
-- `GHOST_WEBHOOK_TOKEN` (for webhook route)
+- one webhook auth mode:
+- `GHOST_WEBHOOK_SECRET` (recommended for native Ghost webhook signature verification)
+- or `GHOST_WEBHOOK_TOKEN` (legacy/manual token header mode)
 
 Common optional:
 
@@ -319,4 +338,5 @@ See `.dev.vars.example` for complete local example values.
 - [Troubleshooting](docs/troubleshooting.md)
 - [Design Principles](docs/design-principles.md)
 - [Deployment](docs/deployment.md)
+- [Ghost Integration Guide](docs/ghost-integration.md)
 - [Research Summary](docs/research-summary.md)

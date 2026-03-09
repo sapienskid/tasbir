@@ -23,7 +23,7 @@ Check `wrangler.jsonc` contains bindings used by runtime:
 
 - `AI`
 - `BROWSER`
-- `OUTPUT_BUCKET`
+- `OUTPUT_BUCKET` (single R2 binding used by runtime)
 - `MARKETING_ORCHESTRATOR` (recommended for agentic orchestration)
 
 Keep binding names aligned with `src/index.ts`.
@@ -44,9 +44,13 @@ Required for Ghost-backed flow (`/generate`, `/webhook/ghost`):
 
 - `GHOST_API_URL`
 - `GHOST_CONTENT_API_KEY`
-- `GHOST_WEBHOOK_TOKEN` (webhook route)
+- webhook auth (choose one):
+- `GHOST_WEBHOOK_SECRET` (recommended; verifies Ghost `x-ghost-signature`)
+- `GHOST_WEBHOOK_TOKEN` (legacy/manual `x-webhook-token` header)
 
 If you only use direct-content flow (`/generate-from-content`), you can leave Ghost vars unset.
+
+If Ghost is calling `/webhook/ghost` directly, keep `security.api_auth.require_for_webhook: false` (default). Ghost does not send your Worker API key header.
 
 Common optional values:
 
@@ -145,6 +149,8 @@ curl -X POST http://127.0.0.1:8787/generate \
 
 You can also pass `url` instead of `slug`.
 
+For end-to-end Ghost webhook setup, see [Ghost Integration Guide](ghost-integration.md).
+
 ## 9. Add a New Template
 
 1. Create HTML file in `templates/`.
@@ -174,3 +180,4 @@ pnpm run test
 - [API Reference](api-reference.md)
 - [Troubleshooting](troubleshooting.md)
 - [Deployment](deployment.md)
+- [Ghost Integration Guide](ghost-integration.md)

@@ -22,11 +22,15 @@ wrangler secret put API_KEYS --env production
 
 wrangler secret put GHOST_API_URL --env staging
 wrangler secret put GHOST_CONTENT_API_KEY --env staging
-wrangler secret put GHOST_WEBHOOK_TOKEN --env staging
+wrangler secret put GHOST_WEBHOOK_SECRET --env staging
+# Optional legacy mode:
+# wrangler secret put GHOST_WEBHOOK_TOKEN --env staging
 
 wrangler secret put GHOST_API_URL --env production
 wrangler secret put GHOST_CONTENT_API_KEY --env production
-wrangler secret put GHOST_WEBHOOK_TOKEN --env production
+wrangler secret put GHOST_WEBHOOK_SECRET --env production
+# Optional legacy mode:
+# wrangler secret put GHOST_WEBHOOK_TOKEN --env production
 ```
 
 Optional secrets/vars should also be configured if used:
@@ -48,7 +52,9 @@ Each env can override:
 - `r2_buckets`
 - `vars`
 
-If you use separate staging/production buckets, update `r2_buckets` in each env profile.
+Use one R2 binding (`OUTPUT_BUCKET`) per env profile. If you use separate staging/production buckets, only change the `bucket_name` for that binding.
+
+If Ghost will call `/webhook/ghost` directly in production, keep `security.api_auth.require_for_webhook: false` unless you front Ghost with a relay that adds API auth headers.
 
 ## 4. Deploy
 

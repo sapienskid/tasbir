@@ -70,6 +70,19 @@ Fix:
 - set `API_KEYS`
 - send `x-api-key` or Bearer token
 
+### 401 on `/webhook/ghost`
+
+Cause:
+
+- webhook auth header mismatch
+- invalid Ghost signature format
+
+Fix:
+
+- preferred: set `GHOST_WEBHOOK_SECRET` and verify Ghost sends `x-ghost-signature`
+- legacy/manual: send `x-webhook-token` matching `GHOST_WEBHOOK_TOKEN`
+- keep `content-type: application/json`
+
 ### 403 on `/template/*`
 
 Cause:
@@ -242,6 +255,13 @@ Fix:
 - inspect request `storage`
 - inspect `R2_KEY_PREFIX`
 - inspect `config.storage`
+
+Current key layout:
+
+- overwrite mode: `<prefix>/<slug>/<asset>.png`
+- versioned mode: `<prefix>/<slug>/<YYYY-MM-DD>/<runId>/<asset>.png`
+
+Campaign/variant outputs append filename suffixes (`-p2`, `-v2`) rather than creating extra nested folders.
 
 ## Fast Recovery Checklist
 

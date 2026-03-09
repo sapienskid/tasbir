@@ -1,6 +1,6 @@
 # Research Summary
 
-Validated on March 4, 2026.
+Validated on March 9, 2026.
 
 This summary records why the current architecture is structured this way.
 
@@ -107,3 +107,41 @@ The system can evolve primarily by editing:
 - config (`config/pipeline/*.yaml`)
 
 Core runtime logic remains stable while content and visual output evolve quickly.
+
+## 8) Ghost Webhook Trigger Compatibility
+
+Decision:
+
+- support Ghost-native webhook signatures (`x-ghost-signature`) for `POST /webhook/ghost`
+- keep legacy token mode (`x-webhook-token`) for manual callers
+
+Why:
+
+- Ghost webhooks are standard HTTP POST requests, so Cloudflare Workers can receive them directly via the `fetch` handler
+- Ghost includes webhook secret signing in `X-Ghost-Signature` using HMAC-SHA256 over `rawBody + timestamp`
+- webhook payloads include `post.current.*`, which is enough to resolve slug and trigger generation
+
+References:
+
+- https://docs.ghost.org/webhooks
+- https://docs.ghost.org/admin-api/webhooks/creating-a-webhook
+- https://developers.cloudflare.com/workers/runtime-apis/handlers/fetch/
+- https://github.com/TryGhost/Ghost/blob/main/ghost/core/core/server/services/webhooks/webhook-trigger.js
+- https://github.com/TryGhost/Ghost/blob/main/ghost/core/test/e2e-webhooks/__snapshots__/posts.test.js.snap
+
+## 9) R2 Binding and Key Shape
+
+Decision:
+
+- keep one R2 binding (`OUTPUT_BUCKET`) in Wrangler config
+- reduce folder sprawl by using filename suffixes for campaign/variant uniqueness
+
+Why:
+
+- runtime only uses one bucket binding
+- uniqueness can be preserved without per-post nested folders
+
+References:
+
+- https://developers.cloudflare.com/r2/api/workers/workers-api-reference/
+- https://developers.cloudflare.com/workers/wrangler/configuration/

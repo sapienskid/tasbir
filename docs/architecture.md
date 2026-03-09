@@ -37,14 +37,16 @@ flowchart TD
 - `GET /preview/screenshot?format=...&templateId=...`
 - `POST /generate`
 - `POST /generate-from-content`
-- `POST /webhook/ghost`
+- `POST /webhook/ghost` (auth via Ghost signature or legacy token)
 
 ## Current AI-Orchestrated Flow
 
 ```mermaid
 flowchart TD
     A[Request] --> B{Input type}
-    B -->|/generate or /webhook/ghost| C[Fetch Ghost post]
+    B -->|/generate| C[Fetch Ghost post]
+    B -->|/webhook/ghost| B1[Verify webhook auth + parse slug]
+    B1 --> C
     B -->|/generate-from-content| D[Build in-memory post]
     C --> E[Build template candidates]
     D --> E
@@ -102,6 +104,15 @@ Because slot keys vary by template, text generation and template selection are t
 - `ai`: force AI image generation (if enabled)
 - `none`: no image
 - `auto`: try AI first (if enabled), then feature fallbacks
+
+## R2 Key Shape
+
+Storage keys are intentionally flattened to reduce folder sprawl:
+
+- overwrite mode: `<prefix>/<slug>/<asset>.png`
+- versioned mode: `<prefix>/<slug>/<YYYY-MM-DD>/<runId>/<asset>.png`
+
+For campaign/variant runs, uniqueness uses filename suffixes (`-p2`, `-v2`) instead of creating per-post/per-variant subfolders.
 
 ## Central Prompt System (Implemented)
 

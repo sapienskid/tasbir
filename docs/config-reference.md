@@ -209,6 +209,8 @@ Feature toggles:
 - `require_for_direct_content`
 - `require_for_webhook`
 
+`require_for_webhook` controls whether `/webhook/ghost` also enforces API key auth. Keep it `false` for direct Ghost integrations.
+
 ### `cors`
 
 - `enabled`
@@ -245,6 +247,12 @@ Default storage behavior:
 - `versioned_include_date`
 
 Request-level `storage` can override these.
+
+Key behavior:
+
+- overwrite mode writes to `<prefix>/<slug>/<asset>.png`
+- versioned mode writes to `<prefix>/<slug>/<YYYY-MM-DD>/<runId>/<asset>.png`
+- campaign/variant runs add filename suffixes for uniqueness (`-p2`, `-v2`) instead of adding nested folders
 
 ## CSS and Design Tokens
 
