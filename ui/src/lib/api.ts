@@ -42,7 +42,7 @@ export function getApiKey() {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json", ...options?.headers as Record<string, string> };
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...(options?.headers as Record<string, string> || {}) };
   if (_apiKey) {
     headers["x-api-key"] = _apiKey;
   }
@@ -60,9 +60,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   getHealth: () => request<{ ok: boolean }>("/health"),
-
+  getConfig: () => request<any>("/config"),
   getDesignTokens: () => request<{ tokens: DesignTokens; tailwindConfig: string }>("/config/design-tokens"),
-
   getPrompts: () => request<{
     copy_system_prompt: string[];
     copy_user_instructions: string[];
@@ -71,9 +70,7 @@ export const api = {
     prompt_profiles: Record<string, any>;
     render_policy: Record<string, any>;
   }>("/config/prompts"),
-
   getFormats: () => request<{ formats: Record<string, FormatConfig> }>("/config/formats"),
-
   generateFromContent: (body: {
     title: string;
     content: string;
@@ -87,7 +84,6 @@ export const api = {
     method: "POST",
     body: JSON.stringify(body),
   }),
-
   generate: (body: {
     slug: string;
     formats?: string[];

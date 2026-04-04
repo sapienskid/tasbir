@@ -223,6 +223,23 @@ app.get("/config/prompts", (c) => {
 
 app.get("/config/formats", (c) => c.json({ formats: getAllFormats() }));
 
+app.get("/config", (c) => {
+  return c.json({
+    formats: getAllFormats(),
+    generation: {
+      limits: PIPELINE_CONFIG.generation?.limits ?? {},
+      prompts: (PIPELINE_CONFIG.generation as any)?.agents?.prompts ?? {},
+      prompt_profiles: (PIPELINE_CONFIG.generation as any)?.agents?.prompt_profiles ?? {},
+      render_policy: (PIPELINE_CONFIG.generation as any)?.agents?.render_policy ?? {},
+      image: PIPELINE_CONFIG.generation?.image ?? {},
+      carousel_required_slides: PIPELINE_CONFIG.generation?.carousel_required_slides ?? 5,
+    },
+    runtime: PIPELINE_CONFIG.runtime ?? {},
+    features: PIPELINE_CONFIG.features ?? {},
+    storage: PIPELINE_CONFIG.storage ?? {},
+  });
+});
+
 app.post("/generate", async (c) => {
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "generate");
@@ -510,7 +527,7 @@ export async function runPipeline(body: GenerateRequestBody, env: Env, security:
 
 export async function runPipelineFromPost(post: GhostPost, env: Env, body: GenerateRequestBody | DirectContentRequestBody, security: ResolvedSecurityConfig) {
   const outputPlan = resolveOutputPlan(body.output);
-  const brandName = body.brandName ?? env.BRAND_NAME ?? ((PIPELINE_CONFIG.brand?.default_name as string) || "Tasbir Blog");
+  const brandName = body.brandName ?? env.BRAND_NAME ?? "Tasbir Blog";
   const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null> }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
   const agentContexts: AgentExecutionContext[] = [];

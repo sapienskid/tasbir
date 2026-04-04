@@ -30,7 +30,7 @@ const VIBE_PRESETS: Record<string, { primary: string; secondary: string; vibe: s
 
 export default function App() {
   const [apiKeyInput, setApiKeyInput] = useState(getApiKey())
-  const [activeTab, setActiveTab] = useState<'tokens' | 'studio'>('tokens')
+  const [activeTab, setActiveTab] = useState<'tokens' | 'studio' | 'settings'>('tokens')
   const [tokens, setTokens] = useState<DesignTokens | null>(null)
   const [generating, setGenerating] = useState(false)
   const [genMode, setGenMode] = useState<'ai' | 'compute'>('ai')
@@ -43,8 +43,23 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewTab, setPreviewTab] = useState<'components' | 'post'>('components')
+  const [serverConfig, setServerConfig] = useState<any>(null)
+  const [configLoading, setConfigLoading] = useState(false)
 
   const handleApiKeyChange = (v: string) => { setApiKeyInput(v); setApiKey(v) }
+
+  useEffect(() => {
+    loadConfig()
+  }, [])
+
+  async function loadConfig() {
+    setConfigLoading(true)
+    try {
+      const cfg = await api.getConfig()
+      setServerConfig(cfg)
+    } catch { /* ignore */ }
+    setConfigLoading(false)
+  }
 
   async function generateTokens() {
     if (!tokens && genMode === 'ai' && !vibeInput.trim() && !activePreset) {
@@ -113,8 +128,11 @@ export default function App() {
           <span className="font-bold text-sm tracking-tight">Tasbir</span>
           <span className="ml-2 text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 border rounded" style={{ color: '#555', borderColor: '#3d3d3d' }}>Studio</span>
           <div className="flex ml-auto gap-1">
-            <button onClick={() => setActiveTab('tokens')} className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-colors ${activeTab === 'tokens' ? 'text-white' : 'text-[#555] hover:text-[#999]'}`}>Tokens</button>
-            <button onClick={() => setActiveTab('studio')} className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-colors ${activeTab === 'studio' ? 'text-white' : 'text-[#555] hover:text-[#999]'}`}>Studio</button>
+            {(['tokens', 'studio', 'settings'] as const).map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-colors ${activeTab === tab ? 'text-white' : 'text-[#555] hover:text-[#999]'}`}>
+                {tab === 'tokens' ? 'Tokens' : tab === 'studio' ? 'Studio' : 'Config'}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -219,6 +237,10 @@ export default function App() {
           <StudioPanel tokens={tokens} setError={setError} />
         )}
 
+        {activeTab === 'settings' && (
+          <SettingsPanel config={serverConfig} loading={configLoading} onReload={loadConfig} />
+        )}
+
         {/* Footer */}
         <div className="p-3 border-t space-y-2" style={{ borderColor: '#252525' }}>
           <div>
@@ -244,7 +266,15 @@ export default function App() {
             <button onClick={() => setPreviewTab('post')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'post' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Social Post</button>
           </div>
           <div className="flex-1 overflow-auto relative" style={{ background: '#1c1c1c' }}>
-            {tokens ? (
+            {activeTab === 'settings' ? (
+              <div className="absolute inset-0 flex items-center justify-center" style={{ color: '#555' }}>
+                <div className="text-center">
+                  <div className="text-2xl opacity-25 mb-2">⚙</div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider">Settings</div>
+                  <div className="text-[10px] mt-1">Configure in the sidebar</div>
+                </div>
+              </div>
+            ) : tokens ? (
               previewTab === 'components' ? (
                 <PreviewComponents tokens={tokens} />
               ) : (
@@ -372,7 +402,7 @@ function SpacingExplorer({ spacing }: { spacing: DesignTokens['spacing'] }) {
   if (!spacing) return null
   return (
     <div className="space-y-0.5">
-      {spacing.scale.map(v => (
+      {spacing.scale.map((v: number) => (
         <div key={v} className="flex items-center gap-1.5 py-0.5">
           <div className="rounded-sm flex-shrink-0" style={{ width: Math.min(v * 1.4, 220), height: 3, background: '#e2e2e2', opacity: 0.5 }} />
           <span className="text-[8px] font-mono" style={{ color: '#555' }}>{v}px</span>
@@ -450,7 +480,6 @@ function ComponentExplorer({ components }: { components: DesignTokens['component
 function PreviewComponents({ tokens }: { tokens: DesignTokens }) {
   const css = tokensToCSS(tokens)
   const fi = fontImport(tokens)
-  const c = tokens.colors
   const ty = tokens.typography
 
   const html = `<!DOCTYPE html>
@@ -519,7 +548,7 @@ body{font-family:var(--font-sans);background:var(--surface-base);color:var(--tex
   <div class="card"><div class="card-icon">○</div><h3>Gradient System</h3><p>Primary, hero, subtle, and surface gradients derived from the color palette.</p></div>
 </div>
 <div class="stats">
-  <div><div class="stat-num">${Object.keys(c.primary || {}).length * 4}</div><div class="stat-label">Colors</div></div>
+  <div><div class="stat-num">${Object.keys(tokens.colors.primary || {}).length * 4}</div><div class="stat-label">Colors</div></div>
   <div><div class="stat-num">${Object.keys(ty.scale || {}).length}</div><div class="stat-label">Type Scale</div></div>
   <div><div class="stat-num">${(tokens.spacing?.scale || []).length}</div><div class="stat-label">Spacing</div></div>
   <div><div class="stat-num">${Object.keys(tokens.shadow || {}).length}</div><div class="stat-label">Shadows</div></div>
@@ -686,6 +715,151 @@ function StudioPanel({ tokens, setError }: { tokens: DesignTokens | null; setErr
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/* ── Settings Panel ── */
+
+function SettingsPanel({ config, loading, onReload }: { config: any; loading: boolean; onReload: () => void }) {
+  const [activeSection, setActiveSection] = useState('formats')
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center" style={{ color: '#555' }}>
+        <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} />
+      </div>
+    )
+  }
+
+  const sections = [
+    { id: 'formats', label: 'Formats' },
+    { id: 'prompts', label: 'Prompts' },
+    { id: 'limits', label: 'Limits' },
+    { id: 'image', label: 'Image' },
+    { id: 'runtime', label: 'Runtime' },
+    { id: 'features', label: 'Features' },
+    { id: 'storage', label: 'Storage' },
+  ]
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="flex gap-1 p-2.5 border-b" style={{ borderColor: '#252525' }}>
+        {sections.map(s => (
+          <button
+            key={s.id}
+            onClick={() => setActiveSection(s.id)}
+            className={`text-[9px] font-bold tracking-wider uppercase px-2 py-1 rounded border transition-all ${activeSection === s.id ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131] hover:border-[#3d3d3d]'}`}
+          >{s.label}</button>
+        ))}
+      </div>
+      <div className="p-3.5">
+        {activeSection === 'formats' && config?.formats && (
+          <div className="space-y-2">
+            <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: '#555' }}>Output Formats</div>
+            {Object.entries(config.formats).map(([id, f]: [string, any]) => (
+              <div key={id} className="flex items-center justify-between py-2 px-3 rounded" style={{ background: '#0b0b0b' }}>
+                <div>
+                  <div className="text-[11px] font-medium">{id}</div>
+                  <div className="text-[9px] font-mono" style={{ color: '#555' }}>{f.width}×{f.height} · {f.caption_source}</div>
+                </div>
+                <div className="text-[10px] font-mono px-2 py-1 rounded" style={{ background: '#141414', color: '#999' }}>#{f.hashtag_count}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeSection === 'prompts' && config?.generation?.prompts && (
+          <div className="space-y-3">
+            <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: '#555' }}>System Prompts</div>
+            {Object.entries(config.generation.prompts).map(([key, lines]: [string, any]) => (
+              <div key={key}>
+                <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>{key}</div>
+                <pre className="p-2.5 rounded text-[9px] font-mono leading-relaxed whitespace-pre-wrap" style={{ background: '#0b0b0b', color: '#999', lineHeight: 1.6 }}>
+                  {Array.isArray(lines) ? lines.join('\n') : String(lines)}
+                </pre>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeSection === 'limits' && config?.generation?.limits && (
+          <div className="space-y-1">
+            <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: '#555' }}>Limits</div>
+            {Object.entries(config.generation.limits).map(([k, v]) => (
+              <div key={k} className="flex justify-between items-center py-1.5 px-3 rounded" style={{ background: '#0b0b0b' }}>
+                <span className="text-[10px] font-mono" style={{ color: '#999' }}>{k}</span>
+                <span className="text-[10px] font-mono" style={{ color: '#555' }}>{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeSection === 'image' && config?.generation?.image && (
+          <div className="space-y-3">
+            <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: '#555' }}>Image Generation</div>
+            <div className="p-2.5 rounded" style={{ background: '#0b0b0b' }}>
+              <div className="text-[9px] font-mono mb-1" style={{ color: '#555' }}>Model</div>
+              <div className="text-[10px] font-mono">{config.generation.image.default_model}</div>
+            </div>
+            <div>
+              <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>Prompt Prefix</div>
+              <pre className="p-2.5 rounded text-[9px] font-mono leading-relaxed whitespace-pre-wrap" style={{ background: '#0b0b0b', color: '#999' }}>
+                {config.generation.image.prompt_prefix?.join('\n')}
+              </pre>
+            </div>
+            <div>
+              <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>Negative Clauses</div>
+              <pre className="p-2.5 rounded text-[9px] font-mono leading-relaxed whitespace-pre-wrap" style={{ background: '#0b0b0b', color: '#999' }}>
+                {config.generation.image.negative_clauses?.join('\n')}
+              </pre>
+            </div>
+          </div>
+        )}
+
+        {activeSection === 'runtime' && config?.runtime && (
+          <div className="space-y-1">
+            <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: '#555' }}>Runtime</div>
+            {Object.entries(config.runtime).map(([k, v]) => (
+              <div key={k} className="flex justify-between items-center py-1.5 px-3 rounded" style={{ background: '#0b0b0b' }}>
+                <span className="text-[10px] font-mono" style={{ color: '#999' }}>{k}</span>
+                <span className="text-[10px] font-mono" style={{ color: '#555' }}>{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeSection === 'features' && config?.features && (
+          <div className="space-y-1">
+            <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: '#555' }}>Features</div>
+            {Object.entries(config.features).map(([k, v]) => (
+              <div key={k} className="flex justify-between items-center py-1.5 px-3 rounded" style={{ background: '#0b0b0b' }}>
+                <span className="text-[10px] font-mono" style={{ color: '#999' }}>{k}</span>
+                <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${v ? 'text-[#22c55e]' : 'text-[#f43f5e]'}`} style={{ background: v ? '#22c55e15' : '#f43f5e15' }}>
+                  {v ? 'ON' : 'OFF'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {activeSection === 'storage' && config?.storage && (
+          <div className="space-y-1">
+            <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: '#555' }}>Storage</div>
+            {Object.entries(config.storage).map(([k, v]) => (
+              <div key={k} className="flex justify-between items-center py-1.5 px-3 rounded" style={{ background: '#0b0b0b' }}>
+                <span className="text-[10px] font-mono" style={{ color: '#999' }}>{k}</span>
+                <span className="text-[10px] font-mono" style={{ color: '#555' }}>{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="p-3 border-t" style={{ borderColor: '#252525' }}>
+        <button onClick={onReload} className="w-full py-1.5 rounded text-[10px] font-bold uppercase tracking-wider border transition-all" style={{ borderColor: '#313131', color: '#555' }}>
+          Reload Config
+        </button>
+      </div>
     </div>
   )
 }
