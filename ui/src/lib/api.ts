@@ -84,6 +84,10 @@ export const api = {
     method: "POST",
     body: JSON.stringify(body),
   }),
+  generateTokens: (body: { vibe?: string; primary?: string; secondary?: string; mode?: string }) => request<any>("/generate-tokens", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
   generate: (body: {
     slug: string;
     formats?: string[];

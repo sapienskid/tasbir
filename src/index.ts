@@ -220,6 +220,27 @@ app.get("/config/prompts", (c) => {
 
 app.get("/config/formats", (c) => c.json({ formats: getAllFormats() }));
 
+app.post("/generate-tokens", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const vibe = (body.vibe as string) || "custom design system";
+  const primary = (body.primary as string) || "#3b82f6";
+  const secondary = (body.secondary as string) || "#0f172a";
+  const mode = (body.mode as string) || "ai";
+
+  let tokens: any;
+  if (mode === "ai") {
+    const { generateTokensAI } = await import("./lib/tokens");
+    tokens = await generateTokensAI(vibe, c.env.GEMINI_API_KEY);
+  } else {
+    const { generateTokensComputational } = await import("./lib/tokens");
+    tokens = generateTokensComputational(primary, secondary, vibe);
+  }
+  return c.json(tokens);
+});
+
 app.get("/config", (c) => {
   return c.json({
     formats: getAllFormats(),

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
-import { generateTokensAI, generateTokensComputational, tokensToCSS, tokensToPrompt, type DesignTokens } from '@/lib/tokens'
+import { generateTokensComputational, tokensToCSS, tokensToPrompt, type DesignTokens } from '@/lib/tokens'
 
 const PRESETS = [
   { id: 'luxury', l: 'Luxury' },
@@ -25,8 +25,8 @@ const VIBE_PRESETS: Record<string, { primary: string; secondary: string; vibe: s
   gothic: { primary: '#7c3aed', secondary: '#0c0a09', vibe: 'dark gothic dramatic' },
   retro: { primary: '#f97316', secondary: '#1e1b4b', vibe: 'retro futurist neon' },
   minimal: { primary: '#171717', secondary: '#fafafa', vibe: 'minimal clean whitespace' },
-  maximalist: { primary: '#e11d48', secondary: '#7c3aed', vibe: 'maximalist bold saturated' },
-]
+  maximalist: { primary: '#e11d48', secondary: '#7c3aed', vibe: 'maximalist bold saturated' }
+}
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -43,7 +43,7 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewTab, setPreviewTab] = useState<'components' | 'post'>('components')
-  const [serverConfig, setServerConfig] = useState<any>(null)
+  const [_serverConfig, setServerConfig] = useState<any>(null)
   const [configLoading, setConfigLoading] = useState(false)
   const [editingConfig, setEditingConfig] = useState<any>(null)
   const [configSaved, setConfigSaved] = useState(false)
@@ -82,7 +82,7 @@ export default function App() {
       let result: DesignTokens
       const vibeLabel = activePreset ? `${PRESETS.find(p => p.id === activePreset)?.l}${vibeInput ? ' + ' + vibeInput : ''}` : vibeInput
       if (genMode === 'ai') {
-        result = await generateTokensAI(vibeLabel || 'custom design system', '')
+        result = await api.generateTokens({ vibe: vibeLabel || 'custom design system', mode: 'ai' })
       } else {
         result = generateTokensComputational(primaryColor, secondaryColor, vibeLabel || 'computational')
       }
@@ -500,7 +500,6 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
 /* ── Config Preview ── */
 
 function ConfigPreview({ config }: any) {
-  const gen = config?.generation || {}
   return (
     <div className="flex-1 overflow-auto p-6" style={{ background: '#0b0b0b' }}>
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
