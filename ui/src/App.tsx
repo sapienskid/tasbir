@@ -1,649 +1,691 @@
 import { useState, useEffect } from 'react'
-import {
-  Sparkles,
-  Palette,
-  Terminal,
-  History,
-  ChevronRight,
-  ImageIcon,
-  Type,
-  Play,
-  CheckCircle2,
-  Loader2,
-  Copy,
-  ExternalLink,
-  RefreshCw,
-  Save
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Label } from '@/components/ui/label'
 import { api, setApiKey, getApiKey } from '@/lib/api'
+import { generateTokensAI, generateTokensComputational, tokensToCSS, tokensToPrompt, type DesignTokens } from '@/lib/tokens'
 
-const FORMATS = [
-  { id: 'instagram-portrait', label: 'IG Portrait', dims: '1080×1350' },
-  { id: 'instagram-square', label: 'IG Square', dims: '1080×1080' },
-  { id: 'instagram-story', label: 'IG Story', dims: '1080×1920' },
-  { id: 'twitter-card', label: 'Twitter Card', dims: '1200×628' },
-  { id: 'linkedin-post', label: 'LinkedIn', dims: '1200×627' },
-  { id: 'carousel-post', label: 'Carousel', dims: '1080×1350' },
+const PRESETS = [
+  { id: 'luxury', l: 'Luxury' },
+  { id: 'brutalist', l: 'Brutalist' },
+  { id: 'organic', l: 'Organic' },
+  { id: 'tech', l: 'Dark Tech' },
+  { id: 'editorial', l: 'Editorial' },
+  { id: 'playful', l: 'Playful' },
+  { id: 'gothic', l: 'Gothic' },
+  { id: 'retro', l: 'Retro' },
+  { id: 'minimal', l: 'Minimal' },
+  { id: 'maximalist', l: 'Maximalist' },
 ]
 
+const VIBE_PRESETS: Record<string, { primary: string; secondary: string; vibe: string }> = {
+  luxury: { primary: '#c9a96e', secondary: '#1a1a2e', vibe: 'cold luxury minimal' },
+  brutalist: { primary: '#ff3b3b', secondary: '#0a0a0a', vibe: 'raw brutalist bold' },
+  organic: { primary: '#4a7c59', secondary: '#f5f0e8', vibe: 'warm organic wellness' },
+  tech: { primary: '#3b82f6', secondary: '#0f172a', vibe: 'dark tech futuristic' },
+  editorial: { primary: '#1a1a1a', secondary: '#faf9f6', vibe: 'clean editorial serif' },
+  playful: { primary: '#f472b6', secondary: '#fef3c7', vibe: 'playful colorful fun' },
+  gothic: { primary: '#7c3aed', secondary: '#0c0a09', vibe: 'dark gothic dramatic' },
+  retro: { primary: '#f97316', secondary: '#1e1b4b', vibe: 'retro futurist neon' },
+  minimal: { primary: '#171717', secondary: '#fafafa', vibe: 'minimal clean whitespace' },
+  maximalist: { primary: '#e11d48', secondary: '#7c3aed', vibe: 'maximalist bold saturated' },
+}
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'studio' | 'design' | 'prompts' | 'history'>('studio')
-  const [tokens, setTokens] = useState<Record<string, any>>({})
-  const [prompts, setPrompts] = useState<Record<string, any>>({})
-  const [_formats, setFormats] = useState<Record<string, any>>({})
-  const [_loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [history, setHistory] = useState<any[]>([])
   const [apiKeyInput, setApiKeyInput] = useState(getApiKey())
-  const [showKey, setShowKey] = useState(false)
+  const [activeTab, setActiveTab] = useState<'tokens' | 'studio'>('tokens')
+  const [tokens, setTokens] = useState<DesignTokens | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [genMode, setGenMode] = useState<'ai' | 'compute'>('ai')
+  const [vibeInput, setVibeInput] = useState('')
+  const [activePreset, setActivePreset] = useState<string | null>(null)
+  const [primaryColor, setPrimaryColor] = useState('#3b82f6')
+  const [secondaryColor, setSecondaryColor] = useState('#0f172a')
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ color: true })
+  const [exportTab, setExportTab] = useState<'css' | 'json' | 'prompt'>('css')
+  const [copied, setCopied] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [previewTab, setPreviewTab] = useState<'components' | 'post'>('components')
 
-  useEffect(() => {
-    loadConfig()
-  }, [])
+  const handleApiKeyChange = (v: string) => { setApiKeyInput(v); setApiKey(v) }
 
-  function handleApiKeyChange(value: string) {
-    setApiKeyInput(value)
-    setApiKey(value)
-  }
+  async function generateTokens() {
+    if (!tokens && genMode === 'ai' && !vibeInput.trim() && !activePreset) {
+      setError('Enter a vibe or select a preset')
+      return
+    }
+    if (genMode === 'compute' && !primaryColor) {
+      setError('Select a primary color')
+      return
+    }
 
-  useEffect(() => {
-    loadConfig()
-  }, [])
+    setGenerating(true)
+    setError(null)
 
-  async function loadConfig() {
     try {
-      const [tokensRes, promptsRes, formatsRes] = await Promise.all([
-        api.getDesignTokens().catch(() => ({ tokens: {}, tailwindConfig: '' })),
-        api.getPrompts().catch(() => ({})),
-        api.getFormats().catch(() => ({ formats: {} })),
-      ])
-      setTokens(tokensRes.tokens || {})
-      setPrompts(promptsRes)
-      setFormats(formatsRes.formats || {})
-    } catch {
-      // Config load failed, continue with defaults
+      let result: DesignTokens
+      const vibeLabel = activePreset
+        ? `${PRESETS.find(p => p.id === activePreset)?.l}${vibeInput ? ' + ' + vibeInput : ''}`
+        : vibeInput
+
+      if (genMode === 'ai') {
+        result = await generateTokensAI(vibeLabel || 'custom design system', apiKeyInput)
+      } else {
+        result = generateTokensComputational(primaryColor, secondaryColor, vibeLabel || 'computational')
+      }
+
+      setTokens(result)
+      setExpandedSections({ color: true })
+    } catch (e: any) {
+      setError(e.message || 'Token generation failed')
+    } finally {
+      setGenerating(false)
     }
   }
 
+  function applyPreset(id: string) {
+    const p = VIBE_PRESETS[id]
+    if (!p) return
+    setActivePreset(id === activePreset ? null : id)
+    setPrimaryColor(p.primary)
+    setSecondaryColor(p.secondary)
+    setVibeInput(p.vibe)
+  }
+
+  function toggleSection(key: string) {
+    setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  function handleCopy() {
+    let text = ''
+    if (!tokens) return
+    if (exportTab === 'css') text = tokensToCSS(tokens)
+    else if (exportTab === 'json') text = JSON.stringify(tokens, null, 2)
+    else text = tokensToPrompt(tokens)
+    navigator.clipboard.writeText(text)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
   return (
-    <div className="flex h-screen w-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#0b0b0b', color: '#e2e2e2', fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13 }}>
       {/* Sidebar */}
-      <aside className="w-64 border-r border-slate-800 bg-slate-900/50 flex flex-col">
-        <div className="p-6 flex items-center gap-3 border-b border-slate-800">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20">
-            T
+      <aside className="flex flex-col border-r" style={{ width: 290, flexShrink: 0, background: '#141414', borderColor: '#252525' }}>
+        {/* Header */}
+        <div className="flex items-center px-4 border-b" style={{ height: 44, borderColor: '#252525' }}>
+          <span className="font-bold text-sm tracking-tight">Tasbir</span>
+          <span className="ml-2 text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 border rounded" style={{ color: '#555', borderColor: '#3d3d3d' }}>Studio</span>
+          <div className="flex ml-auto gap-1">
+            <button onClick={() => setActiveTab('tokens')} className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-colors ${activeTab === 'tokens' ? 'text-white' : 'text-[#555] hover:text-[#999]'}`}>Tokens</button>
+            <button onClick={() => setActiveTab('studio')} className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded transition-colors ${activeTab === 'studio' ? 'text-white' : 'text-[#555] hover:text-[#999]'}`}>Studio</button>
           </div>
-          <h1 className="text-xl font-bold tracking-tight">Tasbir <span className="text-blue-500">AI</span></h1>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1">
-          <NavItem active={activeTab === 'studio'} onClick={() => setActiveTab('studio')} icon={<Sparkles size={18} />} label="Studio" />
-          <NavItem active={activeTab === 'design'} onClick={() => setActiveTab('design')} icon={<Palette size={18} />} label="Design System" />
-          <NavItem active={activeTab === 'prompts'} onClick={() => setActiveTab('prompts')} icon={<Terminal size={18} />} label="AI Prompts" />
-          <NavItem active={activeTab === 'history'} onClick={() => setActiveTab('history')} icon={<History size={18} />} label="History" />
-        </nav>
-
-        <div className="p-4 border-t border-slate-800 space-y-3">
-          <div>
-            <label className="text-xs text-slate-500 font-medium px-1">API Key</label>
-            <div className="flex gap-1 mt-1">
-              <Input
-                type={showKey ? 'text' : 'password'}
-                value={apiKeyInput}
-                onChange={(e) => handleApiKeyChange(e.target.value)}
-                placeholder="sp_..."
-                className="bg-slate-900 border-slate-700 h-7 text-xs font-mono"
+        {activeTab === 'tokens' && (
+          <>
+            {/* Input */}
+            <div className="p-3.5 border-b" style={{ borderColor: '#252525' }}>
+              <div className="text-[9px] font-bold tracking-widest uppercase mb-1.5" style={{ color: '#555' }}>Vibe</div>
+              <textarea
+                value={vibeInput}
+                onChange={e => setVibeInput(e.target.value)}
+                placeholder="cold brutalist luxury… warm organic wellness…"
+                rows={3}
+                className="w-full rounded border resize-none outline-none transition-colors"
+                style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', fontFamily: 'inherit', fontSize: 12, padding: '9px 11px', lineHeight: 1.5 }}
               />
+              <div className="flex gap-1.5 mt-2">
+                <button
+                  onClick={() => setGenMode('ai')}
+                  className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${genMode === 'ai' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131] hover:border-[#3d3d3d]'}`}
+                >AI</button>
+                <button
+                  onClick={() => setGenMode('compute')}
+                  className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${genMode === 'compute' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131] hover:border-[#3d3d3d]'}`}
+                >Compute</button>
+              </div>
+              {genMode === 'compute' && (
+                <div className="flex gap-2 mt-2">
+                  <div className="flex-1">
+                    <div className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>Primary</div>
+                    <div className="flex items-center gap-1.5">
+                      <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-6 h-6 rounded border-0 cursor-pointer" />
+                      <input value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>Secondary</div>
+                    <div className="flex items-center gap-1.5">
+                      <input type="color" value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)} className="w-6 h-6 rounded border-0 cursor-pointer" />
+                      <input value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)} className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
               <button
-                onClick={() => setShowKey(!showKey)}
-                className="px-2 text-xs text-slate-500 hover:text-slate-300 shrink-0"
+                onClick={generateTokens}
+                disabled={generating}
+                className="w-full mt-2 py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25"
+                style={{ background: '#fff', color: '#0b0b0b' }}
               >
-                {showKey ? '••' : '👁'}
+                {generating ? 'Generating…' : 'Generate System'}
               </button>
             </div>
+
+            {/* Presets */}
+            <div className="flex flex-wrap gap-1 p-2.5 border-b" style={{ borderColor: '#252525' }}>
+              {PRESETS.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => applyPreset(p.id)}
+                  className={`text-[9px] font-bold tracking-wider uppercase px-2 py-1 rounded border transition-all ${activePreset === p.id ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131] hover:border-[#3d3d3d]'}`}
+                >{p.l}</button>
+              ))}
+            </div>
+
+            {/* Token Explorer */}
+            <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'thin' }}>
+              {tokens ? (
+                <>
+                  <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}>
+                    <ColorExplorer colors={tokens.colors} />
+                  </TokenSection>
+                  <TokenSection title="Typography" expanded={!!expandedSections.typography} onToggle={() => toggleSection('typography')}>
+                    <TypographyExplorer typography={tokens.typography} />
+                  </TokenSection>
+                  <TokenSection title="Spacing" expanded={!!expandedSections.spacing} onToggle={() => toggleSection('spacing')}>
+                    <SpacingExplorer spacing={tokens.spacing} />
+                  </TokenSection>
+                  <TokenSection title="Shadows" expanded={!!expandedSections.shadow} onToggle={() => toggleSection('shadow')}>
+                    <ShadowExplorer shadows={tokens.shadow} />
+                  </TokenSection>
+                  <TokenSection title="Border & Radius" expanded={!!expandedSections.border} onToggle={() => toggleSection('border')}>
+                    <BorderExplorer border={tokens.border} />
+                  </TokenSection>
+                  <TokenSection title="Gradients" expanded={!!expandedSections.gradient} onToggle={() => toggleSection('gradient')}>
+                    <GradientExplorer gradients={tokens.gradient} />
+                  </TokenSection>
+                  <TokenSection title="Components" expanded={!!expandedSections.component} onToggle={() => toggleSection('component')}>
+                    <ComponentExplorer components={tokens.component} />
+                  </TokenSection>
+                </>
+              ) : (
+                <div className="p-6 text-center" style={{ color: '#555', fontSize: 11, lineHeight: 1.7 }}>
+                  Generate a design system<br />to explore tokens here
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {activeTab === 'studio' && (
+          <StudioPanel tokens={tokens} setError={setError} />
+        )}
+
+        {/* Footer */}
+        <div className="p-3 border-t space-y-2" style={{ borderColor: '#252525' }}>
+          <div>
+            <div className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>API Key</div>
+            <input
+              type="password"
+              value={apiKeyInput}
+              onChange={e => handleApiKeyChange(e.target.value)}
+              placeholder="sp_…"
+              className="w-full rounded border px-2 py-1 text-[10px] font-mono outline-none"
+              style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+            />
           </div>
-          <div className="px-1 text-xs text-slate-500">
-            API: <span className="text-slate-300 font-mono">{import.meta.env.VITE_API_BASE || 'http://127.0.0.1:8787'}</span>
-          </div>
-          <Button variant="ghost" size="sm" className="w-full justify-start text-slate-400" onClick={loadConfig}>
-            <RefreshCw size={14} className="mr-2" /> Refresh Config
-          </Button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-950 to-slate-950">
-        <header className="h-16 border-b border-slate-800 flex items-center justify-between px-8 bg-slate-950/50 backdrop-blur-sm z-10">
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <span>App</span>
-            <ChevronRight size={14} />
-            <span className="text-slate-100 capitalize">{activeTab}</span>
+      {/* Main */}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Preview */}
+        <div className="flex-1 flex flex-col overflow-hidden border-b" style={{ borderColor: '#252525' }}>
+          <div className="flex items-center border-b" style={{ borderColor: '#252525', background: '#141414' }}>
+            <button onClick={() => setPreviewTab('components')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'components' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Components</button>
+            <button onClick={() => setPreviewTab('post')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'post' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Social Post</button>
           </div>
-          <div className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-xs font-semibold text-blue-400">
-            Beta v2.0
-          </div>
-        </header>
-
-        <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-6xl mx-auto space-y-8">
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-red-400 text-sm">
-                {error}
-                <button onClick={() => setError(null)} className="ml-4 text-red-300 hover:text-red-200">Dismiss</button>
+          <div className="flex-1 overflow-auto relative" style={{ background: '#1c1c1c' }}>
+            {tokens ? (
+              previewTab === 'components' ? (
+                <PreviewComponents tokens={tokens} />
+              ) : (
+                <PreviewSocialPost tokens={tokens} />
+              )
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#555' }}>
+                <div className="text-2xl opacity-25">◈</div>
+                <div className="text-[11px] font-bold uppercase tracking-wider">No system generated</div>
+                <div className="text-[10px]">Enter a vibe and generate</div>
               </div>
             )}
-
-            {activeTab === 'studio' && <StudioView setLoading={setLoading} setError={setError} setHistory={setHistory} />}
-            {activeTab === 'design' && <DesignView tokens={tokens} />}
-            {activeTab === 'prompts' && <PromptsView prompts={prompts} setPrompts={setPrompts} />}
-            {activeTab === 'history' && <HistoryView history={history} />}
+            {generating && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10" style={{ background: '#0b0b0b' }}>
+                <div className="w-7 h-7 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} />
+                <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#555' }}>Building token system…</div>
+              </div>
+            )}
           </div>
+        </div>
+
+        {/* Export */}
+        <div className="h-48 flex flex-col flex-shrink-0" style={{ background: '#141414' }}>
+          <div className="flex items-center border-b" style={{ borderColor: '#252525' }}>
+            {(['css', 'json', 'prompt'] as const).map(tab => (
+              <button key={tab} onClick={() => setExportTab(tab)} className={`text-[9px] font-bold uppercase tracking-wider px-3 py-2 transition-colors ${exportTab === tab ? 'text-white' : 'text-[#555] hover:text-[#999]'}`}>
+                {tab === 'css' ? 'CSS Vars' : tab === 'json' ? 'W3C JSON' : 'AI Prompt'}
+              </button>
+            ))}
+            <button onClick={handleCopy} className={`ml-auto mr-3 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border transition-all ${copied ? 'border-[#22c55e] text-[#22c55e]' : 'border-[#313131] text-[#555] hover:border-white hover:text-white'}`}>
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+            {error && <span className="mr-3 text-[9px] text-[#f43f5e] font-mono">{error}</span>}
+          </div>
+          <pre className="flex-1 overflow-auto p-3 text-[9px] font-mono leading-relaxed" style={{ color: '#555', background: '#0b0b0b' }}>
+            {tokens
+              ? exportTab === 'css' ? tokensToCSS(tokens)
+              : exportTab === 'json' ? JSON.stringify(tokens, null, 2)
+              : tokensToPrompt(tokens)
+              : '/* Generate a design system to see exports */'}
+          </pre>
         </div>
       </main>
     </div>
   )
 }
 
-function NavItem({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+/* ── Token Sections ── */
+
+function TokenSection({ title, expanded, onToggle, children }: { title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
-    <button
-      onClick={onClick}
-      className={`flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-        active
-          ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-[0_0_15px_-3px_rgba(59,130,246,0.2)]'
-          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/50 border border-transparent'
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
+    <div className="border-b" style={{ borderColor: '#252525' }}>
+      <div className="flex items-center justify-between px-3.5 py-2 cursor-pointer select-none hover:bg-[#1c1c1c] transition-colors" onClick={onToggle}>
+        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>{title}</span>
+        <span className="text-[9px] transition-transform" style={{ color: '#555', transform: expanded ? 'rotate(180deg)' : undefined }}>▾</span>
+      </div>
+      {expanded && <div className="p-3" style={{ background: '#0b0b0b' }}>{children}</div>}
+    </div>
   )
 }
 
-function StudioView({ setLoading, setError, setHistory }: { setLoading: (v: boolean) => void; setError: (v: string | null) => void; setHistory: React.Dispatch<React.SetStateAction<any[]>> }) {
-  const [mode, setMode] = useState<'content' | 'slug'>('content')
+function ColorExplorer({ colors }: { colors: DesignTokens['colors'] }) {
+  if (!colors) return null
+  const groups = [
+    { label: 'Primary', data: colors.primary, keys: ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900'] },
+    { label: 'Secondary', data: colors.secondary, keys: ['50', '100', '500', '700', '900'] },
+    { label: 'Accent', data: colors.accent, keys: ['light', 'base', 'dark'] },
+    { label: 'Neutral', data: colors.neutral, keys: ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900'] },
+  ]
+
+  return (
+    <div className="space-y-2.5">
+      {groups.map(g => {
+        if (!g.data) return null
+        return (
+          <div key={g.label}>
+            <div className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{ color: '#555' }}>{g.label}</div>
+            <div className="flex rounded overflow-hidden">
+              {g.keys.map(k => {
+                const v = (g.data as any)[k]
+                if (!v) return null
+                return (
+                  <div key={k} className="flex-1 h-5 relative cursor-default hover:flex-[2.5] transition-all group/swatch">
+                    <div className="absolute inset-0" style={{ background: v }} />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-0.5 px-1 py-0.5 rounded text-[8px] font-mono whitespace-nowrap opacity-0 group-hover/swatch:opacity-100 pointer-events-none z-20" style={{ background: '#1c1c1c', border: '1px solid #313131', color: '#999' }}>
+                      {k}: {v}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+      {[...Object.entries(colors.semantic || {}), ...Object.entries(colors.text || {}), ...Object.entries(colors.surface || {})].map(([k, v]) => (
+        <div key={k} className="flex items-center gap-1.5 py-0.5">
+          <div className="w-3.5 h-3.5 rounded-sm flex-shrink-0" style={{ background: v, border: '1px solid rgba(255,255,255,0.08)' }} />
+          <span className="text-[10px] font-medium" style={{ color: '#999' }}>{k}</span>
+          <span className="ml-auto text-[8px] font-mono" style={{ color: '#555' }}>{v}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TypographyExplorer({ typography }: { typography: DesignTokens['typography'] }) {
+  if (!typography) return null
+  return (
+    <div className="space-y-2">
+      <div className="text-[8px] font-mono leading-relaxed" style={{ color: '#555' }}>
+        SANS: {typography.fontSans}<br />SERIF: {typography.fontSerif}<br />MONO: {typography.fontMono}
+      </div>
+      {Object.entries(typography.scale).map(([k, v]) => (
+        <div key={k} className="flex items-baseline gap-2 border-b pb-0.5" style={{ borderColor: '#252525' }}>
+          <span className="text-[8px] font-mono min-w-[28px]" style={{ color: '#555' }}>{k}</span>
+          <span style={{ fontSize: Math.min(v, 28), lineHeight: 1, color: '#999', flex: 1, overflow: 'hidden', whiteSpace: 'nowrap' }}>Aa</span>
+          <span className="text-[8px] font-mono ml-1.5" style={{ color: '#555' }}>{v}px</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SpacingExplorer({ spacing }: { spacing: DesignTokens['spacing'] }) {
+  if (!spacing) return null
+  return (
+    <div className="space-y-0.5">
+      {spacing.scale.map(v => (
+        <div key={v} className="flex items-center gap-1.5 py-0.5">
+          <div className="rounded-sm flex-shrink-0" style={{ width: Math.min(v * 1.4, 220), height: 3, background: '#e2e2e2', opacity: 0.5 }} />
+          <span className="text-[8px] font-mono" style={{ color: '#555' }}>{v}px</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ShadowExplorer({ shadows }: { shadows: Record<string, string> }) {
+  if (!shadows) return null
+  return (
+    <div className="space-y-1">
+      {Object.entries(shadows).map(([k, v]) => (
+        <div key={k} className="flex items-center gap-2 py-1">
+          <div className="w-7 h-4 rounded-sm flex-shrink-0" style={{ background: '#1c1c1c', boxShadow: v }} />
+          <span className="text-[8px] font-mono min-w-[20px]" style={{ color: '#555' }}>{k}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function BorderExplorer({ border }: { border: DesignTokens['border'] }) {
+  if (!border?.radius) return null
+  return (
+    <div className="space-y-1">
+      <div className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{ color: '#555' }}>Radius</div>
+      {Object.entries(border.radius).map(([k, v]) => (
+        <div key={k} className="flex items-center gap-2 py-0.5">
+          <div className="w-5 h-3.5 flex-shrink-0" style={{ borderRadius: v, background: '#999', opacity: 0.2 }} />
+          <span className="text-[8px] font-mono min-w-[24px]" style={{ color: '#555' }}>{k}</span>
+          <span className="text-[8px] font-mono" style={{ color: '#555' }}>{v}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function GradientExplorer({ gradients }: { gradients: Record<string, string> }) {
+  if (!gradients) return null
+  return (
+    <div className="space-y-1">
+      {Object.entries(gradients).map(([k, v]) => (
+        <div key={k} className="flex items-center gap-2 py-0.5">
+          <div className="w-14 h-3.5 rounded-sm flex-shrink-0" style={{ background: v }} />
+          <span className="text-[8px] font-mono" style={{ color: '#555' }}>{k}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ComponentExplorer({ components }: { components: DesignTokens['component'] }) {
+  if (!components) return null
+  return (
+    <div className="space-y-2">
+      {Object.entries(components).map(([name, vals]) => (
+        <div key={name}>
+          <div className="text-[8px] font-bold uppercase tracking-widest mb-0.5" style={{ color: '#555' }}>{name}</div>
+          {Object.entries(vals).map(([k, v]) => (
+            <div key={k} className="flex justify-between items-center py-0.5 text-[10px]">
+              <span style={{ color: '#555' }}>{k}</span>
+              <span className="text-[8px] font-mono" style={{ color: '#999' }}>{String(v)}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* ── Preview Components ── */
+
+function PreviewComponents({ tokens }: { tokens: DesignTokens }) {
+  const css = tokensToCSS(tokens)
+  const fi = fontImport(tokens)
+  const c = tokens.colors
+  const ty = tokens.typography
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+${fi}
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+${css}
+body{font-family:var(--font-sans);background:var(--surface-base);color:var(--text-primary);padding:32px;line-height:1.5}
+.nav{display:flex;align-items:center;gap:24px;padding:16px 0;border-bottom:var(--border-hairline) solid var(--color-neutral-200);margin-bottom:40px}
+.nav-logo{font-weight:700;font-size:18px;letter-spacing:-0.02em}
+.nav-links{display:flex;gap:16px;margin-left:auto}
+.nav-links a{color:var(--text-secondary);text-decoration:none;font-size:13px;font-weight:500}
+.nav-cta{padding:8px 16px;background:var(--color-primary-500);color:var(--text-inverse);border:none;border-radius:var(--radius-md);font-weight:600;font-size:13px;cursor:pointer}
+.hero{text-align:center;padding:48px 0 56px}
+.hero h1{font-size:var(--text-6xl);font-weight:700;letter-spacing:var(--tracking-tight);line-height:var(--leading-tight);margin-bottom:16px}
+.hero p{font-size:var(--text-lg);color:var(--text-secondary);max-width:480px;margin:0 auto 32px}
+.btns{display:flex;gap:12px;justify-content:center}
+.btn-primary{padding:12px 28px;background:var(--color-primary-500);color:var(--text-inverse);border:none;border-radius:var(--radius-md);font-weight:600;font-size:14px;cursor:pointer}
+.btn-secondary{padding:12px 28px;background:transparent;color:var(--text-primary);border:var(--border-normal) solid var(--color-neutral-300);border-radius:var(--radius-md);font-weight:600;font-size:14px;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin:40px 0}
+.card{padding:var(--card-padding);background:var(--surface-elevated);border-radius:var(--card-radius);border:var(--border-hairline) solid var(--color-neutral-200);box-shadow:var(--shadow-sm)}
+.card-icon{font-size:28px;margin-bottom:12px}
+.card h3{font-size:var(--text-lg);font-weight:600;margin-bottom:8px}
+.card p{font-size:var(--text-sm);color:var(--text-secondary);line-height:1.6}
+.form-section{max-width:480px;margin:48px auto 0}
+.form-section h2{font-size:var(--text-2xl);font-weight:700;margin-bottom:24px;text-align:center}
+.field{margin-bottom:16px}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;background:var(--surface-base);border:var(--border-normal) solid var(--color-neutral-300);border-radius:var(--radius-md);color:var(--text-primary);font-family:var(--font-sans);font-size:14px;outline:none}
+.field textarea{min-height:80px;resize:vertical}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0;justify-content:center}
+.badge{padding:4px 10px;border-radius:var(--badge-radius);font-size:11px;font-weight:600}
+.badge-success{background:#22c55e20;color:#22c55e;border:1px solid #22c55e40}
+.badge-warning{background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40}
+.badge-error{background:#ef444420;color:#ef4444;border:1px solid #ef444440}
+.badge-info{background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640}
+.badge-neutral{background:var(--color-neutral-200);color:var(--text-secondary);border:1px solid var(--color-neutral-300)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:40px 0;text-align:center}
+.stat-num{font-size:var(--text-4xl);font-weight:700;letter-spacing:var(--tracking-tight)}
+.stat-label{font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px}
+</style></head><body>
+<div class="nav">
+  <div class="nav-logo">◈ Brand</div>
+  <div class="nav-links"><a href="#">Features</a><a href="#">Pricing</a><a href="#">About</a></div>
+  <button class="nav-cta">Get Started</button>
+</div>
+<div class="hero">
+  <h1>Design System<br/>Showcase</h1>
+  <p>A complete token-driven design system with colors, typography, spacing, shadows, and component tokens.</p>
+  <div class="btns">
+    <button class="btn-primary">Primary Action</button>
+    <button class="btn-secondary">Secondary</button>
+  </div>
+</div>
+<div class="badges">
+  <span class="badge badge-success">Success</span>
+  <span class="badge badge-warning">Warning</span>
+  <span class="badge badge-error">Error</span>
+  <span class="badge badge-info">Info</span>
+  <span class="badge badge-neutral">Neutral</span>
+</div>
+<div class="grid">
+  <div class="card"><div class="card-icon">◆</div><h3>Design Tokens</h3><p>Colors, typography, spacing, and shadows defined as reusable CSS custom properties.</p></div>
+  <div class="card"><div class="card-icon">◇</div><h3>Component API</h3><p>Button, card, input, badge, and nav tokens for consistent component styling.</p></div>
+  <div class="card"><div class="card-icon">○</div><h3>Gradient System</h3><p>Primary, hero, subtle, and surface gradients derived from the color palette.</p></div>
+</div>
+<div class="stats">
+  <div><div class="stat-num">${Object.keys(c.primary || {}).length * 4}</div><div class="stat-label">Colors</div></div>
+  <div><div class="stat-num">${Object.keys(ty.scale || {}).length}</div><div class="stat-label">Type Scale</div></div>
+  <div><div class="stat-num">${(tokens.spacing?.scale || []).length}</div><div class="stat-label">Spacing</div></div>
+  <div><div class="stat-num">${Object.keys(tokens.shadow || {}).length}</div><div class="stat-label">Shadows</div></div>
+</div>
+<div class="form-section">
+  <h2>Form Elements</h2>
+  <div class="field"><label>Text Input</label><input type="text" placeholder="Enter value…" /></div>
+  <div class="field"><label>Select</label><select><option>Option One</option><option>Option Two</option></select></div>
+  <div class="field"><label>Textarea</label><textarea placeholder="Write something…"></textarea></div>
+  <button class="btn-primary" style="width:100%">Submit</button>
+</div>
+</body></html>`
+
+  return <PreviewFrame html={html} />
+}
+
+function PreviewSocialPost({ tokens }: { tokens: DesignTokens }) {
+  const css = tokensToCSS(tokens)
+  const fi = fontImport(tokens)
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+${fi}
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+${css}
+body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111;font-family:var(--font-sans)}
+.post{width:540px;height:540px;background:var(--surface-base);border-radius:var(--radius-xl);overflow:hidden;position:relative;display:flex;flex-direction:column}
+.post-gradient{position:absolute;top:0;left:0;right:0;height:55%;background:var(--gradient-hero);opacity:0.9}
+.post-content{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:32px}
+.post-tag{display:inline-block;padding:4px 10px;background:rgba(255,255,255,0.15);backdrop-filter:blur(8px);border-radius:var(--badge-radius);font-size:10px;font-weight:600;color:var(--text-inverse);text-transform:uppercase;letter-spacing:0.08em;width:fit-content;margin-bottom:12px}
+.post-title{font-size:var(--text-4xl);font-weight:700;line-height:var(--leading-tight);letter-spacing:var(--tracking-tight);color:var(--text-inverse);margin-bottom:8px}
+.post-excerpt{font-size:var(--text-sm);color:var(--text-inverse);opacity:0.8;line-height:1.5}
+.post-footer{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-top:var(--border-hairline) solid rgba(255,255,255,0.1)}
+.post-brand{font-size:11px;font-weight:700;color:var(--text-inverse);opacity:0.6}
+.post-date{font-size:10px;color:var(--text-inverse);opacity:0.4}
+</style></head><body>
+<div class="post">
+  <div class="post-gradient"></div>
+  <div class="post-content">
+    <div class="post-tag">Design System</div>
+    <div class="post-title">${tokens.meta?.vibeName || 'Your Brand'}</div>
+    <div class="post-excerpt">Generated with ${tokens.meta?.aesthetic || 'custom'} aesthetic — ${tokens.meta?.palette || 'dark'} mode design tokens.</div>
+  </div>
+  <div class="post-footer">
+    <div class="post-brand">TASBIR</div>
+    <div class="post-date">${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+  </div>
+</div>
+</body></html>`
+
+  return <PreviewFrame html={html} />
+}
+
+function PreviewFrame({ html }: { html: string }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+
+  useEffect(() => {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    setBlobUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [html])
+
+  return <iframe src={blobUrl || ''} title="Preview" className="w-full h-full border-0" style={{ background: '#fff' }} />
+}
+
+function fontImport(t: DesignTokens) {
+  const ty = t.typography || {}
+  const fs = [ty.fontSans, ty.fontSerif, ty.fontMono].filter(Boolean)
+  if (!fs.length) return ''
+  const q = fs.map((f: string) => `family=${encodeURIComponent(f)}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,900;1,400`).join('&')
+  return `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?${q}&display=swap" rel="stylesheet">`
+}
+
+/* ── Studio Panel ── */
+
+function StudioPanel({ tokens, setError }: { tokens: DesignTokens | null; setError: (v: string | null) => void }) {
+  const [slug, setSlug] = useState('')
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  const [slug, setSlug] = useState('')
-  const [prompt, setPrompt] = useState('')
-  const [selectedFormats, setSelectedFormats] = useState<string[]>(['instagram-portrait', 'twitter-card', 'linkedin-post'])
-  const [imageMode, setImageMode] = useState('auto')
+  const [mode, setMode] = useState<'content' | 'slug'>('content')
+  const [selectedFormats, setSelectedFormats] = useState(['instagram-portrait', 'twitter-card'])
   const [generating, setGenerating] = useState(false)
   const [result, setResult] = useState<any>(null)
 
+  const FORMATS = [
+    { id: 'instagram-portrait', label: 'IG Portrait', dims: '1080×1350' },
+    { id: 'instagram-square', label: 'IG Square', dims: '1080×1080' },
+    { id: 'twitter-card', label: 'Twitter', dims: '1200×628' },
+    { id: 'linkedin-post', label: 'LinkedIn', dims: '1200×627' },
+  ]
+
   async function handleGenerate() {
-    if (mode === 'content' && (!title.trim() || !content.trim())) {
-      setError('Title and content are required')
-      return
-    }
-    if (mode === 'slug' && !slug.trim()) {
-      setError('Slug is required')
-      return
-    }
+    if (mode === 'content' && (!title.trim() || !content.trim())) { setError('Title and content required'); return }
+    if (mode === 'slug' && !slug.trim()) { setError('Slug required'); return }
+    if (!tokens) { setError('Generate design tokens first'); return }
 
     setGenerating(true)
-    setLoading(true)
     setError(null)
 
     try {
       const body: any = {
+        title: mode === 'content' ? title.trim() : 'Generated Post',
+        content: mode === 'content' ? content.trim() : '',
         formats: selectedFormats,
-        prompt: prompt || undefined,
-        image: { mode: imageMode },
+        image: { mode: 'none' },
       }
-
-      if (mode === 'content') {
-        body.title = title.trim()
-        body.content = content.trim()
-      } else {
-        body.slug = slug.trim()
-      }
+      if (mode === 'slug') body.slug = slug.trim()
 
       const res = await api.generateFromContent(body)
       setResult(res)
-      setHistory(prev => [res, ...prev])
     } catch (e: any) {
       setError(e.message || 'Generation failed')
     } finally {
       setGenerating(false)
-      setLoading(false)
     }
   }
 
   function toggleFormat(id: string) {
-    setSelectedFormats(prev =>
-      prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id]
-    )
+    setSelectedFormats(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id])
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      {/* Input Section */}
-      <Card className="bg-slate-900/40 border-slate-800/60 backdrop-blur-md shadow-2xl overflow-hidden relative group">
-        <div className="absolute top-0 right-0 -m-8 w-64 h-64 bg-blue-600/10 rounded-full blur-[100px] pointer-events-none group-hover:bg-blue-600/15 transition-colors duration-700"></div>
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Sparkles className="text-blue-500" size={24} />
-            Tasbir Studio
-          </CardTitle>
-          <p className="text-slate-400 max-w-2xl">
-            Generate AI-powered social media designs from your content. AI creates complete HTML with Tailwind CSS.
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-6 relative">
-          {/* Mode Toggle */}
-          <Tabs value={mode} onValueChange={(v) => setMode(v as 'content' | 'slug')} className="w-full">
-            <TabsList>
-              <TabsTrigger value="content">Direct Content</TabsTrigger>
-              <TabsTrigger value="slug">Ghost Slug</TabsTrigger>
-            </TabsList>
-          </Tabs>
+    <div className="flex-1 overflow-y-auto p-3.5 space-y-3">
+      <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: '#555' }}>Content Source</div>
 
-          {mode === 'content' ? (
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Your post title"
-                  className="bg-slate-950 border-slate-800 mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="content">Content</Label>
-                <Textarea
-                  id="content"
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Paste your article content here..."
-                  className="bg-slate-950 border-slate-800 mt-1 min-h-[120px]"
-                />
-              </div>
-            </div>
-          ) : (
-            <div>
-              <Label htmlFor="slug">Ghost Post Slug</Label>
-              <Input
-                id="slug"
-                value={slug}
-                onChange={(e) => setSlug(e.target.value)}
-                placeholder="my-post-slug"
-                className="bg-slate-950 border-slate-800 mt-1"
-              />
-            </div>
-          )}
-
-          <div>
-            <Label htmlFor="prompt">Additional Prompt (optional)</Label>
-            <Input
-              id="prompt"
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="e.g., Make it dark themed with bold typography"
-              className="bg-slate-950 border-slate-800 mt-1"
-            />
-          </div>
-
-          {/* Format Selection */}
-          <div>
-            <Label className="mb-2 block">Output Formats</Label>
-            <div className="flex flex-wrap gap-2">
-              {FORMATS.map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => toggleFormat(f.id)}
-                  className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
-                    selectedFormats.includes(f.id)
-                      ? 'bg-blue-600/20 border-blue-500/40 text-blue-400'
-                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-600'
-                  }`}
-                >
-                  {f.label}
-                  <span className="ml-1 text-slate-500">{f.dims}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Image Mode */}
-          <div>
-            <Label>Image Mode</Label>
-            <div className="flex gap-2 mt-2">
-              {['auto', 'none', 'feature', 'ai'].map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setImageMode(m)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                    imageMode === m
-                      ? 'bg-blue-600/20 border-blue-500/40 text-blue-400'
-                      : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-600'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <Button
-            onClick={handleGenerate}
-            disabled={generating}
-            size="lg"
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20"
-          >
-            {generating ? <Loader2 className="animate-spin" size={18} /> : <Play size={18} />}
-            {generating ? 'Generating...' : 'Generate Assets'}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Results */}
-      {result && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-              <ImageIcon size={20} className="text-slate-400" />
-              Generated Assets
-            </h3>
-            <Badge variant="default" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-              <CheckCircle2 size={12} className="mr-1" />
-              {Object.keys(result.assets || {}).filter(k => result.assets[k]).length} assets
-            </Badge>
-          </div>
-
-          {/* HTML Preview */}
-          {result.llm_output?.generated_html && (
-            <Card className="bg-slate-900/40 border-slate-800/60">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-mono text-slate-400">Generated HTML</CardTitle>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(result.llm_output.generated_html)}>
-                      <Copy size={14} className="mr-1" /> Copy
-                    </Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <pre className="bg-slate-950 rounded-lg p-4 text-xs text-slate-300 overflow-auto max-h-64 font-mono">
-                  {result.llm_output.generated_html.slice(0, 2000)}
-                  {result.llm_output.generated_html.length > 2000 ? '...' : ''}
-                </pre>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Asset Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Object.entries(result.assets || {}).map(([key, asset]: [string, any]) =>
-              asset ? (
-                <Card key={key} className="bg-slate-900 border-slate-800 overflow-hidden hover:border-slate-600 transition-all shadow-xl hover:-translate-y-1 duration-300">
-                  <div className="aspect-[4/3] bg-slate-950 relative overflow-hidden flex items-center justify-center">
-                    <div className="text-center p-4">
-                      <Badge className="mb-2">{key}</Badge>
-                      <p className="text-xs text-slate-500 font-mono">{asset.key}</p>
-                    </div>
-                  </div>
-                  <div className="p-4 flex items-center justify-between">
-                    <div className="text-sm font-medium text-slate-300">{asset.format}</div>
-                    {asset.url && (
-                      <a href={asset.url} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:text-blue-400 font-semibold flex items-center gap-1">
-                        View <ExternalLink size={12} />
-                      </a>
-                    )}
-                  </div>
-                </Card>
-              ) : null
-            )}
-          </div>
-
-          {/* Captions */}
-          {result.llm_output && (
-            <Card className="bg-slate-900/40 border-slate-800/60">
-              <CardHeader>
-                <CardTitle className="text-sm text-slate-400">Generated Captions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {result.llm_output.instagram_caption && (
-                  <div>
-                    <Label className="text-xs text-slate-500">Instagram</Label>
-                    <p className="text-sm text-slate-300 mt-1">{result.llm_output.instagram_caption}</p>
-                  </div>
-                )}
-                {result.llm_output.twitter_caption && (
-                  <div>
-                    <Label className="text-xs text-slate-500">Twitter</Label>
-                    <p className="text-sm text-slate-300 mt-1">{result.llm_output.twitter_caption}</p>
-                  </div>
-                )}
-                {result.llm_output.linkedin_caption && (
-                  <div>
-                    <Label className="text-xs text-slate-500">LinkedIn</Label>
-                    <p className="text-sm text-slate-300 mt-1">{result.llm_output.linkedin_caption}</p>
-                  </div>
-                )}
-                {result.llm_output.hashtags?.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {result.llm_output.hashtags.map((tag: string, i: number) => (
-                      <Badge key={i} variant="secondary" className="text-xs">{tag}</Badge>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
-
-      {!result && !generating && (
-        <div className="h-64 border-2 border-dashed border-slate-800/50 rounded-3xl flex flex-col items-center justify-center text-slate-500 gap-3 group hover:border-slate-700 transition-colors">
-          <ImageIcon size={32} className="group-hover:text-slate-400 transition-colors" />
-          <p className="text-sm">Configure your content and click Generate to create AI-powered designs.</p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function DesignView({ tokens }: { tokens: any }) {
-  const [editing, setEditing] = useState<Record<string, string>>({})
-
-  useEffect(() => {
-    if (tokens.colors || tokens.fonts || tokens.spacing) {
-      const all: Record<string, string> = {}
-      if (tokens.colors) Object.entries(tokens.colors).forEach(([k, v]) => { all[`colors.${k}`] = v as string })
-      if (tokens.fonts) Object.entries(tokens.fonts).forEach(([k, v]) => { all[`fonts.${k}`] = v as string })
-      if (tokens.spacing) Object.entries(tokens.spacing).forEach(([k, v]) => { all[`spacing.${k}`] = v as string })
-      setEditing(all)
-    }
-  }, [tokens])
-
-  function handleSave() {
-    // In production, POST to /config/design-tokens
-    console.log('Saving tokens:', editing)
-  }
-
-  return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Palette className="text-blue-500" size={24} />
-            Design Tokens
-          </h2>
-          <p className="text-slate-400 mt-1">Manage the design system used by AI when generating HTML with Tailwind CSS.</p>
-        </div>
-        <Button onClick={handleSave} className="bg-blue-600 hover:bg-blue-500">
-          <Save size={16} className="mr-2" /> Save Tokens
-        </Button>
+      <div className="flex gap-1 mb-2">
+        <button onClick={() => setMode('content')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${mode === 'content' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>Direct</button>
+        <button onClick={() => setMode('slug')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${mode === 'slug' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>Ghost Slug</button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {Object.entries(editing).map(([key, value]) => {
-          const isColor = key.startsWith('colors.')
-          return (
-            <Card key={key} className="bg-slate-900/40 border-slate-800 hover:bg-slate-900/60 transition-colors">
-              <CardContent className="flex items-center gap-4 p-5">
-                {isColor ? (
-                  <div className="w-10 h-10 rounded-lg border border-slate-700 shrink-0" style={{ backgroundColor: value }} />
-                ) : (
-                  <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center shrink-0">
-                    <Type size={18} className="text-slate-400" />
-                  </div>
-                )}
-                <div className="flex-1 space-y-1">
-                  <Label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{key}</Label>
-                  <Input
-                    value={value}
-                    onChange={(e) => setEditing({ ...editing, [key]: e.target.value })}
-                    className="bg-transparent border-none p-0 h-auto text-slate-100 font-medium focus-visible:ring-0"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {tokens.tailwindConfig && (
-        <Card className="bg-slate-900/40 border-slate-800/60">
-          <CardHeader>
-            <CardTitle className="text-sm text-slate-400">Tailwind Config Preview</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <pre className="bg-slate-950 rounded-lg p-4 text-xs text-slate-300 overflow-auto max-h-64 font-mono">
-              {tokens.tailwindConfig}
-            </pre>
-          </CardContent>
-        </Card>
+      {mode === 'content' ? (
+        <>
+          <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Post title…" className="w-full rounded border px-2.5 py-2 text-[11px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+          <textarea value={content} onChange={e => setContent(e.target.value)} placeholder="Paste content…" rows={4} className="w-full rounded border px-2.5 py-2 text-[11px] outline-none resize-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5 }} />
+        </>
+      ) : (
+        <input value={slug} onChange={e => setSlug(e.target.value)} placeholder="my-post-slug" className="w-full rounded border px-2.5 py-2 text-[11px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
       )}
-    </div>
-  )
-}
 
-function PromptsView({ prompts, setPrompts }: { prompts: any; setPrompts: (v: any) => void }) {
-  const [activePrompt, setActivePrompt] = useState('gemini_html_generation_system_prompt')
-
-  const promptKeys = [
-    { key: 'gemini_html_generation_system_prompt', label: 'HTML Generation (System)' },
-    { key: 'gemini_html_generation_user_instructions', label: 'HTML Generation (User)' },
-    { key: 'copy_system_prompt', label: 'Copy System' },
-    { key: 'copy_user_instructions', label: 'Copy User' },
-  ]
-
-  const currentPrompt = prompts[activePrompt] || []
-  const promptText = Array.isArray(currentPrompt) ? currentPrompt.join('\n') : ''
-
-  function handleSave() {
-    // In production, POST to update prompts
-    console.log('Saving prompt:', activePrompt, promptText)
-  }
-
-  return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 h-full flex flex-col">
-      <div className="space-y-1 shrink-0">
-        <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-          <Terminal className="text-blue-500" size={24} />
-          AI System Prompts
-        </h2>
-        <p className="text-slate-400">Configure how the AI interprets and generates HTML structures.</p>
-      </div>
-
-      <div className="flex gap-2 shrink-0">
-        {promptKeys.map((pk) => (
-          <button
-            key={pk.key}
-            onClick={() => setActivePrompt(pk.key)}
-            className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${
-              activePrompt === pk.key
-                ? 'bg-blue-600/20 border-blue-500/40 text-blue-400'
-                : 'bg-slate-900 border-slate-700 text-slate-400 hover:border-slate-600'
-            }`}
-          >
-            {pk.label}
+      <div className="text-[9px] font-bold uppercase tracking-widest mb-1.5" style={{ color: '#555' }}>Formats</div>
+      <div className="flex flex-wrap gap-1">
+        {FORMATS.map(f => (
+          <button key={f.id} onClick={() => toggleFormat(f.id)} className={`text-[9px] font-bold tracking-wider px-2 py-1 rounded border transition-all ${selectedFormats.includes(f.id) ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>
+            {f.label} <span style={{ color: '#3d3d3d' }}>{f.dims}</span>
           </button>
         ))}
       </div>
 
-      <div className="flex-1 min-h-[400px] bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden flex flex-col shadow-2xl">
-        <div className="bg-slate-900/50 px-6 py-3 border-b border-slate-800 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="flex gap-1.5">
-              <div className="w-3 h-3 rounded-full bg-red-500/20 border border-red-500/40"></div>
-              <div className="w-3 h-3 rounded-full bg-amber-500/20 border border-amber-500/40"></div>
-              <div className="w-3 h-3 rounded-full bg-emerald-500/20 border border-emerald-500/40"></div>
-            </div>
-            <span className="text-xs font-mono text-slate-500">{activePrompt}.md</span>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={() => navigator.clipboard.writeText(promptText)}>
-              <Copy size={14} className="mr-1" /> Copy
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleSave} className="text-blue-500">
-              <Save size={14} className="mr-1" /> Save
-            </Button>
+      <button onClick={handleGenerate} disabled={generating || !tokens} className="w-full py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
+        {generating ? 'Generating…' : 'Generate Posts'}
+      </button>
+
+      {result && (
+        <div className="mt-3 space-y-2">
+          <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Result</div>
+          <div className="p-2.5 rounded text-[10px] font-mono" style={{ background: '#0b0b0b', color: '#999', lineHeight: 1.6 }}>
+            <div>Slug: {result.slug}</div>
+            <div>Formats: {result.requested_formats?.join(', ')}</div>
+            {result.llm_output?.instagram_caption && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>IG: {result.llm_output.instagram_caption}</div>}
+            {result.llm_output?.twitter_caption && <div className="mt-1">TW: {result.llm_output.twitter_caption}</div>}
+            {result.assets && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>Assets: {Object.keys(result.assets).filter(k => result.assets[k]).length}</div>}
           </div>
         </div>
-        <Textarea
-          value={promptText}
-          onChange={(e) => {
-            const lines = e.target.value.split('\n')
-            setPrompts({ ...prompts, [activePrompt]: lines })
-          }}
-          placeholder="# System Instructions..."
-          className="flex-1 w-full bg-transparent p-8 font-mono text-sm text-slate-300 resize-none outline-none focus:ring-0 leading-relaxed border-none"
-        />
-      </div>
-    </div>
-  )
-}
-
-function HistoryView({ history }: { history: any[] }) {
-  if (history.length === 0) {
-    return (
-      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-        <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-          <History className="text-blue-500" size={24} />
-          Generation History
-        </h2>
-        <div className="h-64 border-2 border-dashed border-slate-800/50 rounded-3xl flex flex-col items-center justify-center text-slate-500 gap-3">
-          <History size={32} />
-          <p className="text-sm">No generations yet. Create your first design in Studio.</p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <h2 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-        <History className="text-blue-500" size={24} />
-        Generation History
-      </h2>
-      <div className="space-y-4">
-        {history.map((item, i) => (
-          <Card key={i} className="bg-slate-900/40 border-slate-800/60">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-200">{item.slug}</p>
-                  <p className="text-xs text-slate-500 mt-1">{item.requested_formats?.join(', ')}</p>
-                </div>
-                <Badge variant="secondary">{Object.keys(item.assets || {}).filter(k => item.assets[k]).length} assets</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      )}
     </div>
   )
 }

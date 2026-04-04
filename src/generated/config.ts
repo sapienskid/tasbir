@@ -1,68 +1,8 @@
 // Auto-generated from config/pipeline.config.yaml — do not edit manually
-
-export interface DesignTokens {
-  colors: {
-    primary_bg: string;
-    primary_text: string;
-    accent: string;
-    accent_text: string;
-    muted_text: string;
-    border: string;
-    surface: string;
-  };
-  fonts: {
-    display: string;
-    body: string;
-    mono: string;
-  };
-  spacing: {
-    xs: string;
-    sm: string;
-    md: string;
-    lg: string;
-    xl: string;
-    "2xl": string;
-    "3xl": string;
-  };
-}
-
-export interface FormatConfig {
-  width: number;
-  height: number;
-  caption_source: string;
-  hashtag_count: number;
-}
-
 export const PIPELINE_CONFIG = {
-  "schema_version": 3,
+  "schema_version": 4,
   "brand": {
-    "default_name": "Tasbir Blog",
-    "icon_svg_url": "/images/brand/icon.svg"
-  },
-  "design_tokens": {
-    "colors": {
-      "primary_bg": "#0b0b0b",
-      "primary_text": "#f5f5f5",
-      "accent": "#3b82f6",
-      "accent_text": "#ffffff",
-      "muted_text": "#a3a3a3",
-      "border": "#262626",
-      "surface": "#171717"
-    },
-    "fonts": {
-      "display": "system-ui, -apple-system, sans-serif",
-      "body": "system-ui, -apple-system, sans-serif",
-      "mono": "ui-monospace, SFMono-Regular, monospace"
-    },
-    "spacing": {
-      "xs": "4px",
-      "sm": "8px",
-      "md": "16px",
-      "lg": "24px",
-      "xl": "32px",
-      "2xl": "48px",
-      "3xl": "64px"
-    }
+    "default_name": "Tasbir Blog"
   },
   "formats": {
     "instagram-portrait": {

@@ -1,30 +1,7 @@
-schema_version: 3
+schema_version: 4
 
 brand:
   default_name: Tasbir Blog
-  icon_svg_url: /images/brand/icon.svg
-
-design_tokens:
-  colors:
-    primary_bg: "#0b0b0b"
-    primary_text: "#f5f5f5"
-    accent: "#3b82f6"
-    accent_text: "#ffffff"
-    muted_text: "#a3a3a3"
-    border: "#262626"
-    surface: "#171717"
-  fonts:
-    display: "system-ui, -apple-system, sans-serif"
-    body: "system-ui, -apple-system, sans-serif"
-    mono: "ui-monospace, SFMono-Regular, monospace"
-  spacing:
-    xs: "4px"limit","resetsAt":null,"remaining":null,"perModelLimit":null,"representativeClaim":"concurrents","overageStatus":null,"overageResetsAt":null,"overageDisabledReason":null,"overageInUse":false,"windows":null,"debug_req_est_usage":null,"debug_req_actual_usage":null}
-    sm: "8px"
-    md: "16px"
-    lg: "24px"
-    xl: "32px"
-    "2xl": "48px"
-    "3xl": "64px"
 
 formats:
   instagram-portrait:
