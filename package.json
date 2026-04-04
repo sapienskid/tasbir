@@ -12,6 +12,7 @@
     "deploy": "wrangler deploy --env production"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.31.0",
     "@cloudflare/workers-types": "latest",
     "@types/node": "^25.5.0",
     "concurrently": "^9.2.1",
@@ -23,10 +24,14 @@
     "yaml": "^2.8.1"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.66",
+    "@ai-sdk/google": "^3.0.58",
+    "@ai-sdk/openai": "^3.0.50",
     "@cloudflare/puppeteer": "1.0.6",
-    "@google/generative-ai": "^0.24.1",
     "agents": "^0.7.5",
+    "ai": "^6.0.146",
     "hono": "^4.12.10",
-    "puppeteer": "^24.40.0"
+    "puppeteer": "^24.40.0",
+    "zod": "^4.3.6"
   }
 }

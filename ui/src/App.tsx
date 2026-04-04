@@ -38,12 +38,14 @@ export default function App() {
   const [activePreset, setActivePreset] = useState<string | null>(null)
   const [primaryColor, setPrimaryColor] = useState('#3b82f6')
   const [secondaryColor, setSecondaryColor] = useState('#0f172a')
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ color: true })
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ color: true, typography: true, spacing: true, shadow: true, border: true, gradient: true, motion: true, component: true })
   const [exportTab, setExportTab] = useState<'css' | 'json' | 'prompt'>('css')
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [previewTab, setPreviewTab] = useState<'components' | 'post'>('components')
+  const [previewTab, setPreviewTab] = useState<'components' | 'landing' | 'poster'>('components')
   const [_serverConfig, setServerConfig] = useState<any>(null)
+  const [demoHtml, setDemoHtml] = useState<Record<string, string>>({})
+  const [demoGenerating, setDemoGenerating] = useState(false)
   const [configLoading, setConfigLoading] = useState(false)
   const [editingConfig, setEditingConfig] = useState<any>(null)
   const [configSaved, setConfigSaved] = useState(false)
@@ -87,12 +89,45 @@ export default function App() {
         result = generateTokensComputational(primaryColor, secondaryColor, vibeLabel || 'computational')
       }
       setTokens(result)
-      setExpandedSections({ color: true })
+      setDemoHtml({})
+      setExpandedSections({ color: true, typography: true, spacing: true, shadow: true, border: true, gradient: true, motion: true, component: true })
     } catch (e: any) {
       setError(e.message || 'Token generation failed')
     } finally {
       setGenerating(false)
     }
+  }
+
+  async function generateDemo(type: 'components' | 'landing' | 'poster') {
+    if (!tokens) return
+    if (demoHtml[type]) return
+    setDemoGenerating(true)
+    setError(null)
+    try {
+      const res = await api.generateDemo({ tokens, demoType: type })
+      setDemoHtml(prev => ({ ...prev, [type]: res.html }))
+    } catch (e: any) {
+      setError(e.message || 'Demo generation failed')
+    } finally {
+      setDemoGenerating(false)
+    }
+  }
+
+  async function handlePreviewTabChange(tab: 'components' | 'landing' | 'poster') {
+    setPreviewTab(tab)
+    if (tokens && !demoHtml[tab]) {
+      await generateDemo(tab)
+    }
+  }
+
+  async function handleRegenDemo() {
+    if (!tokens) return
+    setDemoHtml(prev => {
+      const next = { ...prev }
+      delete next[previewTab]
+      return next
+    })
+    await generateDemo(previewTab)
   }
 
   function applyPreset(id: string) {
@@ -213,6 +248,7 @@ export default function App() {
                 formats={studioFormats} toggleFormat={toggleStudioFormat}
                 generating={studioGenerating} onGenerate={handleStudioGenerate}
                 result={studioResult} tokens={tokens}
+                expandedSections={expandedSections} toggleSection={toggleSection}
               />
             )}
             {activeTab === 'config' && (
@@ -239,12 +275,23 @@ export default function App() {
           <>
             <div className="flex-1 flex flex-col overflow-hidden border-b min-h-0" style={{ borderColor: '#252525' }}>
               <div className="flex items-center border-b flex-shrink-0" style={{ borderColor: '#252525', background: '#141414' }}>
-                <button onClick={() => setPreviewTab('components')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'components' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Components</button>
-                <button onClick={() => setPreviewTab('post')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'post' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Social Post</button>
+                <button onClick={() => handlePreviewTabChange('components')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'components' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Components</button>
+                <button onClick={() => handlePreviewTabChange('landing')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'landing' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Landing Page</button>
+                <button onClick={() => handlePreviewTabChange('poster')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'poster' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Poster</button>
+                {demoHtml[previewTab] && (
+                  <button onClick={handleRegenDemo} className="ml-auto mr-3 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border transition-all border-[#313131] text-[#555] hover:border-[#3d3d3d] hover:text-[#999]">↺ Regen</button>
+                )}
               </div>
               <div className="flex-1 overflow-auto relative min-h-0" style={{ background: '#1c1c1c' }}>
                 {tokens ? (
-                  previewTab === 'components' ? <PreviewComponents tokens={tokens} /> : <PreviewSocialPost tokens={tokens} />
+                  demoHtml[previewTab] ? (
+                    <PreviewFrame html={demoHtml[previewTab]} />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#555' }}>
+                      <div className="text-2xl opacity-25">◈</div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider">Generating {previewTab}…</div>
+                    </div>
+                  )
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#555' }}>
                     <div className="text-2xl opacity-25">◈</div>
@@ -252,10 +299,10 @@ export default function App() {
                     <div className="text-[10px]">Enter a vibe and generate</div>
                   </div>
                 )}
-                {generating && (
+                {(generating || demoGenerating) && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10" style={{ background: '#0b0b0b' }}>
                     <div className="w-7 h-7 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} />
-                    <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#555' }}>Building token system…</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#555' }}>{generating ? 'Building token system…' : `Generating ${previewTab}…`}</div>
                   </div>
                 )}
               </div>
@@ -335,6 +382,7 @@ function TokensTab({ vibeInput, setVibeInput, genMode, setGenMode, activePreset,
             <TokenSection title="Shadows" expanded={!!expandedSections.shadow} onToggle={() => toggleSection('shadow')}><ShadowExplorer shadows={tokens.shadow} /></TokenSection>
             <TokenSection title="Border" expanded={!!expandedSections.border} onToggle={() => toggleSection('border')}><BorderExplorer border={tokens.border} /></TokenSection>
             <TokenSection title="Gradients" expanded={!!expandedSections.gradient} onToggle={() => toggleSection('gradient')}><GradientExplorer gradients={tokens.gradient} /></TokenSection>
+            <TokenSection title="Motion" expanded={!!expandedSections.motion} onToggle={() => toggleSection('motion')}><MotionExplorer motion={tokens.motion} /></TokenSection>
             <TokenSection title="Components" expanded={!!expandedSections.component} onToggle={() => toggleSection('component')}><ComponentExplorer components={tokens.component} /></TokenSection>
           </>
         ) : (
@@ -347,7 +395,7 @@ function TokensTab({ vibeInput, setVibeInput, genMode, setGenMode, activePreset,
 
 /* ── Studio Tab ── */
 
-function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, generating, onGenerate, result, tokens }: any) {
+function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, generating, onGenerate, result, tokens, expandedSections, toggleSection }: any) {
   const FORMATS = [
     { id: 'instagram-portrait', label: 'IG Portrait', dims: '1080×1350' },
     { id: 'instagram-square', label: 'IG Square', dims: '1080×1080' },
@@ -356,41 +404,73 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
   ]
 
   return (
-    <div className="p-3.5 space-y-3">
-      <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Content Source</div>
-      <div className="flex gap-1">
-        <button onClick={() => setMode('content')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${mode === 'content' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>Direct</button>
-        <button onClick={() => setMode('slug')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${mode === 'slug' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>Ghost Slug</button>
-      </div>
-      {mode === 'content' ? (
-        <>
-          <input value={title} onChange={(e: any) => setTitle(e.target.value)} placeholder="Post title…" className="w-full rounded border px-2.5 py-2 text-[11px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
-          <textarea value={content} onChange={(e: any) => setContent(e.target.value)} placeholder="Paste content…" rows={4} className="w-full rounded border px-2.5 py-2 text-[11px] outline-none resize-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5 }} />
-        </>
-      ) : (
-        <input value={slug} onChange={(e: any) => setSlug(e.target.value)} placeholder="my-post-slug" className="w-full rounded border px-2.5 py-2 text-[11px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
-      )}
-      <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Formats</div>
-      <div className="flex flex-wrap gap-1">
-        {FORMATS.map((f: any) => (
-          <button key={f.id} onClick={() => toggleFormat(f.id)} className={`text-[9px] font-bold tracking-wider px-2 py-1 rounded border transition-all ${formats.includes(f.id) ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>
-            {f.label} <span style={{ color: '#3d3d3d' }}>{f.dims}</span>
-          </button>
-        ))}
-      </div>
-      <button onClick={onGenerate} disabled={generating || !tokens} className="w-full py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
-        {generating ? 'Generating…' : 'Generate Posts'}
-      </button>
-      {result && (
-        <div className="p-2.5 rounded text-[10px] font-mono" style={{ background: '#0b0b0b', color: '#999', lineHeight: 1.6 }}>
-          <div>Slug: {result.slug}</div>
-          <div>Formats: {result.requested_formats?.join(', ')}</div>
-          {result.llm_output?.instagram_caption && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>IG: {result.llm_output.instagram_caption}</div>}
-          {result.llm_output?.twitter_caption && <div className="mt-1">TW: {result.llm_output.twitter_caption}</div>}
-          {result.assets && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>Assets: {Object.keys(result.assets).filter((k: string) => result.assets[k]).length}</div>}
+    <>
+      {/* Generation Controls */}
+      <div className="p-3.5 space-y-3 border-b" style={{ borderColor: '#252525' }}>
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Content Source</div>
+        <div className="flex gap-1">
+          <button onClick={() => setMode('content')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${mode === 'content' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>Direct</button>
+          <button onClick={() => setMode('slug')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${mode === 'slug' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>Ghost Slug</button>
         </div>
-      )}
-    </div>
+        {mode === 'content' ? (
+          <>
+            <input value={title} onChange={(e: any) => setTitle(e.target.value)} placeholder="Post title…" className="w-full rounded border px-2.5 py-2 text-[11px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            <textarea value={content} onChange={(e: any) => setContent(e.target.value)} placeholder="Paste content…" rows={3} className="w-full rounded border px-2.5 py-2 text-[11px] outline-none resize-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5 }} />
+          </>
+        ) : (
+          <input value={slug} onChange={(e: any) => setSlug(e.target.value)} placeholder="my-post-slug" className="w-full rounded border px-2.5 py-2 text-[11px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+        )}
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Formats</div>
+        <div className="flex flex-wrap gap-1">
+          {FORMATS.map((f: any) => (
+            <button key={f.id} onClick={() => toggleFormat(f.id)} className={`text-[9px] font-bold tracking-wider px-2 py-1 rounded border transition-all ${formats.includes(f.id) ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>
+              {f.label} <span style={{ color: '#3d3d3d' }}>{f.dims}</span>
+            </button>
+          ))}
+        </div>
+        <button onClick={onGenerate} disabled={generating || !tokens} className="w-full py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
+          {generating ? 'Generating…' : 'Generate Posts'}
+        </button>
+        {result && (
+          <div className="p-2.5 rounded text-[10px] font-mono" style={{ background: '#0b0b0b', color: '#999', lineHeight: 1.6 }}>
+            <div>Slug: {result.slug}</div>
+            <div>Formats: {result.requested_formats?.join(', ')}</div>
+            {result.llm_output?.instagram_caption && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>IG: {result.llm_output.instagram_caption}</div>}
+            {result.llm_output?.twitter_caption && <div className="mt-1">TW: {result.llm_output.twitter_caption}</div>}
+            {result.assets && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>Assets: {Object.keys(result.assets).filter((k: string) => result.assets[k]).length}</div>}
+          </div>
+        )}
+      </div>
+
+      {/* Design Tokens View - Shared with TokensTab */}
+      <div className="overflow-y-auto">
+        {tokens ? (
+          <>
+            <div className="px-3.5 py-2 border-b" style={{ borderColor: '#252525' }}>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Active System</span>
+                <span className="text-[10px] font-bold tracking-wide" style={{ color: '#999' }}>{tokens.meta?.vibeName || 'CUSTOM'}</span>
+              </div>
+              {tokens.meta?.description && (
+                <div className="text-[9px] mt-0.5" style={{ color: '#555' }}>{tokens.meta.description}</div>
+              )}
+            </div>
+            <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}><ColorExplorer colors={tokens.colors} /></TokenSection>
+            <TokenSection title="Typography" expanded={!!expandedSections.typography} onToggle={() => toggleSection('typography')}><TypographyExplorer typography={tokens.typography} /></TokenSection>
+            <TokenSection title="Spacing" expanded={!!expandedSections.spacing} onToggle={() => toggleSection('spacing')}><SpacingExplorer spacing={tokens.spacing} /></TokenSection>
+            <TokenSection title="Shadows" expanded={!!expandedSections.shadow} onToggle={() => toggleSection('shadow')}><ShadowExplorer shadows={tokens.shadow} /></TokenSection>
+            <TokenSection title="Border" expanded={!!expandedSections.border} onToggle={() => toggleSection('border')}><BorderExplorer border={tokens.border} /></TokenSection>
+            <TokenSection title="Gradients" expanded={!!expandedSections.gradient} onToggle={() => toggleSection('gradient')}><GradientExplorer gradients={tokens.gradient} /></TokenSection>
+            <TokenSection title="Motion" expanded={!!expandedSections.motion} onToggle={() => toggleSection('motion')}><MotionExplorer motion={tokens.motion} /></TokenSection>
+            <TokenSection title="Components" expanded={!!expandedSections.component} onToggle={() => toggleSection('component')}><ComponentExplorer components={tokens.component} /></TokenSection>
+          </>
+        ) : (
+          <div className="p-6 text-center" style={{ color: '#555', fontSize: 11, lineHeight: 1.7 }}>
+            Generate a design system in the<br /><strong style={{ color: '#999' }}>Tokens</strong> tab to see tokens here
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -678,86 +758,45 @@ function ComponentExplorer({ components }: { components: DesignTokens['component
   )
 }
 
+function MotionExplorer({ motion }: { motion: DesignTokens['motion'] }) {
+  if (!motion) return null
+  return (
+    <div className="space-y-3">
+      <div>
+        <div className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{ color: '#555' }}>Duration</div>
+        <div className="space-y-1">
+          {Object.entries(motion.duration || {}).map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2 py-0.5">
+              <div 
+                className="h-2 rounded-sm flex-shrink-0 transition-all" 
+                style={{ 
+                  width: parseInt(v) / 5, 
+                  background: 'linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)',
+                  opacity: 0.7
+                }} 
+              />
+              <span className="text-[8px] font-mono min-w-[40px]" style={{ color: '#555' }}>{k}</span>
+              <span className="text-[8px] font-mono ml-auto" style={{ color: '#999' }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{ color: '#555' }}>Easing</div>
+        <div className="space-y-1">
+          {Object.entries(motion.easing || {}).map(([k, v]) => (
+            <div key={k} className="flex items-center gap-2 py-0.5">
+              <span className="text-[8px] font-mono min-w-[40px]" style={{ color: '#555' }}>{k}</span>
+              <span className="text-[8px] font-mono truncate" style={{ color: '#999', maxWidth: 150 }} title={v}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── Preview ── */
-
-function PreviewComponents({ tokens }: { tokens: DesignTokens }) {
-  const css = tokensToCSS(tokens)
-  const fi = fontImport(tokens)
-  const ty = tokens.typography
-  const html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-${fi}
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-${css}
-body{font-family:var(--font-sans);background:var(--surface-base);color:var(--text-primary);padding:32px;line-height:1.5}
-.nav{display:flex;align-items:center;gap:24px;padding:16px 0;border-bottom:var(--border-hairline) solid var(--color-neutral-200);margin-bottom:40px}
-.nav-logo{font-weight:700;font-size:18px;letter-spacing:-0.02em}
-.nav-links{display:flex;gap:16px;margin-left:auto}
-.nav-links a{color:var(--text-secondary);text-decoration:none;font-size:13px;font-weight:500}
-.nav-cta{padding:8px 16px;background:var(--color-primary-500);color:var(--text-inverse);border:none;border-radius:var(--radius-md);font-weight:600;font-size:13px;cursor:pointer}
-.hero{text-align:center;padding:48px 0 56px}
-.hero h1{font-size:var(--text-6xl);font-weight:700;letter-spacing:var(--tracking-tight);line-height:var(--leading-tight);margin-bottom:16px}
-.hero p{font-size:var(--text-lg);color:var(--text-secondary);max-width:480px;margin:0 auto 32px}
-.btns{display:flex;gap:12px;justify-content:center}
-.btn-primary{padding:12px 28px;background:var(--color-primary-500);color:var(--text-inverse);border:none;border-radius:var(--radius-md);font-weight:600;font-size:14px;cursor:pointer}
-.btn-secondary{padding:12px 28px;background:transparent;color:var(--text-primary);border:var(--border-normal) solid var(--color-neutral-300);border-radius:var(--radius-md);font-weight:600;font-size:14px;cursor:pointer}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin:40px 0}
-.card{padding:var(--card-padding);background:var(--surface-elevated);border-radius:var(--card-radius);border:var(--border-hairline) solid var(--color-neutral-200);box-shadow:var(--shadow-sm)}
-.card-icon{font-size:28px;margin-bottom:12px}
-.card h3{font-size:var(--text-lg);font-weight:600;margin-bottom:8px}
-.card p{font-size:var(--text-sm);color:var(--text-secondary);line-height:1.6}
-.badges{display:flex;gap:8px;flex-wrap:wrap;margin:24px 0;justify-content:center}
-.badge{padding:4px 10px;border-radius:var(--badge-radius);font-size:11px;font-weight:600}
-.badge-success{background:#22c55e20;color:#22c55e;border:1px solid #22c55e40}
-.badge-warning{background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40}
-.badge-error{background:#ef444420;color:#ef4444;border:1px solid #ef444440}
-.badge-info{background:#3b82f620;color:#3b82f6;border:1px solid #3b82f640}
-.badge-neutral{background:var(--color-neutral-200);color:var(--text-secondary);border:1px solid var(--color-neutral-300)}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:40px 0;text-align:center}
-.stat-num{font-size:var(--text-4xl);font-weight:700;letter-spacing:var(--tracking-tight)}
-.stat-label{font-size:var(--text-xs);color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-top:4px}
-.form-section{max-width:480px;margin:48px auto 0}
-.form-section h2{font-size:var(--text-2xl);font-weight:700;margin-bottom:24px;text-align:center}
-.field{margin-bottom:16px}
-.field label{display:block;font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px}
-.field input,.field select,.field textarea{width:100%;padding:10px 12px;background:var(--surface-base);border:var(--border-normal) solid var(--color-neutral-300);border-radius:var(--radius-md);color:var(--text-primary);font-family:var(--font-sans);font-size:14px;outline:none}
-.field textarea{min-height:80px;resize:vertical}
-</style></head><body>
-<div class="nav"><div class="nav-logo">◈ Brand</div><div class="nav-links"><a href="#">Features</a><a href="#">Pricing</a><a href="#">About</a></div><button class="nav-cta">Get Started</button></div>
-<div class="hero"><h1>Design System<br/>Showcase</h1><p>A complete token-driven design system with colors, typography, spacing, shadows, and component tokens.</p><div class="btns"><button class="btn-primary">Primary Action</button><button class="btn-secondary">Secondary</button></div></div>
-<div class="badges"><span class="badge badge-success">Success</span><span class="badge badge-warning">Warning</span><span class="badge badge-error">Error</span><span class="badge badge-info">Info</span><span class="badge badge-neutral">Neutral</span></div>
-<div class="grid"><div class="card"><div class="card-icon">◆</div><h3>Design Tokens</h3><p>Colors, typography, spacing, and shadows defined as reusable CSS custom properties.</p></div><div class="card"><div class="card-icon">◇</div><h3>Component API</h3><p>Button, card, input, badge, and nav tokens for consistent component styling.</p></div><div class="card"><div class="card-icon">○</div><h3>Gradient System</h3><p>Primary, hero, subtle, and surface gradients derived from the color palette.</p></div></div>
-<div class="stats"><div><div class="stat-num">${Object.keys(tokens.colors.primary || {}).length * 4}</div><div class="stat-label">Colors</div></div><div><div class="stat-num">${Object.keys(ty.scale || {}).length}</div><div class="stat-label">Type Scale</div></div><div><div class="stat-num">${(tokens.spacing?.scale || []).length}</div><div class="stat-label">Spacing</div></div><div><div class="stat-num">${Object.keys(tokens.shadow || {}).length}</div><div class="stat-label">Shadows</div></div></div>
-<div class="form-section"><h2>Form Elements</h2><div class="field"><label>Text Input</label><input type="text" placeholder="Enter value…" /></div><div class="field"><label>Select</label><select><option>Option One</option><option>Option Two</option></select></div><div class="field"><label>Textarea</label><textarea placeholder="Write something…"></textarea></div><button class="btn-primary" style="width:100%">Submit</button></div>
-</body></html>`
-  return <PreviewFrame html={html} />
-}
-
-function PreviewSocialPost({ tokens }: { tokens: DesignTokens }) {
-  const css = tokensToCSS(tokens)
-  const fi = fontImport(tokens)
-  const html = `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-${fi}
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-${css}
-body{display:flex;align-items:center;justify-content:center;min-height:100vh;background:#111;font-family:var(--font-sans)}
-.post{width:540px;height:540px;background:var(--surface-base);border-radius:var(--radius-xl);overflow:hidden;position:relative;display:flex;flex-direction:column}
-.post-gradient{position:absolute;top:0;left:0;right:0;height:55%;background:var(--gradient-hero);opacity:0.9}
-.post-content{position:relative;z-index:1;flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:32px}
-.post-tag{display:inline-block;padding:4px 10px;background:rgba(255,255,255,0.15);backdrop-filter:blur(8px);border-radius:var(--badge-radius);font-size:10px;font-weight:600;color:var(--text-inverse);text-transform:uppercase;letter-spacing:0.08em;width:fit-content;margin-bottom:12px}
-.post-title{font-size:var(--text-4xl);font-weight:700;line-height:var(--leading-tight);letter-spacing:var(--tracking-tight);color:var(--text-inverse);margin-bottom:8px}
-.post-excerpt{font-size:var(--text-sm);color:var(--text-inverse);opacity:0.8;line-height:1.5}
-.post-footer{display:flex;align-items:center;justify-content:space-between;padding:16px 32px;border-top:var(--border-hairline) solid rgba(255,255,255,0.1)}
-.post-brand{font-size:11px;font-weight:700;color:var(--text-inverse);opacity:0.6}
-.post-date{font-size:10px;color:var(--text-inverse);opacity:0.4}
-</style></head><body>
-<div class="post"><div class="post-gradient"></div><div class="post-content"><div class="post-tag">Design System</div><div class="post-title">${tokens.meta?.vibeName || 'Your Brand'}</div><div class="post-excerpt">Generated with ${tokens.meta?.aesthetic || 'custom'} aesthetic — ${tokens.meta?.palette || 'dark'} mode.</div></div><div class="post-footer"><div class="post-brand">TASBIR</div><div class="post-date">${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</div></div></div>
-</body></html>`
-  return <PreviewFrame html={html} />
-}
 
 function PreviewFrame({ html }: { html: string }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
@@ -767,13 +806,6 @@ function PreviewFrame({ html }: { html: string }) {
     setBlobUrl(url)
     return () => URL.revokeObjectURL(url)
   }, [html])
-  return <iframe src={blobUrl || ''} title="Preview" className="w-full h-full border-0" style={{ background: '#fff' }} />
-}
-
-function fontImport(t: DesignTokens) {
-  const ty = t.typography || {}
-  const fs = [ty.fontSans, ty.fontSerif, ty.fontMono].filter(Boolean)
-  if (!fs.length) return ''
-  const q = fs.map((f: string) => `family=${encodeURIComponent(f)}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,900;1,400`).join('&')
-  return `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?${q}&display=swap" rel="stylesheet">`
+  if (!blobUrl) return null
+  return <iframe src={blobUrl} title="Preview" className="w-full h-full border-0" style={{ background: '#fff' }} />
 }

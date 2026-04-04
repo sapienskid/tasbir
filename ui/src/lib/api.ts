@@ -88,6 +88,10 @@ export const api = {
     method: "POST",
     body: JSON.stringify(body),
   }),
+  generateDemo: (body: { tokens: any; demoType: string }) => request<{ html: string }>("/generate-demo", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
   generate: (body: {
     slug: string;
     formats?: string[];

@@ -3,21 +3,14 @@ import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import type { MarketingOrchestratorAgent } from "./agents/marketing-orchestrator";
 import {
-  generateHtmlWithGemini,
+  generateHtmlLayout,
   normalizeSourceContent,
-  type LlmOutput,
-  type LlmSourcePost as GhostPost,
-  type LlmPromptOverrides,
-  stripHtml
+  stripHtml,
+  createModelChain,
+  resolveProviderConfig,
+  ensureLength,
 } from "./ai";
-import {
-  PIPELINE_CONFIG,
-  getFormatConfig,
-  getAllFormats,
-  getFormatNames,
-  getDesignTokens,
-  generateTailwindConfig
-} from "./config";
+import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, getDesignTokens, generateTailwindConfig, formatDesignTokensForPrompt } from "./config";
 import {
   HttpError,
   enforceApiAuth,
@@ -29,6 +22,44 @@ import {
   type ResolvedSecurityConfig,
   type Env as SecurityEnv
 } from "./lib/security";
+
+interface LlmPromptOverrides {
+  systemPrompt?: string | string[];
+  userInstructions?: string | string[];
+  userInstructionsAppend?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
+interface CarouselSlide {
+  heading: string;
+  body: string;
+}
+
+interface LlmOutput {
+  instagram_caption: string;
+  twitter_caption: string;
+  linkedin_caption: string;
+  image_prompt: string;
+  stock_search_query: string;
+  use_feature_image: boolean;
+  generated_html: string;
+  carousel_slides: CarouselSlide[];
+}
+
+interface GhostPost {
+  id: string;
+  title: string;
+  slug: string;
+  url: string;
+  html?: string;
+  plaintext?: string;
+  excerpt?: string;
+  custom_excerpt?: string;
+  feature_image?: string;
+  tags?: Array<{ name?: string }>;
+  primary_tag?: { name?: string };
+}
 
 const puppeteer = await (async () => {
   if (typeof process !== "undefined" && (process as any).versions?.node) {
@@ -222,6 +253,68 @@ app.get("/config/prompts", (c) => {
 
 app.get("/config/formats", (c) => c.json({ formats: getAllFormats() }));
 
+function tokensToCSSFromTokens(t: Record<string, unknown>): string {
+  const L = [":root {", "  /* COLOR */"];
+  const c = (t.colors || {}) as Record<string, Record<string, string>>;
+  ["primary", "secondary", "accent", "neutral"].forEach((g) => {
+    const group = c[g];
+    if (!group || typeof group !== "object") return;
+    Object.entries(group).forEach(([k, v]) => L.push(`  --color-${g}-${k}: ${v};`));
+  });
+  const semantic = (c.semantic || {}) as Record<string, string>;
+  Object.entries(semantic).forEach(([k, v]) => L.push(`  --color-${k}: ${v};`));
+  const surface = (c.surface || {}) as Record<string, string>;
+  Object.entries(surface).forEach(([k, v]) => L.push(`  --surface-${k}: ${v};`));
+  const text = (c.text || {}) as Record<string, string>;
+  Object.entries(text).forEach(([k, v]) => L.push(`  --text-${k}: ${v};`));
+  const ty = (t.typography || {}) as Record<string, unknown>;
+  L.push("", "  /* TYPOGRAPHY */");
+  const fontSans = ty.fontSans as string | undefined;
+  if (fontSans) L.push(`  --font-sans: '${fontSans}', sans-serif;`);
+  const fontSerif = ty.fontSerif as string | undefined;
+  if (fontSerif) L.push(`  --font-serif: '${fontSerif}', serif;`);
+  const fontMono = ty.fontMono as string | undefined;
+  if (fontMono) L.push(`  --font-mono: '${fontMono}', monospace;`);
+  const scale = (ty.scale || {}) as Record<string, number>;
+  Object.entries(scale).forEach(([k, v]) => L.push(`  --text-${k}: ${v}px;`));
+  const tracking = (ty.tracking || {}) as Record<string, string>;
+  Object.entries(tracking).forEach(([k, v]) => L.push(`  --tracking-${k}: ${v};`));
+  const leading = (ty.leading || {}) as Record<string, number>;
+  Object.entries(leading).forEach(([k, v]) => L.push(`  --leading-${k}: ${v};`));
+  L.push("", "  /* SPACING */");
+  const spacing = (t.spacing || {}) as { scale?: number[] };
+  (spacing.scale || []).forEach((v, i) => L.push(`  --space-${i + 1}: ${v}px;`));
+  L.push("", "  /* BORDER */");
+  const border = (t.border || {}) as Record<string, Record<string, string>>;
+  Object.entries(border.width || {}).forEach(([k, v]) => L.push(`  --border-${k}: ${v};`));
+  Object.entries(border.radius || {}).forEach(([k, v]) => L.push(`  --radius-${k}: ${v};`));
+  L.push("", "  /* SHADOW */");
+  const shadow = (t.shadow || {}) as Record<string, string>;
+  Object.entries(shadow).forEach(([k, v]) => L.push(`  --shadow-${k}: ${v};`));
+  L.push("", "  /* GRADIENT */");
+  const gradient = (t.gradient || {}) as Record<string, string>;
+  Object.entries(gradient).forEach(([k, v]) => L.push(`  --gradient-${k}: ${v};`));
+  L.push("", "  /* MOTION */");
+  const motion = (t.motion || {}) as Record<string, Record<string, string>>;
+  Object.entries(motion.duration || {}).forEach(([k, v]) => L.push(`  --duration-${k}: ${v};`));
+  Object.entries(motion.easing || {}).forEach(([k, v]) => L.push(`  --easing-${k}: ${v};`));
+  L.push("", "  /* COMPONENT */");
+  const component = (t.component || {}) as Record<string, Record<string, string | number>>;
+  Object.entries(component).forEach(([name, vals]) => {
+    Object.entries(vals).forEach(([k, v]) => L.push(`  --${name}-${k}: ${v};`));
+  });
+  L.push("}");
+  return L.join("\n");
+}
+
+function fontImportFromTokens(t: Record<string, unknown>): string {
+  const ty = (t.typography || {}) as Record<string, unknown>;
+  const fonts = [ty.fontSans, ty.fontSerif, ty.fontMono].filter((f): f is string => typeof f === "string" && f.length > 0);
+  if (!fonts.length) return "";
+  const q = fonts.map((f) => `family=${encodeURIComponent(f)}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,900;1,400`).join("&");
+  return `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?${q}&display=swap" rel="stylesheet">`;
+}
+
 app.post("/generate-tokens", async (c) => {
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "generate");
@@ -235,12 +328,118 @@ app.post("/generate-tokens", async (c) => {
   let tokens: any;
   if (mode === "ai") {
     const { generateTokensAI } = await import("./lib/tokens");
-    tokens = await generateTokensAI(vibe, c.env.GEMINI_API_KEY);
+    tokens = await generateTokensAI(vibe, {
+      ANTHROPIC_API_KEY: c.env.ANTHROPIC_API_KEY,
+      OPENAI_API_KEY: c.env.OPENAI_API_KEY,
+      GOOGLE_API_KEY: c.env.GOOGLE_API_KEY || c.env.GEMINI_API_KEY,
+      AI_PREFERRED_PROVIDER: c.env.AI_PREFERRED_PROVIDER,
+    });
   } else {
     const { generateTokensComputational } = await import("./lib/tokens");
     tokens = generateTokensComputational(primary, secondary, vibe);
   }
   return c.json(tokens);
+});
+
+app.post("/generate-demo", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const tokens = body.tokens as Record<string, unknown>;
+  const demoType = (body.demoType as string) || "components";
+
+  if (!tokens) throw new HttpError(400, "tokens required");
+
+  const providerConfig = resolveProviderConfig(c.env as unknown as Record<string, string | undefined>);
+  const models = createModelChain(providerConfig);
+
+  const css = tokensToCSSFromTokens(tokens);
+  const fi = fontImportFromTokens(tokens);
+
+  const prompts: Record<string, string> = {
+    components: `Create a beautiful single-file HTML design system showcase page. Output ONLY the complete HTML document starting with <!DOCTYPE html>.
+
+${fi}
+
+Define these CSS custom properties in :root {}:
+${css}
+
+Design system vibe: ${(tokens.meta as any)?.vibeName} — ${(tokens.meta as any)?.description}
+Color mode: ${(tokens.meta as any)?.palette}
+
+Build a complete page with:
+1. Sticky nav with logo and navigation links and a CTA button styled with var(--color-primary-500) or appropriate primary color
+2. Hero section with a large headline, subheadline, and 2-3 buttons (primary, secondary, ghost styles)
+3. A 3-column feature cards grid — each card has an icon (use SVG or emoji), title, description, styled using card token values
+4. A form section with labeled inputs, a select dropdown, textarea, and submit button
+5. Badges/tags in 4-5 variants (success, warning, error, neutral, primary)
+6. A stats row with 3-4 big numbers and labels
+7. Footer with columns of links
+
+IMPORTANT: Use the CSS variables defined above for ALL colors, spacing, fonts, shadows, and radii. Make it genuinely beautiful — bold typography, strong visual hierarchy, real personality matching the vibe. The page must be fully self-contained with no external dependencies except Google Fonts.`,
+
+    landing: `Create a stunning single-file HTML landing page for a fictional brand that embodies this design system. Output ONLY the complete HTML document starting with <!DOCTYPE html>.
+
+${fi}
+
+Define these CSS custom properties in :root {}:
+${css}
+
+Design system vibe: ${(tokens.meta as any)?.vibeName} — ${(tokens.meta as any)?.description}
+Color mode: ${(tokens.meta as any)?.palette}
+
+Invent a compelling product name and concept that matches the vibe. Build a complete marketing page:
+1. Full-width hero with massive headline, subheadline, hero image (use CSS shapes/gradients as placeholder), and CTAs
+2. Social proof row (logos as text/shapes, or a testimonial strip)
+3. 3-4 feature sections with alternating image+text layouts
+4. A testimonials or quote section with pull quotes
+5. Pricing cards or final CTA section
+6. Footer with links and brand identity
+
+IMPORTANT: Use the CSS variables defined above for ALL styling. Be bold — unexpected layout choices, dramatic typography, creative use of gradients and shadows. The page must be fully self-contained. NOT a generic SaaS template.`,
+
+    poster: `Create a stunning single-file HTML graphic design piece that fills the viewport. Output ONLY the complete HTML document starting with <!DOCTYPE html>.
+
+${fi}
+
+Define these CSS custom properties in :root {}:
+${css}
+
+Design system vibe: ${(tokens.meta as any)?.vibeName} — ${(tokens.meta as any)?.description}
+Color mode: ${(tokens.meta as any)?.palette}
+
+Choose whichever format fits the vibe: magazine cover, event poster, typographic poster, editorial spread, data art, zine page, etc.
+
+Make it visually DRAMATIC:
+- Use large display typography from the font/scale tokens (var(--text-6xl), var(--text-7xl))
+- Strong geometric or abstract elements using CSS (borders, gradients, clip-path, transforms)
+- Creative use of gradient tokens as backgrounds or elements
+- Unexpected spatial composition — overlap, asymmetry, diagonal, grid-breaking
+- The personality of the vibe should be immediately obvious
+
+IMPORTANT: Use the CSS variables defined above. Fill the full viewport (100vw, 100vh). Fully self-contained. Make it something someone would actually want to print or share.`
+  };
+
+  const prompt = prompts[demoType] || prompts.components;
+
+  const { generateWithFallback } = await import("./ai/generate");
+  const html = await generateWithFallback(models, {
+    prompt,
+    temperature: 0.7,
+    maxTokens: 8000,
+  });
+
+  let clean = html.trim();
+  if (clean.startsWith("```")) {
+    clean = clean.replace(/^```html?\s*/, "").replace(/```\s*$/, "").trim();
+  }
+  if (!clean.toLowerCase().startsWith("<!doctype")) {
+    const idx = clean.toLowerCase().indexOf("<!doctype");
+    if (idx > -1) clean = clean.substring(idx);
+  }
+
+  return c.json({ html: clean });
 });
 
 app.get("/config", (c) => {
@@ -320,6 +519,7 @@ app.notFound((c) => c.json({
 }, 404 as any));
 
 app.onError((err, c) => {
+  console.error("Unhandled error:", err);
   if (err instanceof HttpError) return c.json({ error: err.message }, err.status as any);
   const message = err instanceof Error ? err.message : "Unexpected error";
   return c.json({ error: message }, 500 as any);
@@ -533,6 +733,81 @@ function parseBooleanString(value: string, fallback: boolean): boolean {
   return fallback;
 }
 
+// ==================== HTML LAYOUT AGENT ====================
+
+async function runHtmlLayoutAgent(
+  env: Env,
+  post: GhostPost,
+  platform: string,
+  width: number,
+  height: number,
+  userPrompt?: string,
+  overrides?: LlmPromptOverrides,
+): Promise<LlmOutput> {
+  const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>);
+  const models = createModelChain(providerConfig);
+
+  const content = post.plaintext || post.html || "";
+  const designTokens = formatDesignTokensForPrompt();
+  const systemPrompt = [
+    ...(Array.isArray(overrides?.systemPrompt) ? overrides.systemPrompt : overrides?.systemPrompt ? [overrides.systemPrompt] : []),
+  ].join("\n");
+
+  const result = await generateHtmlLayout(models, {
+    platform,
+    width,
+    height,
+    title: post.title,
+    excerpt: post.custom_excerpt || post.excerpt || "",
+    content,
+    designTokens,
+    userPrompt: [
+      userPrompt ? `User specifically asked for: ${userPrompt}` : "",
+      overrides?.userInstructionsAppend || "",
+    ].filter(Boolean).join("\n"),
+  });
+
+  const limits = PIPELINE_CONFIG.generation.limits;
+  const fallbackText = normalizeSourceContent(post.custom_excerpt || post.excerpt || post.plaintext || "") || post.title;
+  const imagePromptFallback = ((PIPELINE_CONFIG.generation.image as any).prompt_fallback || "<title>, modern editorial photo, clean composition, natural lighting, no text overlay").replace("<title>", post.title);
+
+  return {
+    instagram_caption: normalizeCaptionText(result.instagram_caption, post.title, limits.instagram_caption_max_chars, fallbackText),
+    twitter_caption: normalizeCaptionText(result.twitter_caption, post.title, limits.twitter_caption_max_chars, fallbackText),
+    linkedin_caption: normalizeCaptionText(result.linkedin_caption, post.title, limits.linkedin_caption_max_chars, fallbackText),
+    image_prompt: ensureLength(result.image_prompt, limits.image_prompt_max_chars, imagePromptFallback),
+    stock_search_query: result.stock_search_query || post.title.replace(/[^a-zA-Z0-9\s]/g, " ").slice(0, 100),
+    use_feature_image: Boolean(post.feature_image) && Boolean(result.use_feature_image),
+    generated_html: result.generated_html,
+    carousel_slides: result.carousel_slides || [],
+  };
+}
+
+function normalizeCaptionText(rawText: string, title: string, maxChars: number, fallbackText: string): string {
+  const cleaned = removeTitlePrefix(normalizeSourceContent(rawText), title);
+  const fallback = removeTitlePrefix(normalizeSourceContent(fallbackText), title) || normalizeSourceContent(title);
+  const source = cleaned || fallback || title;
+  return ensureLength(source, maxChars, fallback || title);
+}
+
+function removeTitlePrefix(value: string, title: string): string {
+  if (!value) return "";
+  const safeTitle = normalizeSourceContent(title);
+  if (!safeTitle) return value.trim();
+  const titlePattern = new RegExp(`^${escapeRegExp(safeTitle)}(?:\\s*[:\\-–—|]\\s*|\\s+)`, "i");
+  const stripped = value.replace(titlePattern, "").trim();
+  if (stripped && canonicalText(value).startsWith(canonicalText(safeTitle))) return stripped;
+  return value.trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function canonicalText(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+}
+
 // ==================== PIPELINE ====================
 
 export async function runPipeline(body: GenerateRequestBody, env: Env, security: ResolvedSecurityConfig) {
@@ -572,15 +847,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       const dimensions = getFormatConfig(format);
       if (!dimensions) continue;
 
-      const llmOutput = await generateHtmlWithGemini({
-        apiKey: env.GEMINI_API_KEY,
-        post,
-        platform: format,
-        width: dimensions.width,
-        height: dimensions.height,
-        userPrompt: variantPrompt,
-        llmOverrides: agentContext.copyOverrides
-      });
+      const llmOutput = await runHtmlLayoutAgent(env, post, format, dimensions.width, dimensions.height, variantPrompt, agentContext.copyOverrides);
 
       const launchOptions = { keep_alive: (PIPELINE_CONFIG.runtime?.browser_keep_alive_ms as number) ?? 60000 };
       const browser = typeof process !== "undefined"

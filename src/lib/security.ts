@@ -31,7 +31,11 @@ export interface ResolvedSecurityConfig {
 }
 
 export interface Env {
-  GEMINI_API_KEY: string;
+  GEMINI_API_KEY?: string;
+  GOOGLE_API_KEY?: string;
+  ANTHROPIC_API_KEY?: string;
+  OPENAI_API_KEY?: string;
+  AI_PREFERRED_PROVIDER?: string;
   AI: Ai;
   BROWSER: Fetcher;
   OUTPUT_BUCKET: R2Bucket;
