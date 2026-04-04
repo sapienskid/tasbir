@@ -9,7 +9,7 @@ import {
   createModelChain,
   resolveProviderConfig,
 } from "./ai";
-import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, getDesignTokens, generateTailwindConfig, setFormat, deleteFormat, loadFormatsFromStorage, type FormatConfig } from "./config";
+import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, setFormat, deleteFormat, loadFormatsFromStorage, type FormatConfig } from "./config";
 import {
   HttpError,
   enforceApiAuth,
@@ -21,6 +21,14 @@ import {
   type ResolvedSecurityConfig,
   type Env as SecurityEnv
 } from "./lib/security";
+import {
+  tokensToCSSFromRaw,
+  fontImportFromTokens,
+  buildTailwindConfigFromTokens,
+  stripInjectedDesignTokens,
+  formatDesignTokensForPromptFromObject,
+  getDefaultDesignTokens,
+} from "../shared/tokens";
 
 interface LlmPromptOverrides {
   systemPrompt?: string | string[];
@@ -287,7 +295,7 @@ app.use("*", async (c, next) => {
 app.get("/health", (c) => c.json({ ok: true }));
 
 app.get("/config/design-tokens", (c) => {
-  return c.json({ tokens: getDesignTokens(), tailwindConfig: generateTailwindConfig() });
+  return c.json({ tokens: getDefaultDesignTokens(), tailwindConfig: {} });
 });
 
 app.get("/config/prompts", (c) => {
@@ -326,129 +334,6 @@ app.get("/asset", async (c) => {
   });
 });
 
-function tokensToCSSFromTokens(t: Record<string, unknown>): string {
-  const L = [":root {", "  /* COLOR */"];
-  const c = (t.colors || {}) as Record<string, Record<string, string>>;
-  ["primary", "secondary", "accent", "neutral"].forEach((g) => {
-    const group = c[g];
-    if (!group || typeof group !== "object") return;
-    Object.entries(group).forEach(([k, v]) => L.push(`  --color-${g}-${k}: ${v};`));
-  });
-  const semantic = (c.semantic || {}) as Record<string, string>;
-  Object.entries(semantic).forEach(([k, v]) => L.push(`  --color-${k}: ${v};`));
-  const surface = (c.surface || {}) as Record<string, string>;
-  Object.entries(surface).forEach(([k, v]) => L.push(`  --surface-${k}: ${v};`));
-  const text = (c.text || {}) as Record<string, string>;
-  Object.entries(text).forEach(([k, v]) => L.push(`  --text-${k}: ${v};`));
-  const ty = (t.typography || {}) as Record<string, unknown>;
-  L.push("", "  /* TYPOGRAPHY */");
-  const fontSans = ty.fontSans as string | undefined;
-  if (fontSans) L.push(`  --font-sans: '${fontSans}', sans-serif;`);
-  const fontSerif = ty.fontSerif as string | undefined;
-  if (fontSerif) L.push(`  --font-serif: '${fontSerif}', serif;`);
-  const fontMono = ty.fontMono as string | undefined;
-  if (fontMono) L.push(`  --font-mono: '${fontMono}', monospace;`);
-  const scale = (ty.scale || {}) as Record<string, number>;
-  Object.entries(scale).forEach(([k, v]) => L.push(`  --text-${k}: ${v}px;`));
-  const tracking = (ty.tracking || {}) as Record<string, string>;
-  Object.entries(tracking).forEach(([k, v]) => L.push(`  --tracking-${k}: ${v};`));
-  const leading = (ty.leading || {}) as Record<string, number>;
-  Object.entries(leading).forEach(([k, v]) => L.push(`  --leading-${k}: ${v};`));
-  L.push("", "  /* SPACING */");
-  const spacing = (t.spacing || {}) as { scale?: number[] };
-  (spacing.scale || []).forEach((v, i) => L.push(`  --space-${i + 1}: ${v}px;`));
-  L.push("", "  /* BORDER */");
-  const border = (t.border || {}) as Record<string, Record<string, string>>;
-  Object.entries(border.width || {}).forEach(([k, v]) => L.push(`  --border-${k}: ${v};`));
-  Object.entries(border.radius || {}).forEach(([k, v]) => L.push(`  --radius-${k}: ${v};`));
-  L.push("", "  /* SHADOW */");
-  const shadow = (t.shadow || {}) as Record<string, string>;
-  Object.entries(shadow).forEach(([k, v]) => L.push(`  --shadow-${k}: ${v};`));
-  L.push("", "  /* GRADIENT */");
-  const gradient = (t.gradient || {}) as Record<string, string>;
-  Object.entries(gradient).forEach(([k, v]) => L.push(`  --gradient-${k}: ${v};`));
-  L.push("", "  /* MOTION */");
-  const motion = (t.motion || {}) as Record<string, Record<string, string>>;
-  Object.entries(motion.duration || {}).forEach(([k, v]) => L.push(`  --duration-${k}: ${v};`));
-  Object.entries(motion.easing || {}).forEach(([k, v]) => L.push(`  --easing-${k}: ${v};`));
-  L.push("", "  /* COMPONENT */");
-  const component = (t.component || {}) as Record<string, Record<string, string | number>>;
-  Object.entries(component).forEach(([name, vals]) => {
-    Object.entries(vals).forEach(([k, v]) => L.push(`  --${name}-${k}: ${v};`));
-  });
-  L.push("}");
-  return L.join("\n");
-}
-
-function fontImportFromTokens(t: Record<string, unknown>): string {
-  const ty = (t.typography || {}) as Record<string, unknown>;
-  const fonts = [ty.fontSans, ty.fontSerif, ty.fontMono].filter((f): f is string => typeof f === "string" && f.length > 0);
-  if (!fonts.length) return "";
-  const q = fonts.map((f) => `family=${encodeURIComponent(f)}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,900;1,400`).join("&");
-  return `<link id="tasbir-font-preconnect" rel="preconnect" href="https://fonts.googleapis.com"><link id="tasbir-font-preconnect-cross" rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link id="tasbir-fonts" href="https://fonts.googleapis.com/css2?${q}&display=swap" rel="stylesheet">`;
-}
-
-function stripInjectedDesignTokens(html: string): string {
-  let next = html;
-  next = next.replace(/<style[^>]*id=["']tasbir-design-tokens["'][^>]*>[\s\S]*?<\/style>/gi, "");
-  next = next.replace(/<script[^>]*id=["']tasbir-tailwind-config["'][^>]*>[\s\S]*?<\/script>/gi, "");
-  next = next.replace(/<link[^>]*id=["']tasbir-font-preconnect["'][^>]*>/gi, "");
-  next = next.replace(/<link[^>]*id=["']tasbir-font-preconnect-cross["'][^>]*>/gi, "");
-  next = next.replace(/<link[^>]*id=["']tasbir-fonts["'][^>]*>/gi, "");
-  return next;
-}
-
-function formatDesignTokensForPromptFromObject(tokens: Record<string, unknown>): string {
-  const parts: string[] = [];
-  parts.push("Token JSON:");
-  parts.push(JSON.stringify(tokens, null, 2));
-  parts.push("\nToken CSS Variables (use these names directly with var(--...)): ");
-  parts.push(tokensToCSSFromTokens(tokens));
-  parts.push("\nCanonical Tailwind token classes expected:");
-  parts.push("- background: bg-surface-base, bg-surface-elevated");
-  parts.push("- text: text-content-primary, text-content-secondary, text-primary-500");
-  parts.push("- font: font-sans, font-serif, font-mono");
-  parts.push("\nImplementation requirements:");
-  parts.push("- Add these CSS variables to :root in your <style> block.");
-  parts.push("- Prefer var(--color-...), var(--surface-...), var(--text-...), var(--gradient-...), var(--font-sans).\n");
-  return parts.join("\n");
-}
-
-function buildTailwindConfigFromTokens(tokens: Record<string, unknown>): Record<string, unknown> {
-  const colors = (tokens.colors || {}) as Record<string, any>;
-  const border = (tokens.border || {}) as Record<string, any>;
-  const shadow = (tokens.shadow || {}) as Record<string, any>;
-  const gradient = (tokens.gradient || {}) as Record<string, any>;
-
-  return {
-    theme: {
-      extend: {
-        colors: {
-          primary: colors.primary || {},
-          secondary: colors.secondary || {},
-          accent: colors.accent || {},
-          neutral: colors.neutral || {},
-          surface: colors.surface || {},
-          content: colors.text || {},
-        },
-        fontFamily: {
-          sans: ["var(--font-sans)", "sans-serif"],
-          serif: ["var(--font-serif)", "serif"],
-          mono: ["var(--font-mono)", "monospace"],
-        },
-        borderRadius: (border.radius || {}) as Record<string, string>,
-        boxShadow: shadow as Record<string, string>,
-        backgroundImage: {
-          "gradient-primary": gradient.primary || "var(--gradient-primary)",
-          "gradient-hero": gradient.hero || "var(--gradient-hero)",
-          "gradient-subtle": gradient.subtle || "var(--gradient-subtle)",
-          "gradient-surface": gradient.surface || "var(--gradient-surface)",
-        },
-      },
-    },
-  };
-}
-
 function applyBodyDesignSystemClasses(html: string): string {
   return html.replace(/<body([^>]*)>/i, (match, attrs) => {
     const current = String(attrs || "");
@@ -467,7 +352,7 @@ function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown
   if (!html.trim()) return html;
 
   let nextHtml = applyBodyDesignSystemClasses(stripInjectedDesignTokens(html));
-  const cssVars = tokensToCSSFromTokens(tokens);
+  const cssVars = tokensToCSSFromRaw(tokens);
   const fontLinks = fontImportFromTokens(tokens);
   const tailwindConfig = JSON.stringify(buildTailwindConfigFromTokens(tokens));
   const tailwindConfigScript = `<script id="tasbir-tailwind-config">window.tailwind = window.tailwind || {}; window.tailwind.config = ${tailwindConfig};</script>`;
@@ -530,7 +415,7 @@ async function loadDesignTokensForGeneration(env: Env): Promise<Record<string, u
     console.warn("[tokens] failed to read saved tokens, falling back to defaults", error);
   }
 
-  return getDesignTokens() as Record<string, unknown>;
+  return getDefaultDesignTokens() as unknown as Record<string, unknown>;
 }
 
 function resolveDesignTokensForRequest(bodyTokens: unknown, fallbackTokens: Record<string, unknown>): Record<string, unknown> {

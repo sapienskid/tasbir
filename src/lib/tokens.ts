@@ -1,199 +1,36 @@
 import { createModelChain, resolveProviderConfig } from "../ai";
-import { generateDesignTokens, type DesignTokens as AIDesignTokens } from "../ai/agents/design-token-agent";
+import { generateDesignTokens } from "../ai/agents/design-token-agent";
 
-export interface DesignTokens {
-  colors: {
-    primary: {
-      "50": string;
-      "100": string;
-      "200": string;
-      "300": string;
-      "400": string;
-      "500": string;
-      "600": string;
-      "700": string;
-      "800": string;
-      "900": string;
-    };
-    secondary: {
-      "50": string;
-      "100": string;
-      "200": string;
-      "300": string;
-      "400": string;
-      "500": string;
-      "600": string;
-      "700": string;
-      "800": string;
-      "900": string;
-    };
-    accent: { light: string; base: string; dark: string };
-    neutral: {
-      "50": string;
-      "100": string;
-      "200": string;
-      "300": string;
-      "400": string;
-      "500": string;
-      "600": string;
-      "700": string;
-      "800": string;
-      "900": string;
-    };
-    semantic: { success: string; warning: string; error: string; info: string };
-    surface: { base: string; subtle: string; elevated: string; overlay: string };
-    text: { primary: string; secondary: string; muted: string; inverse: string; accent: string };
-  };
-  typography: {
-    fontSans: string;
-    fontSerif: string;
-    fontMono: string;
-    scale: {
-      xs: number;
-      sm: number;
-      base: number;
-      lg: number;
-      xl: number;
-      "2xl": number;
-      "3xl": number;
-      "4xl": number;
-      "5xl": number;
-      "6xl": number;
-      "7xl": number;
-    };
-    weights: {
-      light: number;
-      regular: number;
-      medium: number;
-      semibold: number;
-      bold: number;
-      black: number;
-    };
-    tracking: {
-      tight: string;
-      normal: string;
-      wide: string;
-      wider: string;
-      widest: string;
-    };
-    leading: {
-      tight: number;
-      snug: number;
-      normal: number;
-      relaxed: number;
-      loose: number;
-    };
-  };
-  spacing: { base: number; scale: number[] };
-  border: {
-    width: {
-      hairline: string;
-      thin: string;
-      normal: string;
-      medium: string;
-      thick: string;
-    };
-    radius: {
-      none: string;
-      xs: string;
-      sm: string;
-      md: string;
-      lg: string;
-      xl: string;
-      "2xl": string;
-      "3xl": string;
-      full: string;
-    };
-  };
-  shadow: {
-    xs: string;
-    sm: string;
-    md: string;
-    lg: string;
-    xl: string;
-    inner: string;
-  };
-  gradient: {
-    primary: string;
-    hero: string;
-    subtle: string;
-    surface: string;
-  };
-  motion: {
-    duration: {
-      instant: string;
-      fast: string;
-      normal: string;
-      slow: string;
-      slower: string;
-    };
-    easing: {
-      default: string;
-      in: string;
-      out: string;
-      bounce: string;
-    };
-  };
-  component: {
-    button: {
-      height: string | number;
-      heightSm: string | number;
-      heightLg: string | number;
-      paddingX: string | number;
-      radius: string | number;
-      fontWeight: string | number;
-      fontSize: string | number;
-    };
-    card: {
-      padding: string | number;
-      paddingLg: string | number;
-      radius: string | number;
-      shadow: string | number;
-      border: string | number;
-    };
-    input: {
-      height: string | number;
-      paddingX: string | number;
-      paddingY: string | number;
-      radius: string | number;
-      borderWidth: string | number;
-    };
-    badge: {
-      height: string | number;
-      paddingX: string | number;
-      radius: string | number;
-      fontSize: string | number;
-      fontWeight: string | number;
-    };
-    nav: {
-      height: string | number;
-      paddingX: string | number;
-    };
-  };
-  meta: {
-    vibeName: string;
-    description: string;
-    aesthetic: string;
-    palette: string;
-  };
-}
+// Re-export everything from the shared token package
+export {
+  type DesignTokens,
+  tokensToCSS,
+  tokensToCSSFromRaw,
+  fontImportFromTokens,
+  buildTailwindConfigFromTokens,
+  stripInjectedDesignTokens,
+  formatDesignTokensForPromptFromObject,
+  getDefaultDesignTokens,
+} from "../../shared/tokens";
+
+import type { DesignTokens } from "../../shared/tokens";
 
 export async function generateTokensAI(
-  vibe: string, 
+  vibe: string,
   env: Record<string, string | undefined>,
   primaryHint?: string,
   secondaryHint?: string
 ): Promise<DesignTokens> {
   const providerConfig = resolveProviderConfig(env);
   const models = createModelChain(providerConfig);
-  
+
   let enhancedVibe = vibe;
   if (primaryHint || secondaryHint) {
     enhancedVibe = `${vibe}\n\nCOLOR REQUIREMENTS (you MUST use these exact colors as the base for your scales):\n`;
     if (primaryHint) enhancedVibe += `- Primary color 500 level MUST BE EXACTLY: ${primaryHint}\n`;
     if (secondaryHint) enhancedVibe += `- Secondary color 500 level MUST BE EXACTLY: ${secondaryHint}\n`;
   }
-  
+
   const result = await generateDesignTokens(models, enhancedVibe);
   return result as DesignTokens;
 }
@@ -243,7 +80,7 @@ function generateScale(base: string, isDark: boolean): {
   const steps = isDark
     ? [97, 90, 80, 70, 55, 40, 28, 18, 10, 5]
     : [5, 10, 18, 28, 40, 55, 70, 80, 90, 97];
-  
+
   return {
     "50": hslToHex(h, Math.max(s - 10, 5), steps[0]),
     "100": hslToHex(h, Math.max(s - 10, 5), steps[1]),
@@ -258,9 +95,7 @@ function generateScale(base: string, isDark: boolean): {
   };
 }
 
-// Generate semantic color that harmonizes with the primary hue
 function generateSemanticColor(primaryHue: number, targetHue: number, isDark: boolean): string {
-  // Blend toward target hue while maintaining some harmony with primary
   const blendedHue = (targetHue + primaryHue * 0.15) % 360;
   const saturation = 65;
   const lightness = isDark ? 55 : 45;
@@ -275,15 +110,12 @@ export function generateTokensComputational(primary: string, secondary: string, 
   const secondaryScale = generateScale(secondary, isDark);
   const accentHSL = { h: (primaryHSL.h + 30) % 360, s: Math.min(primaryHSL.s + 10, 90), l: primaryHSL.l };
 
-  // Generate semantic colors that harmonize with the primary palette
   const semanticColors = {
-    success: generateSemanticColor(primaryHSL.h, 142, isDark), // Green-ish
-    warning: generateSemanticColor(primaryHSL.h, 38, isDark),  // Amber-ish
-    error: generateSemanticColor(primaryHSL.h, 0, isDark),     // Red-ish
-    info: generateSemanticColor(primaryHSL.h, 210, isDark),    // Blue-ish
+    success: generateSemanticColor(primaryHSL.h, 142, isDark),
+    warning: generateSemanticColor(primaryHSL.h, 38, isDark),
+    error: generateSemanticColor(primaryHSL.h, 0, isDark),
+    info: generateSemanticColor(primaryHSL.h, 210, isDark),
   };
-  // Light mode: 50 is lightest, 900 is darkest (normal)
-  // Dark mode: 50 is darkest, 900 is lightest (inverted for dark UIs)
   const neutralScale = isDark
     ? { '50': '#171717', '100': '#262626', '200': '#404040', '300': '#525252', '400': '#737373', '500': '#a3a3a3', '600': '#d4d4d4', '700': '#e5e5e5', '800': '#f5f5f5', '900': '#fafafa' }
     : { '50': '#fafafa', '100': '#f5f5f5', '200': '#e5e5e5', '300': '#d4d4d4', '400': '#a3a3a3', '500': '#737373', '600': '#525252', '700': '#404040', '800': '#262626', '900': '#171717' };
@@ -369,45 +201,6 @@ export function generateTokensComputational(primary: string, secondary: string, 
       palette: isDark ? 'dark' : 'light'
     }
   };
-}
-
-export function tokensToCSS(t: DesignTokens): string {
-  const L = [':root {', '  /* COLOR */'];
-  const c = t.colors || {};
-  ['primary', 'secondary', 'accent', 'neutral'].forEach(g => {
-    const group = c[g as keyof typeof c];
-    if (!group || typeof group !== 'object') return;
-    Object.entries(group).forEach(([k, v]) => L.push(`  --color-${g}-${k}: ${v};`));
-  });
-  Object.entries(c.semantic || {}).forEach(([k, v]) => L.push(`  --color-${k}: ${v};`));
-  Object.entries(c.surface || {}).forEach(([k, v]) => L.push(`  --surface-${k}: ${v};`));
-  Object.entries(c.text || {}).forEach(([k, v]) => L.push(`  --text-${k}: ${v};`));
-  const ty = t.typography || {};
-  L.push('', '  /* TYPOGRAPHY */');
-  if (ty.fontSans) L.push(`  --font-sans: '${ty.fontSans}', sans-serif;`);
-  if (ty.fontSerif) L.push(`  --font-serif: '${ty.fontSerif}', serif;`);
-  if (ty.fontMono) L.push(`  --font-mono: '${ty.fontMono}', monospace;`);
-  Object.entries(ty.scale || {}).forEach(([k, v]) => L.push(`  --text-${k}: ${v}px;`));
-  Object.entries(ty.tracking || {}).forEach(([k, v]) => L.push(`  --tracking-${k}: ${v};`));
-  Object.entries(ty.leading || {}).forEach(([k, v]) => L.push(`  --leading-${k}: ${v};`));
-  L.push('', '  /* SPACING */');
-  (t.spacing?.scale || []).forEach((v, i) => L.push(`  --space-${i + 1}: ${v}px;`));
-  L.push('', '  /* BORDER */');
-  Object.entries(t.border?.width || {}).forEach(([k, v]) => L.push(`  --border-${k}: ${v};`));
-  Object.entries(t.border?.radius || {}).forEach(([k, v]) => L.push(`  --radius-${k}: ${v};`));
-  L.push('', '  /* SHADOW */');
-  Object.entries(t.shadow || {}).forEach(([k, v]) => L.push(`  --shadow-${k}: ${v};`));
-  L.push('', '  /* GRADIENT */');
-  Object.entries(t.gradient || {}).forEach(([k, v]) => L.push(`  --gradient-${k}: ${v};`));
-  L.push('', '  /* MOTION */');
-  Object.entries(t.motion?.duration || {}).forEach(([k, v]) => L.push(`  --duration-${k}: ${v};`));
-  Object.entries(t.motion?.easing || {}).forEach(([k, v]) => L.push(`  --easing-${k}: ${v};`));
-  L.push('', '  /* COMPONENT */');
-  Object.entries(t.component || {}).forEach(([name, vals]) => {
-    Object.entries(vals).forEach(([k, v]) => L.push(`  --${name}-${k}: ${v};`));
-  });
-  L.push('}');
-  return L.join('\n');
 }
 
 export function tokensToPrompt(t: DesignTokens): string {

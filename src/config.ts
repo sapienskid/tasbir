@@ -1,3 +1,5 @@
+import { getDefaultDesignTokens } from "../shared/tokens";
+
 export interface FormatConfig {
   width: number;
   height: number;
@@ -235,95 +237,7 @@ export function loadFormatsFromStorage(formats: Record<string, FormatConfig>): v
 }
 
 export function getDesignTokens() {
-  return {
-    colors: {
-      primary: {
-        "50": "#eff6ff",
-        "100": "#dbeafe",
-        "200": "#bfdbfe",
-        "300": "#93c5fd",
-        "400": "#60a5fa",
-        "500": "#3b82f6",
-        "600": "#2563eb",
-        "700": "#1d4ed8",
-        "800": "#1e40af",
-        "900": "#1e3a8a",
-      },
-      secondary: {
-        "50": "#f5f3ff",
-        "100": "#ede9fe",
-        "200": "#ddd6fe",
-        "300": "#c4b5fd",
-        "400": "#a78bfa",
-        "500": "#8b5cf6",
-        "600": "#7c3aed",
-        "700": "#6d28d9",
-        "800": "#5b21b6",
-        "900": "#4c1d95",
-      },
-      accent: { light: "#60a5fa", base: "#3b82f6", dark: "#1d4ed8" },
-      neutral: {
-        "50": "#fafafa",
-        "100": "#f5f5f5",
-        "200": "#e5e5e5",
-        "300": "#d4d4d4",
-        "400": "#a3a3a3",
-        "500": "#737373",
-        "600": "#525252",
-        "700": "#404040",
-        "800": "#262626",
-        "900": "#171717",
-      },
-      semantic: { success: "#22c55e", warning: "#f59e0b", error: "#ef4444", info: "#3b82f6" },
-      surface: { base: "#0b0b0b", subtle: "#171717", elevated: "#1f1f1f", overlay: "rgba(0, 0, 0, 0.8)" },
-      text: { primary: "#f5f5f5", secondary: "#a3a3a3", muted: "#737373", inverse: "#0b0b0b", accent: "#60a5fa" },
-    },
-    typography: {
-      fontSans: "Inter",
-      fontSerif: "Georgia",
-      fontMono: "JetBrains Mono",
-      scale: { xs: 12, sm: 14, base: 16, lg: 18, xl: 20, "2xl": 24, "3xl": 30, "4xl": 36, "5xl": 48, "6xl": 60, "7xl": 72 },
-      weights: { light: 300, regular: 400, medium: 500, semibold: 600, bold: 700, black: 900 },
-      tracking: { tight: "-0.025em", normal: "0em", wide: "0.025em", wider: "0.05em", widest: "0.1em" },
-      leading: { tight: 1.25, snug: 1.375, normal: 1.5, relaxed: 1.625, loose: 2 },
-    },
-    spacing: { base: 4, scale: [4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96, 128] },
-    border: {
-      width: { hairline: "0.5px", thin: "1px", normal: "2px", medium: "3px", thick: "4px" },
-      radius: { none: "0", xs: "2px", sm: "4px", md: "6px", lg: "8px", xl: "12px", "2xl": "16px", "3xl": "24px", full: "9999px" },
-    },
-    shadow: {
-      xs: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
-      sm: "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1)",
-      md: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)",
-      lg: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)",
-      xl: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)",
-      inner: "inset 0 2px 4px 0 rgba(0, 0, 0, 0.05)",
-    },
-    gradient: {
-      primary: "linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%)",
-      hero: "linear-gradient(180deg, rgba(59, 130, 246, 0.15) 0%, transparent 50%)",
-      subtle: "linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, transparent 100%)",
-      surface: "linear-gradient(180deg, #171717 0%, #0b0b0b 100%)",
-    },
-    motion: {
-      duration: { instant: "50ms", fast: "150ms", normal: "300ms", slow: "500ms", slower: "700ms" },
-      easing: { default: "cubic-bezier(0.4, 0, 0.2, 1)", in: "cubic-bezier(0.4, 0, 1, 1)", out: "cubic-bezier(0, 0, 0.2, 1)", bounce: "cubic-bezier(0.68, -0.55, 0.265, 1.55)" },
-    },
-    component: {
-      button: { height: "40px", heightSm: "32px", heightLg: "48px", paddingX: "16px", radius: "6px", fontWeight: 500, fontSize: "14px" },
-      card: { padding: "24px", paddingLg: "32px", radius: "12px", shadow: "md", border: "1px" },
-      input: { height: "40px", paddingX: "12px", paddingY: "8px", radius: "6px", borderWidth: "1px" },
-      badge: { height: "24px", paddingX: "8px", radius: "4px", fontSize: "12px", fontWeight: 500 },
-      nav: { height: "64px", paddingX: "24px" },
-    },
-    meta: {
-      vibeName: "Default Dark",
-      description: "A clean, modern dark theme with blue accents",
-      aesthetic: "minimal",
-      palette: "dark",
-    },
-  };
+  return getDefaultDesignTokens();
 }
 
 export function generateTailwindConfig(): string {
