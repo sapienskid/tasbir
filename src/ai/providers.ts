@@ -1,46 +1,26 @@
-import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { LanguageModel } from "ai";
 
 export interface ProviderConfig {
-  anthropicApiKey?: string;
-  openaiApiKey?: string;
-  googleApiKey?: string;
-  preferredProvider?: "anthropic" | "openai" | "google";
+  cloudflareApiToken?: string;
+  cloudflareAccountId?: string;
+  cloudflareModel?: string;
+  cloudflareFastModel?: string;
 }
 
 export function createModelChain(config: ProviderConfig): LanguageModel[] {
   const models: LanguageModel[] = [];
-  const order = config.preferredProvider
-    ? [config.preferredProvider, "anthropic", "openai", "google"].filter((v, i, a) => a.indexOf(v) === i)
-    : ["anthropic", "openai", "google"];
 
-  for (const provider of order) {
-    switch (provider) {
-      case "anthropic":
-        if (config.anthropicApiKey) {
-          const anthropic = createAnthropic({ apiKey: config.anthropicApiKey });
-          models.push(anthropic("claude-sonnet-4-20250514"));
-        }
-        break;
-      case "openai":
-        if (config.openaiApiKey) {
-          const openai = createOpenAI({ apiKey: config.openaiApiKey });
-          models.push(openai("gpt-4o"));
-        }
-        break;
-      case "google":
-        if (config.googleApiKey) {
-          const google = createGoogleGenerativeAI({ apiKey: config.googleApiKey });
-          models.push(google("gemini-2.5-flash"));
-        }
-        break;
-    }
+  if (config.cloudflareApiToken && config.cloudflareAccountId) {
+    const cloudflare = createOpenAI({
+      apiKey: config.cloudflareApiToken,
+      baseURL: `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/ai/v1`,
+    });
+    models.push(cloudflare(config.cloudflareModel || "@cf/openai/gpt-oss-120b"));
   }
 
   if (models.length === 0) {
-    throw new Error("No AI provider configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY.");
+    throw new Error("No AI provider configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.");
   }
 
   return models;
@@ -48,35 +28,17 @@ export function createModelChain(config: ProviderConfig): LanguageModel[] {
 
 export function createFastModelChain(config: ProviderConfig): LanguageModel[] {
   const models: LanguageModel[] = [];
-  const order = config.preferredProvider
-    ? [config.preferredProvider, "anthropic", "openai", "google"].filter((v, i, a) => a.indexOf(v) === i)
-    : ["anthropic", "openai", "google"];
 
-  for (const provider of order) {
-    switch (provider) {
-      case "anthropic":
-        if (config.anthropicApiKey) {
-          const anthropic = createAnthropic({ apiKey: config.anthropicApiKey });
-          models.push(anthropic("claude-haiku-4-20250414"));
-        }
-        break;
-      case "openai":
-        if (config.openaiApiKey) {
-          const openai = createOpenAI({ apiKey: config.openaiApiKey });
-          models.push(openai("gpt-4o-mini"));
-        }
-        break;
-      case "google":
-        if (config.googleApiKey) {
-          const google = createGoogleGenerativeAI({ apiKey: config.googleApiKey });
-          models.push(google("gemini-2.5-flash"));
-        }
-        break;
-    }
+  if (config.cloudflareApiToken && config.cloudflareAccountId) {
+    const cloudflare = createOpenAI({
+      apiKey: config.cloudflareApiToken,
+      baseURL: `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/ai/v1`,
+    });
+    models.push(cloudflare(config.cloudflareFastModel || "@cf/meta/llama-3.1-8b-instruct-fp8-fast"));
   }
 
   if (models.length === 0) {
-    throw new Error("No AI provider configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY.");
+    throw new Error("No AI provider configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.");
   }
 
   return models;
@@ -84,10 +46,10 @@ export function createFastModelChain(config: ProviderConfig): LanguageModel[] {
 
 export function resolveProviderConfig(env: Record<string, string | undefined>): ProviderConfig {
   return {
-    anthropicApiKey: env.ANTHROPIC_API_KEY,
-    openaiApiKey: env.OPENAI_API_KEY,
-    googleApiKey: env.GOOGLE_API_KEY || env.GEMINI_API_KEY,
-    preferredProvider: (env.AI_PREFERRED_PROVIDER as "anthropic" | "openai" | "google") || undefined,
+    cloudflareApiToken: env.CLOUDFLARE_API_TOKEN || env.CF_API_TOKEN,
+    cloudflareAccountId: env.CLOUDFLARE_ACCOUNT_ID || env.CF_ACCOUNT_ID,
+    cloudflareModel: env.CLOUDFLARE_MODEL || env.LLM_MODEL,
+    cloudflareFastModel: env.CLOUDFLARE_FAST_MODEL || env.LLM_FAST_MODEL,
   };
 }
 

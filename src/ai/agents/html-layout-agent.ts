@@ -1,22 +1,12 @@
-import { generateObject, type LanguageModel } from "ai";
-import { z } from "zod";
+import { generateText, type LanguageModel } from "ai";
 
-const HTML_LAYOUT_SCHEMA = z.object({
-  generated_html: z.string(),
-  instagram_caption: z.string(),
-  twitter_caption: z.string(),
-  linkedin_caption: z.string(),
-  carousel_slides: z.array(z.object({ heading: z.string(), body: z.string() })).min(1),
-  image_prompt: z.string(),
-  stock_search_query: z.string(),
-  use_feature_image: z.boolean(),
-});
-
-export type HtmlLayoutOutput = z.infer<typeof HTML_LAYOUT_SCHEMA>;
+export interface HtmlLayoutOutput {
+  generated_html: string;
+}
 
 const HTML_LAYOUT_SYSTEM_PROMPT = `You are a master of Swiss-style layout design and modern web development.
 
-Your task is to generate ONE COMPLETE, SELF-CONTAINED HTML document for a social media post.
+Your task is to generate ONE COMPLETE, SELF-CONTAINED HTML document for a social media visual post.
 
 Rules:
 - The HTML must be a full standalone document with <!DOCTYPE html>, <html>, <head>, and <body>
@@ -28,12 +18,16 @@ Rules:
 - The design must feel PREMIUM, DYNAMIC, and visually striking
 - Never include text in generated images - all text is HTML/CSS
 - No external libraries except Tailwind CDN
-- Output should be the complete HTML document string`;
+- Return ONLY the HTML document as raw text
+- Do not return JSON
+- Do not return captions, notes, markdown fences, or explanations`;
 
 export async function generateHtmlLayout(
   models: LanguageModel[],
   args: {
     platform: string;
+    formatName?: string;
+    formatInstruction?: string;
     width: number;
     height: number;
     title: string;
@@ -41,16 +35,20 @@ export async function generateHtmlLayout(
     content: string;
     designTokens: string;
     userPrompt?: string;
+    systemPrompt?: string;
+    userInstructionsAppend?: string;
   },
 ): Promise<HtmlLayoutOutput> {
   const errors: Error[] = [];
 
   for (const model of models) {
     try {
-      const result = await generateObject({
+      const result = await generateText({
         model,
-        system: HTML_LAYOUT_SYSTEM_PROMPT,
-        prompt: `Generate a social post design for the platform: ${args.platform} (${args.width}x${args.height}).
+        system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
+        prompt: `Generate a social post design for the platform: ${args.platform}${args.formatName ? ` (${args.formatName})` : ""} (${args.width}x${args.height}).
+
+${args.formatInstruction ? `FORMAT-SPECIFIC CREATIVE DIRECTION:\n${args.formatInstruction}\n` : ""}
 
 Design tokens: ${args.designTokens}
 
@@ -61,14 +59,16 @@ Source Content:
 ${args.content}
 
 ${args.userPrompt ? `User specifically asked for: ${args.userPrompt}` : ""}
+${args.userInstructionsAppend ? `Additional rendering constraints:\n${args.userInstructionsAppend}` : ""}
 
 Instructions: Create a high-impact visual design using the source content. Use Tailwind classes with the provided design tokens.
 
-Return a JSON object with: generated_html, instagram_caption, twitter_caption, linkedin_caption, image_prompt, stock_search_query, use_feature_image, carousel_slides`,
-        schema: HTML_LAYOUT_SCHEMA,
+Return only one complete HTML document as raw text.`,
         temperature: 0.3,
       });
-      return result.object;
+
+      const generatedHtml = extractHtml(result.text);
+      return { generated_html: generatedHtml };
     } catch (error) {
       errors.push(error instanceof Error ? error : new Error(String(error)));
       if (!isRetryableError(error)) throw error;
@@ -76,6 +76,19 @@ Return a JSON object with: generated_html, instagram_caption, twitter_caption, l
   }
 
   throw new AggregateError(errors, "HTML layout generation failed across all providers");
+}
+
+function extractHtml(text: string): string {
+  const cleaned = text.trim().replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  if (/<!doctype html>/i.test(cleaned)) return cleaned;
+
+  const htmlStart = cleaned.search(/<html[\s>]/i);
+  const htmlEnd = cleaned.search(/<\/html>/i);
+  if (htmlStart >= 0 && htmlEnd > htmlStart) {
+    return `<!DOCTYPE html>\n${cleaned.slice(htmlStart, htmlEnd + 7).trim()}`;
+  }
+
+  return cleaned;
 }
 
 function isRetryableError(error: unknown): boolean {

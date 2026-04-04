@@ -31,11 +31,10 @@ export interface ResolvedSecurityConfig {
 }
 
 export interface Env {
-  GEMINI_API_KEY?: string;
-  GOOGLE_API_KEY?: string;
-  ANTHROPIC_API_KEY?: string;
-  OPENAI_API_KEY?: string;
-  AI_PREFERRED_PROVIDER?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_MODEL?: string;
+  CLOUDFLARE_FAST_MODEL?: string;
   AI: Ai;
   BROWSER: Fetcher;
   OUTPUT_BUCKET: R2Bucket;

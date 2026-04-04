@@ -8,9 +8,8 @@ import {
   stripHtml,
   createModelChain,
   resolveProviderConfig,
-  ensureLength,
 } from "./ai";
-import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, getDesignTokens, generateTailwindConfig, formatDesignTokensForPrompt } from "./config";
+import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, getDesignTokens, generateTailwindConfig, formatDesignTokensForPrompt, setFormat, deleteFormat, loadFormatsFromStorage, type FormatConfig } from "./config";
 import {
   HttpError,
   enforceApiAuth,
@@ -31,20 +30,8 @@ interface LlmPromptOverrides {
   maxTokens?: number;
 }
 
-interface CarouselSlide {
-  heading: string;
-  body: string;
-}
-
 interface LlmOutput {
-  instagram_caption: string;
-  twitter_caption: string;
-  linkedin_caption: string;
-  image_prompt: string;
-  stock_search_query: string;
-  use_feature_image: boolean;
   generated_html: string;
-  carousel_slides: CarouselSlide[];
 }
 
 interface GhostPost {
@@ -184,8 +171,6 @@ interface AgentExecutionContext {
   warnings: string[];
 }
 
-const FORMAT_NAMES = getFormatNames();
-const FORMAT_SET = new Set(FORMAT_NAMES);
 const DEFAULT_IMAGE_MODEL = (PIPELINE_CONFIG.generation?.image?.default_model as string) || "@cf/black-forest-labs/flux-1-schnell";
 const DEFAULT_CAROUSEL_SLIDES = (PIPELINE_CONFIG.generation?.carousel_required_slides as number) || 5;
 
@@ -208,6 +193,28 @@ const DEFAULT_AGENT_RENDER_POLICY: ResolvedAgentRenderPolicy = {
 const AGENT_APPLIED_ROLES = ["mastermind", "strategist", "copywriter", "visual_director", "render_guard"] as const;
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Initialize formats from R2 storage on first request
+let formatsInitialized = false;
+async function ensureFormatsLoaded(env: Env) {
+  if (formatsInitialized) return;
+  try {
+    const stored = await env.OUTPUT_BUCKET.get("config/formats.json");
+    if (stored) {
+      const formats = await stored.json() as Record<string, FormatConfig>;
+      loadFormatsFromStorage(formats);
+      console.log("[startup] Loaded custom formats from R2");
+    }
+  } catch (error) {
+    console.warn("[startup] Failed to load formats from R2:", error);
+  }
+  formatsInitialized = true;
+}
+
+app.use("*", async (c, next) => {
+  await ensureFormatsLoaded(c.env);
+  await next();
+});
 
 app.use("*", async (c, next) => {
   const security = resolveSecurityConfig(c.env);
@@ -242,10 +249,8 @@ app.get("/config/prompts", (c) => {
   const agentsConfig = (PIPELINE_CONFIG.generation?.agents ?? {}) as Record<string, any>;
   const prompts = (agentsConfig.prompts ?? {}) as Record<string, any>;
   return c.json({
-    copy_system_prompt: prompts.copy_system_prompt ?? [],
-    copy_user_instructions: prompts.copy_user_instructions ?? [],
-    gemini_html_generation_system_prompt: prompts.gemini_html_generation_system_prompt ?? [],
-    gemini_html_generation_user_instructions: prompts.gemini_html_generation_user_instructions ?? [],
+    html_layout_system_prompt: prompts.html_layout_system_prompt ?? [],
+    html_layout_user_instructions: prompts.html_layout_user_instructions ?? [],
     prompt_profiles: agentsConfig.prompt_profiles ?? {},
     render_policy: agentsConfig.render_policy ?? {}
   });
@@ -321,126 +326,26 @@ app.post("/generate-tokens", async (c) => {
 
   const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
   const vibe = (body.vibe as string) || "custom design system";
-  const primary = (body.primary as string) || "#3b82f6";
-  const secondary = (body.secondary as string) || "#0f172a";
-  const mode = (body.mode as string) || "ai";
+  const primaryHint = body.primaryHint as string | undefined;
+  const secondaryHint = body.secondaryHint as string | undefined;
 
-  let tokens: any;
-  if (mode === "ai") {
+  try {
     const { generateTokensAI } = await import("./lib/tokens");
-    tokens = await generateTokensAI(vibe, {
-      ANTHROPIC_API_KEY: c.env.ANTHROPIC_API_KEY,
-      OPENAI_API_KEY: c.env.OPENAI_API_KEY,
-      GOOGLE_API_KEY: c.env.GOOGLE_API_KEY || c.env.GEMINI_API_KEY,
-      AI_PREFERRED_PROVIDER: c.env.AI_PREFERRED_PROVIDER,
-    });
-  } else {
-    const { generateTokensComputational } = await import("./lib/tokens");
-    tokens = generateTokensComputational(primary, secondary, vibe);
+    const tokens = await generateTokensAI(vibe, {
+      CLOUDFLARE_API_TOKEN: c.env.CLOUDFLARE_API_TOKEN,
+      CLOUDFLARE_ACCOUNT_ID: c.env.CLOUDFLARE_ACCOUNT_ID,
+      CLOUDFLARE_MODEL: c.env.CLOUDFLARE_MODEL,
+      CLOUDFLARE_FAST_MODEL: c.env.CLOUDFLARE_FAST_MODEL,
+    }, primaryHint, secondaryHint);
+    
+    return c.json(tokens);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[generate-tokens] Error:", message);
+    return c.json({ error: message }, 500);
   }
-  return c.json(tokens);
 });
 
-app.post("/generate-demo", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate");
-
-  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
-  const tokens = body.tokens as Record<string, unknown>;
-  const demoType = (body.demoType as string) || "components";
-
-  if (!tokens) throw new HttpError(400, "tokens required");
-
-  const providerConfig = resolveProviderConfig(c.env as unknown as Record<string, string | undefined>);
-  const models = createModelChain(providerConfig);
-
-  const css = tokensToCSSFromTokens(tokens);
-  const fi = fontImportFromTokens(tokens);
-
-  const prompts: Record<string, string> = {
-    components: `Create a beautiful single-file HTML design system showcase page. Output ONLY the complete HTML document starting with <!DOCTYPE html>.
-
-${fi}
-
-Define these CSS custom properties in :root {}:
-${css}
-
-Design system vibe: ${(tokens.meta as any)?.vibeName} — ${(tokens.meta as any)?.description}
-Color mode: ${(tokens.meta as any)?.palette}
-
-Build a complete page with:
-1. Sticky nav with logo and navigation links and a CTA button styled with var(--color-primary-500) or appropriate primary color
-2. Hero section with a large headline, subheadline, and 2-3 buttons (primary, secondary, ghost styles)
-3. A 3-column feature cards grid — each card has an icon (use SVG or emoji), title, description, styled using card token values
-4. A form section with labeled inputs, a select dropdown, textarea, and submit button
-5. Badges/tags in 4-5 variants (success, warning, error, neutral, primary)
-6. A stats row with 3-4 big numbers and labels
-7. Footer with columns of links
-
-IMPORTANT: Use the CSS variables defined above for ALL colors, spacing, fonts, shadows, and radii. Make it genuinely beautiful — bold typography, strong visual hierarchy, real personality matching the vibe. The page must be fully self-contained with no external dependencies except Google Fonts.`,
-
-    landing: `Create a stunning single-file HTML landing page for a fictional brand that embodies this design system. Output ONLY the complete HTML document starting with <!DOCTYPE html>.
-
-${fi}
-
-Define these CSS custom properties in :root {}:
-${css}
-
-Design system vibe: ${(tokens.meta as any)?.vibeName} — ${(tokens.meta as any)?.description}
-Color mode: ${(tokens.meta as any)?.palette}
-
-Invent a compelling product name and concept that matches the vibe. Build a complete marketing page:
-1. Full-width hero with massive headline, subheadline, hero image (use CSS shapes/gradients as placeholder), and CTAs
-2. Social proof row (logos as text/shapes, or a testimonial strip)
-3. 3-4 feature sections with alternating image+text layouts
-4. A testimonials or quote section with pull quotes
-5. Pricing cards or final CTA section
-6. Footer with links and brand identity
-
-IMPORTANT: Use the CSS variables defined above for ALL styling. Be bold — unexpected layout choices, dramatic typography, creative use of gradients and shadows. The page must be fully self-contained. NOT a generic SaaS template.`,
-
-    poster: `Create a stunning single-file HTML graphic design piece that fills the viewport. Output ONLY the complete HTML document starting with <!DOCTYPE html>.
-
-${fi}
-
-Define these CSS custom properties in :root {}:
-${css}
-
-Design system vibe: ${(tokens.meta as any)?.vibeName} — ${(tokens.meta as any)?.description}
-Color mode: ${(tokens.meta as any)?.palette}
-
-Choose whichever format fits the vibe: magazine cover, event poster, typographic poster, editorial spread, data art, zine page, etc.
-
-Make it visually DRAMATIC:
-- Use large display typography from the font/scale tokens (var(--text-6xl), var(--text-7xl))
-- Strong geometric or abstract elements using CSS (borders, gradients, clip-path, transforms)
-- Creative use of gradient tokens as backgrounds or elements
-- Unexpected spatial composition — overlap, asymmetry, diagonal, grid-breaking
-- The personality of the vibe should be immediately obvious
-
-IMPORTANT: Use the CSS variables defined above. Fill the full viewport (100vw, 100vh). Fully self-contained. Make it something someone would actually want to print or share.`
-  };
-
-  const prompt = prompts[demoType] || prompts.components;
-
-  const { generateWithFallback } = await import("./ai/generate");
-  const html = await generateWithFallback(models, {
-    prompt,
-    temperature: 0.7,
-    maxTokens: 8000,
-  });
-
-  let clean = html.trim();
-  if (clean.startsWith("```")) {
-    clean = clean.replace(/^```html?\s*/, "").replace(/```\s*$/, "").trim();
-  }
-  if (!clean.toLowerCase().startsWith("<!doctype")) {
-    const idx = clean.toLowerCase().indexOf("<!doctype");
-    if (idx > -1) clean = clean.substring(idx);
-  }
-
-  return c.json({ html: clean });
-});
 
 app.get("/config", (c) => {
   return c.json({
@@ -457,6 +362,96 @@ app.get("/config", (c) => {
     features: PIPELINE_CONFIG.features ?? {},
     storage: PIPELINE_CONFIG.storage ?? {},
   });
+});
+
+app.get("/tokens", async (c) => {
+  try {
+    const stored = await c.env.OUTPUT_BUCKET.get("config/design-tokens.json");
+    if (!stored) {
+      return c.json(null);
+    }
+    const tokens = await stored.json();
+    return c.json(tokens);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[get-tokens] Error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.put("/tokens", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+
+  try {
+    const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+    await c.env.OUTPUT_BUCKET.put("config/design-tokens.json", JSON.stringify(body), {
+      httpMetadata: { contentType: "application/json" }
+    });
+    return c.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[put-tokens] Error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.get("/formats", (c) => {
+  return c.json(getAllFormats());
+});
+
+app.put("/formats/:id", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+
+  try {
+    const id = c.req.param("id");
+    const body = await readJsonBody<FormatConfig>(c.req.raw, security.request_limits.max_json_body_bytes);
+    
+    if (!body.width || !body.height) {
+      return c.json({ error: "width and height are required" }, 400);
+    }
+    
+    setFormat(id, body);
+    
+    // Persist to R2
+    const allFormats = getAllFormats();
+    await c.env.OUTPUT_BUCKET.put("config/formats.json", JSON.stringify(allFormats), {
+      httpMetadata: { contentType: "application/json" }
+    });
+    
+    return c.json({ ok: true, format: body });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[put-format] Error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+app.delete("/formats/:id", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+
+  try {
+    const id = c.req.param("id");
+    const deleted = deleteFormat(id);
+    
+    if (!deleted) {
+      return c.json({ error: "Format not found" }, 404);
+    }
+    
+    // Persist to R2
+    const allFormats = getAllFormats();
+    await c.env.OUTPUT_BUCKET.put("config/formats.json", JSON.stringify(allFormats), {
+      httpMetadata: { contentType: "application/json" }
+    });
+    
+    return c.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[delete-format] Error:", message);
+    return c.json({ error: message }, 500);
+  }
 });
 
 app.post("/generate", async (c) => {
@@ -549,7 +544,7 @@ function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentE
   };
 
   const copySystemPrompt = mergePromptField(
-    agentPrompts?.copy_system_prompt as string[] | string | undefined,
+    agentPrompts?.html_layout_system_prompt as string[] | string | undefined,
     [...promptProfile.mastermind, ...promptProfile.copywriter]
   );
 
@@ -739,6 +734,8 @@ async function runHtmlLayoutAgent(
   env: Env,
   post: GhostPost,
   platform: string,
+  formatName: string | undefined,
+  formatInstruction: string | undefined,
   width: number,
   height: number,
   userPrompt?: string,
@@ -749,12 +746,12 @@ async function runHtmlLayoutAgent(
 
   const content = post.plaintext || post.html || "";
   const designTokens = formatDesignTokensForPrompt();
-  const systemPrompt = [
-    ...(Array.isArray(overrides?.systemPrompt) ? overrides.systemPrompt : overrides?.systemPrompt ? [overrides.systemPrompt] : []),
-  ].join("\n");
+  const systemPrompt = [...(Array.isArray(overrides?.systemPrompt) ? overrides.systemPrompt : overrides?.systemPrompt ? [overrides.systemPrompt] : [])].join("\n");
 
   const result = await generateHtmlLayout(models, {
     platform,
+    formatName,
+    formatInstruction,
     width,
     height,
     title: post.title,
@@ -763,49 +760,15 @@ async function runHtmlLayoutAgent(
     designTokens,
     userPrompt: [
       userPrompt ? `User specifically asked for: ${userPrompt}` : "",
-      overrides?.userInstructionsAppend || "",
+      overrides?.userInstructionsAppend || ""
     ].filter(Boolean).join("\n"),
+    systemPrompt,
+    userInstructionsAppend: overrides?.userInstructionsAppend,
   });
 
-  const limits = PIPELINE_CONFIG.generation.limits;
-  const fallbackText = normalizeSourceContent(post.custom_excerpt || post.excerpt || post.plaintext || "") || post.title;
-  const imagePromptFallback = ((PIPELINE_CONFIG.generation.image as any).prompt_fallback || "<title>, modern editorial photo, clean composition, natural lighting, no text overlay").replace("<title>", post.title);
-
   return {
-    instagram_caption: normalizeCaptionText(result.instagram_caption, post.title, limits.instagram_caption_max_chars, fallbackText),
-    twitter_caption: normalizeCaptionText(result.twitter_caption, post.title, limits.twitter_caption_max_chars, fallbackText),
-    linkedin_caption: normalizeCaptionText(result.linkedin_caption, post.title, limits.linkedin_caption_max_chars, fallbackText),
-    image_prompt: ensureLength(result.image_prompt, limits.image_prompt_max_chars, imagePromptFallback),
-    stock_search_query: result.stock_search_query || post.title.replace(/[^a-zA-Z0-9\s]/g, " ").slice(0, 100),
-    use_feature_image: Boolean(post.feature_image) && Boolean(result.use_feature_image),
     generated_html: result.generated_html,
-    carousel_slides: result.carousel_slides || [],
   };
-}
-
-function normalizeCaptionText(rawText: string, title: string, maxChars: number, fallbackText: string): string {
-  const cleaned = removeTitlePrefix(normalizeSourceContent(rawText), title);
-  const fallback = removeTitlePrefix(normalizeSourceContent(fallbackText), title) || normalizeSourceContent(title);
-  const source = cleaned || fallback || title;
-  return ensureLength(source, maxChars, fallback || title);
-}
-
-function removeTitlePrefix(value: string, title: string): string {
-  if (!value) return "";
-  const safeTitle = normalizeSourceContent(title);
-  if (!safeTitle) return value.trim();
-  const titlePattern = new RegExp(`^${escapeRegExp(safeTitle)}(?:\\s*[:\\-–—|]\\s*|\\s+)`, "i");
-  const stripped = value.replace(titlePattern, "").trim();
-  if (stripped && canonicalText(value).startsWith(canonicalText(safeTitle))) return stripped;
-  return value.trim();
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function canonicalText(value: string): string {
-  return value.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
 }
 
 // ==================== PIPELINE ====================
@@ -847,7 +810,17 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       const dimensions = getFormatConfig(format);
       if (!dimensions) continue;
 
-      const llmOutput = await runHtmlLayoutAgent(env, post, format, dimensions.width, dimensions.height, variantPrompt, agentContext.copyOverrides);
+      const llmOutput = await runHtmlLayoutAgent(
+        env,
+        post,
+        format,
+        dimensions.name,
+        dimensions.aiInstruction,
+        dimensions.width,
+        dimensions.height,
+        variantPrompt,
+        agentContext.copyOverrides,
+      );
 
       const launchOptions = { keep_alive: (PIPELINE_CONFIG.runtime?.browser_keep_alive_ms as number) ?? 60000 };
       const browser = typeof process !== "undefined"
@@ -876,7 +849,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
     variants.push({
       index: index + 1,
       image_source: imageSource,
-      llm_output: variants[0]?.llm_output || { instagram_caption: "", twitter_caption: "", linkedin_caption: "", hashtags: [], image_prompt: "", stock_search_query: "", use_feature_image: false, generated_html: "", carousel_slides: [] },
+      llm_output: variants[0]?.llm_output || { generated_html: "" },
       assets: formatAssets
     });
   }
@@ -1001,10 +974,12 @@ function resolveBatchStorageOptions(storage: StorageOptions | undefined): Storag
 }
 
 function resolveOutputPlan(output: OutputOptions | undefined): { formats: Set<string>; carouselSlides: number; postCount: number } {
-  const requestedFormats = output?.formats && output.formats.length > 0 ? output.formats : FORMAT_NAMES;
+  const formatNames = getFormatNames();
+  const formatSet = new Set(formatNames);
+  const requestedFormats = output?.formats && output.formats.length > 0 ? output.formats : formatNames;
   const normalizedFormats = new Set<string>();
   for (const format of requestedFormats) {
-    if (FORMAT_SET.has(format)) normalizedFormats.add(format);
+    if (formatSet.has(format)) normalizedFormats.add(format);
   }
   if (normalizedFormats.size === 0) throw new HttpError(400, "output.formats must include at least one supported format");
 
@@ -1313,11 +1288,12 @@ function parseOutputOptions(input: unknown): OutputOptions | undefined {
   let formats: string[] | undefined;
   if (formatsRaw !== undefined) {
     if (!Array.isArray(formatsRaw)) throw new HttpError(400, "output.formats must be an array");
+    const formatSet = new Set(getFormatNames());
     const unique = new Set<string>();
     for (const [index, value] of (formatsRaw as unknown[]).entries()) {
       const item = optionalString(value, `output.formats[${index}]`, 40);
       if (!item) continue;
-      if (!FORMAT_SET.has(item)) throw new HttpError(400, `Unsupported output format: ${item}`);
+      if (!formatSet.has(item)) throw new HttpError(400, `Unsupported output format: ${item}`);
       unique.add(item);
     }
     formats = [...unique];

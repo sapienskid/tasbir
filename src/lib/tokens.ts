@@ -3,10 +3,43 @@ import { generateDesignTokens, type DesignTokens as AIDesignTokens } from "../ai
 
 export interface DesignTokens {
   colors: {
-    primary: Record<string, string>;
-    secondary: Record<string, string>;
+    primary: {
+      "50": string;
+      "100": string;
+      "200": string;
+      "300": string;
+      "400": string;
+      "500": string;
+      "600": string;
+      "700": string;
+      "800": string;
+      "900": string;
+    };
+    secondary: {
+      "50": string;
+      "100": string;
+      "200": string;
+      "300": string;
+      "400": string;
+      "500": string;
+      "600": string;
+      "700": string;
+      "800": string;
+      "900": string;
+    };
     accent: { light: string; base: string; dark: string };
-    neutral: Record<string, string>;
+    neutral: {
+      "50": string;
+      "100": string;
+      "200": string;
+      "300": string;
+      "400": string;
+      "500": string;
+      "600": string;
+      "700": string;
+      "800": string;
+      "900": string;
+    };
     semantic: { success: string; warning: string; error: string; info: string };
     surface: { base: string; subtle: string; elevated: string; overlay: string };
     text: { primary: string; secondary: string; muted: string; inverse: string; accent: string };
@@ -15,28 +48,127 @@ export interface DesignTokens {
     fontSans: string;
     fontSerif: string;
     fontMono: string;
-    scale: Record<string, number>;
-    weights: Record<string, number>;
-    tracking: Record<string, string>;
-    leading: Record<string, number>;
+    scale: {
+      xs: number;
+      sm: number;
+      base: number;
+      lg: number;
+      xl: number;
+      "2xl": number;
+      "3xl": number;
+      "4xl": number;
+      "5xl": number;
+      "6xl": number;
+      "7xl": number;
+    };
+    weights: {
+      light: number;
+      regular: number;
+      medium: number;
+      semibold: number;
+      bold: number;
+      black: number;
+    };
+    tracking: {
+      tight: string;
+      normal: string;
+      wide: string;
+      wider: string;
+      widest: string;
+    };
+    leading: {
+      tight: number;
+      snug: number;
+      normal: number;
+      relaxed: number;
+      loose: number;
+    };
   };
   spacing: { base: number; scale: number[] };
   border: {
-    width: Record<string, string>;
-    radius: Record<string, string>;
+    width: {
+      hairline: string;
+      thin: string;
+      normal: string;
+      medium: string;
+      thick: string;
+    };
+    radius: {
+      none: string;
+      xs: string;
+      sm: string;
+      md: string;
+      lg: string;
+      xl: string;
+      "2xl": string;
+      "3xl": string;
+      full: string;
+    };
   };
-  shadow: Record<string, string>;
-  gradient: Record<string, string>;
+  shadow: {
+    xs: string;
+    sm: string;
+    md: string;
+    lg: string;
+    xl: string;
+    inner: string;
+  };
+  gradient: {
+    primary: string;
+    hero: string;
+    subtle: string;
+    surface: string;
+  };
   motion: {
-    duration: Record<string, string>;
-    easing: Record<string, string>;
+    duration: {
+      instant: string;
+      fast: string;
+      normal: string;
+      slow: string;
+      slower: string;
+    };
+    easing: {
+      default: string;
+      in: string;
+      out: string;
+      bounce: string;
+    };
   };
   component: {
-    button: Record<string, string | number>;
-    card: Record<string, string | number>;
-    input: Record<string, string | number>;
-    badge: Record<string, string | number>;
-    nav: Record<string, string | number>;
+    button: {
+      height: string | number;
+      heightSm: string | number;
+      heightLg: string | number;
+      paddingX: string | number;
+      radius: string | number;
+      fontWeight: string | number;
+      fontSize: string | number;
+    };
+    card: {
+      padding: string | number;
+      paddingLg: string | number;
+      radius: string | number;
+      shadow: string | number;
+      border: string | number;
+    };
+    input: {
+      height: string | number;
+      paddingX: string | number;
+      paddingY: string | number;
+      radius: string | number;
+      borderWidth: string | number;
+    };
+    badge: {
+      height: string | number;
+      paddingX: string | number;
+      radius: string | number;
+      fontSize: string | number;
+      fontWeight: string | number;
+    };
+    nav: {
+      height: string | number;
+      paddingX: string | number;
+    };
   };
   meta: {
     vibeName: string;
@@ -46,10 +178,23 @@ export interface DesignTokens {
   };
 }
 
-export async function generateTokensAI(vibe: string, env: Record<string, string | undefined>): Promise<DesignTokens> {
+export async function generateTokensAI(
+  vibe: string, 
+  env: Record<string, string | undefined>,
+  primaryHint?: string,
+  secondaryHint?: string
+): Promise<DesignTokens> {
   const providerConfig = resolveProviderConfig(env);
   const models = createModelChain(providerConfig);
-  const result = await generateDesignTokens(models, vibe);
+  
+  let enhancedVibe = vibe;
+  if (primaryHint || secondaryHint) {
+    enhancedVibe = `${vibe}\n\nCOLOR REQUIREMENTS (you MUST use these exact colors as the base for your scales):\n`;
+    if (primaryHint) enhancedVibe += `- Primary color 500 level MUST BE EXACTLY: ${primaryHint}\n`;
+    if (secondaryHint) enhancedVibe += `- Secondary color 500 level MUST BE EXACTLY: ${secondaryHint}\n`;
+  }
+  
+  const result = await generateDesignTokens(models, enhancedVibe);
   return result as DesignTokens;
 }
 
@@ -82,16 +227,35 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${f(0)}${f(8)}${f(4)}`;
 }
 
-function generateScale(base: string, isDark: boolean): Record<string, string> {
+function generateScale(base: string, isDark: boolean): {
+  "50": string;
+  "100": string;
+  "200": string;
+  "300": string;
+  "400": string;
+  "500": string;
+  "600": string;
+  "700": string;
+  "800": string;
+  "900": string;
+} {
   const { h, s, l } = hexToHSL(base);
   const steps = isDark
     ? [97, 90, 80, 70, 55, 40, 28, 18, 10, 5]
     : [5, 10, 18, 28, 40, 55, 70, 80, 90, 97];
-  const result: Record<string, string> = {};
-  ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900'].forEach((key, i) => {
-    result[key] = hslToHex(h, Math.max(s - 10, 5), steps[i]);
-  });
-  return result;
+  
+  return {
+    "50": hslToHex(h, Math.max(s - 10, 5), steps[0]),
+    "100": hslToHex(h, Math.max(s - 10, 5), steps[1]),
+    "200": hslToHex(h, Math.max(s - 10, 5), steps[2]),
+    "300": hslToHex(h, Math.max(s - 10, 5), steps[3]),
+    "400": hslToHex(h, Math.max(s - 10, 5), steps[4]),
+    "500": hslToHex(h, Math.max(s - 10, 5), steps[5]),
+    "600": hslToHex(h, Math.max(s - 10, 5), steps[6]),
+    "700": hslToHex(h, Math.max(s - 10, 5), steps[7]),
+    "800": hslToHex(h, Math.max(s - 10, 5), steps[8]),
+    "900": hslToHex(h, Math.max(s - 10, 5), steps[9]),
+  };
 }
 
 // Generate semantic color that harmonizes with the primary hue

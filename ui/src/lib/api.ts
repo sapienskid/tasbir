@@ -9,8 +9,8 @@ export interface DesignTokens {
 export interface FormatConfig {
   width: number;
   height: number;
-  caption_source: string;
-  hashtag_count: number;
+  name?: string;
+  aiInstruction?: string;
 }
 
 export interface GenerationResult {
@@ -20,13 +20,7 @@ export interface GenerationResult {
   requested_formats: string[];
   image_source: { source: string; imageUrl: string };
   llm_output: {
-    instagram_caption: string;
-    twitter_caption: string;
-    linkedin_caption: string;
-    hashtags: string[];
-    image_prompt: string;
     generated_html: string;
-    carousel_slides: Array<{ heading: string; body: string }>;
   };
   assets: Record<string, { format: string; key: string; url: string | null } | null>;
 }
@@ -63,14 +57,34 @@ export const api = {
   getConfig: () => request<any>("/config"),
   getDesignTokens: () => request<{ tokens: DesignTokens; tailwindConfig: string }>("/config/design-tokens"),
   getPrompts: () => request<{
-    copy_system_prompt: string[];
-    copy_user_instructions: string[];
-    gemini_html_generation_system_prompt: string[];
-    gemini_html_generation_user_instructions: string[];
+    html_layout_system_prompt: string[];
+    html_layout_user_instructions: string[];
     prompt_profiles: Record<string, any>;
     render_policy: Record<string, any>;
   }>("/config/prompts"),
   getFormats: () => request<{ formats: Record<string, FormatConfig> }>("/config/formats"),
+  
+  // Token management
+  getSavedTokens: () => request<any>("/tokens"),
+  saveTokens: (tokens: any) => request<{ ok: boolean }>("/tokens", {
+    method: "PUT",
+    body: JSON.stringify(tokens),
+  }),
+  generateTokens: (body: { vibe?: string; primaryHint?: string; secondaryHint?: string }) => request<any>("/generate-tokens", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
+  
+  // Format management
+  getAllFormats: () => request<Record<string, FormatConfig>>("/formats"),
+  saveFormat: (id: string, format: FormatConfig) => request<{ ok: boolean; format: FormatConfig }>(`/formats/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(format),
+  }),
+  deleteFormat: (id: string) => request<{ ok: boolean }>(`/formats/${id}`, {
+    method: "DELETE",
+  }),
+  
   generateFromContent: (body: {
     title: string;
     content: string;
@@ -81,14 +95,6 @@ export const api = {
     image?: { mode?: string };
     agent?: { mode?: string; promptProfile?: string };
   }) => request<GenerationResult>("/generate-from-content", {
-    method: "POST",
-    body: JSON.stringify(body),
-  }),
-  generateTokens: (body: { vibe?: string; primary?: string; secondary?: string; mode?: string }) => request<any>("/generate-tokens", {
-    method: "POST",
-    body: JSON.stringify(body),
-  }),
-  generateDemo: (body: { tokens: any; demoType: string }) => request<{ html: string }>("/generate-demo", {
     method: "POST",
     body: JSON.stringify(body),
   }),

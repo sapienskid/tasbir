@@ -1,6 +1,8 @@
 export interface FormatConfig {
   width: number;
   height: number;
+  name?: string;
+  aiInstruction?: string;
 }
 
 export interface PipelineConfig {
@@ -19,10 +21,8 @@ export interface PipelineConfig {
         copy_max_tokens: number;
       };
       prompts: {
-        copy_system_prompt: string[];
-        copy_user_instructions: string[];
-        gemini_html_generation_system_prompt: string[];
-        gemini_html_generation_user_instructions: string[];
+        html_layout_system_prompt: string[];
+        html_layout_user_instructions: string[];
       };
       render_policy: {
         allow_markdown: boolean;
@@ -62,12 +62,12 @@ export interface PipelineConfig {
 
 export const DEFAULT_CONFIG: PipelineConfig = {
   formats: {
-    "instagram-portrait": { width: 1080, height: 1350 },
-    "instagram-square": { width: 1080, height: 1080 },
-    "instagram-story": { width: 1080, height: 1920 },
-    "carousel-post": { width: 1080, height: 1350 },
-    "twitter-card": { width: 1200, height: 628 },
-    "linkedin-post": { width: 1200, height: 627 },
+    "instagram-portrait": { width: 1080, height: 1350, name: "Instagram Portrait", aiInstruction: "Vertical layout optimized for mobile feed. Bold headline at top, supporting text below. High visual impact with strong typography hierarchy." },
+    "instagram-square": { width: 1080, height: 1080, name: "Instagram Square", aiInstruction: "Square format for Instagram feed. Centered composition, balanced whitespace. Works well for quotes and key insights." },
+    "instagram-story": { width: 1080, height: 1920, name: "Instagram Story", aiInstruction: "Full-screen vertical story format. Top and bottom safe zones for UI. Immersive, attention-grabbing design with minimal text." },
+    "carousel-post": { width: 1080, height: 1350, name: "Carousel Post", aiInstruction: "Swipeable carousel slide. Each slide should be self-contained but part of a visual series. Consistent styling across slides." },
+    "twitter-card": { width: 1200, height: 628, name: "Twitter/X Card", aiInstruction: "Horizontal preview card for Twitter/X. Headline-focused with clear value proposition. Optimized for timeline visibility." },
+    "linkedin-post": { width: 1200, height: 627, name: "LinkedIn Post", aiInstruction: "Professional horizontal format. Clean, corporate-friendly design. Emphasize credibility and thought leadership." },
   },
   generation: {
     carousel_required_slides: 5,
@@ -83,33 +83,9 @@ export const DEFAULT_CONFIG: PipelineConfig = {
         copy_max_tokens: 2200,
       },
       prompts: {
-        copy_system_prompt: [
-          "You are an elite multi-platform marketing strategist and conversion copywriter.",
-          "Produce precise, persuasive, and platform-native content from the provided source context.",
-          "Do not invent facts not present in source content.",
-          "Output strict JSON only and satisfy all schema requirements.",
-        ],
-        copy_user_instructions: [
-          "Create platform-ready campaign copy from the source content.",
-          "Primary goal: convert attention into clear intent (read, save, share, click, follow).",
-          "Constraints:",
-          "- Keep one coherent campaign angle across platforms, adapted to each platform's tone.",
-          "- instagram_caption: emotionally engaging hook + practical value + soft CTA, max 600 characters.",
-          "- twitter_caption: concise high-signal insight + payoff + direct CTA, max 280 characters.",
-          "- linkedin_caption: problem -> insight -> action narrative for professionals, max 900 characters.",
-          "- Captions must be plain text; no markdown headings, no list markers, no leading #.",
-          "- Keep language specific and credible; avoid vague hype.",
-          "- carousel_slides: exactly 5 slides with narrative flow.",
-          "- Carousel flow: slide 1 hook/intro, middle slides distinct support, final slide concrete next step.",
-          "- Each carousel slide must introduce new information.",
-          "- image_prompt: background-only art direction, no text, no UI, no logos.",
-          "- use_feature_image: true only when source feature image fits the campaign.",
-          "- stock_search_query: focused keyword phrase (<= 10 words), no metadata.",
-          "Output JSON only.",
-        ],
-        gemini_html_generation_system_prompt: [
+        html_layout_system_prompt: [
           "You are a master of Swiss-style layout design and modern web development.",
-          "Your task is to generate ONE COMPLETE, SELF-CONTAINED HTML document for a social media post.",
+          "Your task is to generate ONE COMPLETE, SELF-CONTAINED HTML document for screenshot rendering.",
           "The HTML must be a full standalone document with <!DOCTYPE html>, <html>, <head>, and <body>.",
           "Use Tailwind CSS via CDN.",
           "Configure Tailwind with the provided design tokens.",
@@ -121,15 +97,16 @@ export const DEFAULT_CONFIG: PipelineConfig = {
           "- The design must feel PREMIUM, DYNAMIC, and visually striking.",
           "- Never include text in generated images — all text is HTML/CSS.",
           "- No external libraries except Tailwind CDN.",
-          "- Output should be the complete HTML document string.",
+          "- Return only raw HTML output.",
+          "- Never return JSON or captions.",
         ],
-        gemini_html_generation_user_instructions: [
+        html_layout_user_instructions: [
           "Generate a social post design for the platform: <platform> (<width>x<height>).",
           "Design tokens: <design_tokens>",
           "Source Content Title: <title>",
           "Source Content Excerpt: <excerpt>",
           "Instructions: Create a high-impact visual design using the source content. Use Tailwind classes with the provided design tokens.",
-          "Return a JSON object with: { 'generated_html': '...', 'instagram_caption': '...', 'twitter_caption': '...', 'linkedin_caption': '...', 'image_prompt': '...' }",
+          "Return exactly one full HTML document string and nothing else.",
         ],
       },
       render_policy: {
@@ -219,18 +196,42 @@ export const DEFAULT_CONFIG: PipelineConfig = {
   },
 };
 
+// Runtime state for custom formats (merged with defaults)
+let runtimeFormats: Record<string, FormatConfig> = { ...DEFAULT_CONFIG.formats };
+
 export const PIPELINE_CONFIG = DEFAULT_CONFIG;
 
 export function getFormatConfig(name: string): FormatConfig | null {
-  return DEFAULT_CONFIG.formats[name] ?? null;
+  return runtimeFormats[name] ?? null;
 }
 
 export function getAllFormats(): Record<string, FormatConfig> {
-  return { ...DEFAULT_CONFIG.formats };
+  return { ...runtimeFormats };
 }
 
 export function getFormatNames(): string[] {
-  return Object.keys(DEFAULT_CONFIG.formats);
+  return Object.keys(runtimeFormats);
+}
+
+export function setFormat(id: string, config: FormatConfig): void {
+  runtimeFormats[id] = config;
+}
+
+export function deleteFormat(id: string): boolean {
+  if (runtimeFormats[id]) {
+    delete runtimeFormats[id];
+    return true;
+  }
+  return false;
+}
+
+export function resetFormats(): void {
+  runtimeFormats = { ...DEFAULT_CONFIG.formats };
+}
+
+export function loadFormatsFromStorage(formats: Record<string, FormatConfig>): void {
+  const entries = Object.entries(formats || {});
+  runtimeFormats = entries.length > 0 ? { ...formats } : { ...DEFAULT_CONFIG.formats };
 }
 
 export function getDesignTokens() {

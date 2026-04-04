@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
-import { generateTokensComputational, tokensToCSS, tokensToPrompt, type DesignTokens } from '@/lib/tokens'
+import { tokensToCSS, type DesignTokens } from '@/lib/tokens'
+import { generateComponentsSkeleton, generateLandingPageSkeleton, generatePosterSkeleton } from '@/components/skeletons'
 
 const PRESETS = [
   { id: 'luxury', l: 'Luxury' },
@@ -28,24 +29,99 @@ const VIBE_PRESETS: Record<string, { primary: string; secondary: string; vibe: s
   maximalist: { primary: '#e11d48', secondary: '#7c3aed', vibe: 'maximalist bold saturated' }
 }
 
+const TOKENS_LOCAL_KEY = 'tasbir:tokens'
+
+function hexToHSL(hex: string): { h: number; s: number; l: number } {
+  const normalized = hex.replace('#', '')
+  if (normalized.length !== 6) return { h: 0, s: 0, l: 50 }
+  const r = parseInt(normalized.slice(0, 2), 16) / 255
+  const g = parseInt(normalized.slice(2, 4), 16) / 255
+  const b = parseInt(normalized.slice(4, 6), 16) / 255
+  const max = Math.max(r, g, b)
+  const min = Math.min(r, g, b)
+  let h = 0
+  let s = 0
+  const l = (max + min) / 2
+
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    switch (max) {
+      case r:
+        h = ((g - b) / d + (g < b ? 6 : 0)) / 6
+        break
+      case g:
+        h = ((b - r) / d + 2) / 6
+        break
+      default:
+        h = ((r - g) / d + 4) / 6
+        break
+    }
+  }
+
+  return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) }
+}
+
+function hslToHex(h: number, s: number, l: number): string {
+  const sat = s / 100
+  const light = l / 100
+  const a = sat * Math.min(light, 1 - light)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    const color = light - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+    return Math.round(255 * color).toString(16).padStart(2, '0')
+  }
+  return `#${f(0)}${f(8)}${f(4)}`
+}
+
+function generateColorScale(baseHex: string): Record<string, string> {
+  const steps = ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900']
+  const lightnessMap = [95, 88, 78, 68, 58, 50, 42, 34, 24, 14]
+  const { h, s } = hexToHSL(baseHex)
+  const scale: Record<string, string> = {}
+  steps.forEach((step, i) => {
+    const satAdjust = step === '50' || step === '100' ? -12 : step === '800' || step === '900' ? 8 : 0
+    scale[step] = hslToHex(h, Math.max(8, Math.min(96, s + satAdjust)), lightnessMap[i])
+  })
+  scale['500'] = baseHex
+  return scale
+}
+
+function resolveShadowPreviewValue(input: unknown, key: string): string {
+  const fallback: Record<string, string> = {
+    xs: '0 1px 2px rgba(2, 6, 23, 0.18)',
+    sm: '0 2px 6px rgba(2, 6, 23, 0.2)',
+    md: '0 8px 16px rgba(2, 6, 23, 0.22)',
+    lg: '0 14px 28px rgba(2, 6, 23, 0.24)',
+    xl: '0 24px 44px rgba(2, 6, 23, 0.28)',
+    inner: 'inset 0 2px 6px rgba(2, 6, 23, 0.2)'
+  }
+
+  const fail = fallback[key] || fallback.md
+  if (typeof input !== 'string') return fail
+  const value = input.trim()
+  if (!value) return fail
+  if (value === 'none') return 'none'
+  if (fallback[value.toLowerCase()]) return fallback[value.toLowerCase()]
+
+  const hasLength = /\d+px/.test(value)
+  const hasColor = /(rgba?\(|hsla?\(|#[0-9a-f]{3,8})/i.test(value)
+  return hasLength && hasColor ? value : fail
+}
+
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [activeTab, setActiveTab] = useState<'tokens' | 'studio' | 'config'>('tokens')
   const [tokens, setTokens] = useState<DesignTokens | null>(null)
   const [generating, setGenerating] = useState(false)
-  const [genMode, setGenMode] = useState<'ai' | 'compute'>('ai')
   const [vibeInput, setVibeInput] = useState('')
   const [activePreset, setActivePreset] = useState<string | null>(null)
-  const [primaryColor, setPrimaryColor] = useState('#3b82f6')
-  const [secondaryColor, setSecondaryColor] = useState('#0f172a')
+  const [primaryColorHint, setPrimaryColorHint] = useState('')
+  const [secondaryColorHint, setSecondaryColorHint] = useState('')
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ color: true, typography: true, spacing: true, shadow: true, border: true, gradient: true, motion: true, component: true })
-  const [exportTab, setExportTab] = useState<'css' | 'json' | 'prompt'>('css')
-  const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewTab, setPreviewTab] = useState<'components' | 'landing' | 'poster'>('components')
   const [_serverConfig, setServerConfig] = useState<any>(null)
-  const [demoHtml, setDemoHtml] = useState<Record<string, string>>({})
-  const [demoGenerating, setDemoGenerating] = useState(false)
   const [configLoading, setConfigLoading] = useState(false)
   const [editingConfig, setEditingConfig] = useState<any>(null)
   const [configSaved, setConfigSaved] = useState(false)
@@ -57,7 +133,41 @@ export default function App() {
   const [studioSlug, setStudioSlug] = useState('')
   const [studioFormats, setStudioFormats] = useState(['instagram-portrait', 'twitter-card'])
 
-  useEffect(() => { loadConfig() }, [])
+  useEffect(() => {
+    loadConfig()
+    loadSavedTokens()
+  }, [])
+
+  useEffect(() => {
+    if (!tokens) return
+    try {
+      localStorage.setItem(TOKENS_LOCAL_KEY, JSON.stringify(tokens))
+    } catch {
+      // ignore
+    }
+  }, [tokens])
+
+  async function loadSavedTokens() {
+    try {
+      const localRaw = localStorage.getItem(TOKENS_LOCAL_KEY)
+      if (localRaw) {
+        const parsed = JSON.parse(localRaw)
+        setTokens(parsed)
+      }
+    } catch {
+      // ignore malformed local tokens
+    }
+
+    try {
+      const saved = await api.getSavedTokens()
+      if (saved) {
+        setTokens(saved)
+        localStorage.setItem(TOKENS_LOCAL_KEY, JSON.stringify(saved))
+      }
+    } catch {
+      // ignore backend token load failures
+    }
+  }
 
   async function loadConfig() {
     setConfigLoading(true)
@@ -65,31 +175,33 @@ export default function App() {
       const cfg = await api.getConfig()
       setServerConfig(cfg)
       setEditingConfig(JSON.parse(JSON.stringify(cfg)))
+      const formatIds = Object.keys(cfg?.formats || {})
+      if (formatIds.length > 0) {
+        setStudioFormats((prev) => {
+          const valid = prev.filter((id) => formatIds.includes(id))
+          if (valid.length > 0) return valid
+          return formatIds.slice(0, Math.min(2, formatIds.length))
+        })
+      }
     } catch { /* ignore */ }
     setConfigLoading(false)
   }
 
   async function generateTokens() {
-    if (!tokens && genMode === 'ai' && !vibeInput.trim() && !activePreset) {
+    if (!vibeInput.trim() && !activePreset) {
       setError('Enter a vibe or select a preset')
-      return
-    }
-    if (genMode === 'compute' && !primaryColor) {
-      setError('Select a primary color')
       return
     }
     setGenerating(true)
     setError(null)
     try {
-      let result: DesignTokens
       const vibeLabel = activePreset ? `${PRESETS.find(p => p.id === activePreset)?.l}${vibeInput ? ' + ' + vibeInput : ''}` : vibeInput
-      if (genMode === 'ai') {
-        result = await api.generateTokens({ vibe: vibeLabel || 'custom design system', mode: 'ai' })
-      } else {
-        result = generateTokensComputational(primaryColor, secondaryColor, vibeLabel || 'computational')
-      }
-      setTokens(result)
-      setDemoHtml({})
+      const result = await api.generateTokens({ 
+        vibe: vibeLabel || 'custom design system',
+        primaryHint: primaryColorHint || undefined,
+        secondaryHint: secondaryColorHint || undefined
+      })
+      await persistTokens(result)
       setExpandedSections({ color: true, typography: true, spacing: true, shadow: true, border: true, gradient: true, motion: true, component: true })
     } catch (e: any) {
       setError(e.message || 'Token generation failed')
@@ -98,44 +210,66 @@ export default function App() {
     }
   }
 
-  async function generateDemo(type: 'components' | 'landing' | 'poster') {
-    if (!tokens) return
-    if (demoHtml[type]) return
-    setDemoGenerating(true)
-    setError(null)
-    try {
-      const res = await api.generateDemo({ tokens, demoType: type })
-      setDemoHtml(prev => ({ ...prev, [type]: res.html }))
-    } catch (e: any) {
-      setError(e.message || 'Demo generation failed')
-    } finally {
-      setDemoGenerating(false)
-    }
-  }
-
   async function handlePreviewTabChange(tab: 'components' | 'landing' | 'poster') {
     setPreviewTab(tab)
-    if (tokens && !demoHtml[tab]) {
-      await generateDemo(tab)
-    }
   }
 
   async function handleRegenDemo() {
+    // Trigger re-render by updating tokens reference
+    if (tokens) {
+      await persistTokens({ ...tokens })
+    }
+  }
+
+  async function persistTokens(nextTokens: DesignTokens) {
+    setTokens(nextTokens)
+    try {
+      localStorage.setItem(TOKENS_LOCAL_KEY, JSON.stringify(nextTokens))
+    } catch {
+      // ignore local storage failures
+    }
+    try {
+      await api.saveTokens(nextTokens)
+    } catch {
+      // ignore backend save failures
+    }
+  }
+
+  async function updateTokenColor(group: 'primary' | 'secondary', hex: string) {
     if (!tokens) return
-    setDemoHtml(prev => {
-      const next = { ...prev }
-      delete next[previewTab]
-      return next
-    })
-    await generateDemo(previewTab)
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return
+    const next: DesignTokens = {
+      ...tokens,
+      colors: {
+        ...tokens.colors,
+        [group]: generateColorScale(hex),
+      },
+    }
+    await persistTokens(next)
+  }
+
+  async function updateAccentColor(key: 'light' | 'base' | 'dark', hex: string) {
+    if (!tokens) return
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return
+    const next: DesignTokens = {
+      ...tokens,
+      colors: {
+        ...tokens.colors,
+        accent: {
+          ...tokens.colors.accent,
+          [key]: hex,
+        },
+      },
+    }
+    await persistTokens(next)
   }
 
   function applyPreset(id: string) {
     const p = VIBE_PRESETS[id]
     if (!p) return
     setActivePreset(id === activePreset ? null : id)
-    setPrimaryColor(p.primary)
-    setSecondaryColor(p.secondary)
+    setPrimaryColorHint(p.primary)
+    setSecondaryColorHint(p.secondary)
     setVibeInput(p.vibe)
   }
 
@@ -143,19 +277,11 @@ export default function App() {
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  function handleCopy() {
-    let text = ''
-    if (!tokens) return
-    if (exportTab === 'css') text = tokensToCSS(tokens)
-    else if (exportTab === 'json') text = JSON.stringify(tokens, null, 2)
-    else text = tokensToPrompt(tokens)
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
-
   function updateConfigValue(path: string[], value: any) {
     setEditingConfig((prev: any) => {
+      if (path.length === 0) {
+        return typeof value === 'function' ? value(prev) : value
+      }
       const next = JSON.parse(JSON.stringify(prev))
       let obj = next
       for (let i = 0; i < path.length - 1; i++) obj = obj[path[i]]
@@ -167,6 +293,20 @@ export default function App() {
 
   async function saveConfig() {
     setServerConfig(JSON.parse(JSON.stringify(editingConfig)))
+    try {
+      const formats = editingConfig?.formats || {}
+      const formatEntries = Object.entries(formats)
+      for (const [id, format] of formatEntries as [string, any][]) {
+        await api.saveFormat(id, {
+          width: Number(format.width),
+          height: Number(format.height),
+          name: format.name || id,
+          aiInstruction: format.aiInstruction || '',
+        })
+      }
+    } catch {
+      // ignore backend save failures
+    }
     setConfigSaved(true)
     setTimeout(() => setConfigSaved(false), 2000)
   }
@@ -198,6 +338,12 @@ export default function App() {
     setStudioFormats(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id])
   }
 
+  const availableFormats = Object.entries(editingConfig?.formats || {}).map(([id, f]: [string, any]) => ({
+    id,
+    label: f?.name || id,
+    dims: `${f?.width || 0}×${f?.height || 0}`,
+  }))
+
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#0b0b0b', color: '#e2e2e2', fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13 }}>
       {!sidebarOpen && (
@@ -207,14 +353,14 @@ export default function App() {
       )}
 
       <aside
-        className="flex flex-col border-r transition-all duration-300 ease-in-out overflow-hidden"
-        style={{ width: sidebarOpen ? 300 : 0, minWidth: sidebarOpen ? 300 : 0, maxWidth: sidebarOpen ? 300 : 0, background: '#141414', borderColor: '#252525' }}
+        className="flex flex-col border-r overflow-hidden"
+        style={{ width: sidebarOpen ? 300 : 0, background: '#141414', borderColor: '#252525', boxShadow: sidebarOpen ? '4px 0 24px rgba(0,0,0,0.4)' : 'none', transition: 'width 300ms cubic-bezier(0.4, 0, 0.2, 1), box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)' }}
       >
         <div className="flex flex-col h-full min-w-[300px]">
-          <div className="flex items-center px-4 border-b flex-shrink-0" style={{ height: 44, borderColor: '#252525' }}>
-            <span className="font-bold text-sm tracking-tight">Tasbir</span>
-            <span className="ml-2 text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 border rounded" style={{ color: '#555', borderColor: '#3d3d3d' }}>Studio</span>
-            <button onClick={() => setSidebarOpen(false)} className="ml-auto text-[#555] hover:text-white transition-colors" style={{ fontSize: 14 }}>✕</button>
+          <div className="flex items-center px-4 border-b flex-shrink-0" style={{ height: 52, borderColor: '#252525' }}>
+            <span className="font-semibold tracking-tight" style={{ fontSize: 15 }}>Tasbir</span>
+            <span className="ml-2 text-[10px] font-medium tracking-wide uppercase px-1.5 py-0.5 border rounded" style={{ color: '#777', borderColor: '#3d3d3d' }}>Studio</span>
+            <button onClick={() => setSidebarOpen(false)} className="ml-auto text-[#666] hover:text-white transition-colors" style={{ fontSize: 16 }}>✕</button>
           </div>
 
           <div className="flex border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
@@ -223,7 +369,7 @@ export default function App() {
               { id: 'studio' as const, label: 'Studio' },
               { id: 'config' as const, label: 'Config' },
             ]).map(tab => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 text-[10px] font-bold uppercase tracking-wider py-2.5 border-b-2 transition-colors ${activeTab === tab.id ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>{tab.label}</button>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-3 border-b-2 transition-all ${activeTab === tab.id ? 'text-white border-white font-semibold' : 'text-[#555] border-transparent hover:text-[#888] font-medium'}`} style={{ fontSize: 11, letterSpacing: '0.05em' }}>{tab.label}</button>
             ))}
           </div>
 
@@ -231,12 +377,13 @@ export default function App() {
             {activeTab === 'tokens' && (
               <TokensTab
                 vibeInput={vibeInput} setVibeInput={setVibeInput}
-                genMode={genMode} setGenMode={setGenMode}
                 activePreset={activePreset} applyPreset={applyPreset}
-                primaryColor={primaryColor} setPrimaryColor={setPrimaryColor}
-                secondaryColor={secondaryColor} setSecondaryColor={setSecondaryColor}
+                primaryColorHint={primaryColorHint} setPrimaryColorHint={setPrimaryColorHint}
+                secondaryColorHint={secondaryColorHint} setSecondaryColorHint={setSecondaryColorHint}
                 generating={generating} generateTokens={generateTokens}
                 tokens={tokens} expandedSections={expandedSections} toggleSection={toggleSection}
+                onUpdateTokenColor={updateTokenColor}
+                onUpdateAccentColor={updateAccentColor}
               />
             )}
             {activeTab === 'studio' && (
@@ -246,9 +393,12 @@ export default function App() {
                 content={studioContent} setContent={setStudioContent}
                 slug={studioSlug} setSlug={setStudioSlug}
                 formats={studioFormats} toggleFormat={toggleStudioFormat}
+                availableFormats={availableFormats}
                 generating={studioGenerating} onGenerate={handleStudioGenerate}
                 result={studioResult} tokens={tokens}
                 expandedSections={expandedSections} toggleSection={toggleSection}
+                onUpdateTokenColor={updateTokenColor}
+                onUpdateAccentColor={updateAccentColor}
               />
             )}
             {activeTab === 'config' && (
@@ -260,9 +410,9 @@ export default function App() {
           </div>
 
           {error && (
-            <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#252525' }}>
-              <div className="text-[9px] text-[#f43f5e]">{error}</div>
-              <button onClick={() => setError(null)} className="text-[8px] text-[#f43f5e] mt-1 underline">Dismiss</button>
+            <div className="p-3.5 border-t flex-shrink-0" style={{ borderColor: '#252525' }}>
+              <div className="text-[10px] text-[#f43f5e]">{error}</div>
+              <button onClick={() => setError(null)} className="text-[9px] text-[#f43f5e] mt-1 underline">Dismiss</button>
             </div>
           )}
         </div>
@@ -273,59 +423,32 @@ export default function App() {
           <ConfigPreview config={editingConfig} />
         ) : (
           <>
-            <div className="flex-1 flex flex-col overflow-hidden border-b min-h-0" style={{ borderColor: '#252525' }}>
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
               <div className="flex items-center border-b flex-shrink-0" style={{ borderColor: '#252525', background: '#141414' }}>
                 <button onClick={() => handlePreviewTabChange('components')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'components' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Components</button>
                 <button onClick={() => handlePreviewTabChange('landing')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'landing' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Landing Page</button>
                 <button onClick={() => handlePreviewTabChange('poster')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'poster' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Poster</button>
-                {demoHtml[previewTab] && (
-                  <button onClick={handleRegenDemo} className="ml-auto mr-3 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border transition-all border-[#313131] text-[#555] hover:border-[#3d3d3d] hover:text-[#999]">↺ Regen</button>
+                {tokens && (
+                  <button onClick={handleRegenDemo} className="ml-auto mr-3 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border transition-all border-[#313131] text-[#555] hover:border-[#3d3d3d] hover:text-[#999]">↺ Refresh</button>
                 )}
               </div>
               <div className="flex-1 overflow-auto relative min-h-0" style={{ background: '#1c1c1c' }}>
                 {tokens ? (
-                  demoHtml[previewTab] ? (
-                    <PreviewFrame html={demoHtml[previewTab]} />
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#555' }}>
-                      <div className="text-2xl opacity-25">◈</div>
-                      <div className="text-[11px] font-bold uppercase tracking-wider">Generating {previewTab}…</div>
-                    </div>
-                  )
+                  <PreviewFrame tokens={tokens} previewType={previewTab} />
                 ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#555' }}>
-                    <div className="text-2xl opacity-25">◈</div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider">No system generated</div>
-                    <div className="text-[10px]">Enter a vibe and generate</div>
-                  </div>
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
+            <div className="text-3xl opacity-25">◈</div>
+            <div className="text-[12px] font-semibold tracking-wide">No system generated</div>
+            <div className="text-[11px]" style={{ color: '#777' }}>Enter a vibe and generate</div>
+          </div>
                 )}
-                {(generating || demoGenerating) && (
+                {generating && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10" style={{ background: '#0b0b0b' }}>
                     <div className="w-7 h-7 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} />
-                    <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#555' }}>{generating ? 'Building token system…' : `Generating ${previewTab}…`}</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#555' }}>Building token system…</div>
                   </div>
                 )}
               </div>
-            </div>
-
-            <div className="h-48 flex flex-col flex-shrink-0" style={{ background: '#141414' }}>
-              <div className="flex items-center border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
-                {(['css', 'json', 'prompt'] as const).map(tab => (
-                  <button key={tab} onClick={() => setExportTab(tab)} className={`text-[9px] font-bold uppercase tracking-wider px-3 py-2 transition-colors ${exportTab === tab ? 'text-white' : 'text-[#555] hover:text-[#999]'}`}>
-                    {tab === 'css' ? 'CSS Vars' : tab === 'json' ? 'W3C JSON' : 'AI Prompt'}
-                  </button>
-                ))}
-                <button onClick={handleCopy} className={`ml-auto mr-3 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border transition-all ${copied ? 'border-[#22c55e] text-[#22c55e]' : 'border-[#313131] text-[#555] hover:border-white hover:text-white'}`}>
-                  {copied ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-              <pre className="flex-1 overflow-auto p-3 text-[9px] font-mono leading-relaxed whitespace-pre-wrap break-all" style={{ color: '#555', background: '#0b0b0b' }}>
-                {tokens
-                  ? exportTab === 'css' ? tokensToCSS(tokens)
-                  : exportTab === 'json' ? JSON.stringify(tokens, null, 2)
-                  : tokensToPrompt(tokens)
-                  : '/* Generate a design system to see exports */'}
-              </pre>
             </div>
           </>
         )}
@@ -336,47 +459,46 @@ export default function App() {
 
 /* ── Tokens Tab ── */
 
-function TokensTab({ vibeInput, setVibeInput, genMode, setGenMode, activePreset, applyPreset, primaryColor, setPrimaryColor, secondaryColor, setSecondaryColor, generating, generateTokens, tokens, expandedSections, toggleSection }: any) {
+function TokensTab({ vibeInput, setVibeInput, activePreset, applyPreset, primaryColorHint, setPrimaryColorHint, secondaryColorHint, setSecondaryColorHint, generating, generateTokens, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
   return (
     <>
-      <div className="p-3.5 border-b" style={{ borderColor: '#252525' }}>
-        <div className="text-[9px] font-bold tracking-widest uppercase mb-1.5" style={{ color: '#555' }}>Vibe</div>
-        <textarea value={vibeInput} onChange={(e: any) => setVibeInput(e.target.value)} placeholder="cold brutalist luxury…" rows={3} className="w-full rounded border resize-none outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', fontFamily: 'inherit', fontSize: 12, padding: '9px 11px', lineHeight: 1.5 }} />
-        <div className="flex gap-1.5 mt-2">
-          <button onClick={() => setGenMode('ai')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${genMode === 'ai' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>AI</button>
-          <button onClick={() => setGenMode('compute')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${genMode === 'compute' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>Compute</button>
-        </div>
-        {genMode === 'compute' && (
-          <div className="flex gap-2 mt-2">
+      <div className="p-4 border-b" style={{ borderColor: '#252525' }}>
+        <div className="text-[10px] font-semibold tracking-wide uppercase mb-2" style={{ color: '#888' }}>Vibe</div>
+        <textarea value={vibeInput} onChange={(e: any) => setVibeInput(e.target.value)} placeholder="cold brutalist luxury…" rows={3} className="w-full rounded border resize-none outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', fontFamily: 'inherit', fontSize: 13, padding: '10px 12px', lineHeight: 1.6 }} />
+        
+        <div className="mt-3">
+          <div className="text-[9px] font-semibold tracking-wide uppercase mb-2" style={{ color: '#888' }}>Color Hints (optional)</div>
+          <div className="flex gap-2">
             <div className="flex-1">
-              <div className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>Primary</div>
-              <div className="flex items-center gap-1.5">
-                <input type="color" value={primaryColor} onChange={(e: any) => setPrimaryColor(e.target.value)} className="w-6 h-6 rounded border-0 cursor-pointer" />
-                <input value={primaryColor} onChange={(e: any) => setPrimaryColor(e.target.value)} className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
+              <div className="text-[9px] font-semibold tracking-wide uppercase mb-1" style={{ color: '#888' }}>Primary</div>
+              <div className="flex items-center gap-2">
+                <input type="color" value={primaryColorHint || '#3b82f6'} onChange={(e: any) => setPrimaryColorHint(e.target.value)} className="w-7 h-7 rounded border-0 cursor-pointer" />
+                <input value={primaryColorHint} onChange={(e: any) => setPrimaryColorHint(e.target.value)} placeholder="#hex" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[11px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
               </div>
             </div>
             <div className="flex-1">
-              <div className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>Secondary</div>
-              <div className="flex items-center gap-1.5">
-                <input type="color" value={secondaryColor} onChange={(e: any) => setSecondaryColor(e.target.value)} className="w-6 h-6 rounded border-0 cursor-pointer" />
-                <input value={secondaryColor} onChange={(e: any) => setSecondaryColor(e.target.value)} className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
+              <div className="text-[9px] font-semibold tracking-wide uppercase mb-1" style={{ color: '#888' }}>Secondary</div>
+              <div className="flex items-center gap-2">
+                <input type="color" value={secondaryColorHint || '#0f172a'} onChange={(e: any) => setSecondaryColorHint(e.target.value)} className="w-7 h-7 rounded border-0 cursor-pointer" />
+                <input value={secondaryColorHint} onChange={(e: any) => setSecondaryColorHint(e.target.value)} placeholder="#hex" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[11px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
               </div>
             </div>
           </div>
-        )}
-        <button onClick={generateTokens} disabled={generating} className="w-full mt-2 py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
+        </div>
+        
+        <button onClick={generateTokens} disabled={generating} className="w-full mt-4 py-2.5 rounded font-semibold text-[12px] tracking-wide cursor-pointer transition-all disabled:opacity-25 hover:opacity-90" style={{ background: '#fff', color: '#0b0b0b' }}>
           {generating ? 'Generating…' : 'Generate System'}
         </button>
       </div>
-      <div className="flex flex-wrap gap-1 p-2.5 border-b" style={{ borderColor: '#252525' }}>
+      <div className="flex flex-wrap gap-1.5 p-3 border-b" style={{ borderColor: '#252525' }}>
         {PRESETS.map((p: any) => (
-          <button key={p.id} onClick={() => applyPreset(p.id)} className={`text-[9px] font-bold tracking-wider uppercase px-2 py-1 rounded border transition-all ${activePreset === p.id ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>{p.l}</button>
+          <button key={p.id} onClick={() => applyPreset(p.id)} className={`text-[10px] font-medium tracking-wide px-2.5 py-1.5 rounded border transition-all ${activePreset === p.id ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#666] border-[#313131] hover:text-[#999] hover:border-[#444]'}`}>{p.l}</button>
         ))}
       </div>
       <div className="overflow-y-auto">
         {tokens ? (
           <>
-            <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}><ColorExplorer colors={tokens.colors} /></TokenSection>
+            <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}><ColorExplorer colors={tokens.colors} onUpdateTokenColor={onUpdateTokenColor} onUpdateAccentColor={onUpdateAccentColor} /></TokenSection>
             <TokenSection title="Typography" expanded={!!expandedSections.typography} onToggle={() => toggleSection('typography')}><TypographyExplorer typography={tokens.typography} /></TokenSection>
             <TokenSection title="Spacing" expanded={!!expandedSections.spacing} onToggle={() => toggleSection('spacing')}><SpacingExplorer spacing={tokens.spacing} /></TokenSection>
             <TokenSection title="Shadows" expanded={!!expandedSections.shadow} onToggle={() => toggleSection('shadow')}><ShadowExplorer shadows={tokens.shadow} /></TokenSection>
@@ -395,13 +517,7 @@ function TokensTab({ vibeInput, setVibeInput, genMode, setGenMode, activePreset,
 
 /* ── Studio Tab ── */
 
-function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, generating, onGenerate, result, tokens, expandedSections, toggleSection }: any) {
-  const FORMATS = [
-    { id: 'instagram-portrait', label: 'IG Portrait', dims: '1080×1350' },
-    { id: 'instagram-square', label: 'IG Square', dims: '1080×1080' },
-    { id: 'twitter-card', label: 'Twitter', dims: '1200×628' },
-    { id: 'linkedin-post', label: 'LinkedIn', dims: '1200×627' },
-  ]
+function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, availableFormats, generating, onGenerate, result, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
 
   return (
     <>
@@ -422,7 +538,7 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
         )}
         <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Formats</div>
         <div className="flex flex-wrap gap-1">
-          {FORMATS.map((f: any) => (
+          {availableFormats.map((f: any) => (
             <button key={f.id} onClick={() => toggleFormat(f.id)} className={`text-[9px] font-bold tracking-wider px-2 py-1 rounded border transition-all ${formats.includes(f.id) ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>
               {f.label} <span style={{ color: '#3d3d3d' }}>{f.dims}</span>
             </button>
@@ -435,8 +551,7 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
           <div className="p-2.5 rounded text-[10px] font-mono" style={{ background: '#0b0b0b', color: '#999', lineHeight: 1.6 }}>
             <div>Slug: {result.slug}</div>
             <div>Formats: {result.requested_formats?.join(', ')}</div>
-            {result.llm_output?.instagram_caption && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>IG: {result.llm_output.instagram_caption}</div>}
-            {result.llm_output?.twitter_caption && <div className="mt-1">TW: {result.llm_output.twitter_caption}</div>}
+            {result.llm_output?.generated_html && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>HTML: Ready</div>}
             {result.assets && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>Assets: {Object.keys(result.assets).filter((k: string) => result.assets[k]).length}</div>}
           </div>
         )}
@@ -455,7 +570,7 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
                 <div className="text-[9px] mt-0.5" style={{ color: '#555' }}>{tokens.meta.description}</div>
               )}
             </div>
-            <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}><ColorExplorer colors={tokens.colors} /></TokenSection>
+            <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}><ColorExplorer colors={tokens.colors} onUpdateTokenColor={onUpdateTokenColor} onUpdateAccentColor={onUpdateAccentColor} /></TokenSection>
             <TokenSection title="Typography" expanded={!!expandedSections.typography} onToggle={() => toggleSection('typography')}><TypographyExplorer typography={tokens.typography} /></TokenSection>
             <TokenSection title="Spacing" expanded={!!expandedSections.spacing} onToggle={() => toggleSection('spacing')}><SpacingExplorer spacing={tokens.spacing} /></TokenSection>
             <TokenSection title="Shadows" expanded={!!expandedSections.shadow} onToggle={() => toggleSection('shadow')}><ShadowExplorer shadows={tokens.shadow} /></TokenSection>
@@ -478,6 +593,11 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
 
 function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
   const [section, setSection] = useState('formats')
+  const [newFormatId, setNewFormatId] = useState('')
+  const [newFormatName, setNewFormatName] = useState('')
+  const [newFormatWidth, setNewFormatWidth] = useState(1080)
+  const [newFormatHeight, setNewFormatHeight] = useState(1080)
+  const [newFormatInstruction, setNewFormatInstruction] = useState('')
 
   if (loading || !config) {
     return <div className="flex items-center justify-center h-32" style={{ color: '#555' }}><div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} /></div>
@@ -492,6 +612,57 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
 
   const gen = config.generation || {}
 
+  async function saveFormat(id: string, format: any) {
+    try {
+      await api.saveFormat(id, {
+        width: Number(format.width),
+        height: Number(format.height),
+        name: format.name || id,
+        aiInstruction: format.aiInstruction || ''
+      })
+    } catch {
+      // ignore; UI state still preserved locally
+    }
+  }
+
+  async function deleteFormatItem(id: string) {
+    setEditingConfigSafe((prev: any) => {
+      const next = JSON.parse(JSON.stringify(prev))
+      delete next.formats[id]
+      return next
+    })
+    try {
+      await api.deleteFormat(id)
+    } catch {
+      // ignore
+    }
+  }
+
+  function setEditingConfigSafe(updater: (prev: any) => any) {
+    onUpdate([], updater)
+  }
+
+  async function addNewFormat() {
+    const id = newFormatId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
+    if (!id || !newFormatName.trim() || !newFormatInstruction.trim()) return
+
+    const format = {
+      width: Number(newFormatWidth),
+      height: Number(newFormatHeight),
+      name: newFormatName.trim(),
+      aiInstruction: newFormatInstruction.trim(),
+    }
+
+    onUpdate(['formats', id], format)
+    await saveFormat(id, format)
+
+    setNewFormatId('')
+    setNewFormatName('')
+    setNewFormatWidth(1080)
+    setNewFormatHeight(1080)
+    setNewFormatInstruction('')
+  }
+
   return (
     <>
       <div className="flex flex-wrap gap-1 p-2.5 border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
@@ -502,19 +673,35 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
       <div className="p-3.5 space-y-3 overflow-y-auto overflow-x-hidden">
         {section === 'formats' && (
           <div className="space-y-2">
+            <div className="p-2.5 rounded space-y-2 border" style={{ background: '#111', borderColor: '#252525' }}>
+              <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#999' }}>Add New Type</div>
+              <input value={newFormatId} onChange={(e: any) => setNewFormatId(e.target.value)} placeholder="Type ID (e.g. youtube-thumb)" className="w-full bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
+              <input value={newFormatName} onChange={(e: any) => setNewFormatName(e.target.value)} placeholder="Type Name" className="w-full bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
+              <div className="flex flex-wrap gap-2">
+                <input type="number" value={newFormatWidth} onChange={(e: any) => setNewFormatWidth(Number(e.target.value) || 0)} placeholder="Width" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
+                <input type="number" value={newFormatHeight} onChange={(e: any) => setNewFormatHeight(Number(e.target.value) || 0)} placeholder="Height" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
+              </div>
+              <textarea value={newFormatInstruction} onChange={(e: any) => setNewFormatInstruction(e.target.value)} rows={3} placeholder="AI instruction for this type..." className="w-full bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none resize-y" style={{ color: '#e2e2e2' }} />
+              <button onClick={addNewFormat} className="w-full py-1.5 rounded border border-white text-white text-[10px] font-semibold uppercase tracking-wide hover:bg-white hover:text-[#0b0b0b] transition-all">Add Type</button>
+            </div>
             {Object.entries(config.formats || {}).map(([id, f]: [string, any]) => (
               <div key={id} className="p-2.5 rounded space-y-1.5" style={{ background: '#0b0b0b' }}>
-                <div className="text-[11px] font-medium">{id}</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-medium">{id}</div>
+                  <button onClick={() => deleteFormatItem(id)} className="text-[9px] px-2 py-1 rounded border border-[#f43f5e] text-[#f43f5e]">Delete</button>
+                </div>
+                <input value={f.name || ''} onChange={(e: any) => onUpdate(['formats', id, 'name'], e.target.value)} onBlur={() => saveFormat(id, config.formats[id])} placeholder="Display name" className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <div className="text-[8px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#555' }}>Width</div>
-                    <input type="number" value={f.width} onChange={(e: any) => onUpdate(['formats', id, 'width'], Number(e.target.value))} className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
+                    <input type="number" value={f.width} onChange={(e: any) => onUpdate(['formats', id, 'width'], Number(e.target.value))} onBlur={() => saveFormat(id, config.formats[id])} className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
                   </div>
                   <div className="flex-1">
                     <div className="text-[8px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#555' }}>Height</div>
-                    <input type="number" value={f.height} onChange={(e: any) => onUpdate(['formats', id, 'height'], Number(e.target.value))} className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
+                    <input type="number" value={f.height} onChange={(e: any) => onUpdate(['formats', id, 'height'], Number(e.target.value))} onBlur={() => saveFormat(id, config.formats[id])} className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
                   </div>
                 </div>
+                <textarea value={f.aiInstruction || ''} onChange={(e: any) => onUpdate(['formats', id, 'aiInstruction'], e.target.value)} onBlur={() => saveFormat(id, config.formats[id])} rows={2} placeholder="AI instruction for this type..." className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] outline-none resize-y" style={{ color: '#e2e2e2' }} />
               </div>
             ))}
           </div>
@@ -615,16 +802,20 @@ function ConfigPreview({ config }: any) {
 function TokenSection({ title, expanded, onToggle, children }: { title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
     <div className="border-b" style={{ borderColor: '#252525' }}>
-      <div className="flex items-center justify-between px-3.5 py-2 cursor-pointer select-none hover:bg-[#1c1c1c] transition-colors" onClick={onToggle}>
-        <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>{title}</span>
-        <span className="text-[9px] transition-transform" style={{ color: '#555', transform: expanded ? 'rotate(180deg)' : undefined }}>▾</span>
+      <div className="flex items-center justify-between px-4 py-2.5 cursor-pointer select-none hover:bg-[#1c1c1c] transition-colors" onClick={onToggle}>
+        <span className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#888' }}>{title}</span>
+        <span className="text-[11px] transition-transform" style={{ color: '#888', transform: expanded ? 'rotate(180deg)' : undefined }}>▾</span>
       </div>
-      {expanded && <div className="p-3" style={{ background: '#0b0b0b' }}>{children}</div>}
+      {expanded && <div className="p-3.5" style={{ background: '#0b0b0b' }}>{children}</div>}
     </div>
   )
 }
 
-function ColorExplorer({ colors }: { colors: DesignTokens['colors'] }) {
+function ColorExplorer({ colors, onUpdateTokenColor, onUpdateAccentColor }: {
+  colors: DesignTokens['colors']
+  onUpdateTokenColor?: (group: 'primary' | 'secondary', hex: string) => void | Promise<void>
+  onUpdateAccentColor?: (key: 'light' | 'base' | 'dark', hex: string) => void | Promise<void>
+}) {
   if (!colors) return null
   const groups = [
     { label: 'Primary', data: colors.primary, keys: ['50','100','200','300','400','500','600','700','800','900'] },
@@ -634,6 +825,42 @@ function ColorExplorer({ colors }: { colors: DesignTokens['colors'] }) {
   ]
   return (
     <div className="space-y-2.5">
+      <div className="space-y-2 p-2 rounded border" style={{ borderColor: '#252525', background: '#121212' }}>
+        <div className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: '#888' }}>Quick Edit Colors</div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-[8px] mb-1" style={{ color: '#666' }}>Primary 500</div>
+            <input
+              type="color"
+              value={colors.primary?.['500'] || '#3b82f6'}
+              onChange={(e: any) => onUpdateTokenColor?.('primary', e.target.value)}
+              className="w-full h-7 rounded cursor-pointer"
+            />
+          </div>
+          <div>
+            <div className="text-[8px] mb-1" style={{ color: '#666' }}>Secondary 500</div>
+            <input
+              type="color"
+              value={colors.secondary?.['500'] || '#0f172a'}
+              onChange={(e: any) => onUpdateTokenColor?.('secondary', e.target.value)}
+              className="w-full h-7 rounded cursor-pointer"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {(['light', 'base', 'dark'] as const).map((k) => (
+            <div key={k}>
+              <div className="text-[8px] mb-1 capitalize" style={{ color: '#666' }}>{k}</div>
+              <input
+                type="color"
+                value={colors.accent?.[k] || '#8b5cf6'}
+                onChange={(e: any) => onUpdateAccentColor?.(k, e.target.value)}
+                className="w-full h-7 rounded cursor-pointer"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
       {groups.map(g => {
         if (!g.data) return null
         return (
@@ -667,16 +894,44 @@ function ColorExplorer({ colors }: { colors: DesignTokens['colors'] }) {
 
 function TypographyExplorer({ typography }: { typography: DesignTokens['typography'] }) {
   if (!typography) return null
+  const entries = Object.entries(typography.scale)
   return (
-    <div className="space-y-2">
-      <div className="text-[8px] font-mono leading-relaxed" style={{ color: '#555' }}>SANS: {typography.fontSans}<br />SERIF: {typography.fontSerif}<br />MONO: {typography.fontMono}</div>
-      {Object.entries(typography.scale).map(([k, v]) => (
-        <div key={k} className="flex items-baseline gap-2 border-b pb-0.5" style={{ borderColor: '#252525' }}>
-          <span className="text-[8px] font-mono min-w-[28px]" style={{ color: '#555' }}>{k}</span>
-          <span style={{ fontSize: Math.min(v as number, 28), lineHeight: 1, color: '#999', flex: 1, overflow: 'hidden', whiteSpace: 'nowrap' }}>Aa</span>
-          <span className="text-[8px] font-mono ml-1.5" style={{ color: '#555' }}>{v}px</span>
-        </div>
-      ))}
+    <div className="space-y-3">
+      <div className="text-[10px] font-mono leading-relaxed" style={{ color: '#777' }}>SANS: {typography.fontSans}<br />SERIF: {typography.fontSerif}<br />MONO: {typography.fontMono}</div>
+      {entries.map(([k, v]) => {
+        const size = v as number
+        const weight = size >= 36 ? 700 : size >= 24 ? 600 : size >= 18 ? 500 : 400
+        const previewHeight = Math.max(24, Math.min(88, size * 1.08))
+        return (
+          <div key={k} className="flex items-baseline gap-3" style={{ padding: '6px 0', borderBottom: '1px solid #252525' }}>
+            <span className="text-[9px] font-mono min-w-[32px]" style={{ color: '#777' }}>{k}</span>
+            <span
+              style={{
+                flex: 1,
+                minWidth: 0,
+                height: previewHeight,
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'flex-end'
+              }}
+            >
+              <span
+                style={{
+                  fontSize: size,
+                  lineHeight: 1,
+                  color: '#e2e2e2',
+                  fontWeight: weight,
+                  whiteSpace: 'nowrap',
+                  letterSpacing: size >= 32 ? '-0.02em' : 'normal'
+                }}
+              >
+                Aa
+              </span>
+            </span>
+            <span className="text-[9px] font-mono" style={{ color: '#777' }}>{size}px</span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -697,14 +952,39 @@ function SpacingExplorer({ spacing }: { spacing: DesignTokens['spacing'] }) {
 
 function ShadowExplorer({ shadows }: { shadows: Record<string, string> }) {
   if (!shadows) return null
+
   return (
-    <div className="space-y-1">
-      {Object.entries(shadows).map(([k, v]) => (
-        <div key={k} className="flex items-center gap-2 py-1">
-          <div className="w-7 h-4 rounded-sm flex-shrink-0" style={{ background: '#1c1c1c', boxShadow: v }} />
-          <span className="text-[8px] font-mono min-w-[20px]" style={{ color: '#555' }}>{k}</span>
+    <div className="space-y-3">
+      {Object.entries(shadows).map(([k, raw]) => {
+        const v = resolveShadowPreviewValue(raw, k)
+        return (
+        <div key={k} className="flex items-center gap-3">
+          <div
+            className="flex items-center justify-center flex-shrink-0 rounded"
+            style={{
+              width: 116,
+              height: 64,
+              background: '#ffffff',
+              border: '1px solid #252525'
+            }}
+          >
+            <div
+              className="rounded"
+              style={{
+                width: 46,
+                height: 32,
+                background: '#334155',
+                boxShadow: v,
+                borderRadius: 6
+              }}
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] font-medium mb-0.5" style={{ color: '#ccc' }}>{k}</div>
+            <div className="text-[8px] font-mono truncate" style={{ color: '#666' }} title={raw}>{String(raw)}</div>
+          </div>
         </div>
-      ))}
+      )})}
     </div>
   )
 }
@@ -760,52 +1040,116 @@ function ComponentExplorer({ components }: { components: DesignTokens['component
 
 function MotionExplorer({ motion }: { motion: DesignTokens['motion'] }) {
   if (!motion) return null
+  const easingEntries = Object.entries(motion.easing || {})
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div>
-        <div className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{ color: '#555' }}>Duration</div>
-        <div className="space-y-1">
-          {Object.entries(motion.duration || {}).map(([k, v]) => (
-            <div key={k} className="flex items-center gap-2 py-0.5">
-              <div 
-                className="h-2 rounded-sm flex-shrink-0 transition-all" 
-                style={{ 
-                  width: parseInt(v) / 5, 
-                  background: 'linear-gradient(90deg, #3b82f6 0%, #8b5cf6 100%)',
-                  opacity: 0.7
-                }} 
-              />
-              <span className="text-[8px] font-mono min-w-[40px]" style={{ color: '#555' }}>{k}</span>
-              <span className="text-[8px] font-mono ml-auto" style={{ color: '#999' }}>{v}</span>
+        <div className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: '#888' }}>Duration</div>
+        <div className="space-y-2.5">
+          {Object.entries(motion.duration || {}).map(([k, v]) => {
+            const ms = parseInt(v) || 200
+            return (
+              <div key={k} className="flex items-center gap-3">
+                <div className="h-2 rounded-full flex-shrink-0 overflow-hidden" style={{ width: 120, background: '#1c1c1c' }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: '60%',
+                      background: 'linear-gradient(90deg, #22d3ee 0%, #3b82f6 55%, #a78bfa 100%)',
+                      animationName: 'motion-duration-pulse',
+                      animationDuration: `${Math.max(ms, 120)}ms`,
+                      animationTimingFunction: 'ease-in-out',
+                      animationIterationCount: 'infinite',
+                      animationDirection: 'alternate'
+                    }}
+                  />
+                </div>
+                <span className="text-[9px] font-mono min-w-[40px]" style={{ color: '#777' }}>{k}</span>
+                <span className="text-[9px] font-mono ml-auto" style={{ color: '#aaa' }}>{v}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-wide mb-2" style={{ color: '#888' }}>Easing</div>
+        <div className="space-y-2.5">
+          {easingEntries.map(([k, v], idx) => (
+            <div key={k} className="flex items-center gap-3">
+              <div className="flex items-center justify-center flex-shrink-0" style={{ width: 36, height: 36, background: '#1c1c1c', borderRadius: 6 }}>
+                <div
+                  className="rounded-full"
+                  style={{
+                    width: 9,
+                    height: 9,
+                    background: '#60a5fa',
+                    animationName: 'motion-easing-orbit',
+                    animationDuration: '1600ms',
+                    animationTimingFunction: v || 'ease-in-out',
+                    animationDelay: `${idx * 120}ms`,
+                    animationIterationCount: 'infinite',
+                    animationDirection: 'alternate'
+                  }}
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[9px] font-mono" style={{ color: '#aaa' }}>{k}</div>
+                <div className="text-[8px] font-mono truncate" style={{ color: '#666', maxWidth: 140 }} title={v}>{v}</div>
+              </div>
             </div>
           ))}
         </div>
       </div>
-      <div>
-        <div className="text-[8px] font-bold uppercase tracking-widest mb-1" style={{ color: '#555' }}>Easing</div>
-        <div className="space-y-1">
-          {Object.entries(motion.easing || {}).map(([k, v]) => (
-            <div key={k} className="flex items-center gap-2 py-0.5">
-              <span className="text-[8px] font-mono min-w-[40px]" style={{ color: '#555' }}>{k}</span>
-              <span className="text-[8px] font-mono truncate" style={{ color: '#999', maxWidth: 150 }} title={v}>{v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+      <style>{`
+        @keyframes motion-duration-pulse {
+          from { width: 22%; filter: saturate(0.9); }
+          to { width: 100%; filter: saturate(1.25); }
+        }
+
+        @keyframes motion-easing-orbit {
+          from { transform: translateX(-11px) scale(0.85); opacity: 0.65; }
+          to { transform: translateX(11px) scale(1); opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }
 
 /* ── Preview ── */
 
-function PreviewFrame({ html }: { html: string }) {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null)
-  useEffect(() => {
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    setBlobUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [html])
-  if (!blobUrl) return null
-  return <iframe src={blobUrl} title="Preview" className="w-full h-full border-0" style={{ background: '#fff' }} />
+function PreviewFrame({ tokens, previewType }: { tokens: DesignTokens; previewType: 'components' | 'landing' | 'poster' }) {
+  let skeletonHtml = ''
+  if (previewType === 'components') {
+    skeletonHtml = generateComponentsSkeleton()
+  } else if (previewType === 'landing') {
+    skeletonHtml = generateLandingPageSkeleton()
+  } else {
+    skeletonHtml = generatePosterSkeleton()
+  }
+  
+  const cssVars = tokensToCSS(tokens)
+  
+  const fonts = [
+    tokens.typography?.fontSans,
+    tokens.typography?.fontSerif,
+    tokens.typography?.fontMono
+  ].filter(Boolean).map(f => f?.replace(/\s+/g, '+'))
+  
+  const fontImport = fonts.length > 0 
+    ? `<link href="https://fonts.googleapis.com/css2?${fonts.map(f => `family=${f}:wght@300;400;500;600;700;900`).join('&')}&display=swap" rel="stylesheet">`
+    : ''
+  
+  let finalHtml = skeletonHtml.replace('</head>', `${fontImport}\n</head>`)
+  finalHtml = finalHtml.replace('<style id="token-styles"></style>', `<style id="token-styles">${cssVars}</style>`)
+  
+  return (
+    <div className="absolute inset-0">
+      <iframe
+        srcDoc={finalHtml}
+        title="Preview"
+        className="w-full h-full border-0"
+        style={{ background: '#fff' }}
+      />
+    </div>
+  )
 }
