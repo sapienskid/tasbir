@@ -211,7 +211,7 @@ export default function App() {
           </div>
 
           {/* Tab Content */}
-          <div className="flex-1 overflow-y-auto min-h-0">
+          <div className="flex-1 overflow-y-auto min-h-0 overflow-x-hidden">
             {activeTab === 'tokens' && (
               <TokensTab
                 vibeInput={vibeInput} setVibeInput={setVibeInput}
@@ -451,12 +451,12 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
 
   return (
     <>
-      <div className="flex gap-1 p-2.5 border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
+      <div className="flex flex-wrap gap-1 p-2.5 border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
         {sections.map((s: any) => (
-          <button key={s.id} onClick={() => setSection(s.id)} className={`text-[9px] font-bold tracking-wider uppercase px-2 py-1 rounded border transition-all ${section === s.id ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>{s.label}</button>
+          <button key={s.id} onClick={() => setSection(s.id)} className={`text-[9px] font-bold tracking-wider uppercase px-2 py-1 rounded border transition-all whitespace-nowrap ${section === s.id ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>{s.label}</button>
         ))}
       </div>
-      <div className="p-3.5 space-y-3 overflow-y-auto">
+      <div className="p-3.5 space-y-3 overflow-y-auto overflow-x-hidden">
         {section === 'formats' && (
           <div className="space-y-2">
             {Object.entries(config.formats || {}).map(([id, f]: [string, any]) => (
@@ -594,38 +594,38 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
 function ConfigPreview({ config }: any) {
   const gen = config?.generation || {}
   return (
-    <div className="flex-1 overflow-auto p-8" style={{ background: '#0b0b0b' }}>
-      <div className="max-w-4xl mx-auto space-y-8">
-        <div>
-          <h2 className="text-lg font-bold mb-4">Formats</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+    <div className="flex-1 overflow-auto p-6" style={{ background: '#0b0b0b' }}>
+      <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        <div style={{ marginBottom: 32 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Formats</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
             {Object.entries(config?.formats || {}).map(([id, f]: [string, any]) => (
-              <div key={id} className="p-4 rounded border" style={{ background: '#141414', borderColor: '#252525' }}>
-                <div className="text-sm font-medium mb-1">{id}</div>
-                <div className="text-[10px] font-mono" style={{ color: '#555' }}>{f.width} × {f.height}</div>
-                <div className="text-[10px] font-mono mt-0.5" style={{ color: '#555' }}>#{f.hashtag_count} hashtags</div>
+              <div key={id} style={{ padding: 16, borderRadius: 8, background: '#141414', border: '1px solid #252525' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{id}</div>
+                <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#555' }}>{f.width} × {f.height}</div>
+                <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#555', marginTop: 2 }}>#{f.hashtag_count} hashtags</div>
               </div>
             ))}
           </div>
         </div>
-        <div>
-          <h2 className="text-lg font-bold mb-4">Limits</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+        <div style={{ marginBottom: 32 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Limits</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
             {Object.entries(gen.limits || {}).map(([k, v]: [string, any]) => (
-              <div key={k} className="flex justify-between p-2 rounded" style={{ background: '#141414' }}>
-                <span className="text-[10px] font-mono" style={{ color: '#999' }}>{k}</span>
-                <span className="text-[10px] font-mono" style={{ color: '#555' }}>{String(v)}</span>
+              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: 8, borderRadius: 6, background: '#141414' }}>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k}</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#555', marginLeft: 8 }}>{String(v)}</span>
               </div>
             ))}
           </div>
         </div>
         <div>
-          <h2 className="text-lg font-bold mb-4">Features</h2>
-          <div className="grid grid-cols-2 gap-2">
+          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Features</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
             {Object.entries(config?.features || {}).map(([k, v]: [string, any]) => (
-              <div key={k} className="flex items-center justify-between p-3 rounded" style={{ background: '#141414' }}>
-                <span className="text-[11px] font-mono" style={{ color: '#999' }}>{k}</span>
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${v ? 'text-[#22c55e]' : 'text-[#f43f5e]'}`} style={{ background: v ? '#22c55e15' : '#f43f5e15' }}>{v ? 'ON' : 'OFF'}</span>
+              <div key={k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 6, background: '#141414' }}>
+                <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#999' }}>{k}</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', padding: '2px 8px', borderRadius: 4, color: v ? '#22c55e' : '#f43f5e', background: v ? '#22c55e15' : '#f43f5e15' }}>{v ? 'ON' : 'OFF'}</span>
               </div>
             ))}
           </div>
