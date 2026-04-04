@@ -1,26 +1,22 @@
 {
   "name": "social-post-pipeline-worker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm run build && pnpm exec concurrently --kill-others-on-fail --names \"assets,worker\" --prefix-colors \"yellow,cyan\" \"pnpm exec chokidar \\\"templates/**/*.html\\\" \\\"src/styles/**/*.css\\\" \\\"config/pipeline/**/*.yaml\\\" \\\"scripts/embed-template-assets.mjs\\\" -c \\\"pnpm run build\\\" --debounce 250\" \"pnpm exec wrangler dev --local --live-reload --ip 127.0.0.1 --port 8787 --var API_AUTH_REQUIRE_FOR_PREVIEW:false\"",
-    "build": "pnpm exec tailwindcss -i ./src/styles/template.css -o ./src/generated/template.css && node ./scripts/embed-template-assets.mjs",
-    "render:all": "node ./scripts/render-template-variations.mjs",
-    "preview:template": "node ./scripts/preview-template-live.mjs",
-    "render:stress": "node ./scripts/stress-render-suite.mjs",
+    "dev": "wrangler dev --local --live-reload --ip 127.0.0.1 --port 8787",
     "test": "tsc --noEmit && vitest run",
+    "dashboard": "pnpm run --dir ui dev",
+    "dev:server": "wrangler dev --local --ip 127.0.0.1 --port 8787",
+    "dev:all": "concurrently --kill-others-on-fail --names \"server,ui\" \"pnpm run dev:server\" \"pnpm run dashboard\"",
     "deploy": "wrangler deploy --env production"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
-    "@tailwindcss/cli": "^4.1.0",
-    "@tailwindcss/typography": "^0.5.19",
-    "@types/markdown-it": "^14.1.2",
-    "chokidar-cli": "^3.0.0",
+    "@types/node": "^25.5.0",
     "concurrently": "^9.2.1",
     "puppeteer-core": "^24.38.0",
-    "tailwindcss": "^4.1.0",
+    "tsx": "^4.21.0",
     "typescript": "latest",
     "vitest": "^3.2.4",
     "wrangler": "latest",
@@ -28,9 +24,9 @@
   },
   "dependencies": {
     "@cloudflare/puppeteer": "1.0.6",
+    "@google/generative-ai": "^0.24.1",
     "agents": "^0.7.5",
-    "katex": "^0.16.35",
-    "markdown-it": "^14.1.1",
-    "mermaid": "^11.12.3"
+    "hono": "^4.12.10",
+    "puppeteer": "^24.40.0"
   }
 }
