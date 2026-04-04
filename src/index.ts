@@ -9,7 +9,7 @@ import {
   createModelChain,
   resolveProviderConfig,
 } from "./ai";
-import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, getDesignTokens, generateTailwindConfig, formatDesignTokensForPrompt, setFormat, deleteFormat, loadFormatsFromStorage, type FormatConfig } from "./config";
+import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, getDesignTokens, generateTailwindConfig, setFormat, deleteFormat, loadFormatsFromStorage, type FormatConfig } from "./config";
 import {
   HttpError,
   enforceApiAuth,
@@ -48,13 +48,25 @@ interface GhostPost {
   primary_tag?: { name?: string };
 }
 
-const puppeteer = await (async () => {
-  if (typeof process !== "undefined" && (process as any).versions?.node) {
-    return (await import("puppeteer")).default;
+function isCloudflareWorker(): boolean {
+  return typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
+}
+
+async function launchRenderingBrowser(env: Env): Promise<any> {
+  const keepAliveMs = (PIPELINE_CONFIG.runtime?.browser_keep_alive_ms as number) ?? 60000;
+  const shouldUseCloudflareBrowser = isCloudflareWorker() || Boolean(env.BROWSER);
+
+  if (shouldUseCloudflareBrowser) {
+    if (!env.BROWSER) {
+      throw new HttpError(500, "BROWSER binding is required for Cloudflare Browser Rendering");
+    }
+    const cloudflarePuppeteer = (await import("@cloudflare/puppeteer")).default as any;
+    return cloudflarePuppeteer.launch(env.BROWSER, { keep_alive: keepAliveMs });
   }
-  // @ts-ignore
-  return (await import("@cloudflare/puppeteer")).default;
-})();
+
+  const nodePuppeteer = (await import("puppeteer")).default as any;
+  return nodePuppeteer.launch({ headless: true });
+}
 
 interface Env extends SecurityEnv {
   MARKETING_ORCHESTRATOR?: DurableObjectNamespace<MarketingOrchestratorAgent>;
@@ -72,6 +84,11 @@ interface OutputOptions {
   formats?: string[];
   carouselSlides?: number;
   postCount?: number;
+}
+
+interface HtmlCacheOptions {
+  mode?: "off" | "read-only" | "write-only" | "read-write";
+  key?: string;
 }
 
 interface AgentRenderPolicy {
@@ -96,7 +113,9 @@ interface GenerateRequestBody {
   notifyUrl?: string;
   image?: ImageGenerationOptions;
   output?: OutputOptions;
+  htmlCache?: HtmlCacheOptions;
   agent?: AgentOptions;
+  designTokens?: Record<string, unknown>;
 }
 
 interface DirectContentRequestBody {
@@ -115,7 +134,18 @@ interface DirectContentRequestBody {
   notifyUrl?: string;
   image?: ImageGenerationOptions;
   output?: OutputOptions;
+  htmlCache?: HtmlCacheOptions;
   agent?: AgentOptions;
+  designTokens?: Record<string, unknown>;
+}
+
+interface RenderFromCacheRequestBody {
+  slug?: string;
+  output?: OutputOptions;
+  storage?: StorageOptions;
+  htmlCache?: HtmlCacheOptions;
+  variantIndex?: number;
+  designTokens?: Record<string, unknown>;
 }
 
 interface StorageOptions {
@@ -169,6 +199,21 @@ interface AgentExecutionContext {
   strategicBrief: string;
   visualNotes: string;
   warnings: string[];
+}
+
+interface ResolvedHtmlCachePolicy {
+  enabled: boolean;
+  read: boolean;
+  write: boolean;
+  keyPrefix: string;
+}
+
+interface HtmlCacheRecord {
+  generated_html: string;
+  created_at: string;
+  slug: string;
+  format: string;
+  variant_index: number;
 }
 
 const DEFAULT_IMAGE_MODEL = (PIPELINE_CONFIG.generation?.image?.default_model as string) || "@cf/black-forest-labs/flux-1-schnell";
@@ -258,6 +303,29 @@ app.get("/config/prompts", (c) => {
 
 app.get("/config/formats", (c) => c.json({ formats: getAllFormats() }));
 
+app.get("/asset", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate-from-content");
+
+  const key = (c.req.query("key") || "").trim();
+  if (!key) throw new HttpError(400, "Missing required query parameter: key");
+  if (key.length > 1024) throw new HttpError(400, "Asset key is too long");
+  if (key.startsWith("/") || key.includes("..")) throw new HttpError(400, "Invalid asset key");
+
+  const object = await c.env.OUTPUT_BUCKET.get(key);
+  if (!object) throw new HttpError(404, "Asset not found");
+
+  const contentType = object.httpMetadata?.contentType || "application/octet-stream";
+  const cacheControl = object.httpMetadata?.cacheControl || "private, max-age=60";
+  return new Response(object.body, {
+    status: 200,
+    headers: {
+      "content-type": contentType,
+      "cache-control": cacheControl,
+    },
+  });
+});
+
 function tokensToCSSFromTokens(t: Record<string, unknown>): string {
   const L = [":root {", "  /* COLOR */"];
   const c = (t.colors || {}) as Record<string, Record<string, string>>;
@@ -317,7 +385,206 @@ function fontImportFromTokens(t: Record<string, unknown>): string {
   const fonts = [ty.fontSans, ty.fontSerif, ty.fontMono].filter((f): f is string => typeof f === "string" && f.length > 0);
   if (!fonts.length) return "";
   const q = fonts.map((f) => `family=${encodeURIComponent(f)}:ital,wght@0,300;0,400;0,500;0,600;0,700;0,900;1,400`).join("&");
-  return `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?${q}&display=swap" rel="stylesheet">`;
+  return `<link id="tasbir-font-preconnect" rel="preconnect" href="https://fonts.googleapis.com"><link id="tasbir-font-preconnect-cross" rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link id="tasbir-fonts" href="https://fonts.googleapis.com/css2?${q}&display=swap" rel="stylesheet">`;
+}
+
+function stripInjectedDesignTokens(html: string): string {
+  let next = html;
+  next = next.replace(/<style[^>]*id=["']tasbir-design-tokens["'][^>]*>[\s\S]*?<\/style>/gi, "");
+  next = next.replace(/<script[^>]*id=["']tasbir-tailwind-config["'][^>]*>[\s\S]*?<\/script>/gi, "");
+  next = next.replace(/<link[^>]*id=["']tasbir-font-preconnect["'][^>]*>/gi, "");
+  next = next.replace(/<link[^>]*id=["']tasbir-font-preconnect-cross["'][^>]*>/gi, "");
+  next = next.replace(/<link[^>]*id=["']tasbir-fonts["'][^>]*>/gi, "");
+  return next;
+}
+
+function formatDesignTokensForPromptFromObject(tokens: Record<string, unknown>): string {
+  const parts: string[] = [];
+  parts.push("Token JSON:");
+  parts.push(JSON.stringify(tokens, null, 2));
+  parts.push("\nToken CSS Variables (use these names directly with var(--...)): ");
+  parts.push(tokensToCSSFromTokens(tokens));
+  parts.push("\nCanonical Tailwind token classes expected:");
+  parts.push("- background: bg-surface-base, bg-surface-elevated");
+  parts.push("- text: text-content-primary, text-content-secondary, text-primary-500");
+  parts.push("- font: font-sans, font-serif, font-mono");
+  parts.push("\nImplementation requirements:");
+  parts.push("- Add these CSS variables to :root in your <style> block.");
+  parts.push("- Prefer var(--color-...), var(--surface-...), var(--text-...), var(--gradient-...), var(--font-sans).\n");
+  return parts.join("\n");
+}
+
+function buildTailwindConfigFromTokens(tokens: Record<string, unknown>): Record<string, unknown> {
+  const colors = (tokens.colors || {}) as Record<string, any>;
+  const border = (tokens.border || {}) as Record<string, any>;
+  const shadow = (tokens.shadow || {}) as Record<string, any>;
+  const gradient = (tokens.gradient || {}) as Record<string, any>;
+
+  return {
+    theme: {
+      extend: {
+        colors: {
+          primary: colors.primary || {},
+          secondary: colors.secondary || {},
+          accent: colors.accent || {},
+          neutral: colors.neutral || {},
+          surface: colors.surface || {},
+          content: colors.text || {},
+        },
+        fontFamily: {
+          sans: ["var(--font-sans)", "sans-serif"],
+          serif: ["var(--font-serif)", "serif"],
+          mono: ["var(--font-mono)", "monospace"],
+        },
+        borderRadius: (border.radius || {}) as Record<string, string>,
+        boxShadow: shadow as Record<string, string>,
+        backgroundImage: {
+          "gradient-primary": gradient.primary || "var(--gradient-primary)",
+          "gradient-hero": gradient.hero || "var(--gradient-hero)",
+          "gradient-subtle": gradient.subtle || "var(--gradient-subtle)",
+          "gradient-surface": gradient.surface || "var(--gradient-surface)",
+        },
+      },
+    },
+  };
+}
+
+function applyBodyDesignSystemClasses(html: string): string {
+  return html.replace(/<body([^>]*)>/i, (match, attrs) => {
+    const current = String(attrs || "");
+    const classMatch = current.match(/class\s*=\s*"([^"]*)"|class\s*=\s*'([^']*)'/i);
+    const required = ["font-sans", "bg-surface-base", "text-content-primary"];
+    if (classMatch) {
+      const existing = (classMatch[1] || classMatch[2] || "").trim();
+      const all = [...new Set([...existing.split(/\s+/).filter(Boolean), ...required])].join(" ");
+      return match.replace(classMatch[0], `class="${all}"`);
+    }
+    return `<body${current} class="${required.join(" ")}">`;
+  });
+}
+
+function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown>): string {
+  if (!html.trim()) return html;
+
+  let nextHtml = applyBodyDesignSystemClasses(stripInjectedDesignTokens(html));
+  const cssVars = tokensToCSSFromTokens(tokens);
+  const fontLinks = fontImportFromTokens(tokens);
+  const tailwindConfig = JSON.stringify(buildTailwindConfigFromTokens(tokens));
+  const tailwindConfigScript = `<script id="tasbir-tailwind-config">window.tailwind = window.tailwind || {}; window.tailwind.config = ${tailwindConfig};</script>`;
+  const baseline = [
+    "html, body {",
+    "  margin: 0;",
+    "  padding: 0;",
+    "  width: 100%;",
+    "  height: 100%;",
+    "  background: var(--surface-base, #0b0b0b);",
+    "  color: var(--text-primary, #f5f5f5);",
+    "  font-family: var(--font-sans, system-ui, sans-serif);",
+    "}",
+    "*, *::before, *::after { box-sizing: border-box; }",
+    "h1, h2, h3, h4, h5, h6 { color: var(--text-primary, inherit); }",
+    "p, span, li, small { color: var(--text-secondary, inherit); }",
+    ".ds-accent { color: var(--text-accent, var(--color-primary-500)); }",
+    ".ds-surface { background: var(--surface-elevated, transparent); }",
+    ".ds-border { border-color: var(--color-neutral-300, rgba(255,255,255,0.15)); }",
+  ].join("\n");
+
+  const hasTailwindCdn = /<script[^>]+src=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/i.test(nextHtml);
+  const hasTailwindConfig = /id=["']tasbir-tailwind-config["']/i.test(nextHtml);
+
+  if (!hasTailwindConfig) {
+    if (hasTailwindCdn) {
+      nextHtml = nextHtml.replace(
+        /<script[^>]+src=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/i,
+        (m) => `${tailwindConfigScript}\n${m}`,
+      );
+    } else {
+      nextHtml = nextHtml.replace(/<head[^>]*>/i, (m) => `${m}\n${tailwindConfigScript}\n<script src="https://cdn.tailwindcss.com"></script>`);
+    }
+  }
+
+  const injectedBlock = `${fontLinks}\n<style id=\"tasbir-design-tokens\">\n${cssVars}\n\n/* Baseline design-system application */\n${baseline}\n</style>`;
+
+  if (/<\/head>/i.test(nextHtml)) {
+    return nextHtml.replace(/<\/head>/i, `${injectedBlock}\n</head>`);
+  }
+  if (/<head[^>]*>/i.test(nextHtml)) {
+    return nextHtml.replace(/<head[^>]*>/i, (m) => `${m}\n${injectedBlock}`);
+  }
+  if (/<html[^>]*>/i.test(nextHtml)) {
+    return nextHtml.replace(/<html[^>]*>/i, (m) => `${m}\n<head>\n${injectedBlock}\n</head>`);
+  }
+  return `<!DOCTYPE html>\n<html>\n<head>\n${tailwindConfigScript}\n<script src="https://cdn.tailwindcss.com"></script>\n${injectedBlock}\n</head>\n<body class="font-sans bg-surface-base text-content-primary">${nextHtml}</body>\n</html>`;
+}
+
+async function loadDesignTokensForGeneration(env: Env): Promise<Record<string, unknown>> {
+  try {
+    const stored = await env.OUTPUT_BUCKET.get("config/design-tokens.json");
+    if (stored) {
+      const parsed = await stored.json();
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    }
+  } catch (error) {
+    console.warn("[tokens] failed to read saved tokens, falling back to defaults", error);
+  }
+
+  return getDesignTokens() as Record<string, unknown>;
+}
+
+function resolveDesignTokensForRequest(bodyTokens: unknown, fallbackTokens: Record<string, unknown>): Record<string, unknown> {
+  if (!bodyTokens || typeof bodyTokens !== "object" || Array.isArray(bodyTokens)) return fallbackTokens;
+  return bodyTokens as Record<string, unknown>;
+}
+
+function resolveHtmlCachePolicy(input: HtmlCacheOptions | undefined, slug: string): ResolvedHtmlCachePolicy {
+  const requestedMode = input?.mode ?? "off";
+  const mode = ["off", "read-only", "write-only", "read-write"].includes(requestedMode) ? requestedMode : "off";
+  const keyPrefix = sanitizeRunId(input?.key) ?? sanitizeRunId(slug) ?? "default";
+  return {
+    enabled: mode !== "off",
+    read: mode === "read-only" || mode === "read-write",
+    write: mode === "write-only" || mode === "read-write",
+    keyPrefix,
+  };
+}
+
+function buildHtmlCacheR2Key(args: {
+  policy: ResolvedHtmlCachePolicy;
+  slug: string;
+  format: string;
+  variantIndex: number;
+  width: number;
+  height: number;
+}): string {
+  const slugPart = sanitizeSlug(args.slug) || "untitled";
+  const formatPart = args.format.replace(/[^a-z0-9-_]/gi, "").toLowerCase() || "format";
+  const variantPart = `v${args.variantIndex + 1}`;
+  const sizePart = `${args.width}x${args.height}`;
+  return `cache/html/${args.policy.keyPrefix}/${slugPart}/${formatPart}/${variantPart}-${sizePart}.json`;
+}
+
+async function readCachedHtml(env: Env, key: string): Promise<string | null> {
+  try {
+    const stored = await env.OUTPUT_BUCKET.get(key);
+    if (!stored) return null;
+    const parsed = (await stored.json()) as Partial<HtmlCacheRecord>;
+    const html = typeof parsed?.generated_html === "string" ? parsed.generated_html.trim() : "";
+    return html || null;
+  } catch {
+    return null;
+  }
+}
+
+async function writeCachedHtml(env: Env, key: string, record: HtmlCacheRecord): Promise<void> {
+  try {
+    await env.OUTPUT_BUCKET.put(key, JSON.stringify(record), {
+      httpMetadata: { contentType: "application/json" }
+    });
+  } catch (error) {
+    console.warn("[html-cache] failed to persist html cache", error);
+  }
 }
 
 app.post("/generate-tokens", async (c) => {
@@ -463,7 +730,8 @@ app.post("/generate", async (c) => {
   const validated = validateGenerateRequestBody(body);
   const result = await runPipeline(validated, c.env, security);
 
-  const notifyUrl = resolveNotifyUrl(validated.notifyUrl, c.env.NOTIFY_WEBHOOK_URL, security);
+  const envNotifyUrl = shouldUseDefaultNotifyWebhook(c.req.url) ? c.env.NOTIFY_WEBHOOK_URL : undefined;
+  const notifyUrl = resolveNotifyUrl(validated.notifyUrl, envNotifyUrl, security);
   if (notifyUrl && (PIPELINE_CONFIG.features?.enable_notifications ?? true)) {
     c.executionCtx.waitUntil(sendNotification(notifyUrl, result, security));
   }
@@ -481,11 +749,23 @@ app.post("/generate-from-content", async (c) => {
   const post = buildPostFromDirectContent(validated, security);
   const result = await runPipelineFromPost(post, c.env, validated, security);
 
-  const notifyUrl = resolveNotifyUrl(validated.notifyUrl, c.env.NOTIFY_WEBHOOK_URL, security);
+  const envNotifyUrl = shouldUseDefaultNotifyWebhook(c.req.url) ? c.env.NOTIFY_WEBHOOK_URL : undefined;
+  const notifyUrl = resolveNotifyUrl(validated.notifyUrl, envNotifyUrl, security);
   if (notifyUrl && (PIPELINE_CONFIG.features?.enable_notifications ?? true)) {
     c.executionCtx.waitUntil(sendNotification(notifyUrl, result, security));
   }
 
+  return c.json(result);
+});
+
+app.post("/render-from-cache", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  enforceRateLimit(c.req.raw, security, "generate-from-content");
+
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const validated = validateRenderFromCacheRequestBody(body);
+  const result = await runRenderFromCache(validated, c.env);
   return c.json(result);
 });
 
@@ -500,7 +780,8 @@ app.post("/webhook/ghost", async (c) => {
   if (!slug) throw new HttpError(400, "Could not resolve slug from Ghost webhook payload");
 
   const result = await runPipeline({ slug }, c.env, security);
-  const notifyUrl = resolveNotifyUrl(undefined, c.env.NOTIFY_WEBHOOK_URL, security);
+  const envNotifyUrl = shouldUseDefaultNotifyWebhook(c.req.url) ? c.env.NOTIFY_WEBHOOK_URL : undefined;
+  const notifyUrl = resolveNotifyUrl(undefined, envNotifyUrl, security);
   if (notifyUrl && (PIPELINE_CONFIG.features?.enable_notifications ?? true)) {
     c.executionCtx.waitUntil(sendNotification(notifyUrl, result, security));
   }
@@ -563,6 +844,72 @@ function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentE
     strategicBrief: "",
     visualNotes: promptProfile.visualDirector.join(" ").trim(),
     warnings
+  };
+}
+
+async function runRenderFromCache(body: RenderFromCacheRequestBody, env: Env) {
+  const slug = sanitizeSlug(body.slug || "");
+  if (!slug) throw new HttpError(400, "slug is required for /render-from-cache");
+
+  const outputPlan = resolveOutputPlan(body.output);
+  const variantIndex = Math.max(1, Math.round(clampNumber(body.variantIndex, 1, 10, 1)));
+  const cachePolicy = resolveHtmlCachePolicy(body.htmlCache, slug);
+  const defaultTokens = await loadDesignTokensForGeneration(env);
+  const designTokensForRun = resolveDesignTokensForRequest(body.designTokens, defaultTokens);
+  const sharedStorage = resolveBatchStorageOptions(body.storage);
+
+  const browser = await launchRenderingBrowser(env);
+  const assets: Record<string, StoredAsset | null> = {};
+  const missingFormats: string[] = [];
+
+  try {
+    for (const format of outputPlan.formats) {
+      const dimensions = getFormatConfig(format);
+      if (!dimensions) {
+        missingFormats.push(format);
+        assets[format] = null;
+        continue;
+      }
+
+      const cacheKey = buildHtmlCacheR2Key({
+        policy: cachePolicy,
+        slug,
+        format,
+        variantIndex: variantIndex - 1,
+        width: dimensions.width,
+        height: dimensions.height,
+      });
+
+      const cachedHtml = await readCachedHtml(env, cacheKey);
+      if (!cachedHtml) {
+        missingFormats.push(format);
+        assets[format] = null;
+        continue;
+      }
+
+      const keyPrefix = buildR2KeyPrefix(env, slug, sharedStorage);
+      const suffix = `cache-rerender-v${variantIndex}`;
+      const asset = await renderStoreSingleAsset(env, browser, {
+        key: `${keyPrefix}/${buildAssetFileName(format, suffix)}`,
+        format,
+        rawHtml: injectDesignTokensIntoHtml(cachedHtml, designTokensForRun),
+        formatLabel: format,
+      });
+
+      assets[format] = asset;
+    }
+  } finally {
+    await browser.close();
+  }
+
+  return {
+    ok: true,
+    slug,
+    requested_formats: [...outputPlan.formats],
+    cache_key_prefix: cachePolicy.keyPrefix,
+    variant_index: variantIndex,
+    missing_formats: missingFormats,
+    assets,
   };
 }
 
@@ -738,6 +1085,7 @@ async function runHtmlLayoutAgent(
   formatInstruction: string | undefined,
   width: number,
   height: number,
+  designTokensPrompt: string,
   userPrompt?: string,
   overrides?: LlmPromptOverrides,
 ): Promise<LlmOutput> {
@@ -745,7 +1093,6 @@ async function runHtmlLayoutAgent(
   const models = createModelChain(providerConfig);
 
   const content = post.plaintext || post.html || "";
-  const designTokens = formatDesignTokensForPrompt();
   const systemPrompt = [...(Array.isArray(overrides?.systemPrompt) ? overrides.systemPrompt : overrides?.systemPrompt ? [overrides.systemPrompt] : [])].join("\n");
 
   const result = await generateHtmlLayout(models, {
@@ -757,7 +1104,7 @@ async function runHtmlLayoutAgent(
     title: post.title,
     excerpt: post.custom_excerpt || post.excerpt || "",
     content,
-    designTokens,
+    designTokens: designTokensPrompt,
     userPrompt: [
       userPrompt ? `User specifically asked for: ${userPrompt}` : "",
       overrides?.userInstructionsAppend || ""
@@ -783,6 +1130,12 @@ export async function runPipeline(body: GenerateRequestBody, env: Env, security:
 
 export async function runPipelineFromPost(post: GhostPost, env: Env, body: GenerateRequestBody | DirectContentRequestBody, security: ResolvedSecurityConfig) {
   const outputPlan = resolveOutputPlan(body.output);
+  const defaultTokens = await loadDesignTokensForGeneration(env);
+  const designTokensForRun = resolveDesignTokensForRequest(body.designTokens, defaultTokens);
+  const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
+  const htmlCachePolicy = resolveHtmlCachePolicy(body.htmlCache, post.slug);
+  const htmlCacheSummary = { hits: 0, misses: 0, writes: 0 };
+  const primaryVariantByFormat: Record<string, "hit" | "miss"> = {};
   const brandName = body.brandName ?? env.BRAND_NAME ?? "Tasbir Blog";
   const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null> }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
@@ -805,29 +1158,80 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
 
     const formatAssets: Record<string, StoredAsset | null> = {};
     let imageSource: SelectedImage = { source: "none", imageUrl: "" };
+    let variantLlmOutput: LlmOutput | null = null;
 
     for (const format of outputPlan.formats) {
       const dimensions = getFormatConfig(format);
       if (!dimensions) continue;
 
-      const llmOutput = await runHtmlLayoutAgent(
-        env,
-        post,
+      const cacheKey = buildHtmlCacheR2Key({
+        policy: htmlCachePolicy,
+        slug: post.slug,
         format,
-        dimensions.name,
-        dimensions.aiInstruction,
-        dimensions.width,
-        dimensions.height,
-        variantPrompt,
-        agentContext.copyOverrides,
-      );
+        variantIndex: index,
+        width: dimensions.width,
+        height: dimensions.height,
+      });
 
-      const launchOptions = { keep_alive: (PIPELINE_CONFIG.runtime?.browser_keep_alive_ms as number) ?? 60000 };
-      const browser = typeof process !== "undefined"
-        ? await (puppeteer as any).launch(launchOptions)
-        : await puppeteer.launch(env.BROWSER, launchOptions);
+      let llmOutput: LlmOutput | null = null;
+      let cacheStatus: "hit" | "miss" = "miss";
+      if (htmlCachePolicy.enabled && htmlCachePolicy.read) {
+        const cachedHtml = await readCachedHtml(env, cacheKey);
+        if (cachedHtml) {
+          llmOutput = { generated_html: injectDesignTokensIntoHtml(cachedHtml, designTokensForRun) };
+          cacheStatus = "hit";
+          htmlCacheSummary.hits += 1;
+        }
+      }
+
+      if (!llmOutput) {
+        if (body.htmlCache?.mode === "read-only") {
+          throw new HttpError(
+            409,
+            `HTML cache miss for format '${format}' (slug '${post.slug}', cache key '${htmlCachePolicy.keyPrefix}'). Run once with htmlCache.mode=read-write or write-only first.`
+          );
+        }
+        llmOutput = await runHtmlLayoutAgent(
+          env,
+          post,
+          format,
+          dimensions.name,
+          dimensions.aiInstruction,
+          dimensions.width,
+          dimensions.height,
+          designTokensPrompt,
+          variantPrompt,
+          agentContext.copyOverrides,
+        );
+        htmlCacheSummary.misses += 1;
+      }
+
+      llmOutput = {
+        generated_html: injectDesignTokensIntoHtml(llmOutput.generated_html, designTokensForRun)
+      };
+
+      if (htmlCachePolicy.enabled && htmlCachePolicy.write) {
+        await writeCachedHtml(env, cacheKey, {
+          generated_html: llmOutput.generated_html,
+          created_at: new Date().toISOString(),
+          slug: post.slug,
+          format,
+          variant_index: index + 1,
+        });
+        htmlCacheSummary.writes += 1;
+      }
+
+      if (index === 0) {
+        primaryVariantByFormat[format] = cacheStatus;
+      }
+
+      const browser = await launchRenderingBrowser(env);
 
       try {
+        if (!variantLlmOutput) {
+          variantLlmOutput = llmOutput;
+        }
+
         if (index === 0 && format === [...outputPlan.formats][0]) {
           imageSource = { source: post.feature_image ? "feature" : "none", imageUrl: post.feature_image || "" };
         }
@@ -849,7 +1253,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
     variants.push({
       index: index + 1,
       image_source: imageSource,
-      llm_output: variants[0]?.llm_output || { generated_html: "" },
+      llm_output: variantLlmOutput || { generated_html: "" },
       assets: formatAssets
     });
   }
@@ -864,6 +1268,13 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
     requested_formats: [...outputPlan.formats],
     image_source: primaryVariant.image_source,
     llm_output: primaryVariant.llm_output,
+    html_cache: {
+      enabled: htmlCachePolicy.enabled,
+      mode: body.htmlCache?.mode ?? "off",
+      key: body.htmlCache?.key ?? null,
+      summary: htmlCacheSummary,
+      primary_variant_by_format: primaryVariantByFormat,
+    },
     agentic: summarizeAgentExecution(agentContexts),
     assets: primaryVariant.assets,
     variants: outputPlan.postCount > 1 ? variants : undefined
@@ -899,7 +1310,29 @@ async function renderPng(browser: any, html: string, width: number, height: numb
   const page = await browser.newPage();
   try {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 15_000 });
+    await page.setContent(html, { waitUntil: "networkidle0", timeout: 15_000 });
+
+    // Wait for Tailwind CDN to process styles. 
+    // Tailwind CDN adds a <style> tag with processed CSS after initialization.
+    await page.evaluate(`
+      (async () => {
+        // Wait for Tailwind to be available and process styles
+        const maxWait = 3000;
+        const start = Date.now();
+        while (Date.now() - start < maxWait) {
+          // Check if Tailwind has added its generated styles
+          const tailwindStyles = document.querySelector('style[data-tailwind]') || 
+                                 document.querySelector('style:not([id])');
+          if (tailwindStyles && tailwindStyles.textContent && tailwindStyles.textContent.length > 1000) {
+            break;
+          }
+          await new Promise(r => setTimeout(r, 50));
+        }
+        // Final settling time for any remaining style calculations
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      })();
+    `);
 
     await page.waitForFunction(
       "() => typeof window.__RICH_RENDER_DONE__ === 'undefined' || window.__RICH_RENDER_DONE__ === true",
@@ -1163,6 +1596,19 @@ function resolveNotifyUrl(bodyValue: string | undefined, envValue: string | unde
   }
 }
 
+function shouldUseDefaultNotifyWebhook(requestUrl: string): boolean {
+  try {
+    const hostname = new URL(requestUrl).hostname.trim().toLowerCase();
+    if (!hostname) return true;
+    if (hostname === "localhost" || hostname === "::1") return false;
+    if (hostname.endsWith(".localhost") || hostname.endsWith(".local")) return false;
+    if (/^127(?:\.\d{1,3}){3}$/.test(hostname)) return false;
+    return true;
+  } catch {
+    return true;
+  }
+}
+
 // ==================== VALIDATION ====================
 
 function validateGenerateRequestBody(input: unknown): GenerateRequestBody {
@@ -1176,7 +1622,9 @@ function validateGenerateRequestBody(input: unknown): GenerateRequestBody {
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
     image: parseImageOptions(body.image),
     output: parseOutputOptions(body.output),
-    agent: parseAgentOptions(body.agent)
+    htmlCache: parseHtmlCacheOptions(body.htmlCache),
+    agent: parseAgentOptions(body.agent),
+    designTokens: parseDesignTokens(body.designTokens)
   };
 }
 
@@ -1202,8 +1650,44 @@ function validateDirectContentRequestBody(input: unknown): DirectContentRequestB
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
     image: parseImageOptions(body.image),
     output: parseOutputOptions(body.output),
-    agent: parseAgentOptions(body.agent)
+    htmlCache: parseHtmlCacheOptions(body.htmlCache),
+    agent: parseAgentOptions(body.agent),
+    designTokens: parseDesignTokens(body.designTokens)
   };
+}
+
+function validateRenderFromCacheRequestBody(input: unknown): RenderFromCacheRequestBody {
+  const body = requireObject(input, "Request body");
+  return {
+    slug: optionalString(body.slug, "slug", 200),
+    output: parseOutputOptions(body.output),
+    storage: parseStorageOptions(body.storage),
+    htmlCache: parseHtmlCacheOptions(body.htmlCache),
+    designTokens: parseDesignTokens(body.designTokens),
+    variantIndex: body.variantIndex !== undefined
+      ? Math.round(clampNumber(requiredNumber(body.variantIndex, "variantIndex"), 1, 10, 1))
+      : undefined,
+  };
+}
+
+function parseDesignTokens(input: unknown): Record<string, unknown> | undefined {
+  if (input === undefined) return undefined;
+  return requireObject(input, "designTokens");
+}
+
+function parseHtmlCacheOptions(input: unknown): HtmlCacheOptions | undefined {
+  if (input === undefined) return undefined;
+  const object = requireObject(input, "htmlCache");
+  const mode = optionalString(object.mode, "htmlCache.mode", 20);
+  if (mode && !["off", "read-only", "write-only", "read-write"].includes(mode)) {
+    throw new HttpError(400, "htmlCache.mode must be one of off, read-only, write-only, read-write");
+  }
+
+  const parsed: HtmlCacheOptions = {
+    mode: mode as HtmlCacheOptions["mode"],
+    key: optionalString(object.key, "htmlCache.key", 80),
+  };
+  return Object.values(parsed).some((v) => v !== undefined) ? parsed : undefined;
 }
 
 function validateWebhookPayload(input: unknown): GhostWebhookPayload {

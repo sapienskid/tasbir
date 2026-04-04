@@ -237,6 +237,17 @@ Outputs:
 - `renders/stress-suite-*/failures.json`
 - `renders/stress-suite-*/index.html` (grid gallery + click-to-open viewer)
 
+## Studio Cached Render Loop
+
+Use the Studio tab for generation and screenshot iteration.
+
+1. Set `HTML Cache` mode to `read-write` (or `write-only`) and choose a cache key.
+2. Click `Generate Posts` once to seed cache.
+3. Click `Re-render Cached HTML` to render screenshots from cached HTML only.
+4. Switch to `read-only` mode to enforce cache-only behavior (cache miss returns an error, no fallback generation).
+
+The Studio result panel includes screenshot thumbnails rendered directly through authenticated Worker asset endpoints, so private R2 buckets work without public bucket URLs.
+
 ## Agentic Controls
 
 Request payloads may include:

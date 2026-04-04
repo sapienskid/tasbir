@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 import { tokensToCSS, type DesignTokens } from '@/lib/tokens'
-import { generateComponentsSkeleton, generateLandingPageSkeleton, generatePosterSkeleton } from '@/components/skeletons'
+import { generateComponentsSkeleton } from '@/components/skeletons'
 
 const PRESETS = [
   { id: 'luxury', l: 'Luxury' },
@@ -120,18 +120,20 @@ export default function App() {
   const [secondaryColorHint, setSecondaryColorHint] = useState('')
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ color: true, typography: true, spacing: true, shadow: true, border: true, gradient: true, motion: true, component: true })
   const [error, setError] = useState<string | null>(null)
-  const [previewTab, setPreviewTab] = useState<'components' | 'landing' | 'poster'>('components')
   const [_serverConfig, setServerConfig] = useState<any>(null)
   const [configLoading, setConfigLoading] = useState(false)
   const [editingConfig, setEditingConfig] = useState<any>(null)
   const [configSaved, setConfigSaved] = useState(false)
   const [studioResult, setStudioResult] = useState<any>(null)
   const [studioGenerating, setStudioGenerating] = useState(false)
+  const [studioRerendering, setStudioRerendering] = useState(false)
   const [studioMode, setStudioMode] = useState<'content' | 'slug'>('content')
   const [studioTitle, setStudioTitle] = useState('')
   const [studioContent, setStudioContent] = useState('')
   const [studioSlug, setStudioSlug] = useState('')
   const [studioFormats, setStudioFormats] = useState(['instagram-portrait', 'twitter-card'])
+  const [studioCacheMode, setStudioCacheMode] = useState<'off' | 'read-only' | 'write-only' | 'read-write'>('read-write')
+  const [studioCacheKey, setStudioCacheKey] = useState('local-dev')
 
   useEffect(() => {
     loadConfig()
@@ -208,10 +210,6 @@ export default function App() {
     } finally {
       setGenerating(false)
     }
-  }
-
-  async function handlePreviewTabChange(tab: 'components' | 'landing' | 'poster') {
-    setPreviewTab(tab)
   }
 
   async function handleRegenDemo() {
@@ -318,19 +316,66 @@ export default function App() {
     setStudioGenerating(true)
     setError(null)
     try {
-      const body: any = {
-        title: studioMode === 'content' ? studioTitle.trim() : 'Generated Post',
-        content: studioMode === 'content' ? studioContent.trim() : '',
-        formats: studioFormats,
-        image: { mode: 'none' },
+      const htmlCache = {
+        mode: studioCacheMode,
+        key: studioCacheKey.trim() || undefined,
       }
-      if (studioMode === 'slug') body.slug = studioSlug.trim()
-      const res = await api.generateFromContent(body)
+
+      const shared: any = {
+        output: { formats: studioFormats, postCount: 1 },
+        image: { mode: 'none' },
+        htmlCache,
+        designTokens: tokens,
+      }
+
+      const res = studioMode === 'slug'
+        ? await api.generate({
+            slug: studioSlug.trim(),
+            ...shared,
+          })
+        : await api.generateFromContent({
+            title: studioTitle.trim(),
+            content: studioContent.trim(),
+            ...shared,
+          })
+
       setStudioResult(res)
     } catch (e: any) {
       setError(e.message || 'Generation failed')
     } finally {
       setStudioGenerating(false)
+    }
+  }
+
+  async function handleStudioRenderFromCache() {
+    if (!studioResult?.slug) {
+      setError('Generate once before re-rendering from cache')
+      return
+    }
+
+    setStudioRerendering(true)
+    setError(null)
+    try {
+      const resolvedCacheKey = studioResult?.html_cache?.key || studioCacheKey.trim() || undefined
+      const rerender = await api.renderFromCache({
+        slug: studioResult.slug,
+        output: { formats: studioFormats, postCount: 1 },
+        htmlCache: { mode: studioCacheMode, key: resolvedCacheKey },
+        variantIndex: 1,
+        designTokens: tokens,
+      })
+
+      setStudioResult((prev: any) => ({
+        ...prev,
+        assets: {
+          ...(prev?.assets || {}),
+          ...(rerender.assets || {}),
+        },
+      }))
+    } catch (e: any) {
+      setError(e.message || 'Cache re-render failed')
+    } finally {
+      setStudioRerendering(false)
     }
   }
 
@@ -393,8 +438,12 @@ export default function App() {
                 content={studioContent} setContent={setStudioContent}
                 slug={studioSlug} setSlug={setStudioSlug}
                 formats={studioFormats} toggleFormat={toggleStudioFormat}
+                cacheMode={studioCacheMode} setCacheMode={setStudioCacheMode}
+                cacheKey={studioCacheKey} setCacheKey={setStudioCacheKey}
                 availableFormats={availableFormats}
                 generating={studioGenerating} onGenerate={handleStudioGenerate}
+                rerendering={studioRerendering}
+                onRenderFromCache={handleStudioRenderFromCache}
                 result={studioResult} tokens={tokens}
                 expandedSections={expandedSections} toggleSection={toggleSection}
                 onUpdateTokenColor={updateTokenColor}
@@ -425,16 +474,18 @@ export default function App() {
           <>
             <div className="flex-1 flex flex-col overflow-hidden min-h-0">
               <div className="flex items-center border-b flex-shrink-0" style={{ borderColor: '#252525', background: '#141414' }}>
-                <button onClick={() => handlePreviewTabChange('components')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'components' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Components</button>
-                <button onClick={() => handlePreviewTabChange('landing')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'landing' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Landing Page</button>
-                <button onClick={() => handlePreviewTabChange('poster')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'poster' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Poster</button>
+                <div className="text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 text-white border-white">
+                  {activeTab === 'studio' ? 'Screenshots' : 'Components'}
+                </div>
                 {tokens && (
                   <button onClick={handleRegenDemo} className="ml-auto mr-3 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border transition-all border-[#313131] text-[#555] hover:border-[#3d3d3d] hover:text-[#999]">↺ Refresh</button>
                 )}
               </div>
               <div className="flex-1 overflow-auto relative min-h-0" style={{ background: '#1c1c1c' }}>
-                {tokens ? (
-                  <PreviewFrame tokens={tokens} previewType={previewTab} />
+                {activeTab === 'studio' ? (
+                  <StudioScreenshotPanel result={studioResult} generating={studioGenerating || studioRerendering} />
+                ) : tokens ? (
+                  <PreviewFrame tokens={tokens} />
                 ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
             <div className="text-3xl opacity-25">◈</div>
@@ -517,7 +568,7 @@ function TokensTab({ vibeInput, setVibeInput, activePreset, applyPreset, primary
 
 /* ── Studio Tab ── */
 
-function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, availableFormats, generating, onGenerate, result, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
+function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, cacheMode, setCacheMode, cacheKey, setCacheKey, availableFormats, generating, onGenerate, rerendering, onRenderFromCache, result, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
 
   return (
     <>
@@ -544,15 +595,55 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
             </button>
           ))}
         </div>
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>HTML Cache</div>
+        <div className="grid grid-cols-2 gap-2">
+          <select
+            value={cacheMode}
+            onChange={(e: any) => setCacheMode(e.target.value)}
+            className="rounded border px-2 py-2 text-[10px] outline-none"
+            style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+          >
+            <option value="off">off</option>
+            <option value="read-only">read-only</option>
+            <option value="write-only">write-only</option>
+            <option value="read-write">read-write</option>
+          </select>
+          <input
+            value={cacheKey}
+            onChange={(e: any) => setCacheKey(e.target.value)}
+            placeholder="cache key"
+            className="rounded border px-2 py-2 text-[10px] outline-none"
+            style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+          />
+        </div>
         <button onClick={onGenerate} disabled={generating || !tokens} className="w-full py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
           {generating ? 'Generating…' : 'Generate Posts'}
+        </button>
+        <button
+          onClick={onRenderFromCache}
+          disabled={rerendering || !result?.slug}
+          className="w-full py-2 rounded font-bold text-[10px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25 border"
+          style={{ background: '#0b0b0b', borderColor: '#3d3d3d', color: '#e2e2e2' }}
+        >
+          {rerendering ? 'Re-rendering Cache…' : 'Re-render Cached HTML'}
         </button>
         {result && (
           <div className="p-2.5 rounded text-[10px] font-mono" style={{ background: '#0b0b0b', color: '#999', lineHeight: 1.6 }}>
             <div>Slug: {result.slug}</div>
             <div>Formats: {result.requested_formats?.join(', ')}</div>
+            {result.html_cache && (
+              <>
+                <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>
+                  Cache: {result.html_cache.mode} | hits {result.html_cache.summary.hits} | misses {result.html_cache.summary.misses} | writes {result.html_cache.summary.writes}
+                </div>
+                <div style={{ color: '#777' }}>
+                  {Object.entries(result.html_cache.primary_variant_by_format || {}).map(([k, v]: [string, any]) => `${k}:${v}`).join('  ')}
+                </div>
+              </>
+            )}
             {result.llm_output?.generated_html && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>HTML: Ready</div>}
             {result.assets && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>Assets: {Object.keys(result.assets).filter((k: string) => result.assets[k]).length}</div>}
+
           </div>
         )}
       </div>
@@ -586,6 +677,110 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
         )}
       </div>
     </>
+  )
+}
+
+function StudioScreenshotPanel({ result, generating }: { result: any; generating: boolean }) {
+  const entries = Object.entries(result?.assets || {}).filter(([, asset]: [string, any]) => Boolean(asset?.key || asset?.url)) as Array<[string, any]>
+
+  if (generating) {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
+        <div className="w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} />
+        <div className="text-[11px]" style={{ color: '#888' }}>Rendering screenshots…</div>
+      </div>
+    )
+  }
+
+  if (!result) {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
+        <div className="text-3xl opacity-25">▣</div>
+        <div className="text-[12px] font-semibold tracking-wide">No Screenshots Yet</div>
+        <div className="text-[11px]" style={{ color: '#777' }}>Generate from Studio to view results here</div>
+      </div>
+    )
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
+        <div className="text-3xl opacity-25">◻</div>
+        <div className="text-[12px] font-semibold tracking-wide">No Rendered Assets</div>
+        <div className="text-[11px]" style={{ color: '#777' }}>Try Generate or Re-render Cached HTML</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+      {entries.map(([format, asset]) => (
+        <AssetPreviewCard key={format} format={format} asset={asset} />
+      ))}
+    </div>
+  )
+}
+
+function AssetPreviewCard({ format, asset }: { format: string; asset: any }) {
+  const [resolvedSrc, setResolvedSrc] = useState<string>(asset?.url || '')
+  const [loading, setLoading] = useState(Boolean(asset?.key))
+
+  useEffect(() => {
+    let active = true
+    let localBlobUrl: string | null = null
+
+    async function load() {
+      if (!asset?.key) {
+        setResolvedSrc(asset?.url || '')
+        setLoading(false)
+        return
+      }
+
+      try {
+        setLoading(true)
+        const blobUrl = await api.fetchAssetBlobUrl(asset.key)
+        if (!active) {
+          URL.revokeObjectURL(blobUrl)
+          return
+        }
+        localBlobUrl = blobUrl
+        setResolvedSrc(blobUrl)
+      } catch {
+        if (active) {
+          setResolvedSrc(asset?.url || '')
+        }
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    load()
+
+    return () => {
+      active = false
+      if (localBlobUrl) URL.revokeObjectURL(localBlobUrl)
+    }
+  }, [asset?.key, asset?.url])
+
+  return (
+    <div
+      className="rounded overflow-hidden self-start"
+      style={{ background: '#111' }}
+      aria-label={`${format} screenshot card`}
+    >
+      {resolvedSrc ? (
+        <img
+          src={resolvedSrc}
+          alt={`${format} screenshot`}
+          className="w-full h-auto block"
+          loading="lazy"
+        />
+      ) : (
+        <div className="w-full flex items-center justify-center text-[9px]" style={{ minHeight: 120, color: '#666' }}>
+          {loading ? 'Loading preview…' : 'Preview unavailable'}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -1117,15 +1312,8 @@ function MotionExplorer({ motion }: { motion: DesignTokens['motion'] }) {
 
 /* ── Preview ── */
 
-function PreviewFrame({ tokens, previewType }: { tokens: DesignTokens; previewType: 'components' | 'landing' | 'poster' }) {
-  let skeletonHtml = ''
-  if (previewType === 'components') {
-    skeletonHtml = generateComponentsSkeleton()
-  } else if (previewType === 'landing') {
-    skeletonHtml = generateLandingPageSkeleton()
-  } else {
-    skeletonHtml = generatePosterSkeleton()
-  }
+function PreviewFrame({ tokens }: { tokens: DesignTokens }) {
+  const skeletonHtml = generateComponentsSkeleton()
   
   const cssVars = tokensToCSS(tokens)
   

@@ -1,4 +1,11 @@
-const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8787";
+const RAW_API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
+const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
+
+function buildApiUrl(path: string): string {
+  if (!API_BASE) return path;
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${API_BASE}${normalizedPath}`;
+}
 
 export interface DesignTokens {
   colors: Record<string, string>;
@@ -22,6 +29,28 @@ export interface GenerationResult {
   llm_output: {
     generated_html: string;
   };
+  html_cache?: {
+    enabled: boolean;
+    mode: "off" | "read-only" | "write-only" | "read-write";
+    key: string | null;
+    summary: { hits: number; misses: number; writes: number };
+    primary_variant_by_format: Record<string, "hit" | "miss">;
+  };
+  assets: Record<string, { format: string; key: string; url: string | null } | null>;
+}
+
+export interface HtmlCacheOptions {
+  mode?: "off" | "read-only" | "write-only" | "read-write";
+  key?: string;
+}
+
+export interface RenderFromCacheResult {
+  ok: boolean;
+  slug: string;
+  requested_formats: string[];
+  cache_key_prefix: string;
+  variant_index: number;
+  missing_formats: string[];
   assets: Record<string, { format: string; key: string; url: string | null } | null>;
 }
 
@@ -41,7 +70,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     headers["x-api-key"] = _apiKey;
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(buildApiUrl(path), {
     headers,
     ...options,
   });
@@ -90,21 +119,48 @@ export const api = {
     content: string;
     excerpt?: string;
     tags?: string[];
-    formats?: string[];
+    output?: { formats?: string[]; postCount?: number };
     prompt?: string;
     image?: { mode?: string };
+    htmlCache?: HtmlCacheOptions;
     agent?: { mode?: string; promptProfile?: string };
+    designTokens?: any;
   }) => request<GenerationResult>("/generate-from-content", {
     method: "POST",
     body: JSON.stringify(body),
   }),
   generate: (body: {
     slug: string;
-    formats?: string[];
+    output?: { formats?: string[]; postCount?: number };
     prompt?: string;
     image?: { mode?: string };
+    htmlCache?: HtmlCacheOptions;
+    designTokens?: any;
   }) => request<GenerationResult>("/generate", {
     method: "POST",
     body: JSON.stringify(body),
   }),
+  renderFromCache: (body: {
+    slug: string;
+    output?: { formats?: string[]; postCount?: number };
+    htmlCache?: HtmlCacheOptions;
+    variantIndex?: number;
+    designTokens?: any;
+  }) => request<RenderFromCacheResult>("/render-from-cache", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
+  fetchAssetBlobUrl: async (key: string): Promise<string> => {
+    const headers: Record<string, string> = {};
+    if (_apiKey) {
+      headers["x-api-key"] = _apiKey;
+    }
+    const response = await fetch(buildApiUrl(`/asset?key=${encodeURIComponent(key)}`), { headers });
+    if (!response.ok) {
+      const text = await response.text().catch(() => response.statusText);
+      throw new Error(text || `Asset fetch failed: ${response.status}`);
+    }
+    const blob = await response.blob();
+    return URL.createObjectURL(blob);
+  },
 };

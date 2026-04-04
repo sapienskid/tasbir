@@ -13,6 +13,8 @@ Rules:
 - Use Tailwind CSS via CDN
 - Configure Tailwind with the provided design tokens
 - Use Tailwind utility classes for all styling
+- You MUST consume design tokens in styling via CSS variables like var(--surface-base), var(--text-primary), var(--color-primary-500), var(--font-sans)
+- Do NOT hardcode palette hex/rgb values for core UI colors when token variables exist
 - The design must be exactly sized for the given width x height viewport
 - Typography must be bold, professional, and highly readable
 - The design must feel PREMIUM, DYNAMIC, and visually striking
@@ -67,7 +69,27 @@ Return only one complete HTML document as raw text.`,
         temperature: 0.3,
       });
 
-      const generatedHtml = extractHtml(result.text);
+      let generatedHtml = extractHtml(result.text);
+      if (!hasDesignTokenUsage(generatedHtml)) {
+        const retry = await generateText({
+          model,
+          system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
+          prompt: `Your previous HTML did not use design token CSS variables sufficiently.
+
+Regenerate and ensure styles use token variables directly (e.g. var(--surface-base), var(--text-primary), var(--color-primary-500), var(--font-sans)).
+At least 6 style declarations in the document must reference var(--...).
+
+Platform: ${args.platform}${args.formatName ? ` (${args.formatName})` : ""} (${args.width}x${args.height})
+Design tokens: ${args.designTokens}
+Title: ${args.title}
+Excerpt: ${args.excerpt}
+Content:\n${args.content}
+
+Return only one complete HTML document as raw text.`,
+          temperature: 0.2,
+        });
+        generatedHtml = extractHtml(retry.text);
+      }
       return { generated_html: generatedHtml };
     } catch (error) {
       errors.push(error instanceof Error ? error : new Error(String(error)));
@@ -76,6 +98,11 @@ Return only one complete HTML document as raw text.`,
   }
 
   throw new AggregateError(errors, "HTML layout generation failed across all providers");
+}
+
+function hasDesignTokenUsage(html: string): boolean {
+  const matches = html.match(/var\(--[a-z0-9-]+\)/gi) || [];
+  return matches.length >= 3;
 }
 
 function extractHtml(text: string): string {

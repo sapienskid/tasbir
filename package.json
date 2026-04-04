@@ -17,7 +17,6 @@
     "@types/node": "^25.5.0",
     "concurrently": "^9.2.1",
     "puppeteer-core": "^24.38.0",
-    "tsx": "^4.21.0",
     "typescript": "latest",
     "vitest": "^3.2.4",
     "wrangler": "latest",
