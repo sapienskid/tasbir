@@ -193,11 +193,13 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-app.use("*", secureHeaders({
-  xContentTypeOptions: true,
-  referrerPolicy: "no-referrer",
-  xFrameOptions: "DENY"
-}));
+app.use("*", async (c, next) => {
+  if (c.req.method === "OPTIONS") return next();
+  return secureHeaders({
+    xContentTypeOptions: true,
+    referrerPolicy: "no-referrer"
+  })(c, next);
+});
 
 app.get("/health", (c) => c.json({ ok: true }));
 
