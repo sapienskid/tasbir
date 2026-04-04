@@ -1,6 +1,5 @@
 import { Agent } from "agents";
-import { PIPELINE_CONFIG } from "../generated/template-assets";
-import type { TemplateKind } from "../templates";
+import { PIPELINE_CONFIG } from "../config";
 
 interface Env {
   AI: Ai;
@@ -10,7 +9,6 @@ interface Env {
 interface PromptProfilePayload {
   mastermind: string[];
   strategist: string[];
-  templatePlanner: string[];
   copywriter: string[];
   visualDirector: string[];
   renderGuard: string[];
@@ -45,20 +43,19 @@ interface OrchestratorRequestPayload {
     plaintext?: string;
     tags?: string[];
   };
-  requestedFormats: TemplateKind[];
+  requestedFormats: string[];
   userPrompt?: string;
   promptProfile: PromptProfilePayload;
   renderPolicy: RenderPolicyPayload;
   platformGoals?: PlatformGoalsPayload;
   variantContext?: {
-    platform?: TemplateKind;
+    platform?: string;
     variantIndex?: number;
   };
 }
 
 interface OrchestratorResponsePayload {
   strategic_brief: string;
-  template_planner_notes: string;
   copywriter_notes: string;
   visual_notes: string;
   warnings: string[];
@@ -68,7 +65,6 @@ const ORCHESTRATOR_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {
     strategic_brief: { type: "string" },
-    template_planner_notes: { type: "string" },
     copywriter_notes: { type: "string" },
     visual_notes: { type: "string" },
     warnings: {
@@ -78,7 +74,6 @@ const ORCHESTRATOR_RESPONSE_SCHEMA: Record<string, unknown> = {
   },
   required: [
     "strategic_brief",
-    "template_planner_notes",
     "copywriter_notes",
     "visual_notes",
     "warnings"
@@ -105,9 +100,11 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
     const sourceBody = (input.post.plaintext ?? "").trim();
     const sourceExcerpt = (input.post.excerpt ?? "").trim();
     const sourceText = sourceBody || sourceExcerpt;
+    const limits = (PIPELINE_CONFIG.generation?.limits as any) ?? {};
+    const postTextMaxChars = (limits.post_text_max_chars as number) ?? 14000;
     const truncatedSource =
-      sourceText.length > PIPELINE_CONFIG.generation.limits.post_text_max_chars
-        ? `${sourceText.slice(0, PIPELINE_CONFIG.generation.limits.post_text_max_chars)}...`
+      sourceText.length > postTextMaxChars
+        ? `${sourceText.slice(0, postTextMaxChars)}...`
         : sourceText;
 
     const tags = (input.post.tags ?? []).slice(0, 8).join(", ");
@@ -129,7 +126,6 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
     const systemPrompt = [
       ...input.promptProfile.mastermind,
       ...input.promptProfile.strategist,
-      ...input.promptProfile.templatePlanner,
       ...input.promptProfile.copywriter,
       ...input.promptProfile.visualDirector,
       ...input.promptProfile.renderGuard,
@@ -157,7 +153,6 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
       "",
       "Produce concise notes for:",
       "- strategic_brief: campaign intent and angle guidance",
-      "- template_planner_notes: template-fit and slot-density guidance",
       "- copywriter_notes: platform tone and structure guidance",
       "- visual_notes: image direction and no-text image policy reminders",
       "- warnings: potential quality/compliance risks"
@@ -193,10 +188,8 @@ function fallbackResponse(input: OrchestratorRequestPayload): OrchestratorRespon
   const formatSummary = input.requestedFormats.join(", ") || "requested formats";
   return {
     strategic_brief: `Create platform-native assets for ${formatSummary} with clear hooks, practical middle content, and concrete CTA endings.`,
-    template_planner_notes:
-      "Choose templates with slot density proportional to message complexity. Avoid text-heavy layouts for dense source content.",
     copywriter_notes:
-      "Use concise platform-native language, complete sentences, and non-repetitive angles. Keep captions informative and conversion-oriented.",
+      "Write concise platform-native copy, complete sentences, and non-repetitive angles. Keep captions informative and conversion-oriented.",
     visual_notes: input.renderPolicy.allowTextInAiImages
       ? "Use clean editorial visuals aligned to the message."
       : "Use clean editorial visuals with intentional negative space. Never include text artifacts in generated images.",
@@ -215,10 +208,6 @@ function normalizeResponse(
 
   return {
     strategic_brief: toSingleLine(raw.strategic_brief, "Focus on platform-native strategy."),
-    template_planner_notes: toSingleLine(
-      raw.template_planner_notes,
-      "Choose templates that match slot semantics and readability."
-    ),
     copywriter_notes: toSingleLine(raw.copywriter_notes, "Write concise and complete platform-native copy."),
     visual_notes: toSingleLine(raw.visual_notes, "Use clean text-safe editorial backgrounds with no generated text artifacts."),
     warnings: [...new Set(warnings.map((item) => item.trim()).filter(Boolean))].slice(0, 8)
