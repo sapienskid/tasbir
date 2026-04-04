@@ -1,17 +1,10 @@
-import { type TemplateFieldDeclaration } from "./templates";
-import { PIPELINE_CONFIG } from "./generated/template-assets";
+import { PIPELINE_CONFIG, formatDesignTokensForPrompt } from "./config";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export interface LlmPromptOverrides {
   systemPrompt?: string | string[];
   userInstructions?: string | string[];
   userInstructionsAppend?: string;
-  temperature?: number;
-  maxTokens?: number;
-}
-
-export interface TemplatePlannerPromptOverrides {
-  systemPrompt?: string | string[];
-  userInstructions?: string | string[];
   temperature?: number;
   maxTokens?: number;
 }
@@ -25,67 +18,42 @@ export interface LlmOutput {
   instagram_caption: string;
   twitter_caption: string;
   linkedin_caption: string;
-  carousel_slides: CarouselSlide[];
   hashtags: string[];
   image_prompt: string;
   stock_search_query: string;
   use_feature_image: boolean;
-  slot_content: Record<string, string>;
+  generated_html: string;
+  carousel_slides: CarouselSlide[];
 }
 
 export interface LlmSourcePost {
+  id: string;
   title: string;
+  slug: string;
+  url: string;
   html?: string;
   plaintext?: string;
   excerpt?: string;
   custom_excerpt?: string;
   feature_image?: string;
   tags?: Array<{ name?: string }>;
+  primary_tag?: { name?: string };
 }
 
-export interface TemplateChoiceCandidate {
-  id: string;
-  label: string;
-  description?: string;
-  selectionHints?: string;
-  requiredSlotKeys: string[];
-  fields?: TemplateFieldDeclaration[];
-}
+const AGENT_CONFIG = (PIPELINE_CONFIG.generation?.agents ?? {}) as Record<string, any>;
+const AGENT_MODELS = (AGENT_CONFIG.models ?? {}) as Record<string, any>;
+const AGENT_RUNTIME = (AGENT_CONFIG.runtime ?? {}) as Record<string, any>;
+const AGENT_PROMPTS = (AGENT_CONFIG.prompts ?? {}) as Record<string, any>;
+const GEMINI_PROMPTS = {
+  system_prompt: (PIPELINE_CONFIG.generation?.agents?.prompts?.gemini_html_generation_system_prompt ?? []) as string[],
+  user_instructions: (PIPELINE_CONFIG.generation?.agents?.prompts?.gemini_html_generation_user_instructions ?? []) as string[],
+};
 
-const AGENT_CONFIG = (PIPELINE_CONFIG.generation?.agents ?? {}) as Record<string, unknown>;
-const AGENT_MODELS = (AGENT_CONFIG.models ?? {}) as Record<string, unknown>;
-const AGENT_RUNTIME = (AGENT_CONFIG.runtime ?? {}) as Record<string, unknown>;
-const AGENT_PROMPTS = (AGENT_CONFIG.prompts ?? {}) as Record<string, unknown>;
-const DEFAULT_LLM_MODEL = toText(AGENT_MODELS.copy_model) || "@cf/openai/gpt-oss-120b";
-const DEFAULT_TEMPLATE_PLANNER_MODEL = toText(AGENT_MODELS.template_planner_model) || DEFAULT_LLM_MODEL;
-const DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT = normalizePromptLines(AGENT_PROMPTS.copy_system_prompt).join(" ");
-const DEFAULT_COPY_USER_INSTRUCTIONS = normalizePromptLines(AGENT_PROMPTS.copy_user_instructions);
-const DEFAULT_TEMPLATE_PLANNER_SYSTEM_PROMPT = normalizePromptLines(AGENT_PROMPTS.template_planner_system_prompt);
-const DEFAULT_TEMPLATE_PLANNER_USER_INSTRUCTIONS = normalizePromptLines(AGENT_PROMPTS.template_planner_user_instructions);
+const DEFAULT_LLM_MODEL = "gemini-2.0-flash";
 const DEFAULT_COPY_TEMPERATURE = clampNumber(toFiniteNumber(AGENT_RUNTIME.copy_temperature), 0, 2, 0.2);
 const DEFAULT_COPY_MAX_TOKENS = Math.round(clampNumber(toFiniteNumber(AGENT_RUNTIME.copy_max_tokens), 256, 4096, 2200));
-const DEFAULT_PLANNER_TEMPERATURE = clampNumber(
-  toFiniteNumber(AGENT_RUNTIME.template_planner_temperature),
-  0,
-  2,
-  0.1
-);
-const DEFAULT_PLANNER_MAX_TOKENS = Math.round(
-  clampNumber(toFiniteNumber(AGENT_RUNTIME.template_planner_max_tokens), 256, 4096, 900)
-);
-const TEMPLATE_COMPOSITION_DIRECTIVES = [
-  "Treat templates as structure-only skeletons and place all design decisions in CSS classes.",
-  "Fill slot_content comprehensively so every likely template slot has useful copy.",
-  "Never request generated text in images; typography is always rendered by the template system.",
-  "Keep slot values concise, specific, and directly usable without extra formatting."
-] as const;
 
-function buildLlmJsonSchema(requiredSlotKeys: string[]): Record<string, unknown> {
-  const normalizedRequiredSlotKeys = [...new Set(requiredSlotKeys.map((key) => key.trim()).filter(Boolean))];
-  const slotProperties = Object.fromEntries(
-    normalizedRequiredSlotKeys.map((slotKey) => [slotKey, { type: "string" }])
-  );
-
+function buildLlmJsonSchema(): Record<string, unknown> {
   return {
     type: "object",
     properties: {
@@ -110,14 +78,7 @@ function buildLlmJsonSchema(requiredSlotKeys: string[]): Record<string, unknown>
       image_prompt: { type: "string" },
       stock_search_query: { type: "string" },
       use_feature_image: { type: "boolean" },
-      slot_content: {
-        type: "object",
-        properties: slotProperties,
-        required: normalizedRequiredSlotKeys,
-        additionalProperties: {
-          type: "string"
-        }
-      }
+      generated_html: { type: "string" }
     },
     required: [
       "instagram_caption",
@@ -128,356 +89,69 @@ function buildLlmJsonSchema(requiredSlotKeys: string[]): Record<string, unknown>
       "image_prompt",
       "stock_search_query",
       "use_feature_image",
-      "slot_content"
+      "generated_html"
     ]
   } satisfies Record<string, unknown>;
 }
 
-export async function generateStructuredCopy(args: {
-  ai: Ai;
-  llmModel?: string;
+export async function generateHtmlWithGemini(args: {
+  apiKey: string;
   post: LlmSourcePost;
-  requiredCarouselSlides: number;
-  requiredSlotKeys: string[];
-  slotFields?: TemplateFieldDeclaration[];
+  platform: string;
+  width: number;
+  height: number;
   userPrompt?: string;
   llmOverrides?: LlmPromptOverrides;
-  normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string; requiredSlotKeys: string[] }) => Record<string, string>;
 }): Promise<LlmOutput> {
-  const textModel = (args.llmModel || DEFAULT_LLM_MODEL) as keyof AiModels;
+  const genAI = new GoogleGenerativeAI(args.apiKey);
+  const model = genAI.getGenerativeModel({
+    model: DEFAULT_LLM_MODEL,
+    generationConfig: {
+      responseMimeType: "application/json",
+    }
+  });
 
-  // Build slot hint lines from field declarations (preferred) or fall back to key list only
-  const slotHints = buildSlotHintLines(args.requiredSlotKeys, args.slotFields);
+  const designTokens = formatDesignTokensForPrompt();
 
-  const limits = PIPELINE_CONFIG.generation.limits;
-  const templateCompositionPromptHints = [...TEMPLATE_COMPOSITION_DIRECTIVES]
-    .slice(0, 12)
-    .map((line) => `- ${line}`)
-    .join("\n");
-  const userInstructionsTemplate = buildPromptTemplate(
-    args.llmOverrides?.userInstructions,
-    DEFAULT_COPY_USER_INSTRUCTIONS
-  );
-  const userInstructions = userInstructionsTemplate
-    .replace("<required_carousel_slides>", String(args.requiredCarouselSlides))
-    .replace("<instagram_caption_max_chars>", String(limits.instagram_caption_max_chars))
-    .replace("<twitter_caption_max_chars>", String(limits.twitter_caption_max_chars))
-    .replace("<linkedin_caption_max_chars>", String(limits.linkedin_caption_max_chars))
-    .replace("<carousel_heading_max_chars>", String(limits.carousel_heading_max_chars))
-    .replace("<carousel_body_max_chars>", String(limits.carousel_body_max_chars))
-    .replace("<hashtag_min_count>", String(limits.hashtag_min_count))
-    .replace("<hashtag_max_count>", String(limits.hashtag_max_count))
-    .replace("<available_slot_keys>", slotHints || args.requiredSlotKeys.join(", "))
-    .replace("<required_slot_keys>", args.requiredSlotKeys.join(", "))
-    .replace(
-      "<template_composition_directives>",
-      templateCompositionPromptHints || "- Use deterministic HTML template composition."
-    );
-  const userBrief =
-    typeof args.userPrompt === "string" && args.userPrompt.trim().length > 0
-      ? `- user campaign brief: ${args.userPrompt.trim()}`
-      : "";
-  const slotCoverageDirective = `- slot_content contract: include every key from ${args.requiredSlotKeys.join(", ")} with concrete copy that can render directly.`;
-  const appendedInstructions = normalizePromptAppend(args.llmOverrides?.userInstructionsAppend);
-  const mergedBaseInstructions = [userInstructions, userBrief, slotCoverageDirective].filter(Boolean).join("\n");
-  const mergedInstructions = appendedInstructions
-    ? `${mergedBaseInstructions}\n${appendedInstructions}`
-    : mergedBaseInstructions;
-  const systemPrompt = buildPromptTemplate(args.llmOverrides?.systemPrompt, normalizePromptLines(AGENT_PROMPTS.copy_system_prompt));
-  const title = args.post.title.trim();
-  const excerpt = (args.post.custom_excerpt || args.post.excerpt || "").trim();
-  const plainBody = (args.post.plaintext || stripHtml(args.post.html || "")).trim();
-  const postText =
-    plainBody.length > limits.post_text_max_chars
-      ? `${plainBody.slice(0, limits.post_text_max_chars)}...`
-      : plainBody;
-  const topTags = (args.post.tags ?? [])
-    .map((tag) => tag.name ?? "")
-    .filter(Boolean)
-    .slice(0, 6)
-    .join(", ");
+  const systemPrompt = normalizePromptLines(GEMINI_PROMPTS.system_prompt).join("\n");
+  const userInstructions = normalizePromptLines(GEMINI_PROMPTS.user_instructions).join("\n")
+    .replace("<platform>", args.platform)
+    .replace("<width>", String(args.width))
+    .replace("<height>", String(args.height))
+    .replace("<title>", args.post.title)
+    .replace("<excerpt>", args.post.custom_excerpt || args.post.excerpt || "")
+    .replace("<design_tokens>", designTokens);
 
   const prompt = [
-    mergedInstructions,
-    "",
-    "Template contract:",
-    `<required_slot_keys>${args.requiredSlotKeys.join(", ")}</required_slot_keys>`,
-    "",
-    "Blog post source:",
-    `<title>${title}</title>`,
-    `<excerpt>${excerpt || "(none)"}</excerpt>`,
-    `<tags>${topTags || "(none)"}</tags>`,
-    `<has_feature_image>${Boolean(args.post.feature_image)}</has_feature_image>`,
-    "<body>",
-    postText,
-    "</body>"
-  ].join("\n");
+    userInstructions,
+    args.userPrompt ? `User specifically asked for: ${args.userPrompt}` : "",
+    "Source Content:",
+    args.post.plaintext || args.post.html || "",
+  ].filter(Boolean).join("\n\n");
 
-  const raw = await args.ai.run(textModel, {
-    messages: [
-      {
-        role: "system",
-        content: systemPrompt || DEFAULT_SOCIAL_COPY_SYSTEM_PROMPT
-      },
-      {
-        role: "user",
-        content: prompt
-      }
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: buildLlmJsonSchema(args.requiredSlotKeys)
-    },
-    temperature: clampNumber(args.llmOverrides?.temperature, 0, 2, DEFAULT_COPY_TEMPERATURE),
-    max_tokens: Math.round(clampNumber(args.llmOverrides?.maxTokens, 256, 4096, DEFAULT_COPY_MAX_TOKENS))
+  const result = await model.generateContent({
+    contents: [
+      { role: "user", parts: [{ text: `${systemPrompt}\n\n${prompt}` }] }
+    ]
   });
 
-  const parsed = parseModelJson(raw);
+  const response = await result.response;
+  const text = response.text();
+  const parsed = JSON.parse(text);
+
   return normalizeLlmOutput(parsed, {
-    hasFeatureImage: Boolean(args.post.feature_image),
-    title,
-    fallbackText: excerpt || postText,
-    requiredCarouselSlides: args.requiredCarouselSlides,
-    requiredSlotKeys: args.requiredSlotKeys,
-    normalizeSlotContent: args.normalizeSlotContent
+    title: args.post.title,
+    fallbackText: args.post.custom_excerpt || args.post.excerpt || args.post.plaintext || "",
+    hasFeatureImage: Boolean(args.post.feature_image)
   });
-}
-
-export async function chooseTemplateAssignments(args: {
-  ai: Ai;
-  llmModel?: string;
-  post: LlmSourcePost;
-  requestedFormats: string[];
-  templateCandidates: Record<string, TemplateChoiceCandidate[]>;
-  userPrompt?: string;
-  plannerOverrides?: TemplatePlannerPromptOverrides;
-}): Promise<Record<string, string>> {
-  const textModel = (args.llmModel || DEFAULT_TEMPLATE_PLANNER_MODEL) as keyof AiModels;
-  const requestedFormats = [...new Set(args.requestedFormats.map((format) => format.trim()).filter(Boolean))];
-  if (requestedFormats.length === 0) {
-    return {};
-  }
-
-  const promptLines = requestedFormats.map((format) => {
-    const candidates = args.templateCandidates[format] ?? [];
-    const candidateLines = candidates
-      .map((candidate) => {
-        const fieldSummary = candidate.fields && candidate.fields.length > 0
-          ? candidate.fields.map((f) => `${f.key}(${f.type})`).join(", ")
-          : candidate.requiredSlotKeys.length > 0 ? candidate.requiredSlotKeys.join(", ") : "(no explicit SLOT keys)";
-        const description = candidate.description ? ` - ${candidate.description}` : "";
-        const selectionHints = candidate.selectionHints ? `; selection hints: ${candidate.selectionHints}` : "";
-        return `  - ${candidate.id}: ${candidate.label}${description}; fields: ${fieldSummary}${selectionHints}`;
-      })
-      .join("\n");
-    return `format: ${format}\n${candidateLines}`;
-  });
-
-  const excerpt = (args.post.custom_excerpt || args.post.excerpt || "").trim();
-  const plainBody = (args.post.plaintext || stripHtml(args.post.html || "")).trim();
-  const postText =
-    plainBody.length > PIPELINE_CONFIG.generation.limits.post_text_max_chars
-      ? `${plainBody.slice(0, PIPELINE_CONFIG.generation.limits.post_text_max_chars)}...`
-      : plainBody;
-
-  const userBrief =
-    typeof args.userPrompt === "string" && args.userPrompt.trim().length > 0
-      ? `\n<user_brief>${args.userPrompt.trim()}</user_brief>`
-      : "";
-
-  const plannerInstructionsTemplate = buildPromptTemplate(
-    args.plannerOverrides?.userInstructions,
-    DEFAULT_TEMPLATE_PLANNER_USER_INSTRUCTIONS
-  );
-  const plannerInstructions = [
-    plannerInstructionsTemplate,
-    "",
-    "Requested formats and candidate templates:",
-    promptLines.join("\n\n"),
-    "",
-    "Source content:",
-    `<title>${args.post.title.trim()}</title>`,
-    `<excerpt>${excerpt || "(none)"}</excerpt>`,
-    "<body>",
-    postText,
-    "</body>",
-    userBrief
-  ].join("\n");
-  const plannerSystemPrompt = buildPromptTemplate(
-    args.plannerOverrides?.systemPrompt,
-    DEFAULT_TEMPLATE_PLANNER_SYSTEM_PROMPT
-  );
-
-  try {
-    const raw = await args.ai.run(textModel, {
-      messages: [
-        {
-          role: "system",
-          content: plannerSystemPrompt
-        },
-        {
-          role: "user",
-          content: plannerInstructions
-        }
-      ],
-      response_format: {
-        type: "json_schema",
-        json_schema: buildTemplateAssignmentSchema(requestedFormats, args.templateCandidates)
-      },
-      temperature: clampNumber(args.plannerOverrides?.temperature, 0, 2, DEFAULT_PLANNER_TEMPERATURE),
-      max_tokens: Math.round(clampNumber(args.plannerOverrides?.maxTokens, 256, 4096, DEFAULT_PLANNER_MAX_TOKENS))
-    });
-
-    const parsed = parseModelJson(raw);
-    const templateIdsRaw = parsed.template_ids;
-    if (!templateIdsRaw || typeof templateIdsRaw !== "object") {
-      throw new Error("Template planner did not return template_ids object");
-    }
-
-    const selected: Record<string, string> = {};
-    const templateIds = templateIdsRaw as Record<string, unknown>;
-    for (const format of requestedFormats) {
-      const candidates = args.templateCandidates[format] ?? [];
-      const candidateIdSet = new Set(candidates.map((candidate) => candidate.id));
-      const requestedTemplateId = toText(templateIds[format]);
-      if (requestedTemplateId && candidateIdSet.has(requestedTemplateId)) {
-        selected[format] = requestedTemplateId;
-        continue;
-      }
-      const fallbackTemplateId = resolveFallbackTemplateId(format, candidates);
-      if (fallbackTemplateId) {
-        selected[format] = fallbackTemplateId;
-      }
-    }
-
-    return selected;
-  } catch {
-    const fallback: Record<string, string> = {};
-    for (const format of requestedFormats) {
-      const fallbackTemplateId = resolveFallbackTemplateId(format, args.templateCandidates[format] ?? []);
-      if (fallbackTemplateId) {
-        fallback[format] = fallbackTemplateId;
-      }
-    }
-    return fallback;
-  }
-}
-
-function resolveFallbackTemplateId(format: string, candidates: TemplateChoiceCandidate[]): string | null {
-  if (candidates.length === 0) {
-    return null;
-  }
-  const candidateIdSet = new Set(candidates.map((candidate) => candidate.id));
-  const defaultTemplateId = toText((PIPELINE_CONFIG.formats as Record<string, { default_template_id?: string }>)[format]?.default_template_id);
-  if (defaultTemplateId && candidateIdSet.has(defaultTemplateId)) {
-    return defaultTemplateId;
-  }
-  return candidates[0]?.id ?? null;
-}
-
-function buildTemplateAssignmentSchema(
-  requestedFormats: string[],
-  templateCandidates: Record<string, TemplateChoiceCandidate[]>
-): Record<string, unknown> {
-  const properties: Record<string, unknown> = {};
-  for (const format of requestedFormats) {
-    const candidates = templateCandidates[format] ?? [];
-    const candidateIds = [...new Set(candidates.map((candidate) => candidate.id).filter(Boolean))];
-    properties[format] = {
-      type: "string",
-      enum: candidateIds
-    };
-  }
-
-  return {
-    type: "object",
-    properties: {
-      template_ids: {
-        type: "object",
-        properties,
-        required: requestedFormats,
-        additionalProperties: false
-      }
-    },
-    required: ["template_ids"]
-  };
-}
-
-function parseModelJson(raw: unknown): Record<string, unknown> {
-  if (typeof raw === "string") {
-    return parseJsonLike(raw);
-  }
-
-  if (raw && typeof raw === "object") {
-    const object = raw as Record<string, unknown>;
-
-    if (object.response && typeof object.response === "object") {
-      return object.response as Record<string, unknown>;
-    }
-
-    if (typeof object.response === "string") {
-      return parseJsonLike(object.response);
-    }
-
-    return object;
-  }
-
-  throw new Error("LLM returned an unexpected payload");
-}
-
-function parseJsonLike(input: string): Record<string, unknown> {
-  const direct = input.trim();
-  try {
-    return JSON.parse(direct) as Record<string, unknown>;
-  } catch {
-    const fencedMatch = direct.match(/```json\s*([\s\S]*?)```/i) ?? direct.match(/```([\s\S]*?)```/);
-    if (fencedMatch?.[1]) {
-      return JSON.parse(fencedMatch[1].trim()) as Record<string, unknown>;
-    }
-    throw new Error("Model output is not valid JSON");
-  }
-}
-
-function buildPromptTemplate(override: string | string[] | undefined, fallbackLines: readonly string[]): string {
-  const lines = normalizePromptLines(override);
-  if (lines.length === 0) {
-    return fallbackLines.join("\n");
-  }
-  return lines.join("\n");
-}
-
-function normalizePromptAppend(value: string | undefined): string {
-  if (!value) {
-    return "";
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-  return ensureLength(trimmed, 2_000, trimmed);
-}
-
-function normalizePromptLines(input: unknown): string[] {
-  if (!input) {
-    return [];
-  }
-  const rawLines = Array.isArray(input) ? input : [input];
-  return rawLines
-    .map((line) => (typeof line === "string" ? line.trim() : ""))
-    .filter(Boolean)
-    .slice(0, 80)
-    .map((line) => ensureLength(line, 200, line));
 }
 
 function normalizeLlmOutput(
   payload: Record<string, unknown>,
   args: {
-    hasFeatureImage: boolean;
     title: string;
     fallbackText: string;
-    requiredCarouselSlides: number;
-    requiredSlotKeys: string[];
-    normalizeSlotContent: (raw: unknown, args: { title: string; fallbackText: string; requiredSlotKeys: string[] }) => Record<string, string>;
+    hasFeatureImage: boolean;
   }
 ): LlmOutput {
   const limits = PIPELINE_CONFIG.generation.limits;
@@ -494,15 +168,6 @@ function normalizeLlmOutput(
     }
   );
 
-  const rawSlides = Array.isArray(payload.carousel_slides) ? payload.carousel_slides : [];
-  const sourceSentences = sentencePoolFromSource(`${args.title}. ${cleanedFallbackText}`);
-  const normalizedSlides = normalizeCarouselSlides(rawSlides, {
-    title: args.title,
-    fallbackText: cleanedFallbackText,
-    requiredSlides: args.requiredCarouselSlides,
-    sourceSentences
-  });
-
   const rawHashtags = Array.isArray(payload.hashtags) ? payload.hashtags : [];
   const hashtags = normalizeHashtags(rawHashtags, args.title, cleanedFallbackText);
 
@@ -513,23 +178,16 @@ function normalizeLlmOutput(
   const stockSearchQueryFallback = args.title.replace(/[^a-zA-Z0-9\s]/g, " ").slice(0, 100);
   const stockSearchQuery = ensureLength(toText(payload.stock_search_query), 200, stockSearchQueryFallback);
 
-  const useFeatureImage = args.hasFeatureImage && Boolean(payload.use_feature_image);
-  const slotContent = args.normalizeSlotContent(payload.slot_content, {
-    title: args.title,
-    fallbackText: cleanedFallbackText,
-    requiredSlotKeys: args.requiredSlotKeys
-  });
-
   return {
     instagram_caption: captions.instagram,
     twitter_caption: captions.twitter,
     linkedin_caption: captions.linkedin,
-    carousel_slides: normalizedSlides,
     hashtags,
     image_prompt: imagePrompt,
     stock_search_query: stockSearchQuery,
-    use_feature_image: useFeatureImage,
-    slot_content: slotContent
+    use_feature_image: args.hasFeatureImage && Boolean(payload.use_feature_image),
+    generated_html: toText(payload.generated_html),
+    carousel_slides: (payload.carousel_slides as any) || []
   };
 }
 
@@ -552,227 +210,6 @@ function normalizeCaptionText(rawText: string, title: string, maxChars: number, 
   const fallback = removeTitlePrefix(normalizeSourceContent(fallbackText), title) || normalizeSourceContent(title);
   const source = cleaned || fallback || title;
   return ensureLength(source, maxChars, fallback || title);
-}
-
-function normalizeCarouselSlides(
-  rawSlides: unknown[],
-  args: { title: string; fallbackText: string; requiredSlides: number; sourceSentences: string[] }
-): CarouselSlide[] {
-  const limits = PIPELINE_CONFIG.generation.limits;
-  const usedSentenceIndexes = new Set<number>();
-  const seenBodyKeys = new Set<string>();
-  const seenHeadingKeys = new Set<string>();
-  const fallbackSentence = toSingleSentence(ensureLength(args.fallbackText, limits.carousel_body_max_chars, args.title));
-
-  const nextSentence = (): string => {
-    for (const [index, sentence] of args.sourceSentences.entries()) {
-      if (!usedSentenceIndexes.has(index)) {
-        usedSentenceIndexes.add(index);
-        return sentence;
-      }
-    }
-    return "";
-  };
-
-  const ensureBody = (rawBody: string): string => {
-    const cleanedBody = normalizeSourceContent(rawBody);
-    const fallbackBody = nextSentence() || fallbackSentence;
-    let body = toSingleSentence(ensureLength(cleanedBody, limits.carousel_body_max_chars, fallbackBody));
-    let bodyKey = canonicalText(body);
-
-    if (!bodyKey || seenBodyKeys.has(bodyKey)) {
-      const alternative = nextSentence();
-      if (alternative) {
-        body = toSingleSentence(ensureLength(alternative, limits.carousel_body_max_chars, fallbackBody));
-        bodyKey = canonicalText(body);
-      }
-    }
-
-    if (bodyKey) {
-      seenBodyKeys.add(bodyKey);
-    }
-    return body;
-  };
-
-  const slides: CarouselSlide[] = [];
-  for (const [index, rawSlide] of rawSlides.entries()) {
-    if (slides.length >= args.requiredSlides) {
-      break;
-    }
-    if (!rawSlide || typeof rawSlide !== "object") {
-      continue;
-    }
-
-    const entry = rawSlide as Record<string, unknown>;
-    const body = ensureBody(toText(entry.body));
-    const heading = ensureCarouselHeading(toText(entry.heading), {
-      body,
-      title: args.title,
-      index,
-      total: args.requiredSlides,
-      usedHeadingKeys: seenHeadingKeys
-    });
-
-    slides.push({ heading, body });
-  }
-
-  while (slides.length < args.requiredSlides) {
-    const index = slides.length;
-    const body = ensureBody("");
-    const heading = ensureCarouselHeading("", {
-      body,
-      title: args.title,
-      index,
-      total: args.requiredSlides,
-      usedHeadingKeys: seenHeadingKeys
-    });
-    slides.push({ heading, body });
-  }
-
-  return slides;
-}
-
-function ensureCarouselHeading(
-  rawHeading: string,
-  args: {
-    body: string;
-    title: string;
-    index: number;
-    total: number;
-    usedHeadingKeys: Set<string>;
-  }
-): string {
-  const limits = PIPELINE_CONFIG.generation.limits;
-  const phase = getCarouselPhase(args.index, args.total);
-  const fallback = defaultHeadingForPhase(phase, args.index);
-  const candidates = [
-    normalizeSourceContent(rawHeading),
-    deriveHeadingFromBody(args.body, args.title, phase),
-    deriveHeadingFromBody(args.title, args.title, phase),
-    ...defaultHeadingVariantsForPhase(phase)
-  ];
-
-  for (const candidate of candidates) {
-    const heading = normalizeCarouselHeadingCandidate(candidate, limits.carousel_heading_max_chars, fallback);
-    const key = canonicalText(heading);
-    if (!key || args.usedHeadingKeys.has(key) || isGenericCarouselHeading(heading)) {
-      continue;
-    }
-    args.usedHeadingKeys.add(key);
-    return heading;
-  }
-
-  const fallbackHeading = normalizeCarouselHeadingCandidate(fallback, limits.carousel_heading_max_chars, fallback);
-  const fallbackKey = canonicalText(fallbackHeading);
-  if (fallbackKey) {
-    args.usedHeadingKeys.add(fallbackKey);
-  }
-  return fallbackHeading;
-}
-
-function deriveHeadingFromBody(body: string, title: string, phase: "intro" | "middle" | "conclusion"): string {
-  const source = normalizeSourceContent(body) || normalizeSourceContent(title);
-  if (!source) {
-    return defaultHeadingForPhase(phase, 0);
-  }
-
-  const clause = source
-    .replace(/[–—]/g, " ")
-    .split(/[.!?;:]/)[0]
-    ?.trim() || "";
-  const words = clause
-    .split(/\s+/)
-    .map((word) => word.replace(/[^\p{L}\p{N}]/gu, ""))
-    .filter(Boolean)
-    .filter((word) => word.length > 1);
-  const selected = words.slice(0, 7);
-  const candidate = toHeadlineCase(selected.join(" "));
-  if (candidate && !isGenericCarouselHeading(candidate)) {
-    return candidate;
-  }
-  return defaultHeadingForPhase(phase, 0);
-}
-
-function defaultHeadingForPhase(phase: "intro" | "middle" | "conclusion", index: number): string {
-  if (phase === "intro") {
-    return index % 2 === 0 ? "The Main Idea" : "Why This Matters";
-  }
-  if (phase === "conclusion") {
-    return index % 2 === 0 ? "What To Do Next" : "Final Takeaway";
-  }
-  return index % 2 === 0 ? "Key Insight" : "How To Apply It";
-}
-
-function defaultHeadingVariantsForPhase(phase: "intro" | "middle" | "conclusion"): string[] {
-  if (phase === "intro") {
-    return ["Big Picture", "Why It Matters"];
-  }
-  if (phase === "conclusion") {
-    return ["Next Move", "Put It Into Practice"];
-  }
-  return ["Proof In Practice", "What Changes"];
-}
-
-function normalizeCarouselHeadingCandidate(value: string, maxChars: number, fallback: string): string {
-  const cleaned = ensureLength(value, maxChars, fallback)
-    .replace(/[.!?]+$/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!cleaned) {
-    return fallback;
-  }
-  return cleaned;
-}
-
-function getCarouselPhase(index: number, total: number): "intro" | "middle" | "conclusion" {
-  if (index <= 0) {
-    return "intro";
-  }
-  if (index >= total - 1) {
-    return "conclusion";
-  }
-  return "middle";
-}
-
-function isGenericCarouselHeading(value: string): boolean {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) {
-    return true;
-  }
-  if (/^(insight|slide|point|tip|step|idea|key point|takeaway)\s*\d*$/i.test(normalized)) {
-    return true;
-  }
-  if (/^(start here|core insight|how it works|what to do next)\s*\d*$/i.test(normalized)) {
-    return true;
-  }
-  return /^([a-z]+\s*){1,3}\d+$/.test(normalized);
-}
-
-function sentencePoolFromSource(value: string): string[] {
-  const limits = PIPELINE_CONFIG.generation.limits;
-  const source = normalizeSourceContent(value);
-  if (!source) {
-    return [];
-  }
-
-  const rawSentences = source.split(/(?<=[.!?])\s+/g).map((sentence) => sentence.trim()).filter(Boolean);
-  const deduped: string[] = [];
-  const seen = new Set<string>();
-
-  for (const sentence of rawSentences) {
-    const single = toSingleSentence(ensureLength(sentence, limits.carousel_body_max_chars, sentence));
-    const key = canonicalText(single);
-    if (!key || key.length < 12 || seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    deduped.push(single);
-    if (deduped.length >= 24) {
-      break;
-    }
-  }
-
-  return deduped;
 }
 
 export function normalizeSourceContent(input: string): string {
@@ -820,14 +257,6 @@ function removeTitlePrefix(value: string, title: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function toHeadlineCase(value: string): string {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word[0].toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
 }
 
 function canonicalText(value: string): string {
@@ -944,33 +373,16 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
   return Math.min(max, Math.max(min, numeric));
 }
 
-/**
- * Build a compact slot hint string for the LLM prompt.
- * Uses field declarations (with `hint` and `type`) when provided,
- * otherwise falls back to bare key names so the LLM can still attempt to fill them.
- *
- * Output example:
- *   "quote_text(text): The quote or pull-quote text | quote_author(text): Name of person quoted"
- */
-function buildSlotHintLines(
-  requiredSlotKeys: string[],
-  fields?: TemplateFieldDeclaration[]
-): string {
-  if (!requiredSlotKeys.length) return "";
-
-  const fieldMap = new Map<string, TemplateFieldDeclaration>(
-    (fields ?? []).map((f) => [f.key.trim().toLowerCase(), f])
-  );
-
-  return requiredSlotKeys
-    .map((key) => {
-      const normalized = key.trim().toLowerCase();
-      const field = fieldMap.get(normalized);
-      if (field) {
-        const defaultNote = field.default ? ` (default: "${field.default}")` : "";
-        return `${field.key}(${field.type}): ${field.hint}${defaultNote}`;
-      }
-      return `${key}: fill with relevant copy`;
-    })
-    .join(" | ");
+function normalizePromptLines(input: unknown): string[] {
+  if (!input) {
+    return [];
+  }
+  const rawLines = Array.isArray(input) ? input : [input];
+  return rawLines
+    .map((line) => (typeof line === "string" ? line.trim() : ""))
+    .filter(Boolean)
+    .slice(0, 80)
+    .map((line) => ensureLength(line, 200, line));
 }
+
+export { stripHtml, toSingleSentence, ensureLength, clampNumber };
