@@ -1,4 +1,38 @@
 // Auto-generated from config/pipeline.config.yaml — do not edit manually
+
+export interface DesignTokens {
+  colors: {
+    primary_bg: string;
+    primary_text: string;
+    accent: string;
+    accent_text: string;
+    muted_text: string;
+    border: string;
+    surface: string;
+  };
+  fonts: {
+    display: string;
+    body: string;
+    mono: string;
+  };
+  spacing: {
+    xs: string;
+    sm: string;
+    md: string;
+    lg: string;
+    xl: string;
+    "2xl": string;
+    "3xl": string;
+  };
+}
+
+export interface FormatConfig {
+  width: number;
+  height: number;
+  caption_source: string;
+  hashtag_count: number;
+}
+
 export const PIPELINE_CONFIG = {
   "schema_version": 3,
   "brand": {
@@ -336,9 +370,9 @@ tailwind.config = {
         'border-custom': '${tokens.colors.border}',
       },
       fontFamily: {
-        'display': [${tokens.fonts.display.split(",").map(f => `'${f.trim()}'`).join(", ")}],
-        'body': [${tokens.fonts.body.split(",").map(f => `'${f.trim()}'`).join(", ")}],
-        'mono': [${tokens.fonts.mono.split(",").map(f => `'${f.trim()}'`).join(", ")}],
+        'display': [${tokens.fonts.display.split(",").map((f: string) => `'${f.trim()}'`).join(", ")}],
+        'body': [${tokens.fonts.body.split(",").map((f: string) => `'${f.trim()}'`).join(", ")}],
+        'mono': [${tokens.fonts.mono.split(",").map((f: string) => `'${f.trim()}'`).join(", ")}],
       },
       spacing: {
         'token-xs': '${tokens.spacing.xs}',

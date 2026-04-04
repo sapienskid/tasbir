@@ -45,8 +45,8 @@ const AGENT_MODELS = (AGENT_CONFIG.models ?? {}) as Record<string, any>;
 const AGENT_RUNTIME = (AGENT_CONFIG.runtime ?? {}) as Record<string, any>;
 const AGENT_PROMPTS = (AGENT_CONFIG.prompts ?? {}) as Record<string, any>;
 const GEMINI_PROMPTS = {
-  system_prompt: (PIPELINE_CONFIG.generation?.agents?.prompts?.gemini_html_generation_system_prompt ?? []) as string[],
-  user_instructions: (PIPELINE_CONFIG.generation?.agents?.prompts?.gemini_html_generation_user_instructions ?? []) as string[],
+  system_prompt: (PIPELINE_CONFIG.generation?.agents?.prompts?.gemini_html_generation_system_prompt ?? []) as unknown as string[],
+  user_instructions: (PIPELINE_CONFIG.generation?.agents?.prompts?.gemini_html_generation_user_instructions ?? []) as unknown as string[],
 };
 
 const DEFAULT_LLM_MODEL = "gemini-2.0-flash";
