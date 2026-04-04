@@ -61,7 +61,6 @@ interface AgentRenderPolicy {
   allowMath?: boolean;
   allowDiagrams?: boolean;
   allowTextInAiImages?: boolean;
-  stripHashtagsInVisualSlots?: boolean;
 }
 
 interface AgentOptions {
@@ -133,7 +132,6 @@ interface ResolvedAgentRenderPolicy {
   allowMath: boolean;
   allowDiagrams: boolean;
   allowTextInAiImages: boolean;
-  stripHashtagsInVisualSlots: boolean;
 }
 
 interface ResolvedAgentPromptProfile {
@@ -173,8 +171,7 @@ const DEFAULT_AGENT_RENDER_POLICY: ResolvedAgentRenderPolicy = {
   allowMarkdown: true,
   allowMath: true,
   allowDiagrams: true,
-  allowTextInAiImages: false,
-  stripHashtagsInVisualSlots: true
+  allowTextInAiImages: false
 };
 
 const AGENT_APPLIED_ROLES = ["mastermind", "strategist", "copywriter", "visual_director", "render_guard"] as const;
@@ -325,8 +322,7 @@ function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentE
     allowMarkdown: options?.renderPolicy?.allowMarkdown ?? renderPolicyDefaults.allowMarkdown,
     allowMath: options?.renderPolicy?.allowMath ?? renderPolicyDefaults.allowMath,
     allowDiagrams: options?.renderPolicy?.allowDiagrams ?? renderPolicyDefaults.allowDiagrams,
-    allowTextInAiImages: options?.renderPolicy?.allowTextInAiImages ?? renderPolicyDefaults.allowTextInAiImages,
-    stripHashtagsInVisualSlots: options?.renderPolicy?.stripHashtagsInVisualSlots ?? renderPolicyDefaults.stripHashtagsInVisualSlots
+    allowTextInAiImages: options?.renderPolicy?.allowTextInAiImages ?? renderPolicyDefaults.allowTextInAiImages
   };
 
   const copySystemPrompt = mergePromptField(
@@ -376,8 +372,7 @@ function resolveAgentRenderPolicyDefaults(agentsConfig: Record<string, unknown>)
     allowMarkdown: toBoolean(renderPolicy?.allow_markdown, DEFAULT_AGENT_RENDER_POLICY.allowMarkdown),
     allowMath: toBoolean(renderPolicy?.allow_math, DEFAULT_AGENT_RENDER_POLICY.allowMath),
     allowDiagrams: toBoolean(renderPolicy?.allow_diagrams, DEFAULT_AGENT_RENDER_POLICY.allowDiagrams),
-    allowTextInAiImages: toBoolean(renderPolicy?.allow_text_in_ai_images, DEFAULT_AGENT_RENDER_POLICY.allowTextInAiImages),
-    stripHashtagsInVisualSlots: toBoolean(renderPolicy?.strip_hashtags_in_visual_slots, DEFAULT_AGENT_RENDER_POLICY.stripHashtagsInVisualSlots)
+    allowTextInAiImages: toBoolean(renderPolicy?.allow_text_in_ai_images, DEFAULT_AGENT_RENDER_POLICY.allowTextInAiImages)
   };
 }
 
@@ -1009,8 +1004,7 @@ function parseAgentOptions(input: unknown): AgentOptions | undefined {
       allowMarkdown: renderObject.allowMarkdown !== undefined ? requiredBoolean(renderObject.allowMarkdown, "agent.renderPolicy.allowMarkdown") : undefined,
       allowMath: renderObject.allowMath !== undefined ? requiredBoolean(renderObject.allowMath, "agent.renderPolicy.allowMath") : undefined,
       allowDiagrams: renderObject.allowDiagrams !== undefined ? requiredBoolean(renderObject.allowDiagrams, "agent.renderPolicy.allowDiagrams") : undefined,
-      allowTextInAiImages: renderObject.allowTextInAiImages !== undefined ? requiredBoolean(renderObject.allowTextInAiImages, "agent.renderPolicy.allowTextInAiImages") : undefined,
-      stripHashtagsInVisualSlots: renderObject.stripHashtagsInVisualSlots !== undefined ? requiredBoolean(renderObject.stripHashtagsInVisualSlots, "agent.renderPolicy.stripHashtagsInVisualSlots") : undefined
+      allowTextInAiImages: renderObject.allowTextInAiImages !== undefined ? requiredBoolean(renderObject.allowTextInAiImages, "agent.renderPolicy.allowTextInAiImages") : undefined
     };
   }
 

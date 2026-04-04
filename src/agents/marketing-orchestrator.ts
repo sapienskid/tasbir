@@ -19,7 +19,6 @@ interface RenderPolicyPayload {
   allowMath: boolean;
   allowDiagrams: boolean;
   allowTextInAiImages: boolean;
-  stripHashtagsInVisualSlots: boolean;
 }
 
 interface PlatformGoalPayload {
@@ -119,8 +118,7 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
       `allow_markdown=${input.renderPolicy.allowMarkdown}`,
       `allow_math=${input.renderPolicy.allowMath}`,
       `allow_diagrams=${input.renderPolicy.allowDiagrams}`,
-      `allow_text_in_ai_images=${input.renderPolicy.allowTextInAiImages}`,
-      `strip_hashtags_in_visual_slots=${input.renderPolicy.stripHashtagsInVisualSlots}`
+      `allow_text_in_ai_images=${input.renderPolicy.allowTextInAiImages}`
     ].join(", ");
 
     const systemPrompt = [

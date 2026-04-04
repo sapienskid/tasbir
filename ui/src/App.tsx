@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { api, setApiKey, getApiKey } from '@/lib/api'
+import { api } from '@/lib/api'
 import { generateTokensAI, generateTokensComputational, tokensToCSS, tokensToPrompt, type DesignTokens } from '@/lib/tokens'
 
 const PRESETS = [
@@ -26,11 +26,10 @@ const VIBE_PRESETS: Record<string, { primary: string; secondary: string; vibe: s
   retro: { primary: '#f97316', secondary: '#1e1b4b', vibe: 'retro futurist neon' },
   minimal: { primary: '#171717', secondary: '#fafafa', vibe: 'minimal clean whitespace' },
   maximalist: { primary: '#e11d48', secondary: '#7c3aed', vibe: 'maximalist bold saturated' },
-}
+]
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [apiKeyInput, setApiKeyInput] = useState(getApiKey())
   const [activeTab, setActiveTab] = useState<'tokens' | 'studio' | 'config'>('tokens')
   const [tokens, setTokens] = useState<DesignTokens | null>(null)
   const [generating, setGenerating] = useState(false)
@@ -44,7 +43,7 @@ export default function App() {
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [previewTab, setPreviewTab] = useState<'components' | 'post'>('components')
-  const [_serverConfig, setServerConfig] = useState<any>(null)
+  const [serverConfig, setServerConfig] = useState<any>(null)
   const [configLoading, setConfigLoading] = useState(false)
   const [editingConfig, setEditingConfig] = useState<any>(null)
   const [configSaved, setConfigSaved] = useState(false)
@@ -55,8 +54,6 @@ export default function App() {
   const [studioContent, setStudioContent] = useState('')
   const [studioSlug, setStudioSlug] = useState('')
   const [studioFormats, setStudioFormats] = useState(['instagram-portrait', 'twitter-card'])
-
-  const handleApiKeyChange = (v: string) => { setApiKeyInput(v); setApiKey(v) }
 
   useEffect(() => { loadConfig() }, [])
 
@@ -85,7 +82,7 @@ export default function App() {
       let result: DesignTokens
       const vibeLabel = activePreset ? `${PRESETS.find(p => p.id === activePreset)?.l}${vibeInput ? ' + ' + vibeInput : ''}` : vibeInput
       if (genMode === 'ai') {
-        result = await generateTokensAI(vibeLabel || 'custom design system', apiKeyInput)
+        result = await generateTokensAI(vibeLabel || 'custom design system', '')
       } else {
         result = generateTokensComputational(primaryColor, secondaryColor, vibeLabel || 'computational')
       }
@@ -134,7 +131,6 @@ export default function App() {
   }
 
   async function saveConfig() {
-    // In production: POST to /config
     setServerConfig(JSON.parse(JSON.stringify(editingConfig)))
     setConfigSaved(true)
     setTimeout(() => setConfigSaved(false), 2000)
@@ -169,48 +165,33 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#0b0b0b', color: '#e2e2e2', fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13 }}>
-      {/* Sidebar overlay when collapsed on small screens */}
       {!sidebarOpen && (
         <button onClick={() => setSidebarOpen(true)} className="fixed top-3 left-3 z-50 w-8 h-8 flex items-center justify-center rounded border transition-colors hover:bg-[#1c1c1c]" style={{ background: '#141414', borderColor: '#252525' }}>
           <span style={{ color: '#555', fontSize: 14 }}>☰</span>
         </button>
       )}
 
-      {/* Sidebar */}
       <aside
         className="flex flex-col border-r transition-all duration-300 ease-in-out overflow-hidden"
-        style={{
-          width: sidebarOpen ? 300 : 0,
-          minWidth: sidebarOpen ? 300 : 0,
-          maxWidth: sidebarOpen ? 300 : 0,
-          background: '#141414',
-          borderColor: '#252525',
-        }}
+        style={{ width: sidebarOpen ? 300 : 0, minWidth: sidebarOpen ? 300 : 0, maxWidth: sidebarOpen ? 300 : 0, background: '#141414', borderColor: '#252525' }}
       >
         <div className="flex flex-col h-full min-w-[300px]">
-          {/* Header */}
           <div className="flex items-center px-4 border-b flex-shrink-0" style={{ height: 44, borderColor: '#252525' }}>
             <span className="font-bold text-sm tracking-tight">Tasbir</span>
             <span className="ml-2 text-[9px] font-bold tracking-widest uppercase px-1.5 py-0.5 border rounded" style={{ color: '#555', borderColor: '#3d3d3d' }}>Studio</span>
             <button onClick={() => setSidebarOpen(false)} className="ml-auto text-[#555] hover:text-white transition-colors" style={{ fontSize: 14 }}>✕</button>
           </div>
 
-          {/* Tabs */}
           <div className="flex border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
             {([
               { id: 'tokens' as const, label: 'Tokens' },
               { id: 'studio' as const, label: 'Studio' },
               { id: 'config' as const, label: 'Config' },
             ]).map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-1 text-[10px] font-bold uppercase tracking-wider py-2.5 border-b-2 transition-colors ${activeTab === tab.id ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}
-              >{tab.label}</button>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 text-[10px] font-bold uppercase tracking-wider py-2.5 border-b-2 transition-colors ${activeTab === tab.id ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>{tab.label}</button>
             ))}
           </div>
 
-          {/* Tab Content */}
           <div className="flex-1 overflow-y-auto min-h-0 overflow-x-hidden">
             {activeTab === 'tokens' && (
               <TokensTab
@@ -231,7 +212,7 @@ export default function App() {
                 slug={studioSlug} setSlug={setStudioSlug}
                 formats={studioFormats} toggleFormat={toggleStudioFormat}
                 generating={studioGenerating} onGenerate={handleStudioGenerate}
-                result={studioResult} tokens={tokens} setError={setError}
+                result={studioResult} tokens={tokens}
               />
             )}
             {activeTab === 'config' && (
@@ -242,42 +223,28 @@ export default function App() {
             )}
           </div>
 
-          {/* Footer */}
-          <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#252525' }}>
-            <div className="text-[8px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>API Key</div>
-            <input
-              type="password"
-              value={apiKeyInput}
-              onChange={e => handleApiKeyChange(e.target.value)}
-              placeholder="sp_…"
-              className="w-full rounded border px-2 py-1 text-[10px] font-mono outline-none"
-              style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
-            />
-            {error && <div className="mt-1.5 text-[9px] text-[#f43f5e]">{error}</div>}
-          </div>
+          {error && (
+            <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#252525' }}>
+              <div className="text-[9px] text-[#f43f5e]">{error}</div>
+              <button onClick={() => setError(null)} className="text-[8px] text-[#f43f5e] mt-1 underline">Dismiss</button>
+            </div>
+          )}
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 flex flex-col overflow-hidden min-w-0">
         {activeTab === 'config' ? (
           <ConfigPreview config={editingConfig} />
         ) : (
           <>
-            {/* Preview */}
             <div className="flex-1 flex flex-col overflow-hidden border-b min-h-0" style={{ borderColor: '#252525' }}>
               <div className="flex items-center border-b flex-shrink-0" style={{ borderColor: '#252525', background: '#141414' }}>
                 <button onClick={() => setPreviewTab('components')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'components' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Components</button>
                 <button onClick={() => setPreviewTab('post')} className={`text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 transition-colors ${previewTab === 'post' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#999]'}`}>Social Post</button>
-                {!sidebarOpen && <div className="flex-1" />}
               </div>
               <div className="flex-1 overflow-auto relative min-h-0" style={{ background: '#1c1c1c' }}>
                 {tokens ? (
-                  previewTab === 'components' ? (
-                    <PreviewComponents tokens={tokens} />
-                  ) : (
-                    <PreviewSocialPost tokens={tokens} />
-                  )
+                  previewTab === 'components' ? <PreviewComponents tokens={tokens} /> : <PreviewSocialPost tokens={tokens} />
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#555' }}>
                     <div className="text-2xl opacity-25">◈</div>
@@ -294,7 +261,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Export */}
             <div className="h-48 flex flex-col flex-shrink-0" style={{ background: '#141414' }}>
               <div className="flex items-center border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
                 {(['css', 'json', 'prompt'] as const).map(tab => (
@@ -428,7 +394,7 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
   )
 }
 
-/* ── Config Tab (Editable) ── */
+/* ── Config Tab (User-level only) ── */
 
 function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
   const [section, setSection] = useState('formats')
@@ -440,11 +406,8 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
   const sections = [
     { id: 'formats', label: 'Formats' },
     { id: 'prompts', label: 'Prompts' },
-    { id: 'limits', label: 'Limits' },
     { id: 'image', label: 'Image' },
-    { id: 'runtime', label: 'Runtime' },
     { id: 'features', label: 'Features' },
-    { id: 'storage', label: 'Storage' },
   ]
 
   const gen = config.generation || {}
@@ -471,10 +434,6 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
                     <div className="text-[8px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#555' }}>Height</div>
                     <input type="number" value={f.height} onChange={(e: any) => onUpdate(['formats', id, 'height'], Number(e.target.value))} className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
                   </div>
-                  <div className="flex-1">
-                    <div className="text-[8px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#555' }}>Hashtags</div>
-                    <input type="number" value={f.hashtag_count} onChange={(e: any) => onUpdate(['formats', id, 'hashtag_count'], Number(e.target.value))} className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
-                  </div>
                 </div>
               </div>
             ))}
@@ -498,23 +457,6 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
           </div>
         )}
 
-        {section === 'limits' && (
-          <div className="space-y-1">
-            {Object.entries(gen.limits || {}).map(([k, v]: [string, any]) => (
-              <div key={k} className="flex items-center gap-2 py-1.5 px-2 rounded" style={{ background: '#0b0b0b' }}>
-                <span className="text-[10px] font-mono flex-1" style={{ color: '#999' }}>{k}</span>
-                <input
-                  type={typeof v === 'number' ? 'number' : 'text'}
-                  value={v}
-                  onChange={(e: any) => onUpdate(['generation', 'limits', k], typeof v === 'number' ? Number(e.target.value) : e.target.value)}
-                  className="w-20 bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none text-right"
-                  style={{ color: '#e2e2e2' }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
         {section === 'image' && (
           <div className="space-y-3">
             <div className="p-2.5 rounded" style={{ background: '#0b0b0b' }}>
@@ -532,23 +474,6 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
           </div>
         )}
 
-        {section === 'runtime' && (
-          <div className="space-y-1">
-            {Object.entries(config.runtime || {}).map(([k, v]: [string, any]) => (
-              <div key={k} className="flex items-center gap-2 py-1.5 px-2 rounded" style={{ background: '#0b0b0b' }}>
-                <span className="text-[10px] font-mono flex-1" style={{ color: '#999' }}>{k}</span>
-                <input
-                  type={typeof v === 'number' ? 'number' : 'text'}
-                  value={v}
-                  onChange={(e: any) => onUpdate(['runtime', k], typeof v === 'number' ? Number(e.target.value) : e.target.value)}
-                  className="w-24 bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none text-right"
-                  style={{ color: '#e2e2e2' }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
         {section === 'features' && (
           <div className="space-y-1">
             {Object.entries(config.features || {}).map(([k, v]: [string, any]) => (
@@ -558,23 +483,6 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
                   onClick={() => onUpdate(['features', k], !v)}
                   className={`text-[10px] font-mono px-2.5 py-1 rounded border transition-all ${v ? 'border-[#22c55e] text-[#22c55e] bg-[#22c55e10]' : 'border-[#f43f5e] text-[#f43f5e] bg-[#f43f5e10]'}`}
                 >{v ? 'ON' : 'OFF'}</button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {section === 'storage' && (
-          <div className="space-y-1">
-            {Object.entries(config.storage || {}).map(([k, v]: [string, any]) => (
-              <div key={k} className="flex items-center gap-2 py-1.5 px-2 rounded" style={{ background: '#0b0b0b' }}>
-                <span className="text-[10px] font-mono flex-1" style={{ color: '#999' }}>{k}</span>
-                <input
-                  type={typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'text' : 'text'}
-                  value={String(v)}
-                  onChange={(e: any) => onUpdate(['storage', k], typeof v === 'boolean' ? e.target.value === 'true' : typeof v === 'number' ? Number(e.target.value) : e.target.value)}
-                  className="w-24 bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none text-right"
-                  style={{ color: '#e2e2e2' }}
-                />
               </div>
             ))}
           </div>
@@ -589,7 +497,7 @@ function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
   )
 }
 
-/* ── Config Preview (main area when config tab active) ── */
+/* ── Config Preview ── */
 
 function ConfigPreview({ config }: any) {
   const gen = config?.generation || {}
@@ -603,18 +511,6 @@ function ConfigPreview({ config }: any) {
               <div key={id} style={{ padding: 16, borderRadius: 8, background: '#141414', border: '1px solid #252525' }}>
                 <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{id}</div>
                 <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#555' }}>{f.width} × {f.height}</div>
-                <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#555', marginTop: 2 }}>#{f.hashtag_count} hashtags</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Limits</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
-            {Object.entries(gen.limits || {}).map(([k, v]: [string, any]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: 8, borderRadius: 6, background: '#141414' }}>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k}</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#555', marginLeft: 8 }}>{String(v)}</span>
               </div>
             ))}
           </div>
@@ -635,7 +531,7 @@ function ConfigPreview({ config }: any) {
   )
 }
 
-/* ── Token Explorer Components ── */
+/* ── Token Explorer ── */
 
 function TokenSection({ title, expanded, onToggle, children }: { title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
@@ -783,7 +679,7 @@ function ComponentExplorer({ components }: { components: DesignTokens['component
   )
 }
 
-/* ── Preview Components ── */
+/* ── Preview ── */
 
 function PreviewComponents({ tokens }: { tokens: DesignTokens }) {
   const css = tokensToCSS(tokens)

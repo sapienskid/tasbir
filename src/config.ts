@@ -1,8 +1,6 @@
 export interface FormatConfig {
   width: number;
   height: number;
-  caption_source: string;
-  hashtag_count: number;
 }
 
 export interface PipelineConfig {
@@ -31,7 +29,6 @@ export interface PipelineConfig {
         allow_math: boolean;
         allow_diagrams: boolean;
         allow_text_in_ai_images: boolean;
-        strip_hashtags_in_visual_slots: boolean;
       };
       prompt_profiles: Record<string, any>;
     };
@@ -56,36 +53,6 @@ export interface PipelineConfig {
     prefer_feature_image: boolean;
     enable_notifications: boolean;
   };
-  security: {
-    api_auth: {
-      enabled: boolean;
-      header_name: string;
-      require_for_generate: boolean;
-      require_for_direct_content: boolean;
-      require_for_webhook: boolean;
-    };
-    cors: {
-      enabled: boolean;
-      allowed_origins: string[];
-      allowed_headers: string[];
-      allowed_methods: string[];
-      allow_credentials: boolean;
-      max_age_seconds: number;
-    };
-    request_limits: {
-      max_json_body_bytes: number;
-    };
-    rate_limit: {
-      enabled: boolean;
-      window_seconds: number;
-      max_requests_per_window: number;
-    };
-    outbound: {
-      allow_private_network_targets: boolean;
-      allowed_notify_hosts: string[];
-      allowed_image_hosts: string[];
-    };
-  };
   storage: {
     default_key_prefix: string;
     default_mode: string;
@@ -95,12 +62,12 @@ export interface PipelineConfig {
 
 export const DEFAULT_CONFIG: PipelineConfig = {
   formats: {
-    "instagram-portrait": { width: 1080, height: 1350, caption_source: "instagram_caption", hashtag_count: 3 },
-    "instagram-square": { width: 1080, height: 1080, caption_source: "instagram_caption", hashtag_count: 3 },
-    "instagram-story": { width: 1080, height: 1920, caption_source: "instagram_caption", hashtag_count: 2 },
-    "carousel-post": { width: 1080, height: 1350, caption_source: "carousel_slides", hashtag_count: 0 },
-    "twitter-card": { width: 1200, height: 628, caption_source: "twitter_caption", hashtag_count: 0 },
-    "linkedin-post": { width: 1200, height: 627, caption_source: "linkedin_caption", hashtag_count: 0 },
+    "instagram-portrait": { width: 1080, height: 1350 },
+    "instagram-square": { width: 1080, height: 1080 },
+    "instagram-story": { width: 1080, height: 1920 },
+    "carousel-post": { width: 1080, height: 1350 },
+    "twitter-card": { width: 1200, height: 628 },
+    "linkedin-post": { width: 1200, height: 627 },
   },
   generation: {
     carousel_required_slides: 5,
@@ -127,20 +94,17 @@ export const DEFAULT_CONFIG: PipelineConfig = {
           "Primary goal: convert attention into clear intent (read, save, share, click, follow).",
           "Constraints:",
           "- Keep one coherent campaign angle across platforms, adapted to each platform's tone.",
-          "- instagram_caption: emotionally engaging hook + practical value + soft CTA, max <instagram_caption_max_chars> characters.",
-          "- twitter_caption: concise high-signal insight + payoff + direct CTA, max <twitter_caption_max_chars> characters.",
-          "- linkedin_caption: problem -> insight -> action narrative for professionals, max <linkedin_caption_max_chars> characters.",
+          "- instagram_caption: emotionally engaging hook + practical value + soft CTA, max 600 characters.",
+          "- twitter_caption: concise high-signal insight + payoff + direct CTA, max 280 characters.",
+          "- linkedin_caption: problem -> insight -> action narrative for professionals, max 900 characters.",
           "- Captions must be plain text; no markdown headings, no list markers, no leading #.",
           "- Keep language specific and credible; avoid vague hype.",
-          "- carousel_slides: exactly <required_carousel_slides> slides with narrative flow.",
+          "- carousel_slides: exactly 5 slides with narrative flow.",
           "- Carousel flow: slide 1 hook/intro, middle slides distinct support, final slide concrete next step.",
           "- Each carousel slide must introduce new information.",
-          "- hashtags: <hashtag_min_count>-<hashtag_max_count> relevant tags, #prefix, no spaces.",
           "- image_prompt: background-only art direction, no text, no UI, no logos.",
           "- use_feature_image: true only when source feature image fits the campaign.",
           "- stock_search_query: focused keyword phrase (<= 10 words), no metadata.",
-          "- Apply composition directives exactly:",
-          "<composition_directives>",
           "Output JSON only.",
         ],
         gemini_html_generation_system_prompt: [
@@ -165,7 +129,7 @@ export const DEFAULT_CONFIG: PipelineConfig = {
           "Source Content Title: <title>",
           "Source Content Excerpt: <excerpt>",
           "Instructions: Create a high-impact visual design using the source content. Use Tailwind classes with the provided design tokens.",
-          "Return a JSON object with: { 'generated_html': '...', 'instagram_caption': '...', 'twitter_caption': '...', 'linkedin_caption': '...', 'hashtags': [...], 'image_prompt': '...' }",
+          "Return a JSON object with: { 'generated_html': '...', 'instagram_caption': '...', 'twitter_caption': '...', 'linkedin_caption': '...', 'image_prompt': '...' }",
         ],
       },
       render_policy: {
@@ -173,7 +137,6 @@ export const DEFAULT_CONFIG: PipelineConfig = {
         allow_math: true,
         allow_diagrams: true,
         allow_text_in_ai_images: false,
-        strip_hashtags_in_visual_slots: true,
       },
       prompt_profiles: {
         default: {
@@ -205,25 +168,12 @@ export const DEFAULT_CONFIG: PipelineConfig = {
       },
     },
     limits: {
-      post_text_max_chars: 14000,
-      direct_content_max_chars: 120000,
-      direct_excerpt_default_max_chars: 360,
-      input_tags_max_count: 8,
-      stock_query_term_max_count: 6,
-      storage_run_id_max_chars: 64,
       instagram_caption_max_chars: 600,
       twitter_caption_max_chars: 280,
       linkedin_caption_max_chars: 900,
       carousel_heading_max_chars: 72,
       carousel_body_max_chars: 260,
       image_prompt_max_chars: 700,
-      hashtag_min_count: 5,
-      hashtag_max_count: 8,
-      hashtag_min_token_chars: 3,
-      title_keyword_min_chars: 3,
-      fallback_keyword_min_chars: 4,
-      caption_with_hashtags_max_chars: 980,
-      single_sentence_max_chars: 240,
     },
     fallbacks: {
       carousel_heading: "Key Point",
@@ -261,36 +211,6 @@ export const DEFAULT_CONFIG: PipelineConfig = {
     enable_ai_image_generation: true,
     prefer_feature_image: false,
     enable_notifications: true,
-  },
-  security: {
-    api_auth: {
-      enabled: true,
-      header_name: "x-api-key",
-      require_for_generate: true,
-      require_for_direct_content: true,
-      require_for_webhook: false,
-    },
-    cors: {
-      enabled: true,
-      allowed_origins: ["*"],
-      allowed_headers: ["content-type", "authorization", "x-api-key", "x-webhook-token"],
-      allowed_methods: ["GET", "POST", "OPTIONS"],
-      allow_credentials: false,
-      max_age_seconds: 86400,
-    },
-    request_limits: {
-      max_json_body_bytes: 256000,
-    },
-    rate_limit: {
-      enabled: true,
-      window_seconds: 60,
-      max_requests_per_window: 30,
-    },
-    outbound: {
-      allow_private_network_targets: false,
-      allowed_notify_hosts: [],
-      allowed_image_hosts: [],
-    },
   },
   storage: {
     default_key_prefix: "social-assets",
