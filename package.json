@@ -5,23 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --env dev --local --live-reload --ip 127.0.0.1 --port 8787",
+    "dev:ui": "pnpm run --dir ui dev",
     "typecheck": "tsc --noEmit",
-    "test": "pnpm run typecheck && vitest run --passWithNoTests",
-    "dashboard": "pnpm run --dir ui dev",
-    "build:ui": "pnpm run --dir ui build",
-    "ui:build": "pnpm run --dir ui build",
-    "ui:lint": "pnpm run --dir ui lint",
-    "validate": "pnpm run test && pnpm run ui:build && pnpm run ui:lint",
-    "dev:server": "wrangler dev --env dev --local --ip 127.0.0.1 --port 8787",
-    "dev:all": "concurrently --kill-others-on-fail --names \"server,ui\" \"pnpm run dev:server\" \"pnpm run dashboard\"",
-    "deploy:staging": "pnpm run build:ui && wrangler deploy --env staging",
-    "deploy:production": "pnpm run build:ui && wrangler deploy --env production",
-    "deploy": "pnpm run deploy:production"
+    "test": "vitest run --passWithNoTests",
+    "build": "pnpm run --dir ui build",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy": "wrangler deploy --env production"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",
     "@types/node": "^25.5.0",
-    "concurrently": "^9.2.1",
     "typescript": "latest",
     "vitest": "^3.2.4",
     "wrangler": "latest"

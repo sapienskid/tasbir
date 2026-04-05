@@ -6,6 +6,9 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"build": {
+		"command": "pnpm run build"
+	},
 	"assets": {
 		"directory": "./ui/dist",
 		"binding": "ASSETS"

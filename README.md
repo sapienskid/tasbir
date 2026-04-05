@@ -115,9 +115,11 @@ Returns dependency status (R2, KV namespaces).
 Single deploy model: the Cloudflare Worker serves both the API and the dashboard UI from one URL.
 
 ```bash
-pnpm run validate
+pnpm run typecheck
+pnpm run test
+pnpm run build
 pnpm run deploy:staging
-pnpm run deploy:production
+pnpm run deploy
 ```
 
 Make sure KV namespaces are created and configured in `wrangler.jsonc` for your environment.
@@ -127,13 +129,15 @@ Make sure KV namespaces are created and configured in `wrangler.jsonc` for your 
 This repository intentionally does not include a GitHub Actions deployment workflow.
 Run validation and deployment commands manually (or from your own CI/CD system).
 
-### 1. Validate Before Every Deploy
+### 1. Basic Checks Before Every Deploy
 
 ```bash
-pnpm run validate
+pnpm run typecheck
+pnpm run test
+pnpm run build
 ```
 
-This runs worker typecheck/tests and dashboard build/lint.
+This runs worker typecheck/tests and builds the dashboard.
 
 ### 2. Configure Required Secrets
 
@@ -170,10 +174,10 @@ You can override CORS and host allowlists with env vars from `.dev.vars.example`
 
 ```bash
 pnpm run deploy:staging
-pnpm run deploy:production
+pnpm run deploy
 ```
 
-This builds `ui/dist` and deploys one Worker that serves:
+Deploy automatically runs `pnpm run build` through Wrangler before uploading assets, then deploys one Worker that serves:
 
 - API routes (for example `/generate-from-content`, `/settings`, `/templates`)
 - UI/static assets and SPA routes from the same domain
