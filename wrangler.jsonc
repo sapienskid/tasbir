@@ -1,6 +1,6 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "social-post-pipeline",
+	"name": "tasbir",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-03-01",
 	"compatibility_flags": [
@@ -10,42 +10,6 @@
 		"directory": "./ui/dist",
 		"binding": "ASSETS"
 	},
-	"vars": {
-		"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
-		"RATE_LIMIT_ENABLED": "true",
-		"RATE_LIMIT_WINDOW_SECONDS": "60",
-		"RATE_LIMIT_MAX_REQUESTS_PER_WINDOW": "120",
-		"ALLOW_PRIVATE_NETWORK_TARGETS": "false"
-	},
-	"ai": {
-		"binding": "AI"
-	},
-	"browser": {
-		"binding": "BROWSER"
-	},
-	"kv_namespaces": [
-		{
-			"binding": "SETTINGS_KV",
-			"id": "settings-kv-dev",
-			"preview_id": "settings-kv-dev"
-		},
-		{
-			"binding": "TEMPLATES_KV",
-			"id": "templates-kv-dev",
-			"preview_id": "templates-kv-dev"
-		},
-		{
-			"binding": "AI_CACHE_KV",
-			"id": "ai-cache-kv-dev",
-			"preview_id": "ai-cache-kv-dev"
-		}
-	],
-	"r2_buckets": [
-		{
-			"binding": "OUTPUT_BUCKET",
-			"bucket_name": "social-post-assets"
-		}
-	],
 	"observability": {
 		"logs": {
 			"enabled": true,
@@ -53,8 +17,47 @@
 		}
 	},
 	"env": {
+		"dev": {
+			"name": "tasbir",
+			"ai": {
+				"binding": "AI"
+			},
+			"browser": {
+				"binding": "BROWSER"
+			},
+			"kv_namespaces": [
+				{
+					"binding": "SETTINGS_KV",
+					"id": "settings-kv-dev",
+					"preview_id": "settings-kv-dev"
+				},
+				{
+					"binding": "TEMPLATES_KV",
+					"id": "templates-kv-dev",
+					"preview_id": "templates-kv-dev"
+				},
+				{
+					"binding": "AI_CACHE_KV",
+					"id": "ai-cache-kv-dev",
+					"preview_id": "ai-cache-kv-dev"
+				}
+			],
+			"vars": {
+				"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
+				"RATE_LIMIT_ENABLED": "true",
+				"RATE_LIMIT_WINDOW_SECONDS": "60",
+				"RATE_LIMIT_MAX_REQUESTS_PER_WINDOW": "120",
+				"ALLOW_PRIVATE_NETWORK_TARGETS": "false"
+			},
+			"r2_buckets": [
+				{
+					"binding": "OUTPUT_BUCKET",
+					"bucket_name": "social-post-assets"
+				}
+			]
+		},
 		"staging": {
-			"name": "social-post-pipeline-staging",
+			"name": "tasbir",
 			"ai": {
 				"binding": "AI"
 			},
@@ -90,7 +93,7 @@
 			]
 		},
 		"production": {
-			"name": "social-post-pipeline",
+			"name": "tasbir",
 			"ai": {
 				"binding": "AI"
 			},
