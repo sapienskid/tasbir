@@ -236,7 +236,7 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
 
     try {
       // Use gemma-4 directly via Google API for advanced orchestration
-      const providerConfig = resolveProviderConfig(this.env.AI, this.env.AI_GATEWAY_TOKEN, this.env.GOOGLE_API_KEY);
+      const providerConfig = resolveProviderConfig(this.env.AI, this.env.GOOGLE_API_KEY);
       const models = createAdvancedModelChain(providerConfig);
 
       const result = await generateObject({
@@ -433,7 +433,6 @@ export interface OrchestratorOutput {
 export async function callOrchestrator(
   input: OrchestratorInput,
   ai: Ai,
-  gatewayToken?: string,
   googleApiKey?: string
 ): Promise<OrchestratorOutput> {
   const payload: OrchestratorRequestPayload = {
@@ -447,7 +446,7 @@ export async function callOrchestrator(
     imageConfig: input.imageConfig,
   };
 
-  const providerConfig = resolveProviderConfig(ai, gatewayToken, googleApiKey);
+  const providerConfig = resolveProviderConfig(ai, googleApiKey);
   const models = createAdvancedModelChain(providerConfig);
 
   const sourceBody = (input.post.plaintext ?? "").trim();

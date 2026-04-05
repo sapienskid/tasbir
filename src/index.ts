@@ -41,13 +41,8 @@ import {
   getDefaultDesignTokens,
   normalizeDesignTokensForRendering,
 } from "../shared/tokens";
-import {
-  loadSettings,
-  saveSettings,
-  patchSettings,
-  getDefaultSettings,
-  type WorkspaceSettings,
-} from "./lib/settings";
+import { generateTokensAI } from "./lib/tokens";
+import { loadSettings, saveSettings, patchSettings, getDefaultSettings, type WorkspaceSettings } from "./lib/settings";
 import {
   listTemplates,
   getTemplate,
@@ -518,14 +513,10 @@ app.post("/generate-tokens", async (c) => {
 
   // Debug logging for AI Gateway configuration
   console.log("[generate-tokens] AI binding present:", !!c.env.AI);
-  console.log("[generate-tokens] AI_GATEWAY_TOKEN present:", !!c.env.AI_GATEWAY_TOKEN);
-
+  console.log("[generate-tokens] GOOGLE_API_KEY present:", !!c.env.GOOGLE_API_KEY);
+  
   try {
-    const { generateTokensAI } = await import("./lib/tokens");
-    // Use AI Gateway with BYOK - only requires AI_GATEWAY_TOKEN as wrangler secret
-    // GOOGLE_API_KEY is optional - if not provided, BYOK will be used from dashboard
-    const tokens = await generateTokensAI(vibe, c.env.AI, c.env.AI_GATEWAY_TOKEN, c.env.GOOGLE_API_KEY, primaryHint, secondaryHint);
-    
+    const tokens = await generateTokensAI(vibe, c.env.AI, c.env.GOOGLE_API_KEY, primaryHint, secondaryHint);
     return c.json(tokens);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -533,12 +524,11 @@ app.post("/generate-tokens", async (c) => {
     console.error("[generate-tokens] Error:", message);
     if (stack) console.error("[generate-tokens] Stack:", stack);
     
-    // Return more detailed error info in development
     return c.json({ 
       error: message,
       details: {
         aiBindingPresent: !!c.env.AI,
-        gatewayTokenPresent: !!c.env.AI_GATEWAY_TOKEN,
+        googleApiKeyPresent: !!c.env.GOOGLE_API_KEY,
       }
     }, 500);
   }
@@ -859,7 +849,7 @@ app.post("/decide-template", async (c) => {
     return c.json({ error: "title and content (or body) are required" }, 400);
   }
   
-  const providerConfig = resolveProviderConfig(c.env.AI, c.env.AI_GATEWAY_TOKEN, c.env.GOOGLE_API_KEY);
+  const providerConfig = resolveProviderConfig(c.env.AI, c.env.GOOGLE_API_KEY);
   const availableTemplates = await listSavedTemplates(c.env.AI_CACHE_KV, format);
   
   const preferences = {
@@ -1125,7 +1115,7 @@ async function resolveAgentContextForRun(args: {
 }): Promise<AgentExecutionContext> {
   const context = cloneAgentExecutionContext(args.baseContext);
 
-  const providerConfig = resolveProviderConfig(args.env.AI, args.env.AI_GATEWAY_TOKEN, args.env.GOOGLE_API_KEY);
+  const providerConfig = resolveProviderConfig(args.env.AI, args.env.GOOGLE_API_KEY);
   const models = createAdvancedModelChain(providerConfig);
   if (models.length === 0) {
     context.warnings.push("no_ai_provider");
@@ -1294,7 +1284,7 @@ async function runHtmlLayoutAgent(
   imageSpec?: ImageSpecInput,
   settings?: WorkspaceSettings | null,
 ): Promise<LlmOutput> {
-  const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
+  const providerConfig = resolveProviderConfig(env.AI, env.GOOGLE_API_KEY);
   const models = createAdvancedModelChain(providerConfig);
 
   const content = post.plaintext || post.html || "";
@@ -1399,7 +1389,6 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
     orchestratorPlan = await callOrchestrator(
       orchestratorInput,
       env.AI,
-      env.AI_GATEWAY_TOKEN,
       env.GOOGLE_API_KEY
     );
     
@@ -1410,7 +1399,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   }
 
   // SMART TEMPLATE SELECTION: Check for saved HTML templates first
-  const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
+  const providerConfig = resolveProviderConfig(env.AI, env.GOOGLE_API_KEY);
   const templateDecisions: Map<string, TemplateDecision> = new Map();
   const usedSavedTemplates: Map<string, SavedHtmlTemplate> = new Map();
 
@@ -1865,7 +1854,6 @@ export async function runPipelineFromPostWithProgress(
     orchestratorPlan = await callOrchestrator(
       orchestratorInput,
       env.AI,
-      env.AI_GATEWAY_TOKEN,
       env.GOOGLE_API_KEY
     );
     

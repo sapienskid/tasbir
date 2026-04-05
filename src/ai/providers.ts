@@ -5,7 +5,6 @@ import type { LanguageModel } from "ai";
 
 export interface ProviderConfig {
   aiBinding: Ai;
-  gatewayToken?: string;
   googleApiKey?: string;
 }
 
@@ -50,24 +49,19 @@ function buildGatewayBaseUrl(): string {
 
 // ─── Model Creation: AI Gateway (gemini-2.5-flash with BYOK) ────────────────
 
-function createGatewayModel(gatewayToken: string | undefined, googleApiKey: string | undefined, route: string): LanguageModel {
-  if (!gatewayToken && !googleApiKey) {
-    throw new Error(
-      "Either AI_GATEWAY_TOKEN (for BYOK) or GOOGLE_API_KEY is required"
-    );
+function createGatewayModel(googleApiKey: string | undefined, route: string): LanguageModel {
+  if (!googleApiKey) {
+    throw new Error("GOOGLE_API_KEY is required for text generation");
   }
 
   const baseURL = `${buildGatewayBaseUrl()}/compat`;
   console.log(`[ai-gateway] Creating model with baseURL: ${baseURL}, route: ${route}`);
 
-  const apiKey = googleApiKey || "not-used-with-byok";
+  const apiKey = googleApiKey;
   
   const openai = createOpenAI({
     apiKey,
     baseURL,
-    headers: gatewayToken ? {
-      "cf-aig-authorization": `Bearer ${gatewayToken}`,
-    } : {},
     fetch: async (url, init) => {
       console.log(`[ai-gateway] Request to: ${url}`);
       console.log(`[ai-gateway] Request method: ${init?.method || 'GET'}`);
@@ -135,15 +129,15 @@ function createDirectGoogleModel(googleApiKey: string | undefined, model: string
 // ─── Model Chain Functions ───────────────────────────────────────────────────
 
 export function createModelChain(config: ProviderConfig): LanguageModel[] {
-  return [createGatewayModel(config.gatewayToken, config.googleApiKey, DYNAMIC_ROUTES.DESIGN_TOKENS)];
+  return [createGatewayModel(config.googleApiKey, DYNAMIC_ROUTES.DESIGN_TOKENS)];
 }
 
 export function createFastModelChain(config: ProviderConfig): LanguageModel[] {
-  return [createGatewayModel(config.gatewayToken, config.googleApiKey, DYNAMIC_ROUTES.GENERIC)];
+  return [createGatewayModel(config.googleApiKey, DYNAMIC_ROUTES.GENERIC)];
 }
 
 export function createHtmlLayoutModelChain(config: ProviderConfig): LanguageModel[] {
-  return [createGatewayModel(config.gatewayToken, config.googleApiKey, DYNAMIC_ROUTES.HTML_LAYOUT)];
+  return [createGatewayModel(config.googleApiKey, DYNAMIC_ROUTES.HTML_LAYOUT)];
 }
 
 export function createAdvancedModelChain(config: ProviderConfig): LanguageModel[] {
@@ -158,7 +152,7 @@ export function getWorkersAiImageModel(aiBinding: Ai): Ai {
 
 // ─── Env Resolution ──────────────────────────────────────────────────────────
 
-export function resolveProviderConfig(aiBinding: Ai, gatewayToken?: string, googleApiKey?: string): ProviderConfig {
+export function resolveProviderConfig(aiBinding: Ai, googleApiKey?: string): ProviderConfig {
   if (!aiBinding) {
     throw new Error(
       "AI binding is required. Ensure 'ai' is configured in wrangler.jsonc."
@@ -167,7 +161,6 @@ export function resolveProviderConfig(aiBinding: Ai, gatewayToken?: string, goog
   
   return {
     aiBinding,
-    gatewayToken,
     googleApiKey,
   };
 }

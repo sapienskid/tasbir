@@ -56,7 +56,7 @@ export async function classifyContent(
   content: string,
   availableTemplates: TemplateMetadata[],
 ): Promise<ContentClassification> {
-  const providerConfig = resolveProviderConfig(aiBinding, gatewayToken, googleApiKey);
+  const providerConfig = resolveProviderConfig(aiBinding, googleApiKey);
   
   // OPTIMIZATION: Use fast model for classification (simple task)
   const models = createFastModelChain(providerConfig);

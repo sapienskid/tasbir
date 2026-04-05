@@ -142,10 +142,9 @@ export async function generateImage(
   const negativePrompt = options?.negativePrompt || DEFAULT_NEGATIVE_PROMPT;
 
   try {
-    // Use FLUX Schnell for fast generation
-    const result = await ai.run("@cf/black-forest-labs/flux-1-schnell", {
+    // Use FLUX Klein for fast generation
+    const result = await ai.run("@cf/black-forest-labs/flux-2-klein-9b", {
       prompt: enhancedPrompt,
-      num_steps: 4, // Schnell works best with 4 steps
     });
 
     if (!result || typeof result !== "object") {

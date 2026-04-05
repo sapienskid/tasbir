@@ -186,7 +186,7 @@ export const DEFAULT_CONFIG: PipelineConfig = {
       default_quote_author: "Editorial Team",
     },
     image: {
-      default_model: "@cf/black-forest-labs/flux-1-schnell",
+      default_model: "@cf/black-forest-labs/flux-2-klein-9b",
       prompt_fallback: "<title>, modern editorial photo, clean composition, natural lighting, no text overlay",
       prompt_prefix: [
         "Create one campaign-quality social background image that can be reused across square, portrait, and landscape crops.",
