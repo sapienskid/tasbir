@@ -121,9 +121,9 @@ export default function App() {
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ color: true, typography: true, spacing: true, shadow: true, border: true, gradient: true, motion: true, component: true })
   const [error, setError] = useState<string | null>(null)
   const [_serverConfig, setServerConfig] = useState<any>(null)
-  const [configLoading, setConfigLoading] = useState(false)
+  const [_configLoading, setConfigLoading] = useState(false)
   const [editingConfig, setEditingConfig] = useState<any>(null)
-  const [configSaved, setConfigSaved] = useState(false)
+  const [_configSaved, setConfigSaved] = useState(false)
   const [studioResult, setStudioResult] = useState<any>(null)
   const [studioGenerating, setStudioGenerating] = useState(false)
   const [studioMode, setStudioMode] = useState<'content' | 'slug'>('content')
@@ -310,7 +310,7 @@ export default function App() {
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  function updateConfigValue(path: string[], value: any) {
+  function _updateConfigValue(path: string[], value: any) {
     setEditingConfig((prev: any) => {
       if (path.length === 0) {
         return typeof value === 'function' ? value(prev) : value
@@ -324,7 +324,7 @@ export default function App() {
     setConfigSaved(false)
   }
 
-  async function saveConfig() {
+  async function _saveConfig() {
     setServerConfig(JSON.parse(JSON.stringify(editingConfig)))
     try {
       const formats = editingConfig?.formats || {}
@@ -532,10 +532,7 @@ export default function App() {
                 formats={studioFormats} toggleFormat={toggleStudioFormat}
                 availableFormats={availableFormats}
                 generating={studioGenerating} onGenerate={handleStudioGenerate}
-                result={studioResult} tokens={tokens}
-                expandedSections={expandedSections} toggleSection={toggleSection}
-                onUpdateTokenColor={updateTokenColor}
-                onUpdateAccentColor={updateAccentColor}
+                result={studioResult}
               />
             )}
             {activeTab === 'templates' && (
@@ -546,7 +543,6 @@ export default function App() {
                 setEditingTemplate={setEditingTemplate}
                 templateHtml={templateHtml}
                 setTemplateHtml={setTemplateHtml}
-                templatePreviewHtml={templatePreviewHtml}
                 openTemplateEditor={openTemplateEditor}
                 onSaveTemplate={handleSaveTemplate}
                 onDeleteTemplate={handleDeleteTemplate}
@@ -630,7 +626,7 @@ export default function App() {
 
 /* ── Studio Tab ── */
 
-function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, availableFormats, generating, onGenerate, result, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
+function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, availableFormats, generating, onGenerate, result }: any) {
   return (
     <>
       <div className="p-3.5 space-y-3 border-b" style={{ borderColor: '#252525' }}>
@@ -672,41 +668,13 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
           </div>
         )}
       </div>
-
-      <div className="overflow-y-auto">
-        {tokens ? (
-          <>
-            <div className="px-3.5 py-2 border-b" style={{ borderColor: '#252525' }}>
-              <div className="flex items-center gap-2">
-                <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Active System</span>
-                <span className="text-[10px] font-bold tracking-wide" style={{ color: '#999' }}>{tokens.meta?.vibeName || 'CUSTOM'}</span>
-              </div>
-              {tokens.meta?.description && (
-                <div className="text-[9px] mt-0.5" style={{ color: '#555' }}>{tokens.meta.description}</div>
-              )}
-            </div>
-            <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}><ColorExplorer colors={tokens.colors} onUpdateTokenColor={onUpdateTokenColor} onUpdateAccentColor={onUpdateAccentColor} /></TokenSection>
-            <TokenSection title="Typography" expanded={!!expandedSections.typography} onToggle={() => toggleSection('typography')}><TypographyExplorer typography={tokens.typography} /></TokenSection>
-            <TokenSection title="Spacing" expanded={!!expandedSections.spacing} onToggle={() => toggleSection('spacing')}><SpacingExplorer spacing={tokens.spacing} /></TokenSection>
-            <TokenSection title="Shadows" expanded={!!expandedSections.shadow} onToggle={() => toggleSection('shadow')}><ShadowExplorer shadows={tokens.shadow} /></TokenSection>
-            <TokenSection title="Border" expanded={!!expandedSections.border} onToggle={() => toggleSection('border')}><BorderExplorer border={tokens.border} /></TokenSection>
-            <TokenSection title="Gradients" expanded={!!expandedSections.gradient} onToggle={() => toggleSection('gradient')}><GradientExplorer gradients={tokens.gradient} /></TokenSection>
-            <TokenSection title="Motion" expanded={!!expandedSections.motion} onToggle={() => toggleSection('motion')}><MotionExplorer motion={tokens.motion} /></TokenSection>
-            <TokenSection title="Components" expanded={!!expandedSections.component} onToggle={() => toggleSection('component')}><ComponentExplorer components={tokens.component} /></TokenSection>
-          </>
-        ) : (
-          <div className="p-6 text-center" style={{ color: '#555', fontSize: 11, lineHeight: 1.7 }}>
-            Generate a design system in the<br /><strong style={{ color: '#999' }}>Tokens</strong> tab to see tokens here
-          </div>
-        )}
-      </div>
     </>
   )
 }
 
 /* ── Templates Tab ── */
 
-function TemplatesTab({ templates, loading, editingTemplate, setEditingTemplate, templateHtml, setTemplateHtml, templatePreviewHtml, openTemplateEditor, onSaveTemplate, onDeleteTemplate, onToggleTemplate, onUpdatePreview }: any) {
+function TemplatesTab({ templates, loading, editingTemplate, setEditingTemplate, templateHtml, setTemplateHtml, openTemplateEditor, onSaveTemplate, onDeleteTemplate, onToggleTemplate, onUpdatePreview }: any) {
   return (
     <>
       <div className="p-3.5 space-y-2 border-b" style={{ borderColor: '#252525' }}>
