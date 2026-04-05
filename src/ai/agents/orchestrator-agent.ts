@@ -46,7 +46,7 @@ Produce concise notes for:
 - visual_notes: image direction and no-text image policy reminders
 - warnings: potential quality/compliance risks`,
         schema: ORCHESTRATOR_SCHEMA,
-        temperature: 0.2,
+        temperature: 0.7,
         maxOutputTokens: 900,
       });
       return result.object;

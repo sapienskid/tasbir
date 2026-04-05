@@ -23,10 +23,10 @@ export interface ModelSettings {
 
 export const MODEL_SETTINGS = {
   designTokens: { temperature: 0.9 },
-  htmlLayout: { temperature: 0.3 },
-  orchestrator: { temperature: 0.2, maxTokens: 900 },
+  htmlLayout: { temperature: 0.7 },
+  orchestrator: { temperature: 0.7, maxTokens: 900 },
   classification: { temperature: 0.2 },
-  generic: { temperature: 0.2 },
+  generic: { temperature: 0.7 },
 } as const;
 
 // ─── Model Creation ──────────────────────────────────────────────────────────

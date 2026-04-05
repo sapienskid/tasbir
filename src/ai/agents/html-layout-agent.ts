@@ -71,7 +71,7 @@ Instructions:
 - Keep typography highly readable with clear hierarchy.
 
 Return only one complete HTML document as raw text.`,
-        temperature: 0.3,
+        temperature: 0.7,
       });
 
       const generatedHtml = extractHtml(result.text);

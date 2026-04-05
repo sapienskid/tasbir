@@ -81,7 +81,7 @@ export const DEFAULT_CONFIG: PipelineConfig = {
         copy_model: "@cf/openai/gpt-oss-120b",
       },
       runtime: {
-        copy_temperature: 0.2,
+        copy_temperature: 0.7,
         copy_max_tokens: 2200,
       },
       prompts: {

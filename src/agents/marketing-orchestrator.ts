@@ -171,7 +171,7 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
           type: "json_schema",
           json_schema: ORCHESTRATOR_RESPONSE_SCHEMA
         },
-        temperature: 0.2,
+        temperature: 0.7,
         max_tokens: 900
       });
       const parsed = parseModelJson(raw) as Record<string, unknown>;
