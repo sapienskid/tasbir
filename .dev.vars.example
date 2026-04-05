@@ -1,6 +1,17 @@
 # Required: API keys for the dashboard
 API_KEYS="your-api-key-here"
 
+# Security defaults
+RATE_LIMIT_ENABLED="true"
+RATE_LIMIT_WINDOW_SECONDS="60"
+RATE_LIMIT_MAX_REQUESTS_PER_WINDOW="120"
+ALLOW_PRIVATE_NETWORK_TARGETS="false"
+# Optional CORS overrides (comma-separated, defaults to *)
+# CORS_ALLOWED_ORIGINS="https://dashboard.example.com"
+# CORS_ALLOWED_HEADERS="content-type,authorization,x-api-key,x-webhook-token"
+# CORS_ALLOW_CREDENTIALS="false"
+# CORS_MAX_AGE_SECONDS="86400"
+
 # Required: Cloudflare bindings (configured in wrangler.jsonc)
 # - AI binding (Workers AI) — auto-available when deployed, no credentials needed
 # - BROWSER binding (Browser Rendering)
@@ -36,3 +47,7 @@ GOOGLE_API_KEY="AIzaSy..."
 
 # Notifications
 # NOTIFY_WEBHOOK_URL="https://example.com/notify"
+
+# UI deployment (set in ui/.env.production for static dashboard deploys)
+# VITE_API_BASE="https://social-post-pipeline.YOUR_SUBDOMAIN.workers.dev"
+# VITE_API_KEY="your-api-key-here"

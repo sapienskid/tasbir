@@ -82,7 +82,7 @@ Returns dependency status (R2, KV namespaces).
 
 ## Architecture
 
-```
+```text
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
 │   Content   │────>│   Pipeline   │────>│   Assets    │
 │   (Ghost /  │     │   (AI +      │     │   (R2 PNG)  │
@@ -102,18 +102,97 @@ Returns dependency status (R2, KV namespaces).
 
 ## Resource Usage
 
-| Resource | Purpose |
-|----------|---------|
-| **KV** | Settings, template metadata |
-| **R2** | Template HTML files, rendered PNG assets |
-| **Durable Objects** | Marketing orchestrator agent |
-| **AI** | Content classification, HTML generation, design tokens |
-| **Browser Rendering** | HTML to PNG screenshot |
+|Resource|Purpose|
+|---|---|
+|**KV**|Settings, template metadata|
+|**R2**|Template HTML files, rendered PNG assets|
+|**Durable Objects**|Marketing orchestrator agent|
+|**AI**|Content classification, HTML generation, design tokens|
+|**Browser Rendering**|HTML to PNG screenshot|
 
 ## Deployment
 
 ```bash
-pnpm run deploy
+pnpm run validate
+pnpm run deploy:staging
+pnpm run deploy:production
 ```
 
 Make sure KV namespaces are created and configured in `wrangler.jsonc` for your environment.
+
+## Production Readiness
+
+This repository intentionally does not include a GitHub Actions deployment workflow.
+Run validation and deployment commands manually (or from your own CI/CD system).
+
+### 1. Validate Before Every Deploy
+
+```bash
+pnpm run validate
+```
+
+This runs worker typecheck/tests and dashboard build/lint.
+
+### 2. Configure Required Secrets
+
+Set Worker secrets per environment (example for production):
+
+```bash
+wrangler secret put API_KEYS --env production
+wrangler secret put GOOGLE_API_KEY --env production
+wrangler secret put GHOST_CONTENT_API_KEY --env production
+wrangler secret put GHOST_WEBHOOK_TOKEN --env production
+wrangler secret put GHOST_WEBHOOK_SECRET --env production
+```
+
+Optional (if not using Workers AI binding directly):
+
+```bash
+wrangler secret put CLOUDFLARE_API_TOKEN --env production
+wrangler secret put CLOUDFLARE_ACCOUNT_ID --env production
+```
+
+### 3. Configure Public Vars
+
+`wrangler.jsonc` already includes production defaults for:
+
+- `API_AUTH_REQUIRE_FOR_PREVIEW=true`
+- `RATE_LIMIT_ENABLED=true`
+- `RATE_LIMIT_WINDOW_SECONDS=60`
+- `RATE_LIMIT_MAX_REQUESTS_PER_WINDOW=120`
+- `ALLOW_PRIVATE_NETWORK_TARGETS=false`
+
+You can override CORS and host allowlists with env vars from `.dev.vars.example`.
+
+### 4. Deploy Worker
+
+```bash
+pnpm run deploy:staging
+pnpm run deploy:production
+```
+
+### 5. Deploy Dashboard (Optional)
+
+If deploying `ui/` to Cloudflare Pages:
+
+```bash
+export CF_PAGES_PROJECT_NAME="your-pages-project"
+pnpm run deploy:ui
+```
+
+Set `ui/.env.production`:
+
+```bash
+VITE_API_BASE="https://social-post-pipeline.<subdomain>.workers.dev"
+VITE_API_KEY="<same-api-key-used-by-worker>"
+```
+
+### 6. Smoke Test Production
+
+```bash
+curl https://social-post-pipeline.<subdomain>.workers.dev/health
+curl -X POST https://social-post-pipeline.<subdomain>.workers.dev/generate-from-content \
+  -H 'x-api-key: <api-key>' \
+  -H 'content-type: application/json' \
+  -d '{"title":"Production check","content":"Smoke test content"}'
+```

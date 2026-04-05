@@ -5,25 +5,29 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --local --live-reload --ip 127.0.0.1 --port 8787",
-    "test": "tsc --noEmit && vitest run",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm run typecheck && vitest run --passWithNoTests",
     "dashboard": "pnpm run --dir ui dev",
+    "ui:build": "pnpm run --dir ui build",
+    "ui:lint": "pnpm run --dir ui lint",
+    "validate": "pnpm run test && pnpm run ui:build && pnpm run ui:lint",
     "dev:server": "wrangler dev --local --ip 127.0.0.1 --port 8787",
     "dev:all": "concurrently --kill-others-on-fail --names \"server,ui\" \"pnpm run dev:server\" \"pnpm run dashboard\"",
-    "deploy": "wrangler deploy --env production"
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "deploy": "pnpm run deploy:production",
+    "deploy:ui": "pnpm run --dir ui build && wrangler pages deploy ui/dist --project-name ${CF_PAGES_PROJECT_NAME}",
+    "deploy:all": "pnpm run deploy:production && pnpm run deploy:ui"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.31.0",
     "@cloudflare/workers-types": "latest",
     "@types/node": "^25.5.0",
     "concurrently": "^9.2.1",
-    "puppeteer-core": "^24.38.0",
     "typescript": "latest",
     "vitest": "^3.2.4",
-    "wrangler": "latest",
-    "yaml": "^2.8.1"
+    "wrangler": "latest"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.66",
     "@ai-sdk/google": "^3.0.58",
     "@ai-sdk/openai": "^3.0.50",
     "@cloudflare/puppeteer": "1.0.6",

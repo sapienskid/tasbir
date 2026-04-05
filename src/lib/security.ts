@@ -179,6 +179,48 @@ export function resolveSecurityConfig(env: Env): ResolvedSecurityConfig {
     merged.api_auth.require_for_generate = parseBooleanString(env.API_AUTH_REQUIRE_FOR_PREVIEW, merged.api_auth.require_for_generate);
   }
 
+  if (env.CORS_ALLOWED_ORIGINS !== undefined) {
+    const parsed = splitCsv(env.CORS_ALLOWED_ORIGINS);
+    if (parsed.length > 0) merged.cors.allowed_origins = parsed;
+  }
+
+  if (env.CORS_ALLOWED_HEADERS !== undefined) {
+    const parsed = splitCsv(env.CORS_ALLOWED_HEADERS);
+    if (parsed.length > 0) merged.cors.allowed_headers = parsed;
+  }
+
+  if (env.CORS_ALLOW_CREDENTIALS !== undefined) {
+    merged.cors.allow_credentials = parseBooleanString(env.CORS_ALLOW_CREDENTIALS, merged.cors.allow_credentials);
+  }
+
+  if (env.CORS_MAX_AGE_SECONDS !== undefined) {
+    merged.cors.max_age_seconds = parseIntegerString(env.CORS_MAX_AGE_SECONDS, merged.cors.max_age_seconds, 0, 86_400);
+  }
+
+  if (env.RATE_LIMIT_ENABLED !== undefined) {
+    merged.rate_limit.enabled = parseBooleanString(env.RATE_LIMIT_ENABLED, merged.rate_limit.enabled);
+  }
+
+  if (env.RATE_LIMIT_WINDOW_SECONDS !== undefined) {
+    merged.rate_limit.window_seconds = parseIntegerString(env.RATE_LIMIT_WINDOW_SECONDS, merged.rate_limit.window_seconds, 1, 3_600);
+  }
+
+  if (env.RATE_LIMIT_MAX_REQUESTS_PER_WINDOW !== undefined) {
+    merged.rate_limit.max_requests_per_window = parseIntegerString(env.RATE_LIMIT_MAX_REQUESTS_PER_WINDOW, merged.rate_limit.max_requests_per_window, 1, 10_000);
+  }
+
+  if (env.ALLOW_PRIVATE_NETWORK_TARGETS !== undefined) {
+    merged.outbound.allow_private_network_targets = parseBooleanString(
+      env.ALLOW_PRIVATE_NETWORK_TARGETS,
+      merged.outbound.allow_private_network_targets
+    );
+  }
+
+  // CORS credentials cannot be used with wildcard origin; fail closed for credentials.
+  if (merged.cors.allow_credentials && merged.cors.allowed_origins.includes("*")) {
+    merged.cors.allow_credentials = false;
+  }
+
   const notifyHostAllowlist = new Set(merged.outbound.allowed_notify_hosts);
   for (const host of splitCsv(env.NOTIFY_HOST_ALLOWLIST).map((e) => e.toLowerCase())) {
     notifyHostAllowlist.add(host);
@@ -210,6 +252,11 @@ function parseBooleanString(value: string, fallback: boolean): boolean {
   if (["true", "1", "yes", "on"].includes(normalized)) return true;
   if (["false", "0", "no", "off"].includes(normalized)) return false;
   return fallback;
+}
+
+function parseIntegerString(value: string, fallback: number, min: number, max: number): number {
+  const parsed = Number.parseInt(value.trim(), 10);
+  return clampNumber(parsed, min, max, fallback);
 }
 
 function clampNumber(value: number, min: number, max: number, fallback: number): number {

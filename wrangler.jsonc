@@ -7,7 +7,11 @@
 		"nodejs_compat"
 	],
 	"vars": {
-		"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
+		"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
+		"RATE_LIMIT_ENABLED": "true",
+		"RATE_LIMIT_WINDOW_SECONDS": "60",
+		"RATE_LIMIT_MAX_REQUESTS_PER_WINDOW": "120",
+		"ALLOW_PRIVATE_NETWORK_TARGETS": "false"
 	},
 	"ai": {
 		"binding": "AI"
@@ -68,7 +72,11 @@
 				}
 			],
 			"vars": {
-				"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
+				"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
+				"RATE_LIMIT_ENABLED": "true",
+				"RATE_LIMIT_WINDOW_SECONDS": "60",
+				"RATE_LIMIT_MAX_REQUESTS_PER_WINDOW": "120",
+				"ALLOW_PRIVATE_NETWORK_TARGETS": "false"
 			},
 			"r2_buckets": [
 				{
@@ -100,7 +108,11 @@
 				}
 			],
 			"vars": {
-				"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
+				"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
+				"RATE_LIMIT_ENABLED": "true",
+				"RATE_LIMIT_WINDOW_SECONDS": "60",
+				"RATE_LIMIT_MAX_REQUESTS_PER_WINDOW": "120",
+				"ALLOW_PRIVATE_NETWORK_TARGETS": "false"
 			},
 			"r2_buckets": [
 				{
