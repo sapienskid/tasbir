@@ -103,24 +103,16 @@ interface GhostPost {
   primary_tag?: { name?: string };
 }
 
-function isCloudflareWorker(): boolean {
-  return typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
-}
 
 async function launchRenderingBrowser(env: Env): Promise<any> {
   const keepAliveMs = (PIPELINE_CONFIG.runtime?.browser_keep_alive_ms as number) ?? 60000;
-  const shouldUseCloudflareBrowser = isCloudflareWorker() || Boolean(env.BROWSER);
 
-  if (shouldUseCloudflareBrowser) {
-    if (!env.BROWSER) {
-      throw new HttpError(500, "BROWSER binding is required for Cloudflare Browser Rendering");
-    }
-    const cloudflarePuppeteer = (await import("@cloudflare/puppeteer")).default as any;
-    return cloudflarePuppeteer.launch(env.BROWSER, { keep_alive: keepAliveMs });
+  // Always use Cloudflare Browser in Workers environment
+  if (!env.BROWSER) {
+    throw new HttpError(500, "BROWSER binding is required for Cloudflare Browser Rendering");
   }
-
-  const nodePuppeteer = (await import("puppeteer")).default as any;
-  return nodePuppeteer.launch({ headless: true });
+  const cloudflarePuppeteer = (await import("@cloudflare/puppeteer")).default as any;
+  return cloudflarePuppeteer.launch(env.BROWSER, { keep_alive: keepAliveMs });
 }
 
 interface Env extends SecurityEnv {
