@@ -139,4 +139,33 @@ export const api = {
     const blob = await response.blob();
     return URL.createObjectURL(blob);
   },
+
+  getSettings: () => request<any>("/settings"),
+  saveSettings: (settings: any) => request<{ ok: boolean }>("/settings", {
+    method: "PUT",
+    body: JSON.stringify(settings),
+  }),
+  patchSettings: (patch: any) => request<{ ok: boolean; settings: any }>("/settings", {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  }),
+
+  getTemplates: () => request<{ templates: any[] }>("/templates"),
+  getTemplate: (id: string) => request<{ metadata: any; html: string }>(`/templates/${id}`),
+  saveTemplate: (id: string, html: string, metadata?: { name?: string; description?: string; category?: string }) =>
+    request<{ ok: boolean; metadata: any }>(`/templates/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ html, ...metadata }),
+    }),
+  deleteTemplate: (id: string) => request<{ ok: boolean }>(`/templates/${id}`, {
+    method: "DELETE",
+  }),
+  toggleTemplate: (id: string, enabled: boolean) => request<{ ok: boolean; metadata: any }>(`/templates/${id}/toggle`, {
+    method: "POST",
+    body: JSON.stringify({ enabled }),
+  }),
+  validateTemplate: (html: string) => request<{ valid: boolean; errors: string[]; slots: string[] }>(`/templates/validate`, {
+    method: "POST",
+    body: JSON.stringify({ html }),
+  }),
 };

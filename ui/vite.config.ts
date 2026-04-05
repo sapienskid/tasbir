@@ -16,6 +16,8 @@ export default defineConfig({
       "/generate": "http://127.0.0.1:8787",
       "/generate-from-content": "http://127.0.0.1:8787",
       "/webhook": "http://127.0.0.1:8787",
+      "/settings": "http://127.0.0.1:8787",
+      "/templates": "http://127.0.0.1:8787",
     },
   },
   resolve: {
