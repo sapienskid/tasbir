@@ -829,7 +829,7 @@ async function resolveAgentContextForRun(args: {
   };
 
   try {
-    const response = await orchestratorStub.fetch("https://marketing-agent.local/orchestrate", {
+    const response = await orchestratorStub.fetch("http://marketing-agent.local/orchestrate", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload)

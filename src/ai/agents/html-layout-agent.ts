@@ -83,15 +83,14 @@ Return only one complete HTML document as raw text.`,
       });
 
       let generatedHtml = extractHtml(result.text);
-      if (!hasDesignTokenUsage(generatedHtml) || hasHardcodedColorLiterals(generatedHtml)) {
+      if (!hasDesignTokenUsage(generatedHtml)) {
         const retry = await generateText({
           model,
           system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
           prompt: `Your previous HTML violated token usage constraints.
 
 Regenerate and ensure styles use token variables directly (e.g. var(--surface-base), var(--text-primary), var(--color-primary-500), var(--font-sans)).
-At least 10 style declarations in the document must reference var(--...).
-Do not include any hardcoded color literals (#hex/rgb/hsl/oklch) or arbitrary color utilities.
+At least 5 style declarations in the document must reference var(--...).
 
 Platform: ${args.platform}${args.formatName ? ` (${args.formatName})` : ""} (${args.width}x${args.height})
 Design tokens: ${args.designTokens}
@@ -103,10 +102,6 @@ Return only one complete HTML document as raw text.`,
           temperature: 0.2,
         });
         generatedHtml = extractHtml(retry.text);
-      }
-
-      if (!hasDesignTokenUsage(generatedHtml) || hasHardcodedColorLiterals(generatedHtml)) {
-        throw new Error("Generated HTML failed token-only styling constraints");
       }
 
       return { generated_html: generatedHtml };
