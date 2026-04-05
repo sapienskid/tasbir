@@ -28,6 +28,7 @@ import {
   stripInjectedDesignTokens,
   formatDesignTokensForPromptFromObject,
   getDefaultDesignTokens,
+  normalizeDesignTokensForRendering,
 } from "../shared/tokens";
 
 interface LlmPromptOverrides {
@@ -295,7 +296,8 @@ app.use("*", async (c, next) => {
 app.get("/health", (c) => c.json({ ok: true }));
 
 app.get("/config/design-tokens", (c) => {
-  return c.json({ tokens: getDefaultDesignTokens(), tailwindConfig: {} });
+  const tokens = normalizeDesignTokensForRendering(getDefaultDesignTokens() as unknown as Record<string, unknown>);
+  return c.json({ tokens, tailwindConfig: buildTailwindConfigFromTokens(tokens) });
 });
 
 app.get("/config/prompts", (c) => {
@@ -351,10 +353,11 @@ function applyBodyDesignSystemClasses(html: string): string {
 function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown>): string {
   if (!html.trim()) return html;
 
+  const normalizedTokens = normalizeDesignTokensForRendering(tokens);
   let nextHtml = applyBodyDesignSystemClasses(stripInjectedDesignTokens(html));
-  const cssVars = tokensToCSSFromRaw(tokens);
-  const fontLinks = fontImportFromTokens(tokens);
-  const tailwindConfig = JSON.stringify(buildTailwindConfigFromTokens(tokens));
+  const cssVars = tokensToCSSFromRaw(normalizedTokens);
+  const fontLinks = fontImportFromTokens(normalizedTokens);
+  const tailwindConfig = JSON.stringify(buildTailwindConfigFromTokens(normalizedTokens));
   const tailwindConfigScript = `<script id="tasbir-tailwind-config">window.tailwind = window.tailwind || {}; window.tailwind.config = ${tailwindConfig};</script>`;
   const baseline = [
     "html, body {",
@@ -362,16 +365,16 @@ function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown
     "  padding: 0;",
     "  width: 100%;",
     "  height: 100%;",
-    "  background: var(--surface-base, #0b0b0b);",
-    "  color: var(--text-primary, #f5f5f5);",
-    "  font-family: var(--font-sans, system-ui, sans-serif);",
+    "  background: var(--surface-base);",
+    "  color: var(--text-primary);",
+    "  font-family: var(--font-sans);",
     "}",
     "*, *::before, *::after { box-sizing: border-box; }",
     "h1, h2, h3, h4, h5, h6 { color: var(--text-primary, inherit); }",
     "p, span, li, small { color: var(--text-secondary, inherit); }",
     ".ds-accent { color: var(--text-accent, var(--color-primary-500)); }",
     ".ds-surface { background: var(--surface-elevated, transparent); }",
-    ".ds-border { border-color: var(--color-neutral-300, rgba(255,255,255,0.15)); }",
+    ".ds-border { border-color: var(--color-neutral-300); }",
   ].join("\n");
 
   const hasTailwindCdn = /<script[^>]+src=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/i.test(nextHtml);
@@ -408,19 +411,19 @@ async function loadDesignTokensForGeneration(env: Env): Promise<Record<string, u
     if (stored) {
       const parsed = await stored.json();
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return parsed as Record<string, unknown>;
+        return normalizeDesignTokensForRendering(parsed as Record<string, unknown>);
       }
     }
   } catch (error) {
     console.warn("[tokens] failed to read saved tokens, falling back to defaults", error);
   }
 
-  return getDefaultDesignTokens() as unknown as Record<string, unknown>;
+  return normalizeDesignTokensForRendering(getDefaultDesignTokens() as unknown as Record<string, unknown>);
 }
 
 function resolveDesignTokensForRequest(bodyTokens: unknown, fallbackTokens: Record<string, unknown>): Record<string, unknown> {
   if (!bodyTokens || typeof bodyTokens !== "object" || Array.isArray(bodyTokens)) return fallbackTokens;
-  return bodyTokens as Record<string, unknown>;
+  return normalizeDesignTokensForRendering(bodyTokens as Record<string, unknown>);
 }
 
 function resolveHtmlCachePolicy(input: HtmlCacheOptions | undefined, slug: string): ResolvedHtmlCachePolicy {
@@ -522,7 +525,7 @@ app.get("/tokens", async (c) => {
     if (!stored) {
       return c.json(null);
     }
-    const tokens = await stored.json();
+    const tokens = normalizeDesignTokensForRendering(await stored.json() as Record<string, unknown>);
     return c.json(tokens);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -537,10 +540,11 @@ app.put("/tokens", async (c) => {
 
   try {
     const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
-    await c.env.OUTPUT_BUCKET.put("config/design-tokens.json", JSON.stringify(body), {
+    const normalizedTokens = normalizeDesignTokensForRendering(body);
+    await c.env.OUTPUT_BUCKET.put("config/design-tokens.json", JSON.stringify(normalizedTokens), {
       httpMetadata: { contentType: "application/json" }
     });
-    return c.json({ ok: true });
+    return c.json({ ok: true, tokens: normalizedTokens });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("[put-tokens] Error:", message);
@@ -713,6 +717,7 @@ function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentE
     agentPrompts?.html_layout_system_prompt as string[] | string | undefined,
     [...promptProfile.mastermind, ...promptProfile.copywriter]
   );
+  const copyUserInstructions = agentPrompts?.html_layout_user_instructions as string[] | string | undefined;
 
   const renderGuardNotes = promptProfile.renderGuard.join(" ").trim();
   const strategistNotes = promptProfile.strategist.join(" ").trim();
@@ -724,6 +729,7 @@ function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentE
     renderPolicy,
     copyOverrides: {
       systemPrompt: copySystemPrompt,
+      userInstructions: copyUserInstructions,
       userInstructionsAppend: baseInstructionAppend || undefined
     },
     strategicBrief: "",
@@ -995,6 +1001,7 @@ async function runHtmlLayoutAgent(
       overrides?.userInstructionsAppend || ""
     ].filter(Boolean).join("\n"),
     systemPrompt,
+    userInstructions: overrides?.userInstructions,
     userInstructionsAppend: overrides?.userInstructionsAppend,
   });
 

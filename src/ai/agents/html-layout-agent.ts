@@ -4,7 +4,7 @@ export interface HtmlLayoutOutput {
   generated_html: string;
 }
 
-const HTML_LAYOUT_SYSTEM_PROMPT = `You are a master of Swiss-style layout design and modern web development.
+const HTML_LAYOUT_SYSTEM_PROMPT = `You are an elite social media visual designer and modern web layout engineer.
 
 Your task is to generate ONE COMPLETE, SELF-CONTAINED HTML document for a social media visual post.
 
@@ -13,11 +13,16 @@ Rules:
 - Use Tailwind CSS via CDN
 - Configure Tailwind with the provided design tokens
 - Use Tailwind utility classes for all styling
-- You MUST consume design tokens in styling via CSS variables like var(--surface-base), var(--text-primary), var(--color-primary-500), var(--font-sans)
-- Do NOT hardcode palette hex/rgb values for core UI colors when token variables exist
+- Use only token-backed Tailwind theme classes for colors/spacing/typography/radius/shadow where available
+- You MUST consume design tokens in styling via var(--...) when utilities cannot directly express a token
+- Do NOT hardcode palette hex/rgb/hsl/oklch/color() values for UI colors
+- Do NOT use arbitrary Tailwind color classes such as bg-[#...], text-[rgb(...)], border-[hsl(...)]
+- Ensure readable contrast by pairing foreground tokens with the chosen surface/color tokens
 - The design must be exactly sized for the given width x height viewport
-- Typography must be bold, professional, and highly readable
-- The design must feel PREMIUM, DYNAMIC, and visually striking
+- Prioritize platform-native composition that performs well as an image in social feeds
+- Build strong visual hierarchy with clear focal point, fast scannability, and thumbnail legibility
+- Typography must be bold, professional, and highly readable at first glance
+- The design must feel premium, dynamic, and conversion-oriented
 - Never include text in generated images - all text is HTML/CSS
 - No external libraries except Tailwind CDN
 - Return ONLY the HTML document as raw text
@@ -38,10 +43,12 @@ export async function generateHtmlLayout(
     designTokens: string;
     userPrompt?: string;
     systemPrompt?: string;
+    userInstructions?: string | string[];
     userInstructionsAppend?: string;
   },
 ): Promise<HtmlLayoutOutput> {
   const errors: Error[] = [];
+  const renderedUserInstructionBlock = renderUserInstructionBlock(args);
 
   for (const model of models) {
     try {
@@ -63,21 +70,28 @@ ${args.content}
 ${args.userPrompt ? `User specifically asked for: ${args.userPrompt}` : ""}
 ${args.userInstructionsAppend ? `Additional rendering constraints:\n${args.userInstructionsAppend}` : ""}
 
-Instructions: Create a high-impact visual design using the source content. Use Tailwind classes with the provided design tokens.
+${renderedUserInstructionBlock}
+
+Instructions:
+- Create a high-impact visual design using the source content.
+- Use tokenized Tailwind theme classes for all visual styling.
+- If a token exists, never use hardcoded color values.
+- Keep typography highly readable with clear hierarchy and contrast-safe text/background pairing.
 
 Return only one complete HTML document as raw text.`,
         temperature: 0.3,
       });
 
       let generatedHtml = extractHtml(result.text);
-      if (!hasDesignTokenUsage(generatedHtml)) {
+      if (!hasDesignTokenUsage(generatedHtml) || hasHardcodedColorLiterals(generatedHtml)) {
         const retry = await generateText({
           model,
           system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
-          prompt: `Your previous HTML did not use design token CSS variables sufficiently.
+          prompt: `Your previous HTML violated token usage constraints.
 
 Regenerate and ensure styles use token variables directly (e.g. var(--surface-base), var(--text-primary), var(--color-primary-500), var(--font-sans)).
-At least 6 style declarations in the document must reference var(--...).
+At least 10 style declarations in the document must reference var(--...).
+Do not include any hardcoded color literals (#hex/rgb/hsl/oklch) or arbitrary color utilities.
 
 Platform: ${args.platform}${args.formatName ? ` (${args.formatName})` : ""} (${args.width}x${args.height})
 Design tokens: ${args.designTokens}
@@ -90,6 +104,11 @@ Return only one complete HTML document as raw text.`,
         });
         generatedHtml = extractHtml(retry.text);
       }
+
+      if (!hasDesignTokenUsage(generatedHtml) || hasHardcodedColorLiterals(generatedHtml)) {
+        throw new Error("Generated HTML failed token-only styling constraints");
+      }
+
       return { generated_html: generatedHtml };
     } catch (error) {
       errors.push(error instanceof Error ? error : new Error(String(error)));
@@ -102,7 +121,71 @@ Return only one complete HTML document as raw text.`,
 
 function hasDesignTokenUsage(html: string): boolean {
   const matches = html.match(/var\(--[a-z0-9-]+\)/gi) || [];
-  return matches.length >= 3;
+  return matches.length >= 10;
+}
+
+function hasHardcodedColorLiterals(html: string): boolean {
+  const colorLiteralPatterns = [
+    /#[0-9a-f]{3,8}\b/gi,
+    /\brgba?\s*\(/gi,
+    /\bhsla?\s*\(/gi,
+    /\boklch\s*\(/gi,
+    /\bcolor\s*\(/gi,
+  ];
+
+  for (const pattern of colorLiteralPatterns) {
+    if (pattern.test(html)) return true;
+  }
+
+  const arbitraryColorClass = /(bg|text|border|from|via|to)-\[(#|rgb|rgba|hsl|hsla|oklch|color:)/i;
+  return arbitraryColorClass.test(html);
+}
+
+function renderUserInstructionBlock(args: {
+  platform: string;
+  formatName?: string;
+  width: number;
+  height: number;
+  title: string;
+  excerpt: string;
+  content: string;
+  designTokens: string;
+  userInstructions?: string | string[];
+}): string {
+  const lines = toLines(args.userInstructions);
+  if (lines.length === 0) return "";
+
+  const replacements: Record<string, string> = {
+    "<platform>": `${args.platform}${args.formatName ? ` (${args.formatName})` : ""}`,
+    "<width>": String(args.width),
+    "<height>": String(args.height),
+    "<title>": args.title,
+    "<excerpt>": args.excerpt,
+    "<content>": args.content,
+    "<design_tokens>": args.designTokens,
+  };
+
+  const rendered = lines
+    .map((line) => {
+      let next = line;
+      for (const [token, value] of Object.entries(replacements)) {
+        next = next.split(token).join(value);
+      }
+      return next;
+    })
+    .join("\n")
+    .trim();
+
+  return rendered ? `Configured layout instructions:\n${rendered}` : "";
+}
+
+function toLines(value: string | string[] | undefined): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map((line) => String(line).trim()).filter(Boolean);
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 function extractHtml(text: string): string {

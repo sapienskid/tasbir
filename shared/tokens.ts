@@ -10,7 +10,7 @@ export interface DesignTokens {
     neutral: Record<string, string>;
     semantic: { success: string; warning: string; error: string; info: string };
     surface: { base: string; subtle: string; elevated: string; overlay: string };
-    text: { primary: string; secondary: string; muted: string; inverse: string; accent: string };
+    text: { primary: string; secondary: string; muted: string; inverse: string; accent: string; [key: string]: string };
   };
   typography: {
     fontSans: string;
@@ -47,6 +47,135 @@ export interface DesignTokens {
   };
 }
 
+const WCAG_AA_NORMAL_CONTRAST = 4.5;
+
+function normalizeHexColor(value: string): string | null {
+  const input = value.trim();
+  const shortHex = /^#([0-9a-f]{3})$/i.exec(input);
+  if (shortHex) {
+    const [r, g, b] = shortHex[1].split("");
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  const longHex = /^#([0-9a-f]{6})$/i.exec(input);
+  if (longHex) return `#${longHex[1].toLowerCase()}`;
+  return null;
+}
+
+function relativeLuminance(hex: string): number {
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) return 0;
+
+  const r = parseInt(normalized.slice(1, 3), 16) / 255;
+  const g = parseInt(normalized.slice(3, 5), 16) / 255;
+  const b = parseInt(normalized.slice(5, 7), 16) / 255;
+  const srgbToLinear = (channel: number): number =>
+    channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4);
+
+  const rl = srgbToLinear(r);
+  const gl = srgbToLinear(g);
+  const bl = srgbToLinear(b);
+  return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const fg = normalizeHexColor(foreground);
+  const bg = normalizeHexColor(background);
+  if (!fg || !bg) return 1;
+  const l1 = relativeLuminance(fg);
+  const l2 = relativeLuminance(bg);
+  const lighter = Math.max(l1, l2);
+  const darker = Math.min(l1, l2);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function pickBestForeground(background: string, candidates: string[]): { color: string; ratio: number } {
+  let best = { color: "#000000", ratio: 1 };
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeHexColor(candidate);
+    if (!normalizedCandidate) continue;
+    const ratio = contrastRatio(normalizedCandidate, background);
+    if (ratio > best.ratio) best = { color: normalizedCandidate, ratio };
+  }
+  return best;
+}
+
+function ensureReadableTokenColor(
+  existingColor: string | undefined,
+  background: string | undefined,
+  candidates: string[],
+  minimumContrast = WCAG_AA_NORMAL_CONTRAST,
+): string {
+  const normalizedBg = background ? normalizeHexColor(background) : null;
+  const normalizedExisting = existingColor ? normalizeHexColor(existingColor) : null;
+  if (!normalizedBg) return normalizedExisting || "#000000";
+
+  if (normalizedExisting && contrastRatio(normalizedExisting, normalizedBg) >= minimumContrast) {
+    return normalizedExisting;
+  }
+
+  const fallbackCandidates = [...candidates, "#ffffff", "#111111"];
+  const best = pickBestForeground(normalizedBg, fallbackCandidates);
+  return best.color;
+}
+
+function cloneTokenRecord(tokens: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(tokens || {})) as Record<string, unknown>;
+}
+
+export function normalizeDesignTokensForRendering(tokens: Record<string, unknown>): Record<string, unknown> {
+  const next = cloneTokenRecord(tokens);
+  const colors = ((next.colors as Record<string, unknown> | undefined) || {}) as Record<string, unknown>;
+  next.colors = colors;
+
+  const neutral = ((colors.neutral as Record<string, unknown> | undefined) || {}) as Record<string, string>;
+  const primary = ((colors.primary as Record<string, unknown> | undefined) || {}) as Record<string, string>;
+  const secondary = ((colors.secondary as Record<string, unknown> | undefined) || {}) as Record<string, string>;
+  const semantic = ((colors.semantic as Record<string, unknown> | undefined) || {}) as Record<string, string>;
+  const accent = ((colors.accent as Record<string, unknown> | undefined) || {}) as Record<string, string>;
+  const surface = ((colors.surface as Record<string, unknown> | undefined) || {}) as Record<string, string>;
+  const text = ((colors.text as Record<string, unknown> | undefined) || {}) as Record<string, string>;
+
+  colors.text = text;
+
+  const baseCandidates = [
+    text.primary,
+    text.secondary,
+    text.inverse,
+    neutral["50"],
+    neutral["100"],
+    neutral["800"],
+    neutral["900"],
+  ].filter((v): v is string => typeof v === "string");
+
+  const surfaceBase = typeof surface.base === "string" ? surface.base : undefined;
+  const surfaceSubtle = typeof surface.subtle === "string" ? surface.subtle : surfaceBase;
+  const surfaceElevated = typeof surface.elevated === "string" ? surface.elevated : surfaceSubtle;
+
+  text.primary = ensureReadableTokenColor(text.primary, surfaceBase, baseCandidates);
+  text.secondary = ensureReadableTokenColor(text.secondary, surfaceBase, baseCandidates);
+  text.muted = ensureReadableTokenColor(text.muted, surfaceBase, baseCandidates, 3.0);
+  text.inverse = ensureReadableTokenColor(text.inverse, text.primary, [neutral["50"], neutral["900"], "#ffffff", "#111111"]);
+
+  text["on-surface-base"] = ensureReadableTokenColor(text["on-surface-base"], surfaceBase, baseCandidates);
+  text["on-surface-subtle"] = ensureReadableTokenColor(text["on-surface-subtle"], surfaceSubtle, baseCandidates);
+  text["on-surface-elevated"] = ensureReadableTokenColor(text["on-surface-elevated"], surfaceElevated, baseCandidates);
+
+  text["on-primary"] = ensureReadableTokenColor(text["on-primary"], primary["500"], baseCandidates);
+  text["on-secondary"] = ensureReadableTokenColor(text["on-secondary"], secondary["500"], baseCandidates);
+  text["on-accent"] = ensureReadableTokenColor(text["on-accent"], accent.base, baseCandidates);
+  text["on-success"] = ensureReadableTokenColor(text["on-success"], semantic.success, baseCandidates);
+  text["on-warning"] = ensureReadableTokenColor(text["on-warning"], semantic.warning, baseCandidates);
+  text["on-error"] = ensureReadableTokenColor(text["on-error"], semantic.error, baseCandidates);
+  text["on-info"] = ensureReadableTokenColor(text["on-info"], semantic.info, baseCandidates);
+
+  const accentCandidates = [text.accent, primary["500"], primary["600"], secondary["500"]].filter(
+    (v): v is string => typeof v === "string",
+  );
+  text.accent = ensureReadableTokenColor(text.accent, surfaceBase, accentCandidates);
+
+  return next;
+}
+
 // ─── Shadow fallbacks ────────────────────────────────────────────────────────
 
 const SHADOW_FALLBACKS: Record<string, string> = {
@@ -79,8 +208,9 @@ function normalizeShadowValue(value: unknown, keyHint: string): string {
 // ─── tokensToCSS (single implementation used everywhere) ─────────────────────
 
 export function tokensToCSS(t: DesignTokens): string {
+  const normalized = normalizeDesignTokensForRendering(t as unknown as Record<string, unknown>) as unknown as DesignTokens;
   const L = [':root {', '  /* COLOR */'];
-  const c = t.colors || {};
+  const c = normalized.colors || {};
   ['primary', 'secondary', 'accent', 'neutral'].forEach((g) => {
     const group = c[g as keyof typeof c];
     if (!group || typeof group !== 'object') return;
@@ -89,7 +219,7 @@ export function tokensToCSS(t: DesignTokens): string {
   Object.entries(c.semantic || {}).forEach(([k, v]) => L.push(`  --color-${k}: ${v};`));
   Object.entries(c.surface || {}).forEach(([k, v]) => L.push(`  --surface-${k}: ${v};`));
   Object.entries(c.text || {}).forEach(([k, v]) => L.push(`  --text-${k}: ${v};`));
-  const ty = t.typography || {};
+  const ty = normalized.typography || {};
   L.push('', '  /* TYPOGRAPHY */');
   if (ty.fontSans) L.push(`  --font-sans: '${ty.fontSans}', sans-serif;`);
   if (ty.fontSerif) L.push(`  --font-serif: '${ty.fontSerif}', serif;`);
@@ -99,21 +229,21 @@ export function tokensToCSS(t: DesignTokens): string {
   Object.entries(ty.tracking || {}).forEach(([k, v]) => L.push(`  --tracking-${k}: ${v};`));
   Object.entries(ty.leading || {}).forEach(([k, v]) => L.push(`  --leading-${k}: ${v};`));
   L.push('', '  /* SPACING */');
-  (t.spacing?.scale || []).forEach((v, i) => L.push(`  --space-${i + 1}: ${v}px;`));
+  (normalized.spacing?.scale || []).forEach((v, i) => L.push(`  --space-${i + 1}: ${v}px;`));
   L.push('', '  /* BORDER */');
-  Object.entries(t.border?.width || {}).forEach(([k, v]) => L.push(`  --border-${k}: ${v};`));
-  Object.entries(t.border?.radius || {}).forEach(([k, v]) => L.push(`  --radius-${k}: ${v};`));
+  Object.entries(normalized.border?.width || {}).forEach(([k, v]) => L.push(`  --border-${k}: ${v};`));
+  Object.entries(normalized.border?.radius || {}).forEach(([k, v]) => L.push(`  --radius-${k}: ${v};`));
   L.push('', '  /* SHADOW */');
-  Object.entries(t.shadow || {}).forEach(([k, v]) => {
+  Object.entries(normalized.shadow || {}).forEach(([k, v]) => {
     L.push(`  --shadow-${k}: ${normalizeShadowValue(v, k)};`);
   });
   L.push('', '  /* GRADIENT */');
-  Object.entries(t.gradient || {}).forEach(([k, v]) => L.push(`  --gradient-${k}: ${v};`));
+  Object.entries(normalized.gradient || {}).forEach(([k, v]) => L.push(`  --gradient-${k}: ${v};`));
   L.push('', '  /* MOTION */');
-  Object.entries(t.motion?.duration || {}).forEach(([k, v]) => L.push(`  --duration-${k}: ${v};`));
-  Object.entries(t.motion?.easing || {}).forEach(([k, v]) => L.push(`  --easing-${k}: ${v};`));
+  Object.entries(normalized.motion?.duration || {}).forEach(([k, v]) => L.push(`  --duration-${k}: ${v};`));
+  Object.entries(normalized.motion?.easing || {}).forEach(([k, v]) => L.push(`  --easing-${k}: ${v};`));
   L.push('', '  /* COMPONENT */');
-  Object.entries(t.component || {}).forEach(([name, vals]) => {
+  Object.entries(normalized.component || {}).forEach(([name, vals]) => {
     Object.entries(vals).forEach(([k, v]) => L.push(`  --${name}-${k}: ${v};`));
   });
   L.push('}');
@@ -123,8 +253,9 @@ export function tokensToCSS(t: DesignTokens): string {
 // ─── tokensToCSS for Record<string, unknown> (server-side raw JSON) ──────────
 
 export function tokensToCSSFromRaw(t: Record<string, unknown>): string {
+  const normalized = normalizeDesignTokensForRendering(t);
   const L = [':root {', '  /* COLOR */'];
-  const c = (t.colors || {}) as Record<string, Record<string, string>>;
+  const c = (normalized.colors || {}) as Record<string, Record<string, string>>;
   ['primary', 'secondary', 'accent', 'neutral'].forEach((g) => {
     const group = c[g];
     if (!group || typeof group !== 'object') return;
@@ -136,7 +267,7 @@ export function tokensToCSSFromRaw(t: Record<string, unknown>): string {
   Object.entries(surface).forEach(([k, v]) => L.push(`  --surface-${k}: ${v};`));
   const text = (c.text || {}) as Record<string, string>;
   Object.entries(text).forEach(([k, v]) => L.push(`  --text-${k}: ${v};`));
-  const ty = (t.typography || {}) as Record<string, unknown>;
+  const ty = (normalized.typography || {}) as Record<string, unknown>;
   L.push('', '  /* TYPOGRAPHY */');
   const fontSans = ty.fontSans as string | undefined;
   if (fontSans) L.push(`  --font-sans: '${fontSans}', sans-serif;`);
@@ -153,26 +284,26 @@ export function tokensToCSSFromRaw(t: Record<string, unknown>): string {
   const leading = (ty.leading || {}) as Record<string, number>;
   Object.entries(leading).forEach(([k, v]) => L.push(`  --leading-${k}: ${v};`));
   L.push('', '  /* SPACING */');
-  const spacing = (t.spacing || {}) as { scale?: number[] };
+  const spacing = (normalized.spacing || {}) as { scale?: number[] };
   (spacing.scale || []).forEach((v, i) => L.push(`  --space-${i + 1}: ${v}px;`));
   L.push('', '  /* BORDER */');
-  const border = (t.border || {}) as Record<string, Record<string, string>>;
+  const border = (normalized.border || {}) as Record<string, Record<string, string>>;
   Object.entries(border.width || {}).forEach(([k, v]) => L.push(`  --border-${k}: ${v};`));
   Object.entries(border.radius || {}).forEach(([k, v]) => L.push(`  --radius-${k}: ${v};`));
   L.push('', '  /* SHADOW */');
-  const shadow = (t.shadow || {}) as Record<string, string>;
+  const shadow = (normalized.shadow || {}) as Record<string, string>;
   Object.entries(shadow).forEach(([k, v]) => {
     L.push(`  --shadow-${k}: ${normalizeShadowValue(v, k)};`);
   });
   L.push('', '  /* GRADIENT */');
-  const gradient = (t.gradient || {}) as Record<string, string>;
+  const gradient = (normalized.gradient || {}) as Record<string, string>;
   Object.entries(gradient).forEach(([k, v]) => L.push(`  --gradient-${k}: ${v};`));
   L.push('', '  /* MOTION */');
-  const motion = (t.motion || {}) as Record<string, Record<string, string>>;
+  const motion = (normalized.motion || {}) as Record<string, Record<string, string>>;
   Object.entries(motion.duration || {}).forEach(([k, v]) => L.push(`  --duration-${k}: ${v};`));
   Object.entries(motion.easing || {}).forEach(([k, v]) => L.push(`  --easing-${k}: ${v};`));
   L.push('', '  /* COMPONENT */');
-  const component = (t.component || {}) as Record<string, Record<string, string | number>>;
+  const component = (normalized.component || {}) as Record<string, Record<string, string | number>>;
   Object.entries(component).forEach(([name, vals]) => {
     Object.entries(vals).forEach(([k, v]) => L.push(`  --${name}-${k}: ${v};`));
   });
@@ -200,9 +331,13 @@ export function fontImportFromTokens(t: Record<string, unknown>): string {
 // ─── Tailwind config from tokens ─────────────────────────────────────────────
 
 export function buildTailwindConfigFromTokens(tokens: Record<string, unknown>): Record<string, unknown> {
-  const colors = (tokens.colors || {}) as Record<string, unknown>;
-  const border = (tokens.border || {}) as Record<string, unknown>;
-  const ty = (tokens.typography || {}) as Record<string, unknown>;
+  const normalized = normalizeDesignTokensForRendering(tokens);
+  const colors = (normalized.colors || {}) as Record<string, unknown>;
+  const border = (normalized.border || {}) as Record<string, unknown>;
+  const ty = (normalized.typography || {}) as Record<string, unknown>;
+  const shadow = (normalized.shadow || {}) as Record<string, unknown>;
+  const gradient = (normalized.gradient || {}) as Record<string, unknown>;
+  const motion = (normalized.motion || {}) as Record<string, unknown>;
 
   const toColorObj = (obj: unknown): Record<string, string> => {
     if (typeof obj !== 'object' || obj === null) return {};
@@ -227,21 +362,33 @@ export function buildTailwindConfigFromTokens(tokens: Record<string, unknown>): 
   const fontMono = ty.fontMono as string | undefined;
   if (fontMono) fontFamilies.mono = [fontMono, 'monospace'];
 
-  const spacingScale = ((tokens.spacing as { scale?: number[] } | undefined)?.scale || []) as number[];
+  const spacingScale = ((normalized.spacing as { scale?: number[] } | undefined)?.scale || []) as number[];
   const spacing: Record<string, string> = {};
   spacingScale.forEach((v, i) => {
     spacing[String(i + 1)] = `${v}px`;
   });
 
+  const toStringObj = (obj: unknown): Record<string, string> => {
+    if (typeof obj !== 'object' || obj === null) return {};
+    return Object.fromEntries(
+      Object.entries(obj as Record<string, unknown>).filter(([, value]) => typeof value === 'string') as Array<[
+        string,
+        string,
+      ]>,
+    );
+  };
+
   return {
     theme: {
-      extend: {
-        colors: themeColors,
-        fontFamily: fontFamilies,
-        spacing,
-        borderRadius: toColorObj((border.radius || {}) as Record<string, string>),
-        borderWidth: toColorObj((border.width || {}) as Record<string, string>),
-      },
+      colors: themeColors,
+      fontFamily: fontFamilies,
+      spacing,
+      borderRadius: toColorObj((border.radius || {}) as Record<string, string>),
+      borderWidth: toColorObj((border.width || {}) as Record<string, string>),
+      boxShadow: toStringObj(shadow),
+      backgroundImage: toStringObj(gradient),
+      transitionDuration: toStringObj((motion.duration || {}) as Record<string, string>),
+      transitionTimingFunction: toStringObj((motion.easing || {}) as Record<string, string>),
     },
   };
 }
@@ -261,18 +408,26 @@ export function stripInjectedDesignTokens(html: string): string {
 // ─── Prompt formatting ───────────────────────────────────────────────────────
 
 export function formatDesignTokensForPromptFromObject(tokens: Record<string, unknown>): string {
+  const normalized = normalizeDesignTokensForRendering(tokens);
   const parts: string[] = [];
   parts.push('Token JSON:');
-  parts.push(JSON.stringify(tokens, null, 2));
+  parts.push(JSON.stringify(normalized, null, 2));
   parts.push('\nToken CSS Variables (use these names directly with var(--...)): ');
-  parts.push(tokensToCSSFromRaw(tokens));
+  parts.push(tokensToCSSFromRaw(normalized));
+  parts.push('\nTailwind theme config (token-backed):');
+  parts.push(JSON.stringify(buildTailwindConfigFromTokens(normalized), null, 2));
   parts.push('\nCanonical Tailwind token classes expected:');
-  parts.push('- background: bg-surface-base, bg-surface-elevated');
-  parts.push('- text: text-content-primary, text-content-secondary, text-primary-500');
+  parts.push('- background: bg-surface-base, bg-surface-subtle, bg-surface-elevated');
+  parts.push('- foreground: text-content-primary, text-content-on-surface-base, text-content-on-primary');
+  parts.push('- emphasis: bg-primary-500 + text-content-on-primary; bg-secondary-500 + text-content-on-secondary');
   parts.push('- font: font-sans, font-serif, font-mono');
+  parts.push('- spacing/radius/shadow: p-1..p-15, rounded-md etc from token config, shadow-sm/md/lg from token config');
   parts.push('\nImplementation requirements:');
   parts.push('- Add these CSS variables to :root in your <style> block.');
-  parts.push('- Prefer var(--color-...), var(--surface-...), var(--text-...), var(--gradient-...), var(--font-sans).\n');
+  parts.push('- Prefer var(--color-...), var(--surface-...), var(--text-...), var(--gradient-...), var(--font-sans).');
+  parts.push('- Do not use hardcoded color literals (#hex, rgb, rgba, hsl, hsla) when a token exists.');
+  parts.push('- Do not use arbitrary color classes (for example text-[#fff], bg-[rgb(...)]) - use token theme classes only.');
+  parts.push('- Ensure readable contrast by using matching foreground/background token pairs (on-* tokens for colored backgrounds).\n');
   return parts.join('\n');
 }
 

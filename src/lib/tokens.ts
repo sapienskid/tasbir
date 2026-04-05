@@ -11,9 +11,10 @@ export {
   stripInjectedDesignTokens,
   formatDesignTokensForPromptFromObject,
   getDefaultDesignTokens,
+  normalizeDesignTokensForRendering,
 } from "../../shared/tokens";
 
-import type { DesignTokens } from "../../shared/tokens";
+import { normalizeDesignTokensForRendering, type DesignTokens } from "../../shared/tokens";
 
 export async function generateTokensAI(
   vibe: string,
@@ -130,7 +131,7 @@ export function generateTokensComputational(primary: string, secondary: string, 
 
   const vibeName = vibe ? vibe.toUpperCase().slice(0, 30) : 'COMPUTATIONAL';
 
-  return {
+  const baseTokens: DesignTokens = {
     colors: {
       primary: primaryScale,
       secondary: secondaryScale,
@@ -201,6 +202,8 @@ export function generateTokensComputational(primary: string, secondary: string, 
       palette: isDark ? 'dark' : 'light'
     }
   };
+
+  return normalizeDesignTokensForRendering(baseTokens as unknown as Record<string, unknown>) as unknown as DesignTokens;
 }
 
 export function tokensToPrompt(t: DesignTokens): string {
