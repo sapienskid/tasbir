@@ -15,7 +15,6 @@ export default defineConfig({
       "/asset": "http://127.0.0.1:8787",
       "/generate": "http://127.0.0.1:8787",
       "/generate-from-content": "http://127.0.0.1:8787",
-      "/render-from-cache": "http://127.0.0.1:8787",
       "/webhook": "http://127.0.0.1:8787",
     },
   },

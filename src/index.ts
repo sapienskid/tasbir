@@ -79,6 +79,8 @@ async function launchRenderingBrowser(env: Env): Promise<any> {
 
 interface Env extends SecurityEnv {
   MARKETING_ORCHESTRATOR?: DurableObjectNamespace<MarketingOrchestratorAgent>;
+  SETTINGS_KV?: KVNamespace;
+  TEMPLATES_KV?: KVNamespace;
 }
 
 interface ImageGenerationOptions {
@@ -93,11 +95,6 @@ interface OutputOptions {
   formats?: string[];
   carouselSlides?: number;
   postCount?: number;
-}
-
-interface HtmlCacheOptions {
-  mode?: "off" | "read-only" | "write-only" | "read-write";
-  key?: string;
 }
 
 interface AgentRenderPolicy {
@@ -122,7 +119,6 @@ interface GenerateRequestBody {
   notifyUrl?: string;
   image?: ImageGenerationOptions;
   output?: OutputOptions;
-  htmlCache?: HtmlCacheOptions;
   agent?: AgentOptions;
   designTokens?: Record<string, unknown>;
 }
@@ -143,17 +139,7 @@ interface DirectContentRequestBody {
   notifyUrl?: string;
   image?: ImageGenerationOptions;
   output?: OutputOptions;
-  htmlCache?: HtmlCacheOptions;
   agent?: AgentOptions;
-  designTokens?: Record<string, unknown>;
-}
-
-interface RenderFromCacheRequestBody {
-  slug?: string;
-  output?: OutputOptions;
-  storage?: StorageOptions;
-  htmlCache?: HtmlCacheOptions;
-  variantIndex?: number;
   designTokens?: Record<string, unknown>;
 }
 
@@ -208,21 +194,6 @@ interface AgentExecutionContext {
   strategicBrief: string;
   visualNotes: string;
   warnings: string[];
-}
-
-interface ResolvedHtmlCachePolicy {
-  enabled: boolean;
-  read: boolean;
-  write: boolean;
-  keyPrefix: string;
-}
-
-interface HtmlCacheRecord {
-  generated_html: string;
-  created_at: string;
-  slug: string;
-  format: string;
-  variant_index: number;
 }
 
 const DEFAULT_IMAGE_MODEL = (PIPELINE_CONFIG.generation?.image?.default_model as string) || "@cf/black-forest-labs/flux-1-schnell";
@@ -426,55 +397,6 @@ function resolveDesignTokensForRequest(bodyTokens: unknown, fallbackTokens: Reco
   return normalizeDesignTokensForRendering(bodyTokens as Record<string, unknown>);
 }
 
-function resolveHtmlCachePolicy(input: HtmlCacheOptions | undefined, slug: string): ResolvedHtmlCachePolicy {
-  const requestedMode = input?.mode ?? "off";
-  const mode = ["off", "read-only", "write-only", "read-write"].includes(requestedMode) ? requestedMode : "off";
-  const keyPrefix = sanitizeRunId(input?.key) ?? sanitizeRunId(slug) ?? "default";
-  return {
-    enabled: mode !== "off",
-    read: mode === "read-only" || mode === "read-write",
-    write: mode === "write-only" || mode === "read-write",
-    keyPrefix,
-  };
-}
-
-function buildHtmlCacheR2Key(args: {
-  policy: ResolvedHtmlCachePolicy;
-  slug: string;
-  format: string;
-  variantIndex: number;
-  width: number;
-  height: number;
-}): string {
-  const slugPart = sanitizeSlug(args.slug) || "untitled";
-  const formatPart = args.format.replace(/[^a-z0-9-_]/gi, "").toLowerCase() || "format";
-  const variantPart = `v${args.variantIndex + 1}`;
-  const sizePart = `${args.width}x${args.height}`;
-  return `cache/html/${args.policy.keyPrefix}/${slugPart}/${formatPart}/${variantPart}-${sizePart}.json`;
-}
-
-async function readCachedHtml(env: Env, key: string): Promise<string | null> {
-  try {
-    const stored = await env.OUTPUT_BUCKET.get(key);
-    if (!stored) return null;
-    const parsed = (await stored.json()) as Partial<HtmlCacheRecord>;
-    const html = typeof parsed?.generated_html === "string" ? parsed.generated_html.trim() : "";
-    return html || null;
-  } catch {
-    return null;
-  }
-}
-
-async function writeCachedHtml(env: Env, key: string, record: HtmlCacheRecord): Promise<void> {
-  try {
-    await env.OUTPUT_BUCKET.put(key, JSON.stringify(record), {
-      httpMetadata: { contentType: "application/json" }
-    });
-  } catch (error) {
-    console.warn("[html-cache] failed to persist html cache", error);
-  }
-}
-
 app.post("/generate-tokens", async (c) => {
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "generate");
@@ -570,7 +492,6 @@ app.put("/formats/:id", async (c) => {
     
     setFormat(id, body);
     
-    // Persist to R2
     const allFormats = getAllFormats();
     await c.env.OUTPUT_BUCKET.put("config/formats.json", JSON.stringify(allFormats), {
       httpMetadata: { contentType: "application/json" }
@@ -596,7 +517,6 @@ app.delete("/formats/:id", async (c) => {
       return c.json({ error: "Format not found" }, 404);
     }
     
-    // Persist to R2
     const allFormats = getAllFormats();
     await c.env.OUTPUT_BUCKET.put("config/formats.json", JSON.stringify(allFormats), {
       httpMetadata: { contentType: "application/json" }
@@ -644,17 +564,6 @@ app.post("/generate-from-content", async (c) => {
     c.executionCtx.waitUntil(sendNotification(notifyUrl, result, security));
   }
 
-  return c.json(result);
-});
-
-app.post("/render-from-cache", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate-from-content");
-  enforceRateLimit(c.req.raw, security, "generate-from-content");
-
-  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
-  const validated = validateRenderFromCacheRequestBody(body);
-  const result = await runRenderFromCache(validated, c.env);
   return c.json(result);
 });
 
@@ -735,72 +644,6 @@ function resolveAgentExecutionContext(options: AgentOptions | undefined): AgentE
     strategicBrief: "",
     visualNotes: promptProfile.visualDirector.join(" ").trim(),
     warnings
-  };
-}
-
-async function runRenderFromCache(body: RenderFromCacheRequestBody, env: Env) {
-  const slug = sanitizeSlug(body.slug || "");
-  if (!slug) throw new HttpError(400, "slug is required for /render-from-cache");
-
-  const outputPlan = resolveOutputPlan(body.output);
-  const variantIndex = Math.max(1, Math.round(clampNumber(body.variantIndex, 1, 10, 1)));
-  const cachePolicy = resolveHtmlCachePolicy(body.htmlCache, slug);
-  const defaultTokens = await loadDesignTokensForGeneration(env);
-  const designTokensForRun = resolveDesignTokensForRequest(body.designTokens, defaultTokens);
-  const sharedStorage = resolveBatchStorageOptions(body.storage);
-
-  const browser = await launchRenderingBrowser(env);
-  const assets: Record<string, StoredAsset | null> = {};
-  const missingFormats: string[] = [];
-
-  try {
-    for (const format of outputPlan.formats) {
-      const dimensions = getFormatConfig(format);
-      if (!dimensions) {
-        missingFormats.push(format);
-        assets[format] = null;
-        continue;
-      }
-
-      const cacheKey = buildHtmlCacheR2Key({
-        policy: cachePolicy,
-        slug,
-        format,
-        variantIndex: variantIndex - 1,
-        width: dimensions.width,
-        height: dimensions.height,
-      });
-
-      const cachedHtml = await readCachedHtml(env, cacheKey);
-      if (!cachedHtml) {
-        missingFormats.push(format);
-        assets[format] = null;
-        continue;
-      }
-
-      const keyPrefix = buildR2KeyPrefix(env, slug, sharedStorage);
-      const suffix = `cache-rerender-v${variantIndex}`;
-      const asset = await renderStoreSingleAsset(env, browser, {
-        key: `${keyPrefix}/${buildAssetFileName(format, suffix)}`,
-        format,
-        rawHtml: injectDesignTokensIntoHtml(cachedHtml, designTokensForRun),
-        formatLabel: format,
-      });
-
-      assets[format] = asset;
-    }
-  } finally {
-    await browser.close();
-  }
-
-  return {
-    ok: true,
-    slug,
-    requested_formats: [...outputPlan.formats],
-    cache_key_prefix: cachePolicy.keyPrefix,
-    variant_index: variantIndex,
-    missing_formats: missingFormats,
-    assets,
   };
 }
 
@@ -1025,9 +868,6 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   const defaultTokens = await loadDesignTokensForGeneration(env);
   const designTokensForRun = resolveDesignTokensForRequest(body.designTokens, defaultTokens);
   const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
-  const htmlCachePolicy = resolveHtmlCachePolicy(body.htmlCache, post.slug);
-  const htmlCacheSummary = { hits: 0, misses: 0, writes: 0 };
-  const primaryVariantByFormat: Record<string, "hit" | "miss"> = {};
   const brandName = body.brandName ?? env.BRAND_NAME ?? "Tasbir Blog";
   const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null> }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
@@ -1056,72 +896,28 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       const dimensions = getFormatConfig(format);
       if (!dimensions) continue;
 
-      const cacheKey = buildHtmlCacheR2Key({
-        policy: htmlCachePolicy,
-        slug: post.slug,
+      const llmOutput = await runHtmlLayoutAgent(
+        env,
+        post,
         format,
-        variantIndex: index,
-        width: dimensions.width,
-        height: dimensions.height,
-      });
+        dimensions.name,
+        dimensions.aiInstruction,
+        dimensions.width,
+        dimensions.height,
+        designTokensPrompt,
+        variantPrompt,
+        agentContext.copyOverrides,
+      );
 
-      let llmOutput: LlmOutput | null = null;
-      let cacheStatus: "hit" | "miss" = "miss";
-      if (htmlCachePolicy.enabled && htmlCachePolicy.read) {
-        const cachedHtml = await readCachedHtml(env, cacheKey);
-        if (cachedHtml) {
-          llmOutput = { generated_html: injectDesignTokensIntoHtml(cachedHtml, designTokensForRun) };
-          cacheStatus = "hit";
-          htmlCacheSummary.hits += 1;
-        }
-      }
-
-      if (!llmOutput) {
-        if (body.htmlCache?.mode === "read-only") {
-          throw new HttpError(
-            409,
-            `HTML cache miss for format '${format}' (slug '${post.slug}', cache key '${htmlCachePolicy.keyPrefix}'). Run once with htmlCache.mode=read-write or write-only first.`
-          );
-        }
-        llmOutput = await runHtmlLayoutAgent(
-          env,
-          post,
-          format,
-          dimensions.name,
-          dimensions.aiInstruction,
-          dimensions.width,
-          dimensions.height,
-          designTokensPrompt,
-          variantPrompt,
-          agentContext.copyOverrides,
-        );
-        htmlCacheSummary.misses += 1;
-      }
-
-      llmOutput = {
+      const finalLlmOutput = {
         generated_html: injectDesignTokensIntoHtml(llmOutput.generated_html, designTokensForRun)
       };
-
-      if (htmlCachePolicy.enabled && htmlCachePolicy.write) {
-        await writeCachedHtml(env, cacheKey, {
-          generated_html: llmOutput.generated_html,
-          created_at: new Date().toISOString(),
-          slug: post.slug,
-          format,
-          variant_index: index + 1,
-        });
-        htmlCacheSummary.writes += 1;
-      }
-
-      if (index === 0) {
-        primaryVariantByFormat[format] = cacheStatus;
-      }
 
       const browser = await launchRenderingBrowser(env);
 
       try {
         if (!variantLlmOutput) {
-          variantLlmOutput = llmOutput;
+          variantLlmOutput = finalLlmOutput;
         }
 
         if (index === 0 && format === [...outputPlan.formats][0]) {
@@ -1132,7 +928,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
         const asset = await renderStoreSingleAsset(env, browser, {
           key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
           format,
-          rawHtml: llmOutput.generated_html,
+          rawHtml: finalLlmOutput.generated_html,
           formatLabel: format
         });
 
@@ -1160,13 +956,6 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
     requested_formats: [...outputPlan.formats],
     image_source: primaryVariant.image_source,
     llm_output: primaryVariant.llm_output,
-    html_cache: {
-      enabled: htmlCachePolicy.enabled,
-      mode: body.htmlCache?.mode ?? "off",
-      key: body.htmlCache?.key ?? null,
-      summary: htmlCacheSummary,
-      primary_variant_by_format: primaryVariantByFormat,
-    },
     agentic: summarizeAgentExecution(agentContexts),
     assets: primaryVariant.assets,
     variants: outputPlan.postCount > 1 ? variants : undefined
@@ -1204,15 +993,11 @@ async function renderPng(browser: any, html: string, width: number, height: numb
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 15_000 });
 
-    // Wait for Tailwind CDN to process styles. 
-    // Tailwind CDN adds a <style> tag with processed CSS after initialization.
     await page.evaluate(`
       (async () => {
-        // Wait for Tailwind to be available and process styles
         const maxWait = 3000;
         const start = Date.now();
         while (Date.now() - start < maxWait) {
-          // Check if Tailwind has added its generated styles
           const tailwindStyles = document.querySelector('style[data-tailwind]') || 
                                  document.querySelector('style:not([id])');
           if (tailwindStyles && tailwindStyles.textContent && tailwindStyles.textContent.length > 1000) {
@@ -1220,7 +1005,6 @@ async function renderPng(browser: any, html: string, width: number, height: numb
           }
           await new Promise(r => setTimeout(r, 50));
         }
-        // Final settling time for any remaining style calculations
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
         await new Promise((resolve) => setTimeout(resolve, 150));
       })();
@@ -1514,7 +1298,6 @@ function validateGenerateRequestBody(input: unknown): GenerateRequestBody {
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
     image: parseImageOptions(body.image),
     output: parseOutputOptions(body.output),
-    htmlCache: parseHtmlCacheOptions(body.htmlCache),
     agent: parseAgentOptions(body.agent),
     designTokens: parseDesignTokens(body.designTokens)
   };
@@ -1542,44 +1325,14 @@ function validateDirectContentRequestBody(input: unknown): DirectContentRequestB
     notifyUrl: optionalString(body.notifyUrl, "notifyUrl", 500),
     image: parseImageOptions(body.image),
     output: parseOutputOptions(body.output),
-    htmlCache: parseHtmlCacheOptions(body.htmlCache),
     agent: parseAgentOptions(body.agent),
     designTokens: parseDesignTokens(body.designTokens)
-  };
-}
-
-function validateRenderFromCacheRequestBody(input: unknown): RenderFromCacheRequestBody {
-  const body = requireObject(input, "Request body");
-  return {
-    slug: optionalString(body.slug, "slug", 200),
-    output: parseOutputOptions(body.output),
-    storage: parseStorageOptions(body.storage),
-    htmlCache: parseHtmlCacheOptions(body.htmlCache),
-    designTokens: parseDesignTokens(body.designTokens),
-    variantIndex: body.variantIndex !== undefined
-      ? Math.round(clampNumber(requiredNumber(body.variantIndex, "variantIndex"), 1, 10, 1))
-      : undefined,
   };
 }
 
 function parseDesignTokens(input: unknown): Record<string, unknown> | undefined {
   if (input === undefined) return undefined;
   return requireObject(input, "designTokens");
-}
-
-function parseHtmlCacheOptions(input: unknown): HtmlCacheOptions | undefined {
-  if (input === undefined) return undefined;
-  const object = requireObject(input, "htmlCache");
-  const mode = optionalString(object.mode, "htmlCache.mode", 20);
-  if (mode && !["off", "read-only", "write-only", "read-write"].includes(mode)) {
-    throw new HttpError(400, "htmlCache.mode must be one of off, read-only, write-only, read-write");
-  }
-
-  const parsed: HtmlCacheOptions = {
-    mode: mode as HtmlCacheOptions["mode"],
-    key: optionalString(object.key, "htmlCache.key", 80),
-  };
-  return Object.values(parsed).some((v) => v !== undefined) ? parsed : undefined;
 }
 
 function validateWebhookPayload(input: unknown): GhostWebhookPayload {

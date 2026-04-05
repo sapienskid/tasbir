@@ -29,29 +29,19 @@ export interface GenerationResult {
   llm_output: {
     generated_html: string;
   };
-  html_cache?: {
-    enabled: boolean;
-    mode: "off" | "read-only" | "write-only" | "read-write";
-    key: string | null;
-    summary: { hits: number; misses: number; writes: number };
-    primary_variant_by_format: Record<string, "hit" | "miss">;
+  assets: Record<string, { format: string; key: string; url: string | null } | null>;
+  agentic?: {
+    mode: string;
+    prompt_profile: string;
+    applied_roles: string[];
+    warnings: string[];
   };
-  assets: Record<string, { format: string; key: string; url: string | null } | null>;
-}
-
-export interface HtmlCacheOptions {
-  mode?: "off" | "read-only" | "write-only" | "read-write";
-  key?: string;
-}
-
-export interface RenderFromCacheResult {
-  ok: boolean;
-  slug: string;
-  requested_formats: string[];
-  cache_key_prefix: string;
-  variant_index: number;
-  missing_formats: string[];
-  assets: Record<string, { format: string; key: string; url: string | null } | null>;
+  variants?: Array<{
+    index: number;
+    image_source: { source: string; imageUrl: string };
+    llm_output: { generated_html: string };
+    assets: Record<string, { format: string; key: string; url: string | null } | null>;
+  }>;
 }
 
 let _apiKey = import.meta.env.VITE_API_KEY || "";
@@ -93,7 +83,6 @@ export const api = {
   }>("/config/prompts"),
   getFormats: () => request<{ formats: Record<string, FormatConfig> }>("/config/formats"),
   
-  // Token management
   getSavedTokens: () => request<any>("/tokens"),
   saveTokens: (tokens: any) => request<{ ok: boolean }>("/tokens", {
     method: "PUT",
@@ -104,7 +93,6 @@ export const api = {
     body: JSON.stringify(body),
   }),
   
-  // Format management
   getAllFormats: () => request<Record<string, FormatConfig>>("/formats"),
   saveFormat: (id: string, format: FormatConfig) => request<{ ok: boolean; format: FormatConfig }>(`/formats/${id}`, {
     method: "PUT",
@@ -122,7 +110,6 @@ export const api = {
     output?: { formats?: string[]; postCount?: number };
     prompt?: string;
     image?: { mode?: string };
-    htmlCache?: HtmlCacheOptions;
     agent?: { mode?: string; promptProfile?: string };
     designTokens?: any;
   }) => request<GenerationResult>("/generate-from-content", {
@@ -134,19 +121,8 @@ export const api = {
     output?: { formats?: string[]; postCount?: number };
     prompt?: string;
     image?: { mode?: string };
-    htmlCache?: HtmlCacheOptions;
     designTokens?: any;
   }) => request<GenerationResult>("/generate", {
-    method: "POST",
-    body: JSON.stringify(body),
-  }),
-  renderFromCache: (body: {
-    slug: string;
-    output?: { formats?: string[]; postCount?: number };
-    htmlCache?: HtmlCacheOptions;
-    variantIndex?: number;
-    designTokens?: any;
-  }) => request<RenderFromCacheResult>("/render-from-cache", {
     method: "POST",
     body: JSON.stringify(body),
   }),
