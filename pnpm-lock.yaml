@@ -32,6 +32,9 @@ importers:
       puppeteer:
         specifier: ^24.40.0
         version: 24.40.0(typescript@6.0.2)
+      workers-ai-provider:
+        specifier: ^3.1.9
+        version: 3.1.9(@ai-sdk/provider@3.0.8)(ai@6.0.146(zod@4.3.6))
       zod:
         specifier: ^4.3.6
         version: 4.3.6
@@ -1914,6 +1917,12 @@ packages:
     resolution: {integrity: sha512-mUYCd+ohaWJWF5nhDzxugWaAD/DM8Dw0ze3B7bu8JaA7S70+XQJXcvcvwE8C4qGcxSdCyqjsrFzqxKubECDwzg==}
     engines: {node: '>=16'}
     hasBin: true
+
+  workers-ai-provider@3.1.9:
+    resolution: {integrity: sha512-qE114J53WpmF4Uy1+Q1q5MfeKPxWuGr8ykPJlTE0mCJYAyFaeYeH9xKMZeUdQY57Hl8f6fe4/nfvKpkEkyCmOg==}
+    peerDependencies:
+      '@ai-sdk/provider': ^3.0.0
+      ai: ^6.0.0
 
   wrangler@4.80.0:
     resolution: {integrity: sha512-2ZKF7uPeOZy65BGk3YfvqBCPo/xH1MrAlMmH9mVP+tCNBrTUMnwOHSj1HrZHgR8LttkAqhko0fGz+I4ax1rzyQ==}
@@ -3807,6 +3816,11 @@ snapshots:
       '@cloudflare/workerd-linux-64': 1.20260401.1
       '@cloudflare/workerd-linux-arm64': 1.20260401.1
       '@cloudflare/workerd-windows-64': 1.20260401.1
+
+  workers-ai-provider@3.1.9(@ai-sdk/provider@3.0.8)(ai@6.0.146(zod@4.3.6)):
+    dependencies:
+      '@ai-sdk/provider': 3.0.8
+      ai: 6.0.146(zod@4.3.6)
 
   wrangler@4.80.0(@cloudflare/workers-types@4.20260404.1):
     dependencies:

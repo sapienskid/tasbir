@@ -49,8 +49,9 @@ export async function classifyContent(
   title: string,
   content: string,
   availableTemplates: TemplateMetadata[],
+  aiBinding?: Ai,
 ): Promise<ContentClassification> {
-  const providerConfig = resolveProviderConfig(env);
+  const providerConfig = resolveProviderConfig(env, aiBinding);
   const models = createModelChain(providerConfig);
   const model = models[0];
 
@@ -58,6 +59,7 @@ export async function classifyContent(
     const response = await generateText({
       model,
       prompt: CLASSIFICATION_PROMPT(content, title, availableTemplates),
+      temperature: 0.2,
     });
     const text = response.text.trim();
     const jsonMatch = text.match(/\{[\s\S]*\}/);

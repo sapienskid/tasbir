@@ -2,29 +2,37 @@
 API_KEYS="your-api-key-here"
 
 # Required: Cloudflare bindings (configured in wrangler.jsonc)
-# - AI binding (Workers AI)
+# - AI binding (Workers AI) — auto-available when deployed, no credentials needed
 # - BROWSER binding (Browser Rendering)
 # - OUTPUT_BUCKET (R2)
 # - SETTINGS_KV, TEMPLATES_KV (KV)
 
-# AI Provider — choose ONE:
-
-# Option 1: Google Gemini (recommended, no account ID needed)
-GOOGLE_API_KEY="your-google-ai-api-key"
+# ─── AI Providers ─────────────────────────────────────────────────────────────
+#
+# Mixed setup: Gemini for HTML/marketing, Workers AI for design tokens
+#
+# Google Gemini (HTML layout, marketing, classification)
+GOOGLE_API_KEY="AIzaSy..."
 # GOOGLE_MODEL="gemini-2.5-flash"
-# GOOGLE_FAST_MODEL="gemini-2.5-flash"
-
-# Option 2: Workers AI (requires Cloudflare API token + account ID)
-# CLOUDFLARE_API_TOKEN="your-cf-api-token"
-# CLOUDFLARE_ACCOUNT_ID="your-cf-account-id"
+#
+# Workers AI binding — auto-available when deployed as a Worker.
+# For local dev (outside Worker), set REST API credentials:
+# CLOUDFLARE_API_TOKEN="cfat_..."
+# CLOUDFLARE_ACCOUNT_ID="your-account-id"
 # LLM_MODEL="@cf/openai/gpt-oss-120b"
 
-# Optional: Ghost CMS (only if using slug-based generation)
+# ─── Optional ─────────────────────────────────────────────────────────────────
+
+# Ghost CMS (only if using slug-based generation)
 # GHOST_API_URL="https://YOUR_GHOST_DOMAIN/ghost/api/content"
 # GHOST_CONTENT_API_KEY="YOUR_GHOST_CONTENT_API_KEY"
 
-# Optional: Public URL for rendered assets
+# Webhook security for /webhook/ghost
+# GHOST_WEBHOOK_TOKEN="wh_..."
+# GHOST_WEBHOOK_SECRET="whsec_..."
+
+# Public URL for rendered assets
 # R2_PUBLIC_BASE_URL="https://pub-xxxxxxxx.r2.dev"
 
-# Optional: Notifications
+# Notifications
 # NOTIFY_WEBHOOK_URL="https://example.com/notify"

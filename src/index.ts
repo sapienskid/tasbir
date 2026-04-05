@@ -417,7 +417,7 @@ app.post("/generate-tokens", async (c) => {
       CLOUDFLARE_ACCOUNT_ID: c.env.CLOUDFLARE_ACCOUNT_ID,
       LLM_MODEL: c.env.LLM_MODEL,
       LLM_FAST_MODEL: c.env.LLM_FAST_MODEL,
-    }, primaryHint, secondaryHint);
+    }, primaryHint, secondaryHint, c.env.AI);
     
     return c.json(tokens);
   } catch (error) {
@@ -922,7 +922,7 @@ async function runHtmlLayoutAgent(
   userPrompt?: string,
   overrides?: LlmPromptOverrides,
 ): Promise<LlmOutput> {
-  const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>);
+  const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
   const models = createModelChain(providerConfig);
 
   const content = post.plaintext || post.html || "";
@@ -986,6 +986,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
         post.title,
         post.plaintext || post.excerpt || "",
         enabledTemplates,
+        env.AI,
       );
 
       if (classification.templateMatch) {

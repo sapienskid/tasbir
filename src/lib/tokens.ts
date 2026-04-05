@@ -20,9 +20,10 @@ export async function generateTokensAI(
   vibe: string,
   env: Record<string, string | undefined>,
   primaryHint?: string,
-  secondaryHint?: string
+  secondaryHint?: string,
+  aiBinding?: Ai,
 ): Promise<DesignTokens> {
-  const providerConfig = resolveProviderConfig(env);
+  const providerConfig = resolveProviderConfig(env, aiBinding);
   const models = createModelChain(providerConfig);
 
   let enhancedVibe = vibe;
