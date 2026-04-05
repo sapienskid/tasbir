@@ -214,18 +214,36 @@ export async function generateImagesForFormats(
  */
 function buildEnhancedPrompt(basePrompt: string, style?: string): string {
   const styleModifiers = style ? `, ${style} style` : "";
-  const qualityModifiers = "high quality, professional, clean composition";
+  const qualityModifiers = "high quality, professional, clean composition, illustration style";
   
-  // Add negative constraints inline for models that don't support negative prompts
-  const noTextConstraint = "no text, no letters, no words, no typography, no watermarks";
+  // Add constraints for illustration-only (no text, no people, no photos)
+  const constraints = [
+    "no text",
+    "no letters",
+    "no words", 
+    "no typography",
+    "no watermarks",
+    "no people",
+    "no humans",
+    "no faces",
+    "no portraits",
+    "no realistic photos",
+    "no photographs",
+    "illustration only",
+    "abstract art",
+    "geometric shapes",
+    "modern design",
+  ].join(", ");
   
-  return `${basePrompt}${styleModifiers}, ${qualityModifiers}, ${noTextConstraint}`;
+  return `${basePrompt}, ${styleModifiers}, ${qualityModifiers}, ${constraints}`;
 }
 
 const DEFAULT_NEGATIVE_PROMPT = [
   "text", "letters", "words", "typography", "watermark", "logo",
   "signature", "caption", "label", "number", "symbol",
   "blurry", "low quality", "distorted", "ugly", "deformed",
+  "person", "human", "face", "portrait", "photo", "photograph",
+  "realistic", "skin", "eye", "nose", "mouth", "hair",
 ].join(", ");
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {

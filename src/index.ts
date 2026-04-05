@@ -29,11 +29,18 @@ import {
   type Env as SecurityEnv
 } from "./lib/security";
 import {
+  callOrchestrator,
+  type OrchestratorInput,
+  type OrchestratorOutput,
+} from "./agents/marketing-orchestrator";
+import {
   tokensToCSSFromRaw,
   fontImportFromTokens,
   buildTailwindConfigFromTokens,
   stripInjectedDesignTokens,
   formatDesignTokensForPromptFromObject,
+  formatSemanticBriefForPrompt,
+  generateSemanticUtilityCSS,
   getDefaultDesignTokens,
   normalizeDesignTokensForRendering,
 } from "../shared/tokens";
@@ -356,6 +363,9 @@ interface PrecomputedTokenAssets {
   fontLinks: string;
   tailwindConfigScript: string;
   baseline: string;
+  semanticUtilityCSS: string;
+  /** Lightweight semantic brief for AI prompts */
+  semanticBrief: string;
 }
 
 /**
@@ -377,8 +387,14 @@ function precomputeDesignTokenAssets(tokens: Record<string, unknown>): Precomput
     "}",
     "*, *::before, *::after { box-sizing: border-box; }",
   ].join("\n");
+  
+  // Generate semantic utility CSS for AI-generated HTML
+  const semanticUtilityCSS = generateSemanticUtilityCSS();
+  
+  // Generate lightweight semantic brief for AI prompts (avoids full token dump)
+  const semanticBrief = formatSemanticBriefForPrompt(normalizedTokens);
 
-  return { cssVars, fontLinks, tailwindConfigScript, baseline };
+  return { cssVars, fontLinks, tailwindConfigScript, baseline, semanticUtilityCSS, semanticBrief };
 }
 
 /**
@@ -404,7 +420,7 @@ function injectDesignTokensIntoHtmlFast(html: string, precomputed: PrecomputedTo
     }
   }
 
-  const injectedBlock = `${precomputed.fontLinks}\n<style id="tasbir-design-tokens">\n${precomputed.cssVars}\n\n${precomputed.baseline}\n</style>`;
+  const injectedBlock = `${precomputed.fontLinks}\n<style id="tasbir-design-tokens">\n${precomputed.cssVars}\n\n${precomputed.semanticUtilityCSS}\n\n${precomputed.baseline}\n</style>`;
 
   if (/<\/head>/i.test(nextHtml)) {
     return nextHtml.replace(/<\/head>/i, `${injectedBlock}\n</head>`);
@@ -451,7 +467,7 @@ function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown
     }
   }
 
-  const injectedBlock = `${fontLinks}\n<style id="tasbir-design-tokens">\n${cssVars}\n\n${baseline}\n</style>`;
+  const injectedBlock = `${fontLinks}\n<style id="tasbir-design-tokens">\n${cssVars}\n\n${generateSemanticUtilityCSS()}\n\n${baseline}\n</style>`;
 
   if (/<\/head>/i.test(nextHtml)) {
     return nextHtml.replace(/<\/head>/i, `${injectedBlock}\n</head>`);
@@ -1259,6 +1275,12 @@ function parseBooleanString(value: string, fallback: boolean): boolean {
 
 // ==================== HTML LAYOUT AGENT ====================
 
+interface ImageSpecInput {
+  type: string;
+  position: string;
+  count: number;
+}
+
 async function runHtmlLayoutAgent(
   env: Env,
   post: GhostPost,
@@ -1267,11 +1289,12 @@ async function runHtmlLayoutAgent(
   formatInstruction: string | undefined,
   width: number,
   height: number,
-  designTokensPrompt: string,
+  designBrief: string,
   userPrompt?: string,
   overrides?: LlmPromptOverrides,
   designInstructions?: string,
   generatedImage?: GeneratedImage,
+  imageSpec?: ImageSpecInput,
   settings?: WorkspaceSettings | null,
 ): Promise<LlmOutput> {
   const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
@@ -1289,7 +1312,7 @@ async function runHtmlLayoutAgent(
     title: post.title,
     excerpt: post.custom_excerpt || post.excerpt || "",
     content,
-    designTokens: designTokensPrompt,
+    designBrief,
     userPrompt: [
       userPrompt ? `User specifically asked for: ${userPrompt}` : "",
       overrides?.userInstructionsAppend || ""
@@ -1304,6 +1327,7 @@ async function runHtmlLayoutAgent(
       imageType: generatedImage.imageType,
       prompt: generatedImage.prompt,
     } : undefined,
+    imageSpec,
     settings,
   });
 
@@ -1330,7 +1354,8 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   
   // PRE-COMPUTE: Generate all token-derived values once upfront
   const precomputedTokens = precomputeDesignTokenAssets(designTokensForRun);
-  const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
+  // OPTIMIZED: Use lightweight semantic brief instead of full token dump
+  const designTokensPrompt = precomputedTokens.semanticBrief;
   const designInstructions = extractDesignInstructions(designTokensForRun);
   
   // CACHE: Generate design tokens hash for cache key
@@ -1345,6 +1370,47 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
 
   let classification: ContentClassification | null = null;
   let matchedTemplate: { html: string; metadata: TemplateMetadata } | null = null;
+
+  // === MARKETING ORCHESTRATOR: Plan posts with gemma-4 ===
+  let orchestratorPlan: OrchestratorOutput | null = null;
+  try {
+    console.log("[orchestrator] Calling Marketing Orchestrator with gemma-4...");
+    const orchestratorInput: OrchestratorInput = {
+      post: {
+        title: post.title,
+        excerpt: post.custom_excerpt || post.excerpt || "",
+        plaintext: post.plaintext || "",
+        tags: post.tags?.map((t: any) => typeof t === 'string' ? t : t.name).slice(0, 8) || [],
+      },
+      requestedFormats: [...outputPlan.formats],
+      userPrompt: body.prompt || "",
+      promptProfile: baseAgentContext.promptProfile,
+      renderPolicy: baseAgentContext.renderPolicy,
+      postCount: outputPlan.postCount,
+      settings: {
+        brand: settings.brand,
+        campaign: settings.campaign,
+        formats: settings.formats,
+        image: settings.image,
+        templates: settings.templates,
+      },
+      imageConfig: {
+        mode: body.image?.mode || settings.image?.mode || 'auto',
+      },
+    };
+    
+    orchestratorPlan = await callOrchestrator(
+      orchestratorInput,
+      env.AI,
+      env.AI_GATEWAY_TOKEN,
+      env.GOOGLE_API_KEY
+    );
+    
+    console.log(`[orchestrator] Planned ${orchestratorPlan.plannedPosts?.length || 0} posts`);
+    console.log(`[orchestrator] strategic_brief: ${orchestratorPlan.strategic_brief?.slice(0, 100)}...`);
+  } catch (error) {
+    console.error("[orchestrator] Failed to call orchestrator:", error);
+  }
 
   // SMART TEMPLATE SELECTION: Check for saved HTML templates first
   const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
@@ -1421,52 +1487,49 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
   const keyPrefix = buildR2KeyPrefix(env, post.slug, sharedStorage);
 
-  // AI IMAGE GENERATION: Generate images if requested
-  let imageDecision: ImageDecision | null = null;
+  // AI IMAGE GENERATION: Use orchestrator's image decisions
   let generatedImages: Map<string, GeneratedImage | null> = new Map();
   
-  if (body.image?.mode === 'ai' && env.AI) {
+  // Generate images based on orchestrator's planned posts
+  if (orchestratorPlan?.plannedPosts && env.AI) {
     try {
-      console.log(`[ai-image] Deciding if image generation is needed for content`);
-      const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
-      
-      imageDecision = await decideImageGeneration(
-        providerConfig,
-        {
-          title: post.title,
-          excerpt: post.custom_excerpt || post.excerpt || "",
-          contentType: classification?.type,
-          brandTone: settings.brand.tone,
-        },
-        {
-          primaryColor: (designTokensForRun as any)?.colors?.primary?.['500'],
-          style: (designTokensForRun as any)?.meta?.aesthetic,
-        },
-        settings
+      // Filter posts that need AI-generated images
+      const postsNeedingImages = orchestratorPlan.plannedPosts.filter(post => 
+        post.imageSpec && 
+        post.imageSpec.type !== 'none' && 
+        post.imageSpec.type !== 'feature' &&
+        post.imageMode !== 'none'
       );
       
-      if (imageDecision.shouldGenerate && imageDecision.imageType !== 'none') {
-        console.log(`[ai-image] Generating ${imageDecision.imageType} image: ${imageDecision.prompt}`);
+      if (postsNeedingImages.length > 0) {
+        console.log(`[ai-image] Generating images for ${postsNeedingImages.length} posts based on orchestrator decisions`);
         
-        // Generate images for all requested formats
-        const formatsArray = [...outputPlan.formats];
-        const formatConfigs = formatsArray
-          .map(format => {
-            const config = getFormatConfig(format);
-            return config && config.width && config.height ? { 
-              name: format, 
-              width: config.width, 
-              height: config.height 
-            } : null;
-          })
-          .filter((f): f is { name: string; width: number; height: number } => f !== null);
+        // Generate images in parallel for each post that needs them
+        const imagePromises = postsNeedingImages.map(async (post) => {
+          const imageSpec = post.imageSpec!;
+          if (!imageSpec.prompt) return { format: post.format, image: null };
+          
+          try {
+            const image = await generateImage(env.AI, imageSpec.prompt, {
+              width: post.width || 1200,
+              height: post.height || 630,
+              style: imageSpec.style,
+            });
+            return { format: post.format, image };
+          } catch (e) {
+            console.warn(`[ai-image] Failed to generate for ${post.format}:`, e);
+            return { format: post.format, image: null };
+          }
+        });
         
-        if (formatConfigs.length > 0) {
-          generatedImages = await generateImagesForFormats(env.AI, imageDecision, formatConfigs);
-          console.log(`[ai-image] Generated ${generatedImages.size} images for formats: ${Array.from(generatedImages.keys()).join(', ')}`);
+        const results = await Promise.all(imagePromises);
+        for (const { format, image } of results) {
+          generatedImages.set(format, image);
         }
+        
+        console.log(`[ai-image] Generated ${generatedImages.size} images: ${Array.from(generatedImages.keys()).join(', ')}`);
       } else {
-        console.log(`[ai-image] Decision: ${imageDecision.reasoning}`);
+        console.log(`[ai-image] No posts require AI-generated images based on orchestrator`);
       }
     } catch (error) {
       console.warn(`[ai-image] Image generation failed:`, error);
@@ -1551,11 +1614,27 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
             const filledHtml = fillTemplateSlots(matchedTemplate.html, slotValues);
             llmOutput = { generated_html: filledHtml };
           } else {
-            const instructionsWithDesignGuidance = designInstructions
-              ? [`DESIGN SYSTEM INSTRUCTIONS (follow these closely):`, designInstructions].join('\n')
+            // Use orchestrator's per-post brief if available
+            const plannedPost = orchestratorPlan?.plannedPosts?.find(p => 
+              p.format.toLowerCase() === format.toLowerCase()
+            );
+            
+            // Build design instructions combining system design guidance + orchestrator's brief
+            const baseInstructions = designInstructions ? [designInstructions] : [];
+            if (plannedPost?.visualDirection) {
+              baseInstructions.push(`VISUAL DIRECTION: ${plannedPost.visualDirection}`);
+            }
+            if (plannedPost?.copyFocus) {
+              baseInstructions.push(`COPY FOCUS: ${plannedPost.copyFocus}`);
+            }
+            if (plannedPost?.cta && plannedPost.cta !== 'none') {
+              baseInstructions.push(`CTA: ${plannedPost.cta}`);
+            }
+            const instructionsWithDesignGuidance = baseInstructions.length > 0 
+              ? baseInstructions.join('\n')
               : undefined;
 
-            // Get generated image for this format
+            // Get generated image for this format (consider orchestrator's imageMode)
             const generatedImage = generatedImages.get(format);
 
             llmOutput = await runHtmlLayoutAgent(
@@ -1564,13 +1643,18 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
               format,
               config.name,
               config.aiInstruction,
-              config.width,
-              config.height,
+              plannedPost?.width || config.width,
+              plannedPost?.height || config.height,
               designTokensPrompt,
               variantPrompt,
               agentContext.copyOverrides,
               instructionsWithDesignGuidance,
               generatedImage || undefined,
+              plannedPost?.imageSpec ? {
+                type: plannedPost.imageSpec.type || 'background',
+                position: plannedPost.imageSpec.position || 'background',
+                count: plannedPost.imageSpec.count || 1,
+              } : undefined,
               settings,
             );
             
@@ -1741,6 +1825,48 @@ export async function runPipelineFromPostWithProgress(
   let classification: ContentClassification | null = null;
   let matchedTemplate: { html: string; metadata: TemplateMetadata } | null = null;
 
+  // === MARKETING ORCHESTRATOR: Plan posts with gemma-4 ===
+  let orchestratorPlan: OrchestratorOutput | null = null;
+  try {
+    onProgress({ type: "generating", message: "Planning content strategy with AI..." });
+    console.log("[orchestrator] Calling Marketing Orchestrator with gemma-4...");
+    const orchestratorInput: OrchestratorInput = {
+      post: {
+        title: post.title,
+        excerpt: post.custom_excerpt || post.excerpt || "",
+        plaintext: post.plaintext || "",
+        tags: post.tags?.map((t: any) => typeof t === 'string' ? t : t.name).slice(0, 8) || [],
+      },
+      requestedFormats: [...outputPlan.formats],
+      userPrompt: body.prompt || "",
+      promptProfile: baseAgentContext.promptProfile,
+      renderPolicy: baseAgentContext.renderPolicy,
+      postCount: outputPlan.postCount,
+      settings: {
+        brand: settings.brand,
+        campaign: settings.campaign,
+        formats: settings.formats,
+        image: settings.image,
+        templates: settings.templates,
+      },
+      imageConfig: {
+        mode: body.image?.mode || settings.image?.mode || 'auto',
+      },
+    };
+    
+    orchestratorPlan = await callOrchestrator(
+      orchestratorInput,
+      env.AI,
+      env.AI_GATEWAY_TOKEN,
+      env.GOOGLE_API_KEY
+    );
+    
+    console.log(`[orchestrator] Planned ${orchestratorPlan.plannedPosts?.length || 0} posts`);
+    console.log(`[orchestrator] strategic_brief: ${orchestratorPlan.strategic_brief?.slice(0, 100)}...`);
+  } catch (error) {
+    console.error("[orchestrator] Failed to call orchestrator:", error);
+  }
+
   // Classification phase
   if (settings.templates.autoSelect && env.TEMPLATES_KV) {
     onProgress({ type: "classifying", message: "Analyzing content..." });
@@ -1897,6 +2023,11 @@ export async function runPipelineFromPostWithProgress(
             // Get generated image for this format  
             const generatedImage = generatedImages.get(format);
 
+            // Get planned post from orchestrator for this format (if available)
+            const plannedPost = orchestratorPlan?.plannedPosts?.find((p: any) => 
+              p.format.toLowerCase() === format.toLowerCase()
+            ) || null;
+
             llmOutput = await runHtmlLayoutAgent(
               env,
               post,
@@ -1910,6 +2041,11 @@ export async function runPipelineFromPostWithProgress(
               agentContext.copyOverrides,
               instructionsWithDesignGuidance,
               generatedImage || undefined,
+              plannedPost?.imageSpec ? {
+                type: plannedPost.imageSpec.type || 'background',
+                position: plannedPost.imageSpec.position || 'background',
+                count: plannedPost.imageSpec.count || 1,
+              } : undefined,
               settings,
             );
 

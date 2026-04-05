@@ -45,6 +45,8 @@ export interface DesignTokens {
     aesthetic: string;
     palette: string;
     instructions: string;
+    /** Compact natural language summary for AI agents - describes design mood without full token values */
+    semanticBrief?: string;
   };
 }
 
@@ -312,6 +314,92 @@ export function tokensToCSSFromRaw(t: Record<string, unknown>): string {
   return L.join('\n');
 }
 
+// ─── Semantic utility classes for AI-generated HTML ──────────────────────────
+
+/**
+ * Generate semantic CSS utility classes that AI can use without knowing exact token values.
+ * These classes map to CSS variables, allowing the design system to be swapped at render time.
+ * 
+ * The AI outputs HTML like: <div class="bg-surface-base text-content-primary">
+ * And this CSS maps those classes to the actual token values.
+ */
+export function generateSemanticUtilityCSS(): string {
+  const classes: string[] = [
+    '/* SEMANTIC UTILITY CLASSES - AI-friendly, token-backed */',
+    '',
+    '/* Background surfaces */',
+    '.bg-surface-base { background-color: var(--surface-base); }',
+    '.bg-surface-subtle { background-color: var(--surface-subtle); }',
+    '.bg-surface-elevated { background-color: var(--surface-elevated); }',
+    '.bg-surface-overlay { background-color: var(--surface-overlay); }',
+    '',
+    '/* Brand backgrounds */',
+    '.bg-primary-500 { background-color: var(--color-primary-500); }',
+    '.bg-primary-600 { background-color: var(--color-primary-600); }',
+    '.bg-primary-700 { background-color: var(--color-primary-700); }',
+    '.bg-secondary-500 { background-color: var(--color-secondary-500); }',
+    '.bg-secondary-600 { background-color: var(--color-secondary-600); }',
+    '.bg-accent-base { background-color: var(--color-accent-base); }',
+    '',
+    '/* Gradient backgrounds */',
+    '.bg-gradient-primary { background: var(--gradient-primary); }',
+    '.bg-gradient-hero { background: var(--gradient-hero); }',
+    '.bg-gradient-subtle { background: var(--gradient-subtle); }',
+    '.bg-gradient-surface { background: var(--gradient-surface); }',
+    '',
+    '/* Semantic backgrounds */',
+    '.bg-success { background-color: var(--color-success); }',
+    '.bg-warning { background-color: var(--color-warning); }',
+    '.bg-error { background-color: var(--color-error); }',
+    '.bg-info { background-color: var(--color-info); }',
+    '',
+    '/* Text colors */',
+    '.text-content-primary { color: var(--text-primary); }',
+    '.text-content-secondary { color: var(--text-secondary); }',
+    '.text-content-muted { color: var(--text-muted); }',
+    '.text-content-inverse { color: var(--text-inverse); }',
+    '.text-content-accent { color: var(--text-accent); }',
+    '',
+    '/* Text on colored backgrounds (auto-contrasting) */',
+    '.text-content-on-primary { color: var(--text-on-primary); }',
+    '.text-content-on-secondary { color: var(--text-on-secondary); }',
+    '.text-content-on-accent { color: var(--text-on-accent); }',
+    '.text-content-on-surface-base { color: var(--text-on-surface-base); }',
+    '.text-content-on-surface-subtle { color: var(--text-on-surface-subtle); }',
+    '.text-content-on-surface-elevated { color: var(--text-on-surface-elevated); }',
+    '.text-content-on-success { color: var(--text-on-success); }',
+    '.text-content-on-warning { color: var(--text-on-warning); }',
+    '.text-content-on-error { color: var(--text-on-error); }',
+    '.text-content-on-info { color: var(--text-on-info); }',
+    '',
+    '/* Brand text colors */',
+    '.text-primary-500 { color: var(--color-primary-500); }',
+    '.text-secondary-500 { color: var(--color-secondary-500); }',
+    '.text-accent-base { color: var(--color-accent-base); }',
+    '',
+    '/* Typography */',
+    '.font-brand-sans { font-family: var(--font-sans); }',
+    '.font-brand-serif { font-family: var(--font-serif); }',
+    '.font-brand-mono { font-family: var(--font-mono); }',
+    '',
+    '/* Border colors */',
+    '.border-primary { border-color: var(--color-primary-500); }',
+    '.border-secondary { border-color: var(--color-secondary-500); }',
+    '.border-neutral { border-color: var(--color-neutral-300); }',
+    '.border-subtle { border-color: var(--color-neutral-200); }',
+    '',
+    '/* Shadows */',
+    '.shadow-token-xs { box-shadow: var(--shadow-xs); }',
+    '.shadow-token-sm { box-shadow: var(--shadow-sm); }',
+    '.shadow-token-md { box-shadow: var(--shadow-md); }',
+    '.shadow-token-lg { box-shadow: var(--shadow-lg); }',
+    '.shadow-token-xl { box-shadow: var(--shadow-xl); }',
+    '.shadow-token-inner { box-shadow: var(--shadow-inner); }',
+  ];
+  
+  return classes.join('\n');
+}
+
 // ─── Font imports from tokens ────────────────────────────────────────────────
 
 export function fontImportFromTokens(t: Record<string, unknown>): string {
@@ -408,6 +496,10 @@ export function stripInjectedDesignTokens(html: string): string {
 
 // ─── Prompt formatting ───────────────────────────────────────────────────────
 
+/**
+ * LEGACY: Full token dump for AI prompts - HIGH TOKEN USAGE!
+ * Use formatSemanticBriefForPrompt() instead for most AI calls.
+ */
 export function formatDesignTokensForPromptFromObject(tokens: Record<string, unknown>): string {
   const normalized = normalizeDesignTokensForRendering(tokens);
   const parts: string[] = [];
@@ -430,6 +522,96 @@ export function formatDesignTokensForPromptFromObject(tokens: Record<string, unk
   parts.push('- Do not use arbitrary color classes (for example text-[#fff], bg-[rgb(...)]) - use token theme classes only.');
   parts.push('- Ensure readable contrast by using matching foreground/background token pairs (on-* tokens for colored backgrounds).\n');
   return parts.join('\n');
+}
+
+/**
+ * OPTIMIZED: Lightweight semantic brief for AI prompts - LOW TOKEN USAGE!
+ * 
+ * Instead of dumping full token JSON (~3000 tokens), this provides:
+ * 1. Semantic brief describing the design mood (3-5 sentences)
+ * 2. Key semantic CSS classes AI should use
+ * 3. Instructions for the AI to use var(--token) syntax
+ * 
+ * The actual token values are injected at render time via CSS.
+ */
+export function formatSemanticBriefForPrompt(tokens: Record<string, unknown>): string {
+  const meta = (tokens.meta || {}) as Record<string, string>;
+  const semanticBrief = meta.semanticBrief || meta.instructions || '';
+  const vibeName = meta.vibeName || 'Custom';
+  const aesthetic = meta.aesthetic || 'modern';
+  const palette = meta.palette || 'neutral';
+  
+  return `DESIGN SYSTEM: ${vibeName}
+Mode: ${palette} | Style: ${aesthetic}
+
+${semanticBrief ? `DESIGN BRIEF:\n${semanticBrief}\n` : ''}
+SEMANTIC CLASSES (use these - values are injected at render time):
+
+Backgrounds:
+- bg-surface-base: Main background
+- bg-surface-subtle: Secondary background  
+- bg-surface-elevated: Cards, elevated elements
+- bg-primary-500: Primary brand color
+- bg-secondary-500: Secondary brand color
+- bg-gradient-primary: Primary gradient
+- bg-gradient-hero: Hero section gradient
+
+Text Colors (auto-contrasting):
+- text-content-primary: Main text
+- text-content-secondary: Secondary text
+- text-content-muted: Subtle text
+- text-content-on-primary: Text on primary bg
+- text-content-on-secondary: Text on secondary bg
+- text-content-accent: Accent/link color
+
+Typography:
+- font-sans, font-serif, font-mono
+- text-xs through text-7xl (scale)
+- font-light, font-regular, font-medium, font-semibold, font-bold, font-black
+
+Spacing & Layout:
+- p-1 through p-15, m-1 through m-15 (spacing scale)
+- rounded-none, rounded-xs, rounded-sm, rounded-md, rounded-lg, rounded-xl, rounded-2xl, rounded-3xl, rounded-full
+
+Effects:
+- shadow-xs, shadow-sm, shadow-md, shadow-lg, shadow-xl
+
+RULES:
+- Use ONLY semantic class names above - actual values injected at render
+- Use var(--color-primary-500), var(--surface-base), etc. for inline styles
+- NEVER use hardcoded hex colors (#fff, #000, etc.)
+- NEVER use Tailwind arbitrary values like text-[#fff] or bg-[rgb(...)]`;
+}
+
+/**
+ * Generate semantic brief from tokens if not already present.
+ * This creates a compact description from the full token values.
+ */
+export function generateSemanticBriefFromTokens(tokens: Record<string, unknown>): string {
+  const colors = (tokens.colors || {}) as Record<string, unknown>;
+  const meta = (tokens.meta || {}) as Record<string, string>;
+  const typography = (tokens.typography || {}) as Record<string, unknown>;
+  const border = (tokens.border || {}) as Record<string, unknown>;
+  
+  const palette = meta.palette || 'neutral';
+  const aesthetic = meta.aesthetic || 'modern';
+  
+  // Analyze color temperature
+  const primary500 = ((colors.primary as Record<string, string>) || {})['500'] || '#3b82f6';
+  const isWarmPalette = /^#(f|e|d|c)/.test(primary500.toLowerCase());
+  const colorMood = isWarmPalette ? 'warm, inviting tones' : 'cool, professional tones';
+  
+  // Analyze typography
+  const fontSans = (typography.fontSans as string) || 'Inter';
+  const isPlayfulFont = /comic|nunito|quicksand|comfortaa|poppins/i.test(fontSans);
+  const typographyFeel = isPlayfulFont ? 'friendly, approachable typography' : 'clean, professional typography';
+  
+  // Analyze spacing/corners
+  const radiusMd = ((border.radius as Record<string, string>) || {}).md || '8px';
+  const radiusValue = parseInt(radiusMd, 10) || 8;
+  const cornerStyle = radiusValue >= 12 ? 'soft, rounded corners' : radiusValue >= 6 ? 'moderate corner rounding' : 'sharp, minimal corners';
+  
+  return `${palette === 'dark' ? 'Dark mode design with' : 'Light mode design with'} ${colorMood}. ${typographyFeel} using ${fontSans} as the primary typeface. Visual style is ${aesthetic} with ${cornerStyle}. ${meta.instructions || ''}`.trim();
 }
 
 // ─── Default tokens (15-element spacing scale) ───────────────────────────────

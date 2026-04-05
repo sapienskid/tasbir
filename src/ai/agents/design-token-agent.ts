@@ -199,6 +199,12 @@ const DESIGN_TOKEN_SCHEMA = z.object({
     aesthetic: z.string(),
     palette: z.string(),
     instructions: z.string(),
+    /**
+     * Semantic Design Brief: A compact natural language summary for AI agents.
+     * This replaces passing full token JSON to content generation prompts.
+     * Should describe: color mood, typography feel, spacing density, visual style.
+     */
+    semanticBrief: z.string().optional(),
   }),
 });
 
@@ -407,6 +413,7 @@ CRITICAL REQUIREMENTS - YOU MUST GENERATE ALL OF THESE:
     - aesthetic: The overall aesthetic (e.g., "dark", "light", "bold")
     - palette: Color mode (e.g., "dark", "light", "colorful")
     - instructions: Design instructions for HTML generation - specific guidance on layout style, composition patterns, visual hierarchy, spacing preferences, and any creative direction that should be followed when generating social media posts with this design system. Write 2-4 sentences of actionable guidance.
+    - semanticBrief: A compact (3-5 sentence) natural language summary of this design system for AI agents generating content. Describe: (1) color mood and personality, (2) typography feel, (3) spacing density, (4) overall visual style. Use descriptive terms like "bold saturated colors with high contrast", "airy generous whitespace", "tight compact layout", "playful rounded corners", "sharp brutalist edges". This brief enables AI to make design-aligned decisions WITHOUT seeing full token values.
 
 VALIDATION RULES:
 - Every field listed above MUST be present in your response

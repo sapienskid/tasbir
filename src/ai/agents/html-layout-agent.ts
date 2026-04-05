@@ -58,21 +58,42 @@ export interface HtmlLayoutArgs {
   title: string;
   excerpt: string;
   content: string;
-  designTokens: string;
+  /**
+   * Design brief for the AI - can be either:
+   * - Semantic brief (lightweight, ~500 tokens) from formatSemanticBriefForPrompt()
+   * - Full token dump (heavy, ~3000 tokens) from formatDesignTokensForPromptFromObject()
+   * 
+   * Prefer semantic brief for token efficiency.
+   */
+  designBrief: string;
+  /** @deprecated Use designBrief instead */
+  designTokens?: string;
   userPrompt?: string;
   systemPrompt?: string;
   userInstructions?: string | string[];
   userInstructionsAppend?: string;
   settings?: WorkspaceSettings | null;
+  /** Generated AI image for this post */
   generatedImage?: {
     dataUrl: string;
     imageType: string;
     prompt: string;
   };
+  /** Image specification from orchestrator */
+  imageSpec?: {
+    type: string;
+    position: string;
+    count: number;
+  };
 }
 
 function buildPrompt(args: HtmlLayoutArgs): string {
-  const renderedUserInstructionBlock = renderUserInstructionBlock(args);
+  // Support both new designBrief and legacy designTokens
+  const designInfo = args.designBrief || args.designTokens || '';
+  const renderedUserInstructionBlock = renderUserInstructionBlock({
+    ...args,
+    designTokens: designInfo, // For template replacement compatibility
+  });
   
   return `Generate a social post design for the platform: ${args.platform}${args.formatName ? ` (${args.formatName})` : ""} (${args.width}x${args.height}).
 
@@ -84,15 +105,22 @@ Source Content Excerpt: ${args.excerpt}
 Source Content:
 ${args.content}
 
-Design Tokens:
-${args.designTokens}
+${designInfo}
 
 ${args.generatedImage ? `GENERATED IMAGE AVAILABLE:
 - Image Type: ${args.generatedImage.imageType}
-- Generation Prompt: ${args.generatedImage.prompt}
-- Data URL: ${args.generatedImage.dataUrl}
+- Position: ${args.imageSpec?.position || 'background'}
+- Count: ${args.imageSpec?.count || 1}
 
-IMPORTANT: Use this generated image in your HTML as a background or prominent visual element. Use it as src attribute for an <img> tag or as a CSS background-image.
+IMAGE USAGE RULES:
+- Embed the image using: <img src="${args.generatedImage.dataUrl.slice(0, 50)}..."> or CSS background
+- Position: ${args.imageSpec?.position || 'background'} (background | hero | left | right | overlay)
+- For background: use as full-bleed background with text overlay on top
+- For hero: place image at top, text below in content area
+- For left/right: split layout with image on one side, text on other
+- For overlay: place image behind text with gradient overlay for readability
+- NEVER put text INSIDE the image - text goes in HTML elements on top
+- The image is already generated - just embed and position it correctly
 ` : ""}
 
 ${args.userPrompt ? `User specifically asked for: ${args.userPrompt}` : ""}
@@ -100,14 +128,23 @@ ${args.userInstructionsAppend ? `Additional rendering constraints:\n${args.userI
 
 ${renderedUserInstructionBlock}
 
+CRITICAL LAYOUT RULES:
+- The canvas size is EXACTLY ${args.width}x${args.height} pixels
+- Use overflow-hidden on the root container to prevent content from spilling
+- All content must fit within the ${args.width}x${args.height} frame - NO overflow, NO scrollbars
+- Use proper spacing (p-4, p-6, p-8) to create breathing room
+- Text should be readable without being too small or too large
+- For multi-line text, use line-clamp or truncate if needed
+
 Instructions:
 - Create a high-impact social post visual using the source content.
 - Keep it as a single-frame composition, not a webpage.
-- Use normal Tailwind classes for styling.
+- Use semantic Tailwind classes from the design system (bg-surface-base, text-content-primary, etc.).
+- CSS variables (var(--color-...), var(--surface-...), etc.) will be injected at render time.
 - Ensure content fits the fixed frame with no overflow, clipping, or hidden text.
 - Keep typography highly readable with clear hierarchy.
 - Match the requested style and content density while preserving legibility and composition balance.
-${args.generatedImage ? "- Incorporate the generated image effectively in the design layout." : ""}
+${args.generatedImage ? "- Incorporate the generated image effectively in the design layout per the specified position." : ""}
 
 Return only one complete HTML document as raw text.`;
 }
@@ -216,12 +253,14 @@ function renderUserInstructionBlock(args: {
   title: string;
   excerpt: string;
   content: string;
-  designTokens: string;
+  designTokens?: string;
+  designBrief?: string;
   userInstructions?: string | string[];
 }): string {
   const lines = toLines(args.userInstructions);
   if (lines.length === 0) return "";
 
+  const designInfo = args.designBrief || args.designTokens || '';
   const replacements: Record<string, string> = {
     "<platform>": `${args.platform}${args.formatName ? ` (${args.formatName})` : ""}`,
     "<width>": String(args.width),
@@ -229,7 +268,8 @@ function renderUserInstructionBlock(args: {
     "<title>": args.title,
     "<excerpt>": args.excerpt,
     "<content>": args.content,
-    "<design_tokens>": args.designTokens,
+    "<design_tokens>": designInfo,
+    "<design_brief>": designInfo,
   };
 
   const rendered = lines

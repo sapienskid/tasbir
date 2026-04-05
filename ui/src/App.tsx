@@ -1105,6 +1105,11 @@ function FormatsTemplatesTab({
 function SettingsTab({ settings, loading, onSave, formats }: any) {
   const [local, setLocal] = useState<any>(null)
   const [apiKey, setApiKeyState] = useState(getApiKey())
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    strategy: false,  // brand + campaign combined
+    output: false,   // formats + image + templates
+    advanced: true,   // api + prompts
+  })
 
   useEffect(() => {
     if (settings) setLocal(JSON.parse(JSON.stringify(settings)))
@@ -1113,6 +1118,10 @@ function SettingsTab({ settings, loading, onSave, formats }: any) {
   const handleApiKeyChange = (value: string) => {
     setApiKeyState(value)
     setApiKey(value)
+  }
+
+  const toggleSection = (section: string) => {
+    setCollapsedSections(prev => ({ ...prev, [section]: !prev[section] }))
   }
 
   if (loading || !local) {
@@ -1133,184 +1142,92 @@ function SettingsTab({ settings, loading, onSave, formats }: any) {
     onSave(local)
   }
 
+  function Section({ id, label, children, defaultCollapsed = false }: { id: string; label: string; children: React.ReactNode; defaultCollapsed?: boolean }) {
+    const isCollapsed = collapsedSections[id] ?? defaultCollapsed
+    return (
+      <div className="border-b" style={{ borderColor: '#252525' }}>
+        <button
+          onClick={() => toggleSection(id)}
+          className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-white/5 transition-colors"
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: '#888' }}>{label}</span>
+          <span className="text-[10px]" style={{ color: '#555' }}>{isCollapsed ? '▼' : '▲'}</span>
+        </button>
+        {!isCollapsed && <div className="px-3 pb-3 space-y-2">{children}</div>}
+      </div>
+    )
+  }
+
   return (
     <>
-      <div className="p-3.5 space-y-3 overflow-y-auto">
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Brand</div>
-        <input value={local.brand?.name || ''} onChange={(e: any) => set(['brand', 'name'], e.target.value)} placeholder="Brand name" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
-        <input value={local.brand?.tone || ''} onChange={(e: any) => set(['brand', 'tone'], e.target.value)} placeholder="Tone (e.g. confident, practical)" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
-        <input value={local.brand?.audience || ''} onChange={(e: any) => set(['brand', 'audience'], e.target.value)} placeholder="Target audience" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
-
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Campaign</div>
-        <select value={local.campaign?.goal || 'awareness'} onChange={(e: any) => set(['campaign', 'goal'], e.target.value)} className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
-          <option value="awareness">Awareness</option>
-          <option value="engagement">Engagement</option>
-          <option value="conversion">Conversion</option>
-          <option value="education">Education</option>
-        </select>
-        <select value={local.campaign?.framework || 'none'} onChange={(e: any) => set(['campaign', 'framework'], e.target.value)} className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
-          <option value="none">No framework</option>
-          <option value="AIDA">AIDA</option>
-          <option value="PAS">PAS</option>
-          <option value="FAB">FAB</option>
-        </select>
-        <div className="flex gap-2">
-          <select value={local.campaign?.hashtags?.style || 'niche'} onChange={(e: any) => set(['campaign', 'hashtags', 'style'], e.target.value)} className="flex-1 rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
-            <option value="niche">Niche hashtags</option>
-            <option value="broad">Broad hashtags</option>
-            <option value="branded">Branded hashtags</option>
+      <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+        {/* Combined Strategy Section */}
+        <Section id="strategy" label="Strategy" defaultCollapsed={false}>
+          <input value={local.brand?.name || ''} onChange={(e: any) => set(['brand', 'name'], e.target.value)} placeholder="Brand name" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+          <input value={local.brand?.tone || ''} onChange={(e: any) => set(['brand', 'tone'], e.target.value)} placeholder="Tone (e.g. confident, practical)" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+          <select value={local.campaign?.goal || 'awareness'} onChange={(e: any) => set(['campaign', 'goal'], e.target.value)} className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
+            <option value="awareness">Goal: Awareness</option>
+            <option value="engagement">Goal: Engagement</option>
+            <option value="conversion">Goal: Conversion</option>
+            <option value="education">Goal: Education</option>
           </select>
-          <input type="number" value={local.campaign?.hashtags?.count || 5} onChange={(e: any) => set(['campaign', 'hashtags', 'count'], Number(e.target.value))} className="w-16 rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
-        </div>
-        <input value={local.campaign?.cta || ''} onChange={(e: any) => set(['campaign', 'cta'], e.target.value)} placeholder="CTA (e.g. Read more →)" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+          <input value={local.campaign?.cta || ''} onChange={(e: any) => set(['campaign', 'cta'], e.target.value)} placeholder="Default CTA (e.g. Read more →)" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+        </Section>
 
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Formats</div>
-        <div className="flex flex-wrap gap-1">
-          {formats.map((f: any) => (
-            <button
-              key={f.id}
-              onClick={() => {
-                const enabled = local.formats?.enabled || []
-                const next = enabled.includes(f.id) ? enabled.filter((id: string) => id !== f.id) : [...enabled, f.id]
-                set(['formats', 'enabled'], next)
-              }}
-              className={`text-[9px] font-bold tracking-wider px-2 py-1 rounded border transition-all ${(local.formats?.enabled || []).includes(f.id) ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}
-            >
-              {f.label}
+        {/* Combined Output Section */}
+        <Section id="output" label="Output" defaultCollapsed={false}>
+          <div className="flex flex-wrap gap-1">
+            {formats.map((f: any) => (
+              <button
+                key={f.id}
+                onClick={() => {
+                  const enabled = local.formats?.enabled || []
+                  const next = enabled.includes(f.id) ? enabled.filter((id: string) => id !== f.id) : [...enabled, f.id]
+                  set(['formats', 'enabled'], next)
+                }}
+                className={`text-[9px] font-bold tracking-wider px-2 py-1 rounded border transition-all ${(local.formats?.enabled || []).includes(f.id) ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-3 mt-2">
+            <span className="text-[9px]" style={{ color: '#777' }}>Posts:</span>
+            <input type="number" value={local.formats?.postCount || 1} onChange={(e: any) => set(['formats', 'postCount'], Number(e.target.value))} min={1} max={10} className="w-14 rounded border px-2 py-1 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            <span className="text-[9px]" style={{ color: '#777' }}>Images:</span>
+            <select value={local.image?.mode || 'auto'} onChange={(e: any) => set(['image', 'mode'], e.target.value)} className="flex-1 rounded border px-2 py-1 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
+              <option value="auto">Auto</option>
+              <option value="none">None</option>
+              <option value="ai">AI</option>
+              <option value="feature">Feature</option>
+            </select>
+          </div>
+          <div className="flex items-center justify-between py-1 px-2 rounded mt-2" style={{ background: '#0b0b0b' }}>
+            <span className="text-[10px]" style={{ color: '#999' }}>Auto templates</span>
+            <button onClick={() => set(['templates', 'autoSelect'], !local.templates?.autoSelect)} className={`text-[10px] font-mono px-2 py-0.5 rounded border ${local.templates?.autoSelect ? 'border-[#22c55e] text-[#22c55e]' : 'border-[#555] text-[#555]'}`}>
+              {local.templates?.autoSelect ? 'ON' : 'OFF'}
             </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[9px]" style={{ color: '#777' }}>Post count:</span>
-          <input type="number" value={local.formats?.postCount || 1} onChange={(e: any) => set(['formats', 'postCount'], Number(e.target.value))} min={1} max={10} className="w-16 rounded border px-2 py-1 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
-        </div>
+          </div>
+        </Section>
 
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Templates</div>
-        <div className="flex items-center justify-between py-1 px-2 rounded" style={{ background: '#0b0b0b' }}>
-          <span className="text-[10px]" style={{ color: '#999' }}>Auto-select templates</span>
-          <button onClick={() => set(['templates', 'autoSelect'], !local.templates?.autoSelect)} className={`text-[10px] font-mono px-2.5 py-1 rounded border transition-all ${local.templates?.autoSelect ? 'border-[#22c55e] text-[#22c55e] bg-[#22c55e10]' : 'border-[#f43f5e] text-[#f43f5e] bg-[#f43f5e10]'}`}>
-            {local.templates?.autoSelect ? 'ON' : 'OFF'}
-          </button>
-        </div>
-
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Image</div>
-        <select value={local.image?.mode || 'auto'} onChange={(e: any) => set(['image', 'mode'], e.target.value)} className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
-          <option value="auto">Auto</option>
-          <option value="none">None</option>
-          <option value="feature">Feature image</option>
-          <option value="ai">AI generated</option>
-        </select>
-
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>API Authentication</div>
-        <div className="space-y-3 p-2.5 rounded border" style={{ background: '#0a0a0a', borderColor: '#313131' }}>
-          <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: '#666' }}>
-            API Key Required
+        {/* Advanced Section (collapsed by default) */}
+        <Section id="advanced" label="Advanced" defaultCollapsed={true}>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e: any) => handleApiKeyChange(e.target.value)}
+            placeholder="API Key..."
+            className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+            style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+          />
+          <div className="text-[8px]" style={{ color: '#666' }}>
+            {apiKey ? <span style={{ color: '#22c55e' }}>✓ Configured</span> : <span style={{ color: '#f43f5e' }}>✗ Missing</span>}
           </div>
-          <div className="text-[9px] leading-relaxed" style={{ color: '#777' }}>
-            Enter your API key to authenticate with the service. This key is stored securely in your browser.
-          </div>
-          
-          <div>
-            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>API Key</label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e: any) => handleApiKeyChange(e.target.value)}
-              placeholder="Enter your API key..."
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
-              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-            />
-            <div className="text-[8px] mt-1" style={{ color: '#666' }}>
-              Status: {apiKey ? <span style={{ color: '#22c55e' }}>Key configured</span> : <span style={{ color: '#f43f5e' }}>No key set</span>}
-            </div>
-          </div>
-        </div>
-
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>AI Prompts</div>
-        <div className="space-y-3 p-2.5 rounded border" style={{ background: '#0a0a0a', borderColor: '#313131' }}>
-          <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: '#666' }}>
-            Custom AI Instructions (Optional)
-          </div>
-          <div className="text-[9px] leading-relaxed" style={{ color: '#777' }}>
-            Customize how AI generates content and visuals. Leave fields empty to use system defaults.
-          </div>
-          
-          <div>
-            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>HTML Generation</label>
-            <textarea
-              value={local.prompts?.htmlGeneration || ''}
-              onChange={(e: any) => set(['prompts', 'htmlGeneration'], e.target.value)}
-              placeholder="Additional instructions for HTML layout generation..."
-              rows={3}
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
-              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-            />
-          </div>
-          
-          <div>
-            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Content Creation</label>
-            <textarea
-              value={local.prompts?.contentCreation || ''}
-              onChange={(e: any) => set(['prompts', 'contentCreation'], e.target.value)}
-              placeholder="Instructions for AI copywriting and content generation..."
-              rows={3}
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
-              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-            />
-          </div>
-          
-          <div>
-            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>AI Image Generation</label>
-            <textarea
-              value={local.prompts?.imageGeneration || ''}
-              onChange={(e: any) => set(['prompts', 'imageGeneration'], e.target.value)}
-              placeholder="Style guidance for AI-generated images..."
-              rows={2}
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
-              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-            />
-          </div>
-          
-          <div>
-            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Template Selection</label>
-            <textarea
-              value={local.prompts?.templateSelection || ''}
-              onChange={(e: any) => set(['prompts', 'templateSelection'], e.target.value)}
-              placeholder="Guidelines for when AI should use templates vs. generate new layouts..."
-              rows={2}
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
-              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-            />
-          </div>
-          
-          <div>
-            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Design Tokens</label>
-            <textarea
-              value={local.prompts?.designTokens || ''}
-              onChange={(e: any) => set(['prompts', 'designTokens'], e.target.value)}
-              placeholder="Instructions for AI design token generation..."
-              rows={2}
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
-              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-            />
-          </div>
-          
-          <div>
-            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Custom Instructions</label>
-            <textarea
-              value={local.prompts?.customInstructions || ''}
-              onChange={(e: any) => set(['prompts', 'customInstructions'], e.target.value)}
-              placeholder="General instructions that apply to all AI operations..."
-              rows={3}
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
-              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-            />
-          </div>
-        </div>
+        </Section>
       </div>
       <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#252525' }}>
         <button onClick={handleSave} className="w-full py-2 rounded font-bold text-[10px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">
-          Save Settings
+          Save
         </button>
       </div>
     </>
