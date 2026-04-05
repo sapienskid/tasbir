@@ -46,7 +46,9 @@ import {
   fillTemplateSlots,
   extractSlotsFromHtml,
   validateTemplateHtml,
+  type TemplateMetadata,
 } from "./lib/templates";
+import { classifyContent, type ContentClassification } from "./lib/content-classifier";
 
 interface LlmPromptOverrides {
   systemPrompt?: string | string[];
@@ -976,20 +978,48 @@ export async function runPipeline(body: GenerateRequestBody, env: Env, security:
 }
 
 export async function runPipelineFromPost(post: GhostPost, env: Env, body: GenerateRequestBody | DirectContentRequestBody, security: ResolvedSecurityConfig) {
-  const outputPlan = resolveOutputPlan(body.output);
+  const settings = env.SETTINGS_KV ? await loadSettings(env.SETTINGS_KV) : getDefaultSettings();
+  const outputPlan = resolveOutputPlanWithSettings(body.output, settings);
   const defaultTokens = await loadDesignTokensForGeneration(env);
   const designTokensForRun = resolveDesignTokensForRequest(body.designTokens, defaultTokens);
   const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
-  const brandName = body.brandName ?? env.BRAND_NAME ?? "Tasbir Blog";
+  const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
   const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null> }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
   const agentContexts: AgentExecutionContext[] = [];
   const sharedStorage = resolveBatchStorageOptions(body.storage);
 
+  let classification: ContentClassification | null = null;
+  let matchedTemplate: { html: string; metadata: TemplateMetadata } | null = null;
+
+  if (settings.templates.autoSelect && env.TEMPLATES_KV) {
+    try {
+      const allTemplates = await listTemplates(env.TEMPLATES_KV);
+      const enabledTemplates = allTemplates.filter((t) => t.enabled && !settings.templates.disabled.includes(t.id));
+      classification = await classifyContent(
+        env as unknown as Record<string, string | undefined>,
+        post.title,
+        post.plaintext || post.excerpt || "",
+        enabledTemplates,
+      );
+
+      if (classification.templateMatch) {
+        const templateResult = await getTemplate(env.TEMPLATES_KV, env.OUTPUT_BUCKET, classification.templateMatch);
+        if (templateResult) {
+          matchedTemplate = { html: templateResult.html, metadata: templateResult.metadata };
+        }
+      }
+    } catch (error) {
+      console.warn("[classification] Failed to classify content or load template:", error);
+    }
+  }
+
+  const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
+
   for (let index = 0; index < outputPlan.postCount; index += 1) {
     const variantPrompt = outputPlan.postCount > 1
-      ? [body.prompt?.trim(), `Variation index ${index + 1} of ${outputPlan.postCount}.`].filter(Boolean).join(" ")
-      : body.prompt;
+      ? [effectivePrompt?.trim(), `Variation index ${index + 1} of ${outputPlan.postCount}.`].filter(Boolean).join(" ")
+      : effectivePrompt;
 
     const agentContext = await resolveAgentContextForRun({
       env,
@@ -1008,18 +1038,28 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       const dimensions = getFormatConfig(format);
       if (!dimensions) continue;
 
-      const llmOutput = await runHtmlLayoutAgent(
-        env,
-        post,
-        format,
-        dimensions.name,
-        dimensions.aiInstruction,
-        dimensions.width,
-        dimensions.height,
-        designTokensPrompt,
-        variantPrompt,
-        agentContext.copyOverrides,
-      );
+      let llmOutput: LlmOutput;
+
+      if (matchedTemplate && classification) {
+        const slotValues = { ...classification.slotValues };
+        if (!slotValues.headline) slotValues.headline = post.title;
+        if (!slotValues.brand) slotValues.brand = brandName;
+        const filledHtml = fillTemplateSlots(matchedTemplate.html, slotValues);
+        llmOutput = { generated_html: filledHtml };
+      } else {
+        llmOutput = await runHtmlLayoutAgent(
+          env,
+          post,
+          format,
+          dimensions.name,
+          dimensions.aiInstruction,
+          dimensions.width,
+          dimensions.height,
+          designTokensPrompt,
+          variantPrompt,
+          agentContext.copyOverrides,
+        );
+      }
 
       const finalLlmOutput = {
         generated_html: injectDesignTokensIntoHtml(llmOutput.generated_html, designTokensForRun)
@@ -1070,8 +1110,55 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
     llm_output: primaryVariant.llm_output,
     agentic: summarizeAgentExecution(agentContexts),
     assets: primaryVariant.assets,
-    variants: outputPlan.postCount > 1 ? variants : undefined
+    variants: outputPlan.postCount > 1 ? variants : undefined,
+    classification: classification ? {
+      type: classification.type,
+      templateUsed: classification.templateMatch,
+      reasoning: classification.reasoning,
+    } : undefined,
   };
+}
+
+function resolveOutputPlanWithSettings(bodyOutput: OutputOptions | undefined, settings: WorkspaceSettings): { formats: Set<string>; carouselSlides: number; postCount: number } {
+  const formatNames = getFormatNames();
+  const formatSet = new Set(formatNames);
+  const enabledFormats = settings.formats.enabled.length > 0 ? settings.formats.enabled : formatNames;
+  const requestedFormats = bodyOutput?.formats && bodyOutput.formats.length > 0 ? bodyOutput.formats : enabledFormats;
+  const normalizedFormats = new Set<string>();
+  for (const format of requestedFormats) {
+    if (formatSet.has(format)) normalizedFormats.add(format);
+  }
+  if (normalizedFormats.size === 0) throw new HttpError(400, "output.formats must include at least one supported format");
+
+  const postCount = Math.round(clampNumber(bodyOutput?.postCount, 1, 10, settings.formats.postCount || 1));
+  return { formats: normalizedFormats, carouselSlides: DEFAULT_CAROUSEL_SLIDES, postCount };
+}
+
+function buildEffectivePrompt(bodyPrompt: string | undefined, settings: WorkspaceSettings, classification: ContentClassification | null): string | undefined {
+  if (bodyPrompt?.trim()) return bodyPrompt.trim();
+
+  const parts: string[] = [];
+
+  if (settings.brand.tone) {
+    parts.push(`Tone: ${settings.brand.tone}.`);
+  }
+  if (settings.brand.audience) {
+    parts.push(`Audience: ${settings.brand.audience}.`);
+  }
+  if (settings.campaign.goal && settings.campaign.goal !== "awareness") {
+    parts.push(`Campaign goal: ${settings.campaign.goal}.`);
+  }
+  if (settings.campaign.framework && settings.campaign.framework !== "none") {
+    parts.push(`Use ${settings.campaign.framework} copywriting framework.`);
+  }
+  if (settings.campaign.cta) {
+    parts.push(`Include CTA: ${settings.campaign.cta}`);
+  }
+  if (classification) {
+    parts.push(`Content type: ${classification.type}.`);
+  }
+
+  return parts.length > 0 ? parts.join(" ") : undefined;
 }
 
 // ==================== RENDERING ====================
