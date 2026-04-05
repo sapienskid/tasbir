@@ -1,353 +1,119 @@
-# Social Media Asset Pipeline Worker
+# Tasbir
 
-A Cloudflare Worker that turns source content into multi-platform social outputs:
+A Cloudflare Worker-based social media asset pipeline that turns source content into multi-platform social outputs — powered by AI, driven by settings, and templated for consistency.
 
-- captions
-- rendered PNG assets
-- template slot content
-- optional generated variants (`output.postCount`)
+## Features
 
-Supported output formats:
-
-- `instagram-portrait` (1080x1350)
-- `instagram-square` (1080x1080)
-- `instagram-story` (1080x1920)
-- `carousel-post` (1080x1350)
-- `twitter-card` (1200x630)
-- `linkedin-post` (1200x627)
-
-## Core Model
-
-This project is template-driven and CSS-token-driven:
-
-- templates are structural skeletons in `templates/*.html`
-- shared wrapper fragments are in `templates/system/*.html`
-- utility-first styles are authored in `src/styles/template.css` and compiled to `src/generated/template.css`
-- runtime assets are compiled into `src/generated/template-assets.json`
-
-No runtime style CDN/script injection, no style/archetype/font-profile matrix.
-
-## High-Level Flow
-
-1. Input arrives from:
-- `POST /generate` (Ghost slug/url)
-- `POST /generate-from-content` (direct content)
-- `POST /webhook/ghost`
-2. Worker builds template candidates from discovered `templates/*.html` files.
-3. LLM chooses template IDs per requested format (unless forced via `templateIds`).
-4. Required slot keys are extracted from selected template `{{SLOT:key}}` placeholders.
-5. LLM generates structured output (captions, slides, hashtags, image prompt, slot content).
-6. Worker resolves image source (AI/feature/custom/none).
-7. HTML is rendered and screenshotted via Cloudflare Browser Rendering.
-8. PNG files are stored in R2 and returned in API response.
-
-When agentic mode is enabled (default), an additional orchestration step runs first:
-
-1. `MarketingOrchestratorAgent` (Cloudflare Agents SDK + Durable Objects) receives source context + prompt profile.
-2. Agent returns strategic brief and role notes.
-3. Worker merges those notes into template planner/copy prompts and render policy checks.
-
-## Project Layout
-
-- `config/pipeline.config.yaml`: composed config entrypoint (`extends`)
-- `config/pipeline/templates.yaml`: brand, format, and preview defaults
-- `config/pipeline/content.yaml`: generation prompts/limits/fallbacks
-- `config/pipeline/runtime.yaml`: runtime, features, security, storage
-- `templates/*.html`: format-agnostic content skeletons
-- `templates/system/*.html`: shared wrappers (`head-shell`, `frame-shell`, partials)
-- `src/styles/template.css`: Tailwind theme tokens + utility source
-- `scripts/embed-template-assets.mjs`: build-time embed + validation
-- `src/generated/template-assets.json`: generated runtime bundle
-- `src/generated/template-assets.ts`: typed wrapper over generated JSON
-- `src/index.ts`: API routes + orchestration pipeline
-- `src/agents/marketing-orchestrator.ts`: Cloudflare Agents SDK orchestrator (Durable Object)
-- `src/ai.ts`: structured generation + template assignment planner
-- `src/templates.ts`: template slot extraction/interpolation + render assembly
-- `src/template-theme.ts`: token derivation and render-time controls
-
-## Prerequisites
-
-- Node.js 20+
-- pnpm 9+
-- Cloudflare account with:
-- Workers AI
-- Browser Rendering
-- R2
-- Ghost Content API key (only required for `/generate` and webhook flow)
+- **Settings-driven**: Configure brand voice, campaign goals, formats, and templates once through the UI. Every API call uses these settings automatically.
+- **Custom HTML templates**: Create simple HTML templates with `{{slot}}` placeholders. AI auto-selects the right template based on content type.
+- **AI-powered**: Content classification, template matching, and full HTML generation when no template fits.
+- **Multi-platform**: Instagram, Twitter/X, LinkedIn, and custom formats.
+- **Design tokens**: AI-generated or custom design systems with full color, typography, and component control.
+- **Headless API**: Simple API — just send content, get posts back. All configuration is managed through the UI.
 
 ## Quick Start
 
-1. Install:
-
 ```bash
 pnpm install
-```
-
-2. Configure env:
-
-```bash
 cp .dev.vars.example .dev.vars
-```
-
-3. Build runtime assets:
-
-```bash
-pnpm run build:assets
-```
-
-4. Run locally (fully local runtime + live reload):
-
-```bash
+# Configure your env vars
 pnpm run dev
 ```
 
-5. Optional remote dev mode (Cloudflare edge runtime):
+## API
+
+### Generate Posts (Simple)
 
 ```bash
-pnpm run dev:remote
+curl -X POST http://127.0.0.1:8787/generate-from-content \
+  -H 'x-api-key: your-api-key' \
+  -H 'content-type: application/json' \
+  -d '{
+    "title": "Ship Better Content Systems",
+    "content": "Turn one long article into platform-native assets..."
+  }'
 ```
 
-6. Check health:
+That's it. All configuration (brand, formats, templates, campaign goals) is loaded from your saved settings.
+
+### Manage Settings
+
+```bash
+# Get current settings
+curl http://127.0.0.1:8787/settings -H 'x-api-key: your-api-key'
+
+# Update settings
+curl -X PATCH http://127.0.0.1:8787/settings \
+  -H 'x-api-key: your-api-key' \
+  -H 'content-type: application/json' \
+  -d '{
+    "brand": { "name": "My Brand", "tone": "confident" },
+    "formats": { "enabled": ["instagram-square", "twitter-card"] }
+  }'
+```
+
+### Manage Templates
+
+```bash
+# List templates
+curl http://127.0.0.1:8787/templates -H 'x-api-key: your-api-key'
+
+# Create template
+curl -X PUT http://127.0.0.1:8787/templates/quote-card \
+  -H 'x-api-key: your-api-key' \
+  -H 'content-type: application/json' \
+  -d '{
+    "html": "<!DOCTYPE html><html><body><h1>{{headline}}</h1><p>{{quote}}</p></body></html>",
+    "name": "Quote Card",
+    "category": "quote"
+  }'
+
+# Delete template
+curl -X DELETE http://127.0.0.1:8787/templates/quote-card -H 'x-api-key: your-api-key'
+```
+
+### Health Check
 
 ```bash
 curl http://127.0.0.1:8787/health
 ```
 
-## First End-to-End Request (Direct Content)
+Returns dependency status (R2, KV namespaces).
 
-```bash
-curl -X POST http://127.0.0.1:8787/generate-from-content \
-  -H 'x-api-key: your-api-key' \
-  -H 'content-type: application/json' \
-  -d '{
-    "title": "Ship Better Content Systems",
-    "content": "Turn one long article into platform-native assets with a reusable template pipeline.",
-    "prompt": "Practical, confident tone for solo founders.",
-    "output": {
-      "formats": ["instagram-square", "twitter-card", "linkedin-post"],
-      "postCount": 2
-    }
-  }'
+## Architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Content   │────>│   Pipeline   │────>│   Assets    │
+│   (Ghost /  │     │   (AI +      │     │   (R2 PNG)  │
+│    Direct)  │     │   Templates) │     │             │
+└─────────────┘     └──────────────┘     └─────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │  Settings   │
+                    │  (KV)       │
+                    └─────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │  Templates  │
+                    │  (KV + R2)  │
+                    └─────────────┘
 ```
 
-Campaign-planned generation (preferred):
+## Resource Usage
 
-```bash
-curl -X POST http://127.0.0.1:8787/generate-from-content \
-  -H 'x-api-key: your-api-key' \
-  -H 'content-type: application/json' \
-  -d '{
-    "title": "Ship Better Content Systems",
-    "content": "Turn one long article into platform-native assets with a reusable template pipeline.",
-    "campaign": {
-      "platforms": ["instagram-square", "twitter-card", "linkedin-post"],
-      "counts": {
-        "instagram-square": 2,
-        "twitter-card": 3,
-        "linkedin-post": 1
-      }
-    },
-    "image": {
-      "mode": "none"
-    }
-  }'
-```
-
-## Template Preview
-
-Render preview HTML without running full generation.
-
-Local browser workflow (template-only, no deploy dependency):
-
-```bash
-pnpm run dev:design
-```
-
-Open a direct template URL:
-
-```text
-http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context
-```
-
-`dev:design`/`dev:templates` watches template/style/config files, rebuilds assets on save, and uses Wrangler local live-reload so the browser refreshes automatically. It also sets `API_AUTH_REQUIRE_FOR_PREVIEW=false` for this local session so preview URLs open directly in browser.
-
-Direct API request example (when preview auth is enabled):
-
-```bash
-curl "http://127.0.0.1:8787/template/instagram-square?templateId=layout/single-metric-focus&slot.metric_value=9.8K&slot.metric_label=Engagement&slot.headline=Signal%20that%20compounds&slot.insight_line=One%20metric%20needs%20context" \
-  -H 'x-api-key: your-api-key'
-```
-
-Useful preview query params:
-
-- core: `title`, `caption`, `imageUrl`, `brand`/`brandName`, `templateId`
-- carousel: `heading`, `body`, `slide`, `total`
-- slots: `slot.<key>=value` or `slot_<key>=value`
-
-If you run plain `pnpm run dev` and still want browser-openable template previews, set:
-- `API_AUTH_REQUIRE_FOR_PREVIEW=false` in `.dev.vars`
-
-## How New Templates Are Recognized
-
-1. Add a new file under `templates/`.
-2. Optional: add `@formats: format-a,format-b` in template front-matter to constrain compatibility.
-3. Run `pnpm run build:templates`.
-4. New template becomes available for rendering and selection automatically.
-
-No TypeScript template registration is required.
-
-## API Routes
-
-- `GET /health`
-- `GET /template/<format>`
-- `GET /preview/screenshot?format=...&templateId=...`
-- `POST /generate`
-- `POST /generate-from-content`
-- `POST /webhook/ghost`
-
-## R2 Key Layout
-
-Default (`storage.mode=overwrite`) stores assets under one slug prefix:
-
-- `social-assets/<slug>/<asset>.png`
-
-Versioned mode stores one extra version prefix:
-
-- `social-assets/<slug>/<YYYY-MM-DD>/<runId>/<asset>.png`
-
-For multi-post/campaign outputs, uniqueness is now in filename suffixes (`-v2`, `-p2`) instead of extra nested folders.
-
-## Local Stress Render Suite
-
-Run a local screenshot stress sweep with synthetic payloads (plain short/long, markdown-heavy, math-heavy, mermaid-style diagram strings, mixed payloads).
-
-```bash
-pnpm run render:stress -- --build --concurrency 1
-```
-
-Useful targeted run:
-
-```bash
-pnpm run render:stress -- --cases plain-short,markdown-rich,math-heavy --formats instagram-square,twitter-card --max-tasks 30
-```
-
-Outputs:
-
-- `renders/stress-suite-*/report.json`
-- `renders/stress-suite-*/failures.json`
-- `renders/stress-suite-*/index.html` (grid gallery + click-to-open viewer)
-
-## Studio Cached Render Loop
-
-Use the Studio tab for generation and screenshot iteration.
-
-1. Set `HTML Cache` mode to `read-write` (or `write-only`) and choose a cache key.
-2. Click `Generate Posts` once to seed cache.
-3. Click `Re-render Cached HTML` to render screenshots from cached HTML only.
-4. Switch to `read-only` mode to enforce cache-only behavior (cache miss returns an error, no fallback generation).
-
-The Studio result panel includes screenshot thumbnails rendered directly through authenticated Worker asset endpoints, so private R2 buckets work without public bucket URLs.
-
-## Agentic Controls
-
-Request payloads may include:
-
-- `agent.mode`: `agentic`
-- `agent.promptProfile`: selects profile from `generation.agents.prompt_profiles`
-- `agent.renderPolicy`: per-request render policy overrides
-- `agent.platformGoals`: optional platform planning intent signals
-
-System prompt sources:
-
-- agent copy/planner prompts: `generation.agents.prompts.*`
-- agent roles: `generation.agents.prompt_profiles.*`
-- image policy prompts: `generation.image.*`
+| Resource | Purpose |
+|----------|---------|
+| **KV** | Settings, template metadata |
+| **R2** | Template HTML files, rendered PNG assets |
+| **Durable Objects** | Marketing orchestrator agent |
+| **AI** | Content classification, HTML generation, design tokens |
+| **Browser Rendering** | HTML to PNG screenshot |
 
 ## Deployment
 
-Dry-run bundle check:
-
 ```bash
-pnpm run deploy:dry-run
+pnpm run deploy
 ```
 
-Deploy staging:
-
-```bash
-pnpm run deploy:staging
-```
-
-Deploy production:
-
-```bash
-pnpm run deploy:production
-```
-
-Tail logs:
-
-```bash
-pnpm run tail:staging
-pnpm run tail:production
-```
-
-## Auth
-
-Protected routes accept either:
-
-- `x-api-key: <API_KEYS entry>`
-- `Authorization: Bearer <API_KEYS entry>`
-
-`POST /webhook/ghost` supports either:
-
-- `x-ghost-signature` (Ghost-native signed webhook; recommended)
-- `x-webhook-token` (legacy/manual caller flow)
-
-## Daily Commands
-
-```bash
-pnpm run build:assets
-pnpm run check
-pnpm run test
-```
-
-## Environment Variables
-
-Required:
-
-- `API_KEYS`
-- `GHOST_API_URL` and `GHOST_CONTENT_API_KEY` (for Ghost-backed generation)
-- one webhook auth mode:
-- `GHOST_WEBHOOK_SECRET` (recommended for native Ghost webhook signature verification)
-- or `GHOST_WEBHOOK_TOKEN` (legacy/manual token header mode)
-
-Common optional:
-
-- `R2_PUBLIC_BASE_URL`
-- `DEFAULT_BRAND_COLOR`
-- `BRAND_NAME`
-- `LLM_MODEL`
-- `IMAGE_MODEL`
-- `R2_KEY_PREFIX`
-- `NOTIFY_WEBHOOK_URL`
-- `NOTIFY_HOST_ALLOWLIST`
-- `IMAGE_HOST_ALLOWLIST`
-- `ALLOW_PRIVATE_NETWORK_TARGETS`
-- `CORS_ALLOWED_ORIGINS`
-- `CORS_ALLOWED_HEADERS`
-- `CORS_ALLOW_CREDENTIALS`
-- `CORS_MAX_AGE_SECONDS`
-
-See `.dev.vars.example` for complete local example values.
-
-## Documentation
-
-- [Getting Started](docs/getting-started.md)
-- [Architecture](docs/architecture.md)
-- [Template System](docs/template-system.md)
-- [Configuration Reference](docs/config-reference.md)
-- [API Reference](docs/api-reference.md)
-- [Troubleshooting](docs/troubleshooting.md)
-- [Design Principles](docs/design-principles.md)
-- [Deployment](docs/deployment.md)
-- [Ghost Integration Guide](docs/ghost-integration.md)
-- [Research Summary](docs/research-summary.md)
+Make sure KV namespaces are created and configured in `wrangler.jsonc` for your environment.

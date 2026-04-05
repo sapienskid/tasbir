@@ -49,6 +49,7 @@ import {
   type TemplateMetadata,
 } from "./lib/templates";
 import { classifyContent, type ContentClassification } from "./lib/content-classifier";
+import { checkHealth } from "./lib/health";
 
 interface LlmPromptOverrides {
   systemPrompt?: string | string[];
@@ -283,7 +284,10 @@ app.use("*", async (c, next) => {
   })(c, next);
 });
 
-app.get("/health", (c) => c.json({ ok: true }));
+app.get("/health", async (c) => {
+  const health = await checkHealth(c.env);
+  return c.json(health);
+});
 
 app.get("/config/design-tokens", (c) => {
   const tokens = normalizeDesignTokensForRendering(getDefaultDesignTokens() as unknown as Record<string, unknown>);
