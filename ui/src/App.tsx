@@ -111,7 +111,7 @@ function resolveShadowPreviewValue(input: unknown, key: string): string {
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [activeTab, setActiveTab] = useState<'tokens' | 'studio' | 'config'>('tokens')
+  const [activeTab, setActiveTab] = useState<'studio' | 'templates' | 'settings' | 'tokens'>('studio')
   const [tokens, setTokens] = useState<DesignTokens | null>(null)
   const [generating, setGenerating] = useState(false)
   const [vibeInput, setVibeInput] = useState('')
@@ -130,11 +130,20 @@ export default function App() {
   const [studioTitle, setStudioTitle] = useState('')
   const [studioContent, setStudioContent] = useState('')
   const [studioSlug, setStudioSlug] = useState('')
-  const [studioFormats, setStudioFormats] = useState(['instagram-portrait', 'twitter-card'])
+  const [studioFormats, setStudioFormats] = useState<string[]>([])
+  const [settings, setSettings] = useState<any>(null)
+  const [settingsLoading, setSettingsLoading] = useState(false)
+  const [templates, setTemplates] = useState<any[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<{ id: string; html: string; name: string; description: string; category: string; slots: string[] } | null>(null)
+  const [templateHtml, setTemplateHtml] = useState('')
+  const [templatePreviewHtml, setTemplatePreviewHtml] = useState('')
 
   useEffect(() => {
     loadConfig()
     loadSavedTokens()
+    loadSettings()
+    loadTemplates()
   }, [])
 
   useEffect(() => {
@@ -176,14 +185,44 @@ export default function App() {
       setEditingConfig(JSON.parse(JSON.stringify(cfg)))
       const formatIds = Object.keys(cfg?.formats || {})
       if (formatIds.length > 0) {
-        setStudioFormats((prev) => {
-          const valid = prev.filter((id) => formatIds.includes(id))
-          if (valid.length > 0) return valid
-          return formatIds.slice(0, Math.min(2, formatIds.length))
-        })
+        setStudioFormats(formatIds)
       }
     } catch { /* ignore */ }
     setConfigLoading(false)
+  }
+
+  async function loadSettings() {
+    setSettingsLoading(true)
+    try {
+      const s = await api.getSettings()
+      setSettings(s)
+      if (s?.formats?.enabled && s.formats.enabled.length > 0) {
+        setStudioFormats(s.formats.enabled)
+      }
+    } catch {
+      // ignore
+    }
+    setSettingsLoading(false)
+  }
+
+  async function loadTemplates() {
+    setTemplatesLoading(true)
+    try {
+      const res = await api.getTemplates()
+      setTemplates(res.templates || [])
+    } catch {
+      // ignore
+    }
+    setTemplatesLoading(false)
+  }
+
+  async function saveSettings(patch: any) {
+    try {
+      const res = await api.patchSettings(patch)
+      setSettings(res.settings)
+    } catch (e: any) {
+      setError(e.message || 'Failed to save settings')
+    }
   }
 
   async function generateTokens() {
@@ -210,7 +249,6 @@ export default function App() {
   }
 
   async function handleRegenDemo() {
-    // Trigger re-render by updating tokens reference
     if (tokens) {
       await persistTokens({ ...tokens })
     }
@@ -309,14 +347,13 @@ export default function App() {
   async function handleStudioGenerate() {
     if (studioMode === 'content' && (!studioTitle.trim() || !studioContent.trim())) { setError('Title and content required'); return }
     if (studioMode === 'slug' && !studioSlug.trim()) { setError('Slug required'); return }
-    if (!tokens) { setError('Generate design tokens first'); return }
     setStudioGenerating(true)
     setError(null)
     try {
       const shared: any = {
         output: { formats: studioFormats, postCount: 1 },
         image: { mode: 'none' },
-        designTokens: tokens,
+        designTokens: tokens || undefined,
       }
 
       const res = studioMode === 'slug'
@@ -348,6 +385,113 @@ export default function App() {
     dims: `${f?.width || 0}×${f?.height || 0}`,
   }))
 
+  function openTemplateEditor(template?: any) {
+    if (template) {
+      api.getTemplate(template.id).then(res => {
+        setEditingTemplate({
+          id: template.id,
+          html: res.html,
+          name: template.name || template.id,
+          description: template.description || '',
+          category: template.category || 'custom',
+          slots: template.slots || [],
+        })
+        setTemplateHtml(res.html)
+        updateTemplatePreview(res.html)
+      }).catch(() => {
+        setEditingTemplate({
+          id: template.id,
+          html: '',
+          name: template.name || template.id,
+          description: template.description || '',
+          category: template.category || 'custom',
+          slots: template.slots || [],
+        })
+        setTemplateHtml('')
+        setTemplatePreviewHtml('')
+      })
+    } else {
+      setEditingTemplate({ id: '', html: '', name: '', description: '', category: 'custom', slots: [] })
+      setTemplateHtml('')
+      setTemplatePreviewHtml('')
+    }
+  }
+
+  function updateTemplatePreview(html: string) {
+    const slots = extractSlotsFromHtml(html)
+    const filled = fillSlotsForPreview(html, slots)
+    setTemplatePreviewHtml(filled)
+  }
+
+  function extractSlotsFromHtml(html: string): string[] {
+    const matches = html.match(/\{\{(\w+)\}\}/g) || []
+    return [...new Set(matches.map(m => m.replace(/[{}]/g, '')))]
+  }
+
+  function fillSlotsForPreview(html: string, slots: string[]): string {
+    let result = html
+    const sampleValues: Record<string, string> = {
+      headline: 'Your Headline Here',
+      title: 'Your Headline Here',
+      subtitle: 'Supporting text goes here',
+      body: 'This is sample content that demonstrates how the template will look when filled with real content.',
+      quote: '"The best code is no code."',
+      author: 'Jane Doe',
+      role: 'Founder & CEO',
+      metric: '9.8K',
+      metric_label: 'Engagement',
+      brand: 'Your Brand',
+      cta: 'Learn More →',
+      image_url: '',
+    }
+    for (const slot of slots) {
+      const value = sampleValues[slot] || `{{${slot}}}`
+      result = result.replace(new RegExp(`\\{\\{${slot}\\}\\}`, 'g'), value)
+    }
+    return result
+  }
+
+  async function handleSaveTemplate() {
+    if (!editingTemplate) return
+    const id = editingTemplate.id.trim() || editingTemplate.name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
+    if (!id) { setError('Template ID is required'); return }
+    if (!templateHtml.trim()) { setError('Template HTML is required'); return }
+    try {
+      await api.saveTemplate(id, templateHtml, {
+        name: editingTemplate.name || id,
+        description: editingTemplate.description,
+        category: editingTemplate.category,
+      })
+      setEditingTemplate(prev => prev ? { ...prev, id } : null)
+      await loadTemplates()
+      setError(null)
+    } catch (e: any) {
+      setError(e.message || 'Failed to save template')
+    }
+  }
+
+  async function handleDeleteTemplate(id: string) {
+    if (!confirm('Delete this template?')) return
+    try {
+      await api.deleteTemplate(id)
+      await loadTemplates()
+      if (editingTemplate?.id === id) {
+        setEditingTemplate(null)
+      }
+    } catch (e: any) {
+      setError(e.message || 'Failed to delete template')
+    }
+  }
+
+  async function handleToggleTemplate(id: string, enabled: boolean) {
+    try {
+      await api.toggleTemplate(id, enabled)
+      await loadTemplates()
+    } catch (e: any) {
+      setError(e.message || 'Failed to toggle template')
+    }
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#0b0b0b', color: '#e2e2e2', fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13 }}>
       {!sidebarOpen && (
@@ -369,27 +513,16 @@ export default function App() {
 
           <div className="flex border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
             {([
-              { id: 'tokens' as const, label: 'Tokens' },
               { id: 'studio' as const, label: 'Studio' },
-              { id: 'config' as const, label: 'Config' },
+              { id: 'templates' as const, label: 'Templates' },
+              { id: 'settings' as const, label: 'Settings' },
+              { id: 'tokens' as const, label: 'Tokens' },
             ]).map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-3 border-b-2 transition-all ${activeTab === tab.id ? 'text-white border-white font-semibold' : 'text-[#555] border-transparent hover:text-[#888] font-medium'}`} style={{ fontSize: 11, letterSpacing: '0.05em' }}>{tab.label}</button>
             ))}
           </div>
 
           <div className="flex-1 overflow-y-auto min-h-0 overflow-x-hidden">
-            {activeTab === 'tokens' && (
-              <TokensTab
-                vibeInput={vibeInput} setVibeInput={setVibeInput}
-                activePreset={activePreset} applyPreset={applyPreset}
-                primaryColorHint={primaryColorHint} setPrimaryColorHint={setPrimaryColorHint}
-                secondaryColorHint={secondaryColorHint} setSecondaryColorHint={setSecondaryColorHint}
-                generating={generating} generateTokens={generateTokens}
-                tokens={tokens} expandedSections={expandedSections} toggleSection={toggleSection}
-                onUpdateTokenColor={updateTokenColor}
-                onUpdateAccentColor={updateAccentColor}
-              />
-            )}
             {activeTab === 'studio' && (
               <StudioTab
                 mode={studioMode} setMode={setStudioMode}
@@ -405,10 +538,40 @@ export default function App() {
                 onUpdateAccentColor={updateAccentColor}
               />
             )}
-            {activeTab === 'config' && (
-              <ConfigTab
-                config={editingConfig} loading={configLoading}
-                onUpdate={updateConfigValue} onSave={saveConfig} saved={configSaved}
+            {activeTab === 'templates' && (
+              <TemplatesTab
+                templates={templates}
+                loading={templatesLoading}
+                editingTemplate={editingTemplate}
+                setEditingTemplate={setEditingTemplate}
+                templateHtml={templateHtml}
+                setTemplateHtml={setTemplateHtml}
+                templatePreviewHtml={templatePreviewHtml}
+                openTemplateEditor={openTemplateEditor}
+                onSaveTemplate={handleSaveTemplate}
+                onDeleteTemplate={handleDeleteTemplate}
+                onToggleTemplate={handleToggleTemplate}
+                onUpdatePreview={updateTemplatePreview}
+              />
+            )}
+            {activeTab === 'settings' && (
+              <SettingsTab
+                settings={settings}
+                loading={settingsLoading}
+                onSave={saveSettings}
+                formats={availableFormats}
+              />
+            )}
+            {activeTab === 'tokens' && (
+              <TokensTab
+                vibeInput={vibeInput} setVibeInput={setVibeInput}
+                activePreset={activePreset} applyPreset={applyPreset}
+                primaryColorHint={primaryColorHint} setPrimaryColorHint={setPrimaryColorHint}
+                secondaryColorHint={secondaryColorHint} setSecondaryColorHint={setSecondaryColorHint}
+                generating={generating} generateTokens={generateTokens}
+                tokens={tokens} expandedSections={expandedSections} toggleSection={toggleSection}
+                onUpdateTokenColor={updateTokenColor}
+                onUpdateAccentColor={updateAccentColor}
               />
             )}
           </div>
@@ -423,30 +586,32 @@ export default function App() {
       </aside>
 
       <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-        {activeTab === 'config' ? (
-          <ConfigPreview config={editingConfig} />
+        {activeTab === 'settings' ? (
+          <SettingsPreview settings={settings} />
         ) : (
           <>
             <div className="flex-1 flex flex-col overflow-hidden min-h-0">
               <div className="flex items-center border-b flex-shrink-0" style={{ borderColor: '#252525', background: '#141414' }}>
                 <div className="text-[10px] font-bold uppercase tracking-wider px-4 py-2.5 border-b-2 text-white border-white">
-                  {activeTab === 'studio' ? 'Screenshots' : 'Components'}
+                  {activeTab === 'studio' ? 'Screenshots' : activeTab === 'templates' ? 'Preview' : 'Components'}
                 </div>
-                {tokens && (
+                {tokens && activeTab !== 'templates' && (
                   <button onClick={handleRegenDemo} className="ml-auto mr-3 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded border transition-all border-[#313131] text-[#555] hover:border-[#3d3d3d] hover:text-[#999]">↺ Refresh</button>
                 )}
               </div>
               <div className="flex-1 overflow-auto relative min-h-0" style={{ background: '#1c1c1c' }}>
                 {activeTab === 'studio' ? (
                   <StudioScreenshotPanel result={studioResult} generating={studioGenerating} />
+                ) : activeTab === 'templates' ? (
+                  <TemplatePreview html={templatePreviewHtml} />
                 ) : tokens ? (
                   <PreviewFrame tokens={tokens} />
                 ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
-            <div className="text-3xl opacity-25">◈</div>
-            <div className="text-[12px] font-semibold tracking-wide">No system generated</div>
-            <div className="text-[11px]" style={{ color: '#777' }}>Enter a vibe and generate</div>
-          </div>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
+                    <div className="text-3xl opacity-25">◈</div>
+                    <div className="text-[12px] font-semibold tracking-wide">No system generated</div>
+                    <div className="text-[11px]" style={{ color: '#777' }}>Enter a vibe and generate</div>
+                  </div>
                 )}
                 {generating && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 z-10" style={{ background: '#0b0b0b' }}>
@@ -463,68 +628,9 @@ export default function App() {
   )
 }
 
-/* ── Tokens Tab ── */
-
-function TokensTab({ vibeInput, setVibeInput, activePreset, applyPreset, primaryColorHint, setPrimaryColorHint, secondaryColorHint, setSecondaryColorHint, generating, generateTokens, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
-  return (
-    <>
-      <div className="p-4 border-b" style={{ borderColor: '#252525' }}>
-        <div className="text-[10px] font-semibold tracking-wide uppercase mb-2" style={{ color: '#888' }}>Vibe</div>
-        <textarea value={vibeInput} onChange={(e: any) => setVibeInput(e.target.value)} placeholder="cold brutalist luxury…" rows={3} className="w-full rounded border resize-none outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', fontFamily: 'inherit', fontSize: 13, padding: '10px 12px', lineHeight: 1.6 }} />
-        
-        <div className="mt-3">
-          <div className="text-[9px] font-semibold tracking-wide uppercase mb-2" style={{ color: '#888' }}>Color Hints (optional)</div>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <div className="text-[9px] font-semibold tracking-wide uppercase mb-1" style={{ color: '#888' }}>Primary</div>
-              <div className="flex items-center gap-2">
-                <input type="color" value={primaryColorHint || '#3b82f6'} onChange={(e: any) => setPrimaryColorHint(e.target.value)} className="w-7 h-7 rounded border-0 cursor-pointer" />
-                <input value={primaryColorHint} onChange={(e: any) => setPrimaryColorHint(e.target.value)} placeholder="#hex" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[11px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
-              </div>
-            </div>
-            <div className="flex-1">
-              <div className="text-[9px] font-semibold tracking-wide uppercase mb-1" style={{ color: '#888' }}>Secondary</div>
-              <div className="flex items-center gap-2">
-                <input type="color" value={secondaryColorHint || '#0f172a'} onChange={(e: any) => setSecondaryColorHint(e.target.value)} className="w-7 h-7 rounded border-0 cursor-pointer" />
-                <input value={secondaryColorHint} onChange={(e: any) => setSecondaryColorHint(e.target.value)} placeholder="#hex" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[11px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <button onClick={generateTokens} disabled={generating} className="w-full mt-4 py-2.5 rounded font-semibold text-[12px] tracking-wide cursor-pointer transition-all disabled:opacity-25 hover:opacity-90" style={{ background: '#fff', color: '#0b0b0b' }}>
-          {generating ? 'Generating…' : 'Generate System'}
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-1.5 p-3 border-b" style={{ borderColor: '#252525' }}>
-        {PRESETS.map((p: any) => (
-          <button key={p.id} onClick={() => applyPreset(p.id)} className={`text-[10px] font-medium tracking-wide px-2.5 py-1.5 rounded border transition-all ${activePreset === p.id ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#666] border-[#313131] hover:text-[#999] hover:border-[#444]'}`}>{p.l}</button>
-        ))}
-      </div>
-      <div className="overflow-y-auto">
-        {tokens ? (
-          <>
-            <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}><ColorExplorer colors={tokens.colors} onUpdateTokenColor={onUpdateTokenColor} onUpdateAccentColor={onUpdateAccentColor} /></TokenSection>
-            <TokenSection title="Typography" expanded={!!expandedSections.typography} onToggle={() => toggleSection('typography')}><TypographyExplorer typography={tokens.typography} /></TokenSection>
-            <TokenSection title="Spacing" expanded={!!expandedSections.spacing} onToggle={() => toggleSection('spacing')}><SpacingExplorer spacing={tokens.spacing} /></TokenSection>
-            <TokenSection title="Shadows" expanded={!!expandedSections.shadow} onToggle={() => toggleSection('shadow')}><ShadowExplorer shadows={tokens.shadow} /></TokenSection>
-            <TokenSection title="Border" expanded={!!expandedSections.border} onToggle={() => toggleSection('border')}><BorderExplorer border={tokens.border} /></TokenSection>
-            <TokenSection title="Gradients" expanded={!!expandedSections.gradient} onToggle={() => toggleSection('gradient')}><GradientExplorer gradients={tokens.gradient} /></TokenSection>
-            <TokenSection title="Motion" expanded={!!expandedSections.motion} onToggle={() => toggleSection('motion')}><MotionExplorer motion={tokens.motion} /></TokenSection>
-            <TokenSection title="Components" expanded={!!expandedSections.component} onToggle={() => toggleSection('component')}><ComponentExplorer components={tokens.component} /></TokenSection>
-          </>
-        ) : (
-          <div className="p-6 text-center" style={{ color: '#555', fontSize: 11, lineHeight: 1.7 }}>Generate a design system<br />to explore tokens here</div>
-        )}
-      </div>
-    </>
-  )
-}
-
 /* ── Studio Tab ── */
 
 function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, availableFormats, generating, onGenerate, result, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
-
   return (
     <>
       <div className="p-3.5 space-y-3 border-b" style={{ borderColor: '#252525' }}>
@@ -549,20 +655,24 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
             </button>
           ))}
         </div>
-        <button onClick={onGenerate} disabled={generating || !tokens} className="w-full py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
+        <button onClick={onGenerate} disabled={generating} className="w-full py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
           {generating ? 'Generating…' : 'Generate Posts'}
         </button>
         {result && (
           <div className="p-2.5 rounded text-[10px] font-mono" style={{ background: '#0b0b0b', color: '#999', lineHeight: 1.6 }}>
             <div>Slug: {result.slug}</div>
             <div>Formats: {result.requested_formats?.join(', ')}</div>
-            {result.llm_output?.generated_html && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>HTML: Ready</div>}
+            {result.classification && (
+              <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>
+                <div>Type: {result.classification.type}</div>
+                <div>Template: {result.classification.templateUsed || 'AI generated'}</div>
+              </div>
+            )}
             {result.assets && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>Assets: {Object.keys(result.assets).filter((k: string) => result.assets[k]).length}</div>}
           </div>
         )}
       </div>
 
-      {/* Design Tokens View - Shared with TokensTab */}
       <div className="overflow-y-auto">
         {tokens ? (
           <>
@@ -593,6 +703,249 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
     </>
   )
 }
+
+/* ── Templates Tab ── */
+
+function TemplatesTab({ templates, loading, editingTemplate, setEditingTemplate, templateHtml, setTemplateHtml, templatePreviewHtml, openTemplateEditor, onSaveTemplate, onDeleteTemplate, onToggleTemplate, onUpdatePreview }: any) {
+  return (
+    <>
+      <div className="p-3.5 space-y-2 border-b" style={{ borderColor: '#252525' }}>
+        <div className="flex items-center justify-between">
+          <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Templates</div>
+          <button onClick={() => openTemplateEditor()} className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">+ New</button>
+        </div>
+
+        {editingTemplate && (
+          <div className="space-y-2">
+            <input
+              value={editingTemplate.name}
+              onChange={(e: any) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
+              placeholder="Template name"
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+              style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+            />
+            <input
+              value={editingTemplate.description}
+              onChange={(e: any) => setEditingTemplate({ ...editingTemplate, description: e.target.value })}
+              placeholder="Description"
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+              style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+            />
+            <div className="flex gap-2">
+              <input
+                value={editingTemplate.id}
+                onChange={(e: any) => setEditingTemplate({ ...editingTemplate, id: e.target.value })}
+                placeholder="ID (e.g. quote-card)"
+                className="flex-1 rounded border px-2 py-1.5 text-[10px] font-mono outline-none"
+                style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+              />
+              <select
+                value={editingTemplate.category}
+                onChange={(e: any) => setEditingTemplate({ ...editingTemplate, category: e.target.value })}
+                className="rounded border px-2 py-1.5 text-[10px] outline-none"
+                style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+              >
+                <option value="quote">Quote</option>
+                <option value="metric">Metric</option>
+                <option value="list">List</option>
+                <option value="carousel">Carousel</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <textarea
+              value={templateHtml}
+              onChange={(e: any) => { setTemplateHtml(e.target.value); onUpdatePreview(e.target.value) }}
+              placeholder="<!DOCTYPE html>..."
+              rows={8}
+              className="w-full rounded border px-2 py-2 text-[10px] font-mono outline-none resize-y"
+              style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5 }}
+            />
+            {editingTemplate.slots && editingTemplate.slots.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {editingTemplate.slots.map((slot: string) => (
+                  <span key={slot} className="text-[8px] font-mono px-1.5 py-0.5 rounded" style={{ background: '#1c1c1c', color: '#60a5fa', border: '1px solid #1e3a5f' }}>{`{{${slot}}}`}</span>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <button onClick={onSaveTemplate} className="flex-1 py-1.5 rounded font-bold text-[10px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">Save</button>
+              <button onClick={() => setEditingTemplate(null)} className="py-1.5 px-3 rounded font-bold text-[10px] uppercase tracking-wider border border-[#313131] text-[#555] hover:border-[#444] hover:text-[#888] transition-all">Close</button>
+            </div>
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex items-center justify-center py-4"><div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} /></div>
+        ) : templates.length === 0 ? (
+          <div className="p-4 text-center" style={{ color: '#555', fontSize: 11 }}>No templates yet. Create one to get started.</div>
+        ) : (
+          <div className="space-y-1">
+            {templates.map((t: any) => (
+              <div key={t.id} className="flex items-center gap-2 p-2 rounded" style={{ background: '#0b0b0b', opacity: t.enabled ? 1 : 0.5 }}>
+                <button
+                  onClick={() => onToggleTemplate(t.id, !t.enabled)}
+                  className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${t.enabled ? 'text-[#22c55e]' : 'text-[#555]'}`}
+                >
+                  {t.enabled ? 'ON' : 'OFF'}
+                </button>
+                <button onClick={() => openTemplateEditor(t)} className="flex-1 text-left">
+                  <div className="text-[10px] font-medium">{t.name || t.id}</div>
+                  <div className="text-[8px]" style={{ color: '#555' }}>{t.category} · {t.slots?.length || 0} slots</div>
+                </button>
+                <button onClick={() => onDeleteTemplate(t.id)} className="text-[8px] px-1.5 py-0.5 rounded border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e15]">Del</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+/* ── Settings Tab ── */
+
+function SettingsTab({ settings, loading, onSave, formats }: any) {
+  const [local, setLocal] = useState<any>(null)
+
+  useEffect(() => {
+    if (settings) setLocal(JSON.parse(JSON.stringify(settings)))
+  }, [settings])
+
+  if (loading || !local) {
+    return <div className="flex items-center justify-center h-32" style={{ color: '#555' }}><div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} /></div>
+  }
+
+  function set(path: string[], value: any) {
+    setLocal((prev: any) => {
+      const next = JSON.parse(JSON.stringify(prev))
+      let obj = next
+      for (let i = 0; i < path.length - 1; i++) obj = obj[path[i]]
+      obj[path[path.length - 1]] = value
+      return next
+    })
+  }
+
+  function handleSave() {
+    onSave(local)
+  }
+
+  return (
+    <>
+      <div className="p-3.5 space-y-3 overflow-y-auto">
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Brand</div>
+        <input value={local.brand?.name || ''} onChange={(e: any) => set(['brand', 'name'], e.target.value)} placeholder="Brand name" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+        <input value={local.brand?.tone || ''} onChange={(e: any) => set(['brand', 'tone'], e.target.value)} placeholder="Tone (e.g. confident, practical)" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+        <input value={local.brand?.audience || ''} onChange={(e: any) => set(['brand', 'audience'], e.target.value)} placeholder="Target audience" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Campaign</div>
+        <select value={local.campaign?.goal || 'awareness'} onChange={(e: any) => set(['campaign', 'goal'], e.target.value)} className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
+          <option value="awareness">Awareness</option>
+          <option value="engagement">Engagement</option>
+          <option value="conversion">Conversion</option>
+          <option value="education">Education</option>
+        </select>
+        <select value={local.campaign?.framework || 'none'} onChange={(e: any) => set(['campaign', 'framework'], e.target.value)} className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
+          <option value="none">No framework</option>
+          <option value="AIDA">AIDA</option>
+          <option value="PAS">PAS</option>
+          <option value="FAB">FAB</option>
+        </select>
+        <div className="flex gap-2">
+          <select value={local.campaign?.hashtags?.style || 'niche'} onChange={(e: any) => set(['campaign', 'hashtags', 'style'], e.target.value)} className="flex-1 rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
+            <option value="niche">Niche hashtags</option>
+            <option value="broad">Broad hashtags</option>
+            <option value="branded">Branded hashtags</option>
+          </select>
+          <input type="number" value={local.campaign?.hashtags?.count || 5} onChange={(e: any) => set(['campaign', 'hashtags', 'count'], Number(e.target.value))} className="w-16 rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+        </div>
+        <input value={local.campaign?.cta || ''} onChange={(e: any) => set(['campaign', 'cta'], e.target.value)} placeholder="CTA (e.g. Read more →)" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Formats</div>
+        <div className="flex flex-wrap gap-1">
+          {formats.map((f: any) => (
+            <button
+              key={f.id}
+              onClick={() => {
+                const enabled = local.formats?.enabled || []
+                const next = enabled.includes(f.id) ? enabled.filter((id: string) => id !== f.id) : [...enabled, f.id]
+                set(['formats', 'enabled'], next)
+              }}
+              className={`text-[9px] font-bold tracking-wider px-2 py-1 rounded border transition-all ${(local.formats?.enabled || []).includes(f.id) ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[9px]" style={{ color: '#777' }}>Post count:</span>
+          <input type="number" value={local.formats?.postCount || 1} onChange={(e: any) => set(['formats', 'postCount'], Number(e.target.value))} min={1} max={10} className="w-16 rounded border px-2 py-1 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+        </div>
+
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Templates</div>
+        <div className="flex items-center justify-between py-1 px-2 rounded" style={{ background: '#0b0b0b' }}>
+          <span className="text-[10px]" style={{ color: '#999' }}>Auto-select templates</span>
+          <button onClick={() => set(['templates', 'autoSelect'], !local.templates?.autoSelect)} className={`text-[10px] font-mono px-2.5 py-1 rounded border transition-all ${local.templates?.autoSelect ? 'border-[#22c55e] text-[#22c55e] bg-[#22c55e10]' : 'border-[#f43f5e] text-[#f43f5e] bg-[#f43f5e10]'}`}>
+            {local.templates?.autoSelect ? 'ON' : 'OFF'}
+          </button>
+        </div>
+
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Image</div>
+        <select value={local.image?.mode || 'auto'} onChange={(e: any) => set(['image', 'mode'], e.target.value)} className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
+          <option value="auto">Auto</option>
+          <option value="none">None</option>
+          <option value="feature">Feature image</option>
+          <option value="ai">AI generated</option>
+        </select>
+      </div>
+      <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#252525' }}>
+        <button onClick={handleSave} className="w-full py-2 rounded font-bold text-[10px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">
+          Save Settings
+        </button>
+      </div>
+    </>
+  )
+}
+
+function SettingsPreview({ settings }: any) {
+  return (
+    <div className="flex-1 overflow-auto p-6" style={{ background: '#0b0b0b' }}>
+      <div style={{ maxWidth: 800, margin: '0 auto' }}>
+        <div style={{ marginBottom: 32 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Current Settings</h2>
+          {settings ? (
+            <div className="space-y-4">
+              <div style={{ padding: 16, borderRadius: 8, background: '#141414', border: '1px solid #252525' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Brand</div>
+                <div style={{ fontSize: 11, color: '#999' }}>Name: {settings.brand?.name}</div>
+                <div style={{ fontSize: 11, color: '#999' }}>Tone: {settings.brand?.tone}</div>
+                <div style={{ fontSize: 11, color: '#999' }}>Audience: {settings.brand?.audience}</div>
+              </div>
+              <div style={{ padding: 16, borderRadius: 8, background: '#141414', border: '1px solid #252525' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Campaign</div>
+                <div style={{ fontSize: 11, color: '#999' }}>Goal: {settings.campaign?.goal}</div>
+                <div style={{ fontSize: 11, color: '#999' }}>Framework: {settings.campaign?.framework}</div>
+                <div style={{ fontSize: 11, color: '#999' }}>CTA: {settings.campaign?.cta || 'None'}</div>
+              </div>
+              <div style={{ padding: 16, borderRadius: 8, background: '#141414', border: '1px solid #252525' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Formats</div>
+                <div style={{ fontSize: 11, color: '#999' }}>Enabled: {(settings.formats?.enabled || []).join(', ')}</div>
+                <div style={{ fontSize: 11, color: '#999' }}>Post count: {settings.formats?.postCount}</div>
+              </div>
+              <div style={{ padding: 16, borderRadius: 8, background: '#141414', border: '1px solid #252525' }}>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Templates</div>
+                <div style={{ fontSize: 11, color: '#999' }}>Auto-select: {settings.templates?.autoSelect ? 'Yes' : 'No'}</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: '#555' }}>Loading settings…</div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Studio Screenshot Panel ── */
 
 function StudioScreenshotPanel({ result, generating }: { result: any; generating: boolean }) {
   const entries = Object.entries(result?.assets || {}).filter(([, asset]: [string, any]) => Boolean(asset?.key || asset?.url)) as Array<[string, any]>
@@ -631,6 +984,29 @@ function StudioScreenshotPanel({ result, generating }: { result: any; generating
       {entries.map(([format, asset]) => (
         <AssetPreviewCard key={format} format={format} asset={asset} />
       ))}
+    </div>
+  )
+}
+
+function TemplatePreview({ html }: { html: string }) {
+  if (!html) {
+    return (
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
+        <div className="text-3xl opacity-25">◈</div>
+        <div className="text-[12px] font-semibold tracking-wide">No Template Preview</div>
+        <div className="text-[11px]" style={{ color: '#777' }}>Select or create a template to preview</div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="absolute inset-0">
+      <iframe
+        srcDoc={html}
+        title="Template Preview"
+        className="w-full h-full border-0"
+        style={{ background: '#fff' }}
+      />
     </div>
   )
 }
@@ -698,211 +1074,61 @@ function AssetPreviewCard({ format, asset }: { format: string; asset: any }) {
   )
 }
 
-/* ── Config Tab (User-level only) ── */
+/* ── Tokens Tab ── */
 
-function ConfigTab({ config, loading, onUpdate, onSave, saved }: any) {
-  const [section, setSection] = useState('formats')
-  const [newFormatId, setNewFormatId] = useState('')
-  const [newFormatName, setNewFormatName] = useState('')
-  const [newFormatWidth, setNewFormatWidth] = useState(1080)
-  const [newFormatHeight, setNewFormatHeight] = useState(1080)
-  const [newFormatInstruction, setNewFormatInstruction] = useState('')
-
-  if (loading || !config) {
-    return <div className="flex items-center justify-center h-32" style={{ color: '#555' }}><div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} /></div>
-  }
-
-  const sections = [
-    { id: 'formats', label: 'Formats' },
-    { id: 'prompts', label: 'Prompts' },
-    { id: 'image', label: 'Image' },
-    { id: 'features', label: 'Features' },
-  ]
-
-  const gen = config.generation || {}
-
-  async function saveFormat(id: string, format: any) {
-    try {
-      await api.saveFormat(id, {
-        width: Number(format.width),
-        height: Number(format.height),
-        name: format.name || id,
-        aiInstruction: format.aiInstruction || ''
-      })
-    } catch {
-      // ignore; UI state still preserved locally
-    }
-  }
-
-  async function deleteFormatItem(id: string) {
-    setEditingConfigSafe((prev: any) => {
-      const next = JSON.parse(JSON.stringify(prev))
-      delete next.formats[id]
-      return next
-    })
-    try {
-      await api.deleteFormat(id)
-    } catch {
-      // ignore
-    }
-  }
-
-  function setEditingConfigSafe(updater: (prev: any) => any) {
-    onUpdate([], updater)
-  }
-
-  async function addNewFormat() {
-    const id = newFormatId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
-    if (!id || !newFormatName.trim() || !newFormatInstruction.trim()) return
-
-    const format = {
-      width: Number(newFormatWidth),
-      height: Number(newFormatHeight),
-      name: newFormatName.trim(),
-      aiInstruction: newFormatInstruction.trim(),
-    }
-
-    onUpdate(['formats', id], format)
-    await saveFormat(id, format)
-
-    setNewFormatId('')
-    setNewFormatName('')
-    setNewFormatWidth(1080)
-    setNewFormatHeight(1080)
-    setNewFormatInstruction('')
-  }
-
+function TokensTab({ vibeInput, setVibeInput, activePreset, applyPreset, primaryColorHint, setPrimaryColorHint, secondaryColorHint, setSecondaryColorHint, generating, generateTokens, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
   return (
     <>
-      <div className="flex flex-wrap gap-1 p-2.5 border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
-        {sections.map((s: any) => (
-          <button key={s.id} onClick={() => setSection(s.id)} className={`text-[9px] font-bold tracking-wider uppercase px-2 py-1 rounded border transition-all whitespace-nowrap ${section === s.id ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>{s.label}</button>
-        ))}
-      </div>
-      <div className="p-3.5 space-y-3 overflow-y-auto overflow-x-hidden">
-        {section === 'formats' && (
-          <div className="space-y-2">
-            <div className="p-2.5 rounded space-y-2 border" style={{ background: '#111', borderColor: '#252525' }}>
-              <div className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: '#999' }}>Add New Type</div>
-              <input value={newFormatId} onChange={(e: any) => setNewFormatId(e.target.value)} placeholder="Type ID (e.g. youtube-thumb)" className="w-full bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
-              <input value={newFormatName} onChange={(e: any) => setNewFormatName(e.target.value)} placeholder="Type Name" className="w-full bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
-              <div className="flex flex-wrap gap-2">
-                <input type="number" value={newFormatWidth} onChange={(e: any) => setNewFormatWidth(Number(e.target.value) || 0)} placeholder="Width" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
-                <input type="number" value={newFormatHeight} onChange={(e: any) => setNewFormatHeight(Number(e.target.value) || 0)} placeholder="Height" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
+      <div className="p-4 border-b" style={{ borderColor: '#252525' }}>
+        <div className="text-[10px] font-semibold tracking-wide uppercase mb-2" style={{ color: '#888' }}>Vibe</div>
+        <textarea value={vibeInput} onChange={(e: any) => setVibeInput(e.target.value)} placeholder="cold brutalist luxury…" rows={3} className="w-full rounded border resize-none outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', fontFamily: 'inherit', fontSize: 13, padding: '10px 12px', lineHeight: 1.6 }} />
+        
+        <div className="mt-3">
+          <div className="text-[9px] font-semibold tracking-wide uppercase mb-2" style={{ color: '#888' }}>Color Hints (optional)</div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <div className="text-[9px] font-semibold tracking-wide uppercase mb-1" style={{ color: '#888' }}>Primary</div>
+              <div className="flex items-center gap-2">
+                <input type="color" value={primaryColorHint || '#3b82f6'} onChange={(e: any) => setPrimaryColorHint(e.target.value)} className="w-7 h-7 rounded border-0 cursor-pointer" />
+                <input value={primaryColorHint} onChange={(e: any) => setPrimaryColorHint(e.target.value)} placeholder="#hex" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[11px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
               </div>
-              <textarea value={newFormatInstruction} onChange={(e: any) => setNewFormatInstruction(e.target.value)} rows={3} placeholder="AI instruction for this type..." className="w-full bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[10px] outline-none resize-y" style={{ color: '#e2e2e2' }} />
-              <button onClick={addNewFormat} className="w-full py-1.5 rounded border border-white text-white text-[10px] font-semibold uppercase tracking-wide hover:bg-white hover:text-[#0b0b0b] transition-all">Add Type</button>
             </div>
-            {Object.entries(config.formats || {}).map(([id, f]: [string, any]) => (
-              <div key={id} className="p-2.5 rounded space-y-1.5" style={{ background: '#0b0b0b' }}>
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-medium">{id}</div>
-                  <button onClick={() => deleteFormatItem(id)} className="text-[9px] px-2 py-1 rounded border border-[#f43f5e] text-[#f43f5e]">Delete</button>
-                </div>
-                <input value={f.name || ''} onChange={(e: any) => onUpdate(['formats', id, 'name'], e.target.value)} onBlur={() => saveFormat(id, config.formats[id])} placeholder="Display name" className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] outline-none" style={{ color: '#e2e2e2' }} />
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <div className="text-[8px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#555' }}>Width</div>
-                    <input type="number" value={f.width} onChange={(e: any) => onUpdate(['formats', id, 'width'], Number(e.target.value))} onBlur={() => saveFormat(id, config.formats[id])} className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-[8px] font-bold uppercase tracking-wider mb-0.5" style={{ color: '#555' }}>Height</div>
-                    <input type="number" value={f.height} onChange={(e: any) => onUpdate(['formats', id, 'height'], Number(e.target.value))} onBlur={() => saveFormat(id, config.formats[id])} className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
-                  </div>
-                </div>
-                <textarea value={f.aiInstruction || ''} onChange={(e: any) => onUpdate(['formats', id, 'aiInstruction'], e.target.value)} onBlur={() => saveFormat(id, config.formats[id])} rows={2} placeholder="AI instruction for this type..." className="w-full bg-[#141414] border border-[#313131] rounded px-1.5 py-1 text-[10px] outline-none resize-y" style={{ color: '#e2e2e2' }} />
+            <div className="flex-1">
+              <div className="text-[9px] font-semibold tracking-wide uppercase mb-1" style={{ color: '#888' }}>Secondary</div>
+              <div className="flex items-center gap-2">
+                <input type="color" value={secondaryColorHint || '#0f172a'} onChange={(e: any) => setSecondaryColorHint(e.target.value)} className="w-7 h-7 rounded border-0 cursor-pointer" />
+                <input value={secondaryColorHint} onChange={(e: any) => setSecondaryColorHint(e.target.value)} placeholder="#hex" className="flex-1 bg-[#0b0b0b] border border-[#313131] rounded px-2 py-1.5 text-[11px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
               </div>
-            ))}
-          </div>
-        )}
-
-        {section === 'prompts' && (
-          <div className="space-y-3">
-            {Object.entries(gen.prompts || {}).map(([key, lines]: [string, any]) => (
-              <div key={key}>
-                <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>{key}</div>
-                <textarea
-                  value={Array.isArray(lines) ? lines.join('\n') : String(lines)}
-                  onChange={(e: any) => onUpdate(['generation', 'prompts', key], e.target.value.split('\n'))}
-                  rows={6}
-                  className="w-full rounded border px-2.5 py-2 text-[10px] font-mono outline-none resize-y"
-                  style={{ background: '#0b0b0b', borderColor: '#313131', color: '#999', lineHeight: 1.6 }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
-
-        {section === 'image' && (
-          <div className="space-y-3">
-            <div className="p-2.5 rounded" style={{ background: '#0b0b0b' }}>
-              <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>Model</div>
-              <input value={gen.image?.default_model || ''} onChange={(e: any) => onUpdate(['generation', 'image', 'default_model'], e.target.value)} className="w-full bg-[#141414] border border-[#313131] rounded px-2 py-1.5 text-[10px] font-mono outline-none" style={{ color: '#e2e2e2' }} />
-            </div>
-            <div>
-              <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>Prompt Prefix</div>
-              <textarea value={(gen.image?.prompt_prefix || []).join('\n')} onChange={(e: any) => onUpdate(['generation', 'image', 'prompt_prefix'], e.target.value.split('\n'))} rows={4} className="w-full rounded border px-2.5 py-2 text-[10px] font-mono outline-none resize-y" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#999', lineHeight: 1.6 }} />
-            </div>
-            <div>
-              <div className="text-[9px] font-bold uppercase tracking-wider mb-1" style={{ color: '#555' }}>Negative Clauses</div>
-              <textarea value={(gen.image?.negative_clauses || []).join('\n')} onChange={(e: any) => onUpdate(['generation', 'image', 'negative_clauses'], e.target.value.split('\n'))} rows={4} className="w-full rounded border px-2.5 py-2 text-[10px] font-mono outline-none resize-y" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#999', lineHeight: 1.6 }} />
             </div>
           </div>
-        )}
-
-        {section === 'features' && (
-          <div className="space-y-1">
-            {Object.entries(config.features || {}).map(([k, v]: [string, any]) => (
-              <div key={k} className="flex items-center justify-between py-1.5 px-2 rounded" style={{ background: '#0b0b0b' }}>
-                <span className="text-[10px] font-mono" style={{ color: '#999' }}>{k}</span>
-                <button
-                  onClick={() => onUpdate(['features', k], !v)}
-                  className={`text-[10px] font-mono px-2.5 py-1 rounded border transition-all ${v ? 'border-[#22c55e] text-[#22c55e] bg-[#22c55e10]' : 'border-[#f43f5e] text-[#f43f5e] bg-[#f43f5e10]'}`}
-                >{v ? 'ON' : 'OFF'}</button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#252525' }}>
-        <button onClick={onSave} className={`w-full py-2 rounded font-bold text-[10px] uppercase tracking-wider border transition-all ${saved ? 'border-[#22c55e] text-[#22c55e] bg-[#22c55e10]' : 'border-white text-white hover:bg-white hover:text-[#0b0b0b]'}`}>
-          {saved ? '✓ Saved Locally' : 'Save Changes'}
+        </div>
+        
+        <button onClick={generateTokens} disabled={generating} className="w-full mt-4 py-2.5 rounded font-semibold text-[12px] tracking-wide cursor-pointer transition-all disabled:opacity-25 hover:opacity-90" style={{ background: '#fff', color: '#0b0b0b' }}>
+          {generating ? 'Generating…' : 'Generate System'}
         </button>
       </div>
-    </>
-  )
-}
-
-/* ── Config Preview ── */
-
-function ConfigPreview({ config }: any) {
-  return (
-    <div className="flex-1 overflow-auto p-6" style={{ background: '#0b0b0b' }}>
-      <div style={{ maxWidth: 800, margin: '0 auto' }}>
-        <div style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Formats</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-            {Object.entries(config?.formats || {}).map(([id, f]: [string, any]) => (
-              <div key={id} style={{ padding: 16, borderRadius: 8, background: '#141414', border: '1px solid #252525' }}>
-                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{id}</div>
-                <div style={{ fontSize: 10, fontFamily: 'monospace', color: '#555' }}>{f.width} × {f.height}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <h2 style={{ fontSize: 16, fontWeight: 700, marginBottom: 16 }}>Features</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
-            {Object.entries(config?.features || {}).map(([k, v]: [string, any]) => (
-              <div key={k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 6, background: '#141414' }}>
-                <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#999' }}>{k}</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', padding: '2px 8px', borderRadius: 4, color: v ? '#22c55e' : '#f43f5e', background: v ? '#22c55e15' : '#f43f5e15' }}>{v ? 'ON' : 'OFF'}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div className="flex flex-wrap gap-1.5 p-3 border-b" style={{ borderColor: '#252525' }}>
+        {PRESETS.map((p: any) => (
+          <button key={p.id} onClick={() => applyPreset(p.id)} className={`text-[10px] font-medium tracking-wide px-2.5 py-1.5 rounded border transition-all ${activePreset === p.id ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#666] border-[#313131] hover:text-[#999] hover:border-[#444]'}`}>{p.l}</button>
+        ))}
       </div>
-    </div>
+      <div className="overflow-y-auto">
+        {tokens ? (
+          <>
+            <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}><ColorExplorer colors={tokens.colors} onUpdateTokenColor={onUpdateTokenColor} onUpdateAccentColor={onUpdateAccentColor} /></TokenSection>
+            <TokenSection title="Typography" expanded={!!expandedSections.typography} onToggle={() => toggleSection('typography')}><TypographyExplorer typography={tokens.typography} /></TokenSection>
+            <TokenSection title="Spacing" expanded={!!expandedSections.spacing} onToggle={() => toggleSection('spacing')}><SpacingExplorer spacing={tokens.spacing} /></TokenSection>
+            <TokenSection title="Shadows" expanded={!!expandedSections.shadow} onToggle={() => toggleSection('shadow')}><ShadowExplorer shadows={tokens.shadow} /></TokenSection>
+            <TokenSection title="Border" expanded={!!expandedSections.border} onToggle={() => toggleSection('border')}><BorderExplorer border={tokens.border} /></TokenSection>
+            <TokenSection title="Gradients" expanded={!!expandedSections.gradient} onToggle={() => toggleSection('gradient')}><GradientExplorer gradients={tokens.gradient} /></TokenSection>
+            <TokenSection title="Motion" expanded={!!expandedSections.motion} onToggle={() => toggleSection('motion')}><MotionExplorer motion={tokens.motion} /></TokenSection>
+            <TokenSection title="Components" expanded={!!expandedSections.component} onToggle={() => toggleSection('component')}><ComponentExplorer components={tokens.component} /></TokenSection>
+          </>
+        ) : (
+          <div className="p-6 text-center" style={{ color: '#555', fontSize: 11, lineHeight: 1.7 }}>Generate a design system<br />to explore tokens here</div>
+        )}
+      </div>
+    </>
   )
 }
 
