@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { api } from '@/lib/api'
 import { tokensToCSS, type DesignTokens } from '@/lib/tokens'
 import { generateComponentsSkeleton } from '@/components/skeletons'
+import { GOOGLE_FONTS, FONT_CATEGORIES } from '@/lib/google-fonts'
 
 const PRESETS = [
   { id: 'luxury', l: 'Luxury' },
@@ -111,19 +112,18 @@ function resolveShadowPreviewValue(input: unknown, key: string): string {
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [activeTab, setActiveTab] = useState<'studio' | 'templates' | 'settings' | 'tokens'>('studio')
+  const [activeTab, setActiveTab] = useState<'studio' | 'templates' | 'formats' | 'settings' | 'tokens'>('studio')
   const [tokens, setTokens] = useState<DesignTokens | null>(null)
   const [generating, setGenerating] = useState(false)
   const [vibeInput, setVibeInput] = useState('')
   const [activePreset, setActivePreset] = useState<string | null>(null)
   const [primaryColorHint, setPrimaryColorHint] = useState('')
   const [secondaryColorHint, setSecondaryColorHint] = useState('')
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ color: true, typography: true, spacing: true, shadow: true, border: true, gradient: true, motion: true, component: true })
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({ color: true, typography: true, instructions: false, spacing: true, shadow: true, border: true, gradient: true, motion: true, component: true })
   const [error, setError] = useState<string | null>(null)
   const [_serverConfig, setServerConfig] = useState<any>(null)
   const [_configLoading, setConfigLoading] = useState(false)
   const [editingConfig, setEditingConfig] = useState<any>(null)
-  const [_configSaved, setConfigSaved] = useState(false)
   const [studioResult, setStudioResult] = useState<any>(null)
   const [studioGenerating, setStudioGenerating] = useState(false)
   const [studioMode, setStudioMode] = useState<'content' | 'slug'>('content')
@@ -131,6 +131,7 @@ export default function App() {
   const [studioContent, setStudioContent] = useState('')
   const [studioSlug, setStudioSlug] = useState('')
   const [studioFormats, setStudioFormats] = useState<string[]>([])
+  const [studioImageMode, setStudioImageMode] = useState<'none' | 'auto' | 'ai'>('auto')
   const [settings, setSettings] = useState<any>(null)
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [templates, setTemplates] = useState<any[]>([])
@@ -138,6 +139,15 @@ export default function App() {
   const [editingTemplate, setEditingTemplate] = useState<{ id: string; html: string; name: string; description: string; category: string; slots: string[] } | null>(null)
   const [templateHtml, setTemplateHtml] = useState('')
   const [templatePreviewHtml, setTemplatePreviewHtml] = useState('')
+  const [designInstructions, setDesignInstructions] = useState('')
+  const [savingTemplate, setSavingTemplate] = useState(false)
+  const [templateSaveDialog, setTemplateSaveDialog] = useState(false)
+  const [templateSaveName, setTemplateSaveName] = useState('')
+  const [fontSearches, setFontSearches] = useState<Record<string, string>>({ fontSans: '', fontSerif: '', fontMono: '' })
+  const [fontCategories, setFontCategories] = useState<Record<string, string>>({ fontSans: 'all', fontSerif: 'all', fontMono: 'all' })
+  // Format management state
+  const [editingFormat, setEditingFormat] = useState<{ id: string; width: number; height: number; name: string; aiInstruction: string; isNew: boolean } | null>(null)
+  const [formatSaving, setFormatSaving] = useState(false)
 
   useEffect(() => {
     loadConfig()
@@ -161,6 +171,9 @@ export default function App() {
       if (localRaw) {
         const parsed = JSON.parse(localRaw)
         setTokens(parsed)
+        if (parsed?.meta?.instructions) {
+          setDesignInstructions(parsed.meta.instructions)
+        }
       }
     } catch {
       // ignore malformed local tokens
@@ -171,6 +184,9 @@ export default function App() {
       if (saved) {
         setTokens(saved)
         localStorage.setItem(TOKENS_LOCAL_KEY, JSON.stringify(saved))
+        if (saved?.meta?.instructions) {
+          setDesignInstructions(saved.meta.instructions)
+        }
       }
     } catch {
       // ignore backend token load failures
@@ -310,40 +326,6 @@ export default function App() {
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }))
   }
 
-  function _updateConfigValue(path: string[], value: any) {
-    setEditingConfig((prev: any) => {
-      if (path.length === 0) {
-        return typeof value === 'function' ? value(prev) : value
-      }
-      const next = JSON.parse(JSON.stringify(prev))
-      let obj = next
-      for (let i = 0; i < path.length - 1; i++) obj = obj[path[i]]
-      obj[path[path.length - 1]] = value
-      return next
-    })
-    setConfigSaved(false)
-  }
-
-  async function _saveConfig() {
-    setServerConfig(JSON.parse(JSON.stringify(editingConfig)))
-    try {
-      const formats = editingConfig?.formats || {}
-      const formatEntries = Object.entries(formats)
-      for (const [id, format] of formatEntries as [string, any][]) {
-        await api.saveFormat(id, {
-          width: Number(format.width),
-          height: Number(format.height),
-          name: format.name || id,
-          aiInstruction: format.aiInstruction || '',
-        })
-      }
-    } catch {
-      // ignore backend save failures
-    }
-    setConfigSaved(true)
-    setTimeout(() => setConfigSaved(false), 2000)
-  }
-
   async function handleStudioGenerate() {
     if (studioMode === 'content' && (!studioTitle.trim() || !studioContent.trim())) { setError('Title and content required'); return }
     if (studioMode === 'slug' && !studioSlug.trim()) { setError('Slug required'); return }
@@ -352,7 +334,7 @@ export default function App() {
     try {
       const shared: any = {
         output: { formats: studioFormats, postCount: 1 },
-        image: { mode: 'none' },
+        image: { mode: studioImageMode },
         designTokens: tokens || undefined,
       }
 
@@ -383,7 +365,70 @@ export default function App() {
     id,
     label: f?.name || id,
     dims: `${f?.width || 0}×${f?.height || 0}`,
+    width: f?.width || 0,
+    height: f?.height || 0,
+    aiInstruction: f?.aiInstruction || '',
   }))
+
+  // Format management functions
+  function openFormatEditor(format?: any) {
+    if (format) {
+      setEditingFormat({
+        id: format.id,
+        width: format.width,
+        height: format.height,
+        name: format.label || format.id,
+        aiInstruction: format.aiInstruction || '',
+        isNew: false,
+      })
+    } else {
+      setEditingFormat({
+        id: '',
+        width: 1080,
+        height: 1080,
+        name: '',
+        aiInstruction: '',
+        isNew: true,
+      })
+    }
+  }
+
+  async function handleSaveFormat() {
+    if (!editingFormat) return
+    const id = editingFormat.id.trim() || editingFormat.name.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
+    if (!id) { setError('Format ID is required'); return }
+    if (editingFormat.width < 100 || editingFormat.height < 100) { setError('Minimum size is 100x100'); return }
+    
+    setFormatSaving(true)
+    try {
+      await api.saveFormat(id, {
+        width: editingFormat.width,
+        height: editingFormat.height,
+        name: editingFormat.name || id,
+        aiInstruction: editingFormat.aiInstruction,
+      })
+      // Reload config to get updated formats
+      await loadConfig()
+      setEditingFormat(null)
+      setError(null)
+    } catch (e: any) {
+      setError(e.message || 'Failed to save format')
+    } finally {
+      setFormatSaving(false)
+    }
+  }
+
+  async function handleDeleteFormat(id: string) {
+    if (!confirm(`Delete format "${id}"? This cannot be undone.`)) return
+    try {
+      await api.deleteFormat(id)
+      await loadConfig()
+      // Remove from selected formats if present
+      setStudioFormats(prev => prev.filter(f => f !== id))
+    } catch (e: any) {
+      setError(e.message || 'Failed to delete format')
+    }
+  }
 
   function openTemplateEditor(template?: any) {
     if (template) {
@@ -492,6 +537,90 @@ export default function App() {
     }
   }
 
+  async function handleSaveAsTemplate(type: 'generated' | 'design') {
+    if (!tokens) return
+    setTemplateSaveDialog(true)
+    setTemplateSaveName(type === 'generated' ? 'generated-design' : tokens.meta?.vibeName?.toLowerCase().replace(/[^a-z0-9-]/g, '-') || 'design-tokens')
+  }
+
+  async function confirmSaveTemplate() {
+    if (!tokens || !templateSaveName.trim()) return
+    setSavingTemplate(true)
+    try {
+      const id = templateSaveName.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-')
+      const instructions = designInstructions || tokens.meta?.instructions || ''
+      const tokensWithInstructions = {
+        ...tokens,
+        meta: {
+          ...tokens.meta,
+          instructions
+        }
+      }
+
+      let html: string
+      let description: string
+
+      if (studioResult?.llm_output?.generated_html) {
+        html = studioResult.llm_output.generated_html
+        description = `AI-generated HTML template from ${tokens.meta?.vibeName || 'design system'}. Design tokens: ${JSON.stringify(tokensWithInstructions).substring(0, 200)}...`
+      } else {
+        const skeletonHtml = generateComponentsSkeleton()
+        const cssVars = tokensToCSS(tokensWithInstructions)
+        const fonts = [
+          tokensWithInstructions.typography?.fontSans,
+          tokensWithInstructions.typography?.fontSerif,
+          tokensWithInstructions.typography?.fontMono
+        ].filter(Boolean).map((f: string) => f?.replace(/\s+/g, '+'))
+        const fontImport = fonts.length > 0
+          ? `<link href="https://fonts.googleapis.com/css2?${fonts.map((f: string) => `family=${f}:wght@300;400;500;600;700;900`).join('&')}&display=swap" rel="stylesheet">`
+          : ''
+        html = skeletonHtml.replace('</head>', `${fontImport}\n</head>`)
+        html = html.replace('<style id="token-styles"></style>', `<style id="token-styles">${cssVars}</style>`)
+        description = `Design template from ${tokens.meta?.vibeName || 'design system'} with tokens and instructions`
+      }
+
+      await api.saveTemplate(id, html, {
+        name: templateSaveName.trim(),
+        description,
+        category: 'custom',
+      })
+      await loadTemplates()
+      setTemplateSaveDialog(false)
+      setTemplateSaveName('')
+      setError(null)
+    } catch (e: any) {
+      setError(e.message || 'Failed to save as template')
+    } finally {
+      setSavingTemplate(false)
+    }
+  }
+
+  function handleUpdateDesignInstructions(instructions: string) {
+    setDesignInstructions(instructions)
+    if (tokens) {
+      const next = {
+        ...tokens,
+        meta: {
+          ...tokens.meta,
+          instructions
+        }
+      }
+      persistTokens(next)
+    }
+  }
+
+  function handleUpdateFont(type: 'fontSans' | 'fontSerif' | 'fontMono', family: string) {
+    if (!tokens) return
+    const next = {
+      ...tokens,
+      typography: {
+        ...tokens.typography,
+        [type]: family
+      }
+    }
+    persistTokens(next)
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#0b0b0b', color: '#e2e2e2', fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13 }}>
       {!sidebarOpen && (
@@ -515,6 +644,7 @@ export default function App() {
             {([
               { id: 'studio' as const, label: 'Studio' },
               { id: 'templates' as const, label: 'Templates' },
+              { id: 'formats' as const, label: 'Formats' },
               { id: 'settings' as const, label: 'Settings' },
               { id: 'tokens' as const, label: 'Tokens' },
             ]).map(tab => (
@@ -531,6 +661,7 @@ export default function App() {
                 slug={studioSlug} setSlug={setStudioSlug}
                 formats={studioFormats} toggleFormat={toggleStudioFormat}
                 availableFormats={availableFormats}
+                imageMode={studioImageMode} setImageMode={setStudioImageMode}
                 generating={studioGenerating} onGenerate={handleStudioGenerate}
                 result={studioResult}
               />
@@ -548,6 +679,17 @@ export default function App() {
                 onDeleteTemplate={handleDeleteTemplate}
                 onToggleTemplate={handleToggleTemplate}
                 onUpdatePreview={updateTemplatePreview}
+              />
+            )}
+            {activeTab === 'formats' && (
+              <FormatsTab
+                formats={availableFormats}
+                editingFormat={editingFormat}
+                setEditingFormat={setEditingFormat}
+                formatSaving={formatSaving}
+                onOpenEditor={openFormatEditor}
+                onSave={handleSaveFormat}
+                onDelete={handleDeleteFormat}
               />
             )}
             {activeTab === 'settings' && (
@@ -568,6 +710,12 @@ export default function App() {
                 tokens={tokens} expandedSections={expandedSections} toggleSection={toggleSection}
                 onUpdateTokenColor={updateTokenColor}
                 onUpdateAccentColor={updateAccentColor}
+                fontSearches={fontSearches} setFontSearches={setFontSearches}
+                fontCategories={fontCategories} setFontCategories={setFontCategories}
+                designInstructions={designInstructions} setDesignInstructions={handleUpdateDesignInstructions}
+                onUpdateFont={handleUpdateFont}
+                onSaveAsTemplate={handleSaveAsTemplate}
+                studioResult={studioResult}
               />
             )}
           </div>
@@ -576,6 +724,36 @@ export default function App() {
             <div className="p-3.5 border-t flex-shrink-0" style={{ borderColor: '#252525' }}>
               <div className="text-[10px] text-[#f43f5e]">{error}</div>
               <button onClick={() => setError(null)} className="text-[9px] text-[#f43f5e] mt-1 underline">Dismiss</button>
+            </div>
+          )}
+
+          {templateSaveDialog && (
+            <div className="p-3.5 border-t flex-shrink-0" style={{ borderColor: '#252525', background: '#0f0f0f' }}>
+              <div className="text-[9px] font-bold uppercase tracking-widest mb-2" style={{ color: '#888' }}>Save as Template</div>
+              <input
+                value={templateSaveName}
+                onChange={(e: any) => setTemplateSaveName(e.target.value)}
+                placeholder="Template name…"
+                className="w-full rounded border px-2 py-1.5 text-[10px] outline-none mb-2"
+                style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+                autoFocus
+                onKeyDown={(e: any) => e.key === 'Enter' && confirmSaveTemplate()}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={confirmSaveTemplate}
+                  disabled={savingTemplate || !templateSaveName.trim()}
+                  className="flex-1 py-1.5 rounded font-bold text-[10px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all disabled:opacity-25"
+                >
+                  {savingTemplate ? 'Saving…' : 'Save'}
+                </button>
+                <button
+                  onClick={() => { setTemplateSaveDialog(false); setTemplateSaveName('') }}
+                  className="py-1.5 px-3 rounded font-bold text-[10px] uppercase tracking-wider border border-[#313131] text-[#555] hover:border-[#444] hover:text-[#888] transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -626,7 +804,7 @@ export default function App() {
 
 /* ── Studio Tab ── */
 
-function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, availableFormats, generating, onGenerate, result }: any) {
+function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, availableFormats, imageMode, setImageMode, generating, onGenerate, result }: any) {
   return (
     <>
       <div className="p-3.5 space-y-3 border-b" style={{ borderColor: '#252525' }}>
@@ -650,6 +828,17 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
               {f.label} <span style={{ color: '#3d3d3d' }}>{f.dims}</span>
             </button>
           ))}
+        </div>
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Image Generation</div>
+        <div className="flex gap-1">
+          <button onClick={() => setImageMode('none')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${imageMode === 'none' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>None</button>
+          <button onClick={() => setImageMode('auto')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${imageMode === 'auto' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>Auto</button>
+          <button onClick={() => setImageMode('ai')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${imageMode === 'ai' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>AI Gen</button>
+        </div>
+        <div className="text-[8px]" style={{ color: '#444' }}>
+          {imageMode === 'none' && 'No images will be included'}
+          {imageMode === 'auto' && 'Uses existing images from content or generates if needed'}
+          {imageMode === 'ai' && 'Always generates new AI images based on content'}
         </div>
         <button onClick={onGenerate} disabled={generating} className="w-full py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
           {generating ? 'Generating…' : 'Generate Posts'}
@@ -761,6 +950,119 @@ function TemplatesTab({ templates, loading, editingTemplate, setEditingTemplate,
                   <div className="text-[8px]" style={{ color: '#555' }}>{t.category} · {t.slots?.length || 0} slots</div>
                 </button>
                 <button onClick={() => onDeleteTemplate(t.id)} className="text-[8px] px-1.5 py-0.5 rounded border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e15]">Del</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+/* ── Formats Tab ── */
+
+function FormatsTab({ formats, editingFormat, setEditingFormat, formatSaving, onOpenEditor, onSave, onDelete }: any) {
+  return (
+    <>
+      <div className="p-3.5 space-y-2 border-b" style={{ borderColor: '#252525' }}>
+        <div className="flex items-center justify-between">
+          <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Output Formats</div>
+          <button onClick={() => onOpenEditor()} className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">+ New</button>
+        </div>
+
+        {editingFormat && (
+          <div className="space-y-2 p-2.5 rounded border" style={{ background: '#0a0a0a', borderColor: '#313131' }}>
+            <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: '#666' }}>
+              {editingFormat.isNew ? 'New Format' : 'Edit Format'}
+            </div>
+            <input
+              value={editingFormat.name}
+              onChange={(e: any) => setEditingFormat({ ...editingFormat, name: e.target.value })}
+              placeholder="Format name (e.g. Instagram Story)"
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+            />
+            {editingFormat.isNew && (
+              <input
+                value={editingFormat.id}
+                onChange={(e: any) => setEditingFormat({ ...editingFormat, id: e.target.value })}
+                placeholder="ID (e.g. ig-story, auto-generated if empty)"
+                className="w-full rounded border px-2 py-1.5 text-[10px] outline-none font-mono"
+                style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+              />
+            )}
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Width</label>
+                <input
+                  type="number"
+                  value={editingFormat.width}
+                  onChange={(e: any) => setEditingFormat({ ...editingFormat, width: Number(e.target.value) })}
+                  className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                  style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Height</label>
+                <input
+                  type="number"
+                  value={editingFormat.height}
+                  onChange={(e: any) => setEditingFormat({ ...editingFormat, height: Number(e.target.value) })}
+                  className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                  style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>AI Instructions</label>
+              <textarea
+                value={editingFormat.aiInstruction}
+                onChange={(e: any) => setEditingFormat({ ...editingFormat, aiInstruction: e.target.value })}
+                placeholder="Optional instructions for AI when generating for this format..."
+                rows={2}
+                className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
+                style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={onSave}
+                disabled={formatSaving}
+                className="flex-1 py-1.5 rounded font-bold text-[9px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all disabled:opacity-25"
+              >
+                {formatSaving ? 'Saving…' : 'Save Format'}
+              </button>
+              <button
+                onClick={() => setEditingFormat(null)}
+                className="py-1.5 px-3 rounded font-bold text-[9px] uppercase tracking-wider border border-[#313131] text-[#555] hover:border-[#444] hover:text-[#888] transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="p-3.5">
+        {formats.length === 0 ? (
+          <div className="p-4 text-center" style={{ color: '#555', fontSize: 11 }}>No formats configured. Add one to get started.</div>
+        ) : (
+          <div className="space-y-1">
+            {formats.map((f: any) => (
+              <div key={f.id} className="flex items-center gap-2 p-2 rounded" style={{ background: '#0b0b0b' }}>
+                <button onClick={() => onOpenEditor(f)} className="flex-1 text-left">
+                  <div className="text-[10px] font-medium" style={{ color: '#e2e2e2' }}>{f.label}</div>
+                  <div className="text-[8px]" style={{ color: '#555' }}>
+                    {f.dims}
+                    {f.aiInstruction && <span className="ml-1.5 px-1 py-0.5 rounded" style={{ background: '#1c1c1c' }}>AI hints</span>}
+                  </div>
+                </button>
+                <button
+                  onClick={() => onDelete(f.id)}
+                  className="text-[8px] px-1.5 py-0.5 rounded border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e15] transition-all"
+                >
+                  Del
+                </button>
               </div>
             ))}
           </div>
@@ -1044,7 +1346,7 @@ function AssetPreviewCard({ format, asset }: { format: string; asset: any }) {
 
 /* ── Tokens Tab ── */
 
-function TokensTab({ vibeInput, setVibeInput, activePreset, applyPreset, primaryColorHint, setPrimaryColorHint, secondaryColorHint, setSecondaryColorHint, generating, generateTokens, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
+function TokensTab({ vibeInput, setVibeInput, activePreset, applyPreset, primaryColorHint, setPrimaryColorHint, secondaryColorHint, setSecondaryColorHint, generating, generateTokens, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor, fontSearches, setFontSearches, fontCategories, setFontCategories, designInstructions, setDesignInstructions, onUpdateFont, onSaveAsTemplate, studioResult }: any) {
   return (
     <>
       <div className="p-4 border-b" style={{ borderColor: '#252525' }}>
@@ -1083,14 +1385,49 @@ function TokensTab({ vibeInput, setVibeInput, activePreset, applyPreset, primary
       <div className="overflow-y-auto">
         {tokens ? (
           <>
+            {tokens.meta?.instructions !== undefined && (
+              <TokenSection title="Design Instructions" expanded={!!expandedSections.instructions} onToggle={() => toggleSection('instructions')}>
+                <DesignInstructionsEditor
+                  value={designInstructions || tokens.meta?.instructions || ''}
+                  onChange={setDesignInstructions}
+                />
+              </TokenSection>
+            )}
+            <TokenSection title="Typography" expanded={!!expandedSections.typography} onToggle={() => toggleSection('typography')}>
+              <TypographyExplorer
+                typography={tokens.typography}
+                fontSearches={fontSearches}
+                setFontSearches={setFontSearches}
+                fontCategories={fontCategories}
+                setFontCategories={setFontCategories}
+                onUpdateFont={onUpdateFont}
+              />
+            </TokenSection>
             <TokenSection title="Color" expanded={!!expandedSections.color} onToggle={() => toggleSection('color')}><ColorExplorer colors={tokens.colors} onUpdateTokenColor={onUpdateTokenColor} onUpdateAccentColor={onUpdateAccentColor} /></TokenSection>
-            <TokenSection title="Typography" expanded={!!expandedSections.typography} onToggle={() => toggleSection('typography')}><TypographyExplorer typography={tokens.typography} /></TokenSection>
             <TokenSection title="Spacing" expanded={!!expandedSections.spacing} onToggle={() => toggleSection('spacing')}><SpacingExplorer spacing={tokens.spacing} /></TokenSection>
             <TokenSection title="Shadows" expanded={!!expandedSections.shadow} onToggle={() => toggleSection('shadow')}><ShadowExplorer shadows={tokens.shadow} /></TokenSection>
             <TokenSection title="Border" expanded={!!expandedSections.border} onToggle={() => toggleSection('border')}><BorderExplorer border={tokens.border} /></TokenSection>
             <TokenSection title="Gradients" expanded={!!expandedSections.gradient} onToggle={() => toggleSection('gradient')}><GradientExplorer gradients={tokens.gradient} /></TokenSection>
             <TokenSection title="Motion" expanded={!!expandedSections.motion} onToggle={() => toggleSection('motion')}><MotionExplorer motion={tokens.motion} /></TokenSection>
             <TokenSection title="Components" expanded={!!expandedSections.component} onToggle={() => toggleSection('component')}><ComponentExplorer components={tokens.component} /></TokenSection>
+            {studioResult?.llm_output?.generated_html && (
+              <div className="p-3 border-t" style={{ borderColor: '#252525' }}>
+                <button
+                  onClick={() => onSaveAsTemplate('generated')}
+                  className="w-full py-2 rounded font-bold text-[10px] uppercase tracking-wider border border-[#22c55e] text-[#22c55e] hover:bg-[#22c55e15] transition-all"
+                >
+                  Save Generated HTML as Template
+                </button>
+              </div>
+            )}
+            <div className="p-3 border-t" style={{ borderColor: '#252525' }}>
+              <button
+                onClick={() => onSaveAsTemplate('design')}
+                className="w-full py-2 rounded font-bold text-[10px] uppercase tracking-wider border border-[#3b82f6] text-[#3b82f6] hover:bg-[#3b82f615] transition-all"
+              >
+                Save Design Tokens as Template
+              </button>
+            </div>
           </>
         ) : (
           <div className="p-6 text-center" style={{ color: '#555', fontSize: 11, lineHeight: 1.7 }}>Generate a design system<br />to explore tokens here</div>
@@ -1110,6 +1447,29 @@ function TokenSection({ title, expanded, onToggle, children }: { title: string; 
         <span className="text-[11px] transition-transform" style={{ color: '#888', transform: expanded ? 'rotate(180deg)' : undefined }}>▾</span>
       </div>
       {expanded && <div className="p-3.5" style={{ background: '#0b0b0b' }}>{children}</div>}
+    </div>
+  )
+}
+
+function DesignInstructionsEditor({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="space-y-2">
+      <div className="text-[9px]" style={{ color: '#666', lineHeight: 1.6 }}>
+        Write specific design guidance for HTML generation. These instructions tell the AI how to compose layouts, what visual patterns to use, and any creative direction for social media posts.
+      </div>
+      <textarea
+        value={value}
+        onChange={(e: any) => onChange(e.target.value)}
+        placeholder="e.g. Use large bold headlines with generous whitespace. Prefer card-based layouts with subtle borders. Use gradients sparingly — only for hero elements…"
+        rows={6}
+        className="w-full rounded border resize-y outline-none"
+        style={{ background: '#121212', borderColor: '#313131', color: '#e2e2e2', fontFamily: 'inherit', fontSize: 12, padding: '10px 12px', lineHeight: 1.6 }}
+      />
+      {value && (
+        <div className="text-[8px]" style={{ color: '#555' }}>
+          {value.length} characters · Instructions will be passed to the HTML generator
+        </div>
+      )}
     </div>
   )
 }
@@ -1195,46 +1555,118 @@ function ColorExplorer({ colors, onUpdateTokenColor, onUpdateAccentColor }: {
   )
 }
 
-function TypographyExplorer({ typography }: { typography: DesignTokens['typography'] }) {
+function TypographyExplorer({ typography, fontSearches, setFontSearches, fontCategories, setFontCategories, onUpdateFont }: {
+  typography: DesignTokens['typography']
+  fontSearches: Record<string, string>
+  setFontSearches: (v: Record<string, string>) => void
+  fontCategories: Record<string, string>
+  setFontCategories: (v: Record<string, string>) => void
+  onUpdateFont?: (type: 'fontSans' | 'fontSerif' | 'fontMono', family: string) => void
+}) {
   if (!typography) return null
   const entries = Object.entries(typography.scale)
+  const fontTypes: { key: 'fontSans' | 'fontSerif' | 'fontMono'; label: string; category: string }[] = [
+    { key: 'fontSans', label: 'Sans', category: 'sans-serif' },
+    { key: 'fontSerif', label: 'Serif', category: 'serif' },
+    { key: 'fontMono', label: 'Mono', category: 'monospace' },
+  ]
+
+  function getFilteredFonts(typeKey: string, typeCategory: string) {
+    const search = fontSearches[typeKey] || ''
+    const cat = fontCategories[typeKey] || 'all'
+    let fonts = GOOGLE_FONTS
+    if (cat !== 'all') {
+      if (typeCategory === 'sans-serif' && cat === 'sans-serif') fonts = fonts.filter(f => f.category === 'sans-serif' || f.category === 'display')
+      else if (typeCategory === cat) fonts = fonts.filter(f => f.category === cat)
+      else fonts = fonts.filter(f => f.category === cat)
+    }
+    if (search) {
+      fonts = fonts.filter(f => f.family.toLowerCase().includes(search.toLowerCase()))
+    }
+    return fonts
+  }
+
   return (
     <div className="space-y-3">
-      <div className="text-[10px] font-mono leading-relaxed" style={{ color: '#777' }}>SANS: {typography.fontSans}<br />SERIF: {typography.fontSerif}<br />MONO: {typography.fontMono}</div>
-      {entries.map(([k, v]) => {
-        const size = v as number
-        const weight = size >= 36 ? 700 : size >= 24 ? 600 : size >= 18 ? 500 : 400
-        const previewHeight = Math.max(24, Math.min(88, size * 1.08))
+      {fontTypes.map(({ key, label, category }) => {
+        const filtered = getFilteredFonts(key, category)
         return (
-          <div key={k} className="flex items-baseline gap-3" style={{ padding: '6px 0', borderBottom: '1px solid #252525' }}>
-            <span className="text-[9px] font-mono min-w-[32px]" style={{ color: '#777' }}>{k}</span>
-            <span
-              style={{
-                flex: 1,
-                minWidth: 0,
-                height: previewHeight,
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'flex-end'
-              }}
-            >
-              <span
-                style={{
-                  fontSize: size,
-                  lineHeight: 1,
-                  color: '#e2e2e2',
-                  fontWeight: weight,
-                  whiteSpace: 'nowrap',
-                  letterSpacing: size >= 32 ? '-0.02em' : 'normal'
-                }}
+          <div key={key} className="space-y-1">
+            <div className="text-[9px] font-semibold uppercase tracking-wide" style={{ color: '#888' }}>{label}</div>
+            <div className="flex items-center gap-2">
+              <input
+                value={fontSearches[key] || ''}
+                onChange={(e: any) => setFontSearches({ ...fontSearches, [key]: e.target.value })}
+                placeholder={`Search ${label.toLowerCase()} fonts…`}
+                className="flex-1 rounded border px-2 py-1 text-[10px] outline-none"
+                style={{ background: '#121212', borderColor: '#313131', color: '#e2e2e2' }}
+              />
+              <select
+                value={fontCategories[key] || 'all'}
+                onChange={(e: any) => setFontCategories({ ...fontCategories, [key]: e.target.value })}
+                className="rounded border px-2 py-1 text-[10px] outline-none"
+                style={{ background: '#121212', borderColor: '#313131', color: '#e2e2e2' }}
               >
-                Aa
-              </span>
-            </span>
-            <span className="text-[9px] font-mono" style={{ color: '#777' }}>{size}px</span>
+                {FONT_CATEGORIES.map(cat => (
+                  <option key={cat} value={cat}>{cat === 'all' ? 'All' : cat}</option>
+                ))}
+              </select>
+            </div>
+            <div className="text-[11px] font-medium px-2 py-1.5 rounded border" style={{ background: '#121212', borderColor: '#252525', color: '#e2e2e2' }}>
+              {typography[key]}
+            </div>
+            <div className="max-h-32 overflow-y-auto rounded border" style={{ background: '#121212', borderColor: '#252525' }}>
+              {filtered.map((font: any) => (
+                <button
+                  key={font.family}
+                  onClick={() => onUpdateFont?.(key, font.family)}
+                  className={`w-full text-left px-2 py-1 text-[10px] transition-colors hover:bg-[#1c1c1c] ${typography[key] === font.family ? 'text-white bg-[#1c1c1c]' : 'text-[#999]'}`}
+                  style={{ fontFamily: `'${font.family}', sans-serif` }}
+                >
+                  {font.family}
+                  <span className="ml-1 text-[8px]" style={{ color: '#555' }}>{font.category}</span>
+                </button>
+              ))}
+            </div>
           </div>
         )
       })}
+      <div className="space-y-3 pt-2 border-t" style={{ borderColor: '#252525' }}>
+        {entries.map(([k, v]) => {
+          const size = v as number
+          const weight = size >= 36 ? 700 : size >= 24 ? 600 : size >= 18 ? 500 : 400
+          const previewHeight = Math.max(24, Math.min(88, size * 1.08))
+          return (
+            <div key={k} className="flex items-baseline gap-3" style={{ padding: '6px 0', borderBottom: '1px solid #252525' }}>
+              <span className="text-[9px] font-mono min-w-[32px]" style={{ color: '#777' }}>{k}</span>
+              <span
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  height: previewHeight,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'flex-end'
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: size,
+                    lineHeight: 1,
+                    color: '#e2e2e2',
+                    fontWeight: weight,
+                    whiteSpace: 'nowrap',
+                    letterSpacing: size >= 32 ? '-0.02em' : 'normal'
+                  }}
+                >
+                  Aa
+                </span>
+              </span>
+              <span className="text-[9px] font-mono" style={{ color: '#777' }}>{size}px</span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
