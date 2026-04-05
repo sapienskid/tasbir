@@ -1326,7 +1326,6 @@ async function runHtmlLayoutAgent(
 // ==================== PIPELINE ====================
 
 export async function runPipeline(body: GenerateRequestBody, env: Env, security: ResolvedSecurityConfig) {
-  assertRequiredEnv(env);
   const slug = resolveSlug(body);
   if (!slug) throw new HttpError(400, "Request must include either slug or url");
   const post = await fetchGhostPost(env, slug);
@@ -1409,7 +1408,6 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       const enabledTemplates = allTemplates.filter((t) => t.enabled && !settings.templates.disabled.includes(t.id));
       classification = await classifyContent(
         env.AI,
-        env.AI_GATEWAY_TOKEN,
         env.GOOGLE_API_KEY,
         post.title,
         post.plaintext || post.excerpt || "",
@@ -1871,7 +1869,6 @@ export async function runPipelineFromPostWithProgress(
       const enabledTemplates = allTemplates.filter((t) => t.enabled && !settings.templates.disabled.includes(t.id));
       classification = await classifyContent(
         env.AI,
-        env.AI_GATEWAY_TOKEN,
         env.GOOGLE_API_KEY,
         post.title,
         post.plaintext || post.excerpt || "",
@@ -2720,14 +2717,4 @@ function requiredNumber(input: unknown, field: string): number {
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.min(max, Math.max(min, numeric));
-}
-
-function assertRequiredEnv(env: Env): void {
-  const hasGatewayToken = Boolean(env.AI_GATEWAY_TOKEN?.trim());
-  if (!hasGatewayToken) {
-    throw new HttpError(
-      500,
-      "AI Gateway dynamic routing is required. Set AI_GATEWAY_TOKEN.",
-    );
-  }
 }

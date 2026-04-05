@@ -50,7 +50,6 @@ Return JSON:
  */
 export async function classifyContent(
   aiBinding: Ai,
-  gatewayToken: string | undefined,
   googleApiKey: string | undefined,
   title: string,
   content: string,
