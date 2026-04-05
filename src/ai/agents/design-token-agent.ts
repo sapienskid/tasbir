@@ -198,6 +198,7 @@ const DESIGN_TOKEN_SCHEMA = z.object({
     description: z.string(),
     aesthetic: z.string(),
     palette: z.string(),
+    instructions: z.string(),
   }),
 });
 
@@ -401,10 +402,11 @@ CRITICAL REQUIREMENTS - YOU MUST GENERATE ALL OF THESE:
    - nav: Must have height, paddingX (e.g., height="64px")
 
 9. META - REQUIRED INFO:
-   - vibeName: Short name for this system
-   - description: One sentence description
-   - aesthetic: The overall aesthetic (e.g., "dark", "light", "bold")
-   - palette: Color mode (e.g., "dark", "light", "colorful")
+    - vibeName: Short name for this system
+    - description: One sentence description
+    - aesthetic: The overall aesthetic (e.g., "dark", "light", "bold")
+    - palette: Color mode (e.g., "dark", "light", "colorful")
+    - instructions: Design instructions for HTML generation - specific guidance on layout style, composition patterns, visual hierarchy, spacing preferences, and any creative direction that should be followed when generating social media posts with this design system. Write 2-4 sentences of actionable guidance.
 
 VALIDATION RULES:
 - Every field listed above MUST be present in your response

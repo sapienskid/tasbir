@@ -200,7 +200,8 @@ export function generateTokensComputational(primary: string, secondary: string, 
       vibeName,
       description: `Computationally generated design system from ${primary} + ${secondary}`,
       aesthetic: isDark ? 'dark' : 'light',
-      palette: isDark ? 'dark' : 'light'
+      palette: isDark ? 'dark' : 'light',
+      instructions: ''
     }
   };
 

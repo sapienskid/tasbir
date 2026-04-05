@@ -44,6 +44,7 @@ export interface DesignTokens {
     description: string;
     aesthetic: string;
     palette: string;
+    instructions: string;
   };
 }
 
@@ -521,6 +522,7 @@ export function getDefaultDesignTokens(): DesignTokens {
       description: 'A clean, modern dark theme with blue accents',
       aesthetic: 'minimal',
       palette: 'dark',
+      instructions: '',
     },
   };
 }
