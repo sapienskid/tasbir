@@ -328,6 +328,75 @@ app.get("/asset", async (c) => {
   });
 });
 
+// ==================== PRE-COMPUTED TOKEN ASSETS ====================
+
+interface PrecomputedTokenAssets {
+  cssVars: string;
+  fontLinks: string;
+  tailwindConfigScript: string;
+  baseline: string;
+}
+
+/**
+ * Pre-compute all token-derived assets once per request.
+ * This avoids redundant normalization and computation for each format.
+ */
+function precomputeDesignTokenAssets(tokens: Record<string, unknown>): PrecomputedTokenAssets {
+  const normalizedTokens = normalizeDesignTokensForRendering(tokens);
+  const cssVars = tokensToCSSFromRaw(normalizedTokens);
+  const fontLinks = fontImportFromTokens(normalizedTokens);
+  const tailwindConfig = JSON.stringify(buildTailwindConfigFromTokens(normalizedTokens));
+  const tailwindConfigScript = `<script id="tasbir-tailwind-config">window.tailwind = window.tailwind || {}; window.tailwind.config = ${tailwindConfig};</script>`;
+  const baseline = [
+    "html, body {",
+    "  margin: 0;",
+    "  padding: 0;",
+    "  width: 100%;",
+    "  height: 100%;",
+    "}",
+    "*, *::before, *::after { box-sizing: border-box; }",
+  ].join("\n");
+
+  return { cssVars, fontLinks, tailwindConfigScript, baseline };
+}
+
+/**
+ * Fast HTML injection using pre-computed token assets.
+ * Avoids re-normalizing tokens for each format.
+ */
+function injectDesignTokensIntoHtmlFast(html: string, precomputed: PrecomputedTokenAssets): string {
+  if (!html.trim()) return html;
+
+  let nextHtml = stripInjectedDesignTokens(html);
+
+  const hasTailwindCdn = /<script[^>]+src=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/i.test(nextHtml);
+  const hasTailwindConfig = /id=["']tasbir-tailwind-config["']/i.test(nextHtml);
+
+  if (!hasTailwindConfig) {
+    if (hasTailwindCdn) {
+      nextHtml = nextHtml.replace(
+        /<script[^>]+src=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/i,
+        (m) => `${precomputed.tailwindConfigScript}\n${m}`,
+      );
+    } else {
+      nextHtml = nextHtml.replace(/<head[^>]*>/i, (m) => `${m}\n${precomputed.tailwindConfigScript}\n<script src="https://cdn.tailwindcss.com"></script>`);
+    }
+  }
+
+  const injectedBlock = `${precomputed.fontLinks}\n<style id="tasbir-design-tokens">\n${precomputed.cssVars}\n\n${precomputed.baseline}\n</style>`;
+
+  if (/<\/head>/i.test(nextHtml)) {
+    return nextHtml.replace(/<\/head>/i, `${injectedBlock}\n</head>`);
+  }
+  if (/<head[^>]*>/i.test(nextHtml)) {
+    return nextHtml.replace(/<head[^>]*>/i, (m) => `${m}\n${injectedBlock}`);
+  }
+  if (/<html[^>]*>/i.test(nextHtml)) {
+    return nextHtml.replace(/<html[^>]*>/i, (m) => `${m}\n<head>\n${injectedBlock}\n</head>`);
+  }
+  return `<!DOCTYPE html>\n<html>\n<head>\n${precomputed.tailwindConfigScript}\n<script src="https://cdn.tailwindcss.com"></script>\n${injectedBlock}\n</head>\n<body>${nextHtml}</body>\n</html>`;
+}
+
 function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown>): string {
   if (!html.trim()) return html;
 
@@ -394,6 +463,14 @@ async function loadDesignTokensForGeneration(env: Env): Promise<Record<string, u
 function resolveDesignTokensForRequest(bodyTokens: unknown, fallbackTokens: Record<string, unknown>): Record<string, unknown> {
   if (!bodyTokens || typeof bodyTokens !== "object" || Array.isArray(bodyTokens)) return fallbackTokens;
   return normalizeDesignTokensForRendering(bodyTokens as Record<string, unknown>);
+}
+
+function extractDesignInstructions(tokens: Record<string, unknown>): string {
+  const meta = tokens.meta as Record<string, unknown> | undefined;
+  if (meta && typeof meta.instructions === "string") {
+    return meta.instructions.trim();
+  }
+  return "";
 }
 
 app.post("/generate-tokens", async (c) => {
@@ -937,6 +1014,7 @@ async function runHtmlLayoutAgent(
   designTokensPrompt: string,
   userPrompt?: string,
   overrides?: LlmPromptOverrides,
+  designInstructions?: string,
 ): Promise<LlmOutput> {
   const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
   const models = createModelChain(providerConfig);
@@ -960,7 +1038,9 @@ async function runHtmlLayoutAgent(
     ].filter(Boolean).join("\n"),
     systemPrompt,
     userInstructions: overrides?.userInstructions,
-    userInstructionsAppend: overrides?.userInstructionsAppend,
+    userInstructionsAppend: designInstructions
+      ? [overrides?.userInstructionsAppend || "", designInstructions].filter(Boolean).join("\n")
+      : overrides?.userInstructionsAppend,
   });
 
   return {
@@ -983,7 +1063,12 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   const outputPlan = resolveOutputPlanWithSettings(body.output, settings);
   const defaultTokens = await loadDesignTokensForGeneration(env);
   const designTokensForRun = resolveDesignTokensForRequest(body.designTokens, defaultTokens);
+  
+  // PRE-COMPUTE: Generate all token-derived values once upfront
+  const precomputedTokens = precomputeDesignTokenAssets(designTokensForRun);
   const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
+  const designInstructions = extractDesignInstructions(designTokensForRun);
+  
   const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
   const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null> }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
@@ -1017,87 +1102,110 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   }
 
   const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
+  const keyPrefix = buildR2KeyPrefix(env, post.slug, sharedStorage);
 
-  for (let index = 0; index < outputPlan.postCount; index += 1) {
-    const variantPrompt = outputPlan.postCount > 1
-      ? [effectivePrompt?.trim(), `Variation index ${index + 1} of ${outputPlan.postCount}.`].filter(Boolean).join(" ")
-      : effectivePrompt;
+  // OPTIMIZATION: Launch browser ONCE for the entire request
+  const browser = await launchRenderingBrowser(env);
+  
+  try {
+    for (let index = 0; index < outputPlan.postCount; index += 1) {
+      const variantPrompt = outputPlan.postCount > 1
+        ? [effectivePrompt?.trim(), `Variation index ${index + 1} of ${outputPlan.postCount}.`].filter(Boolean).join(" ")
+        : effectivePrompt;
 
-    const agentContext = await resolveAgentContextForRun({
-      env,
-      post,
-      baseContext: baseAgentContext,
-      userPrompt: variantPrompt,
-      requestedFormats: [...outputPlan.formats]
-    });
-    agentContexts.push(agentContext);
+      const agentContext = await resolveAgentContextForRun({
+        env,
+        post,
+        baseContext: baseAgentContext,
+        userPrompt: variantPrompt,
+        requestedFormats: [...outputPlan.formats]
+      });
+      agentContexts.push(agentContext);
 
-    const formatAssets: Record<string, StoredAsset | null> = {};
-    let imageSource: SelectedImage = { source: "none", imageUrl: "" };
-    let variantLlmOutput: LlmOutput | null = null;
+      // OPTIMIZATION: Generate HTML for all formats in parallel when not using templates
+      const formatsArray = [...outputPlan.formats];
+      const formatConfigs = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter(f => f.config);
+      
+      // Generate all HTML outputs in parallel
+      const htmlOutputs = await Promise.all(
+        formatConfigs.map(async ({ format, config }) => {
+          if (!config) return { format, output: null };
+          
+          let llmOutput: LlmOutput;
 
-    for (const format of outputPlan.formats) {
-      const dimensions = getFormatConfig(format);
-      if (!dimensions) continue;
+          if (matchedTemplate && classification) {
+            const slotValues = { ...classification.slotValues };
+            if (!slotValues.headline) slotValues.headline = post.title;
+            if (!slotValues.brand) slotValues.brand = brandName;
+            const filledHtml = fillTemplateSlots(matchedTemplate.html, slotValues);
+            llmOutput = { generated_html: filledHtml };
+          } else {
+            const instructionsWithDesignGuidance = designInstructions
+              ? [`DESIGN SYSTEM INSTRUCTIONS (follow these closely):`, designInstructions].join('\n')
+              : undefined;
 
-      let llmOutput: LlmOutput;
+            llmOutput = await runHtmlLayoutAgent(
+              env,
+              post,
+              format,
+              config.name,
+              config.aiInstruction,
+              config.width,
+              config.height,
+              designTokensPrompt,
+              variantPrompt,
+              agentContext.copyOverrides,
+              instructionsWithDesignGuidance,
+            );
+          }
 
-      if (matchedTemplate && classification) {
-        const slotValues = { ...classification.slotValues };
-        if (!slotValues.headline) slotValues.headline = post.title;
-        if (!slotValues.brand) slotValues.brand = brandName;
-        const filledHtml = fillTemplateSlots(matchedTemplate.html, slotValues);
-        llmOutput = { generated_html: filledHtml };
-      } else {
-        llmOutput = await runHtmlLayoutAgent(
-          env,
-          post,
-          format,
-          dimensions.name,
-          dimensions.aiInstruction,
-          dimensions.width,
-          dimensions.height,
-          designTokensPrompt,
-          variantPrompt,
-          agentContext.copyOverrides,
-        );
+          // Use pre-computed token assets for injection
+          const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
+          return { format, output: { generated_html: finalHtml }, config };
+        })
+      );
+
+      // OPTIMIZATION: Render all formats in parallel using separate browser pages
+      const renderResults = await Promise.all(
+        htmlOutputs.map(async ({ format, output, config }) => {
+          if (!output || !config) return { format, asset: null };
+          
+          const asset = await renderStoreSingleAssetWithPage(env, browser, {
+            key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
+            format,
+            rawHtml: output.generated_html,
+            formatLabel: format,
+            width: config.width,
+            height: config.height,
+          });
+          
+          return { format, asset, output };
+        })
+      );
+
+      const formatAssets: Record<string, StoredAsset | null> = {};
+      let variantLlmOutput: LlmOutput | null = null;
+      let imageSource: SelectedImage = { source: "none", imageUrl: "" };
+
+      for (const { format, asset, output } of renderResults) {
+        if (asset) formatAssets[format] = asset;
+        if (!variantLlmOutput && output) variantLlmOutput = output;
       }
 
-      const finalLlmOutput = {
-        generated_html: injectDesignTokensIntoHtml(llmOutput.generated_html, designTokensForRun)
-      };
-
-      const browser = await launchRenderingBrowser(env);
-
-      try {
-        if (!variantLlmOutput) {
-          variantLlmOutput = finalLlmOutput;
-        }
-
-        if (index === 0 && format === [...outputPlan.formats][0]) {
-          imageSource = { source: post.feature_image ? "feature" : "none", imageUrl: post.feature_image || "" };
-        }
-
-        const keyPrefix = buildR2KeyPrefix(env, post.slug, sharedStorage);
-        const asset = await renderStoreSingleAsset(env, browser, {
-          key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
-          format,
-          rawHtml: finalLlmOutput.generated_html,
-          formatLabel: format
-        });
-
-        formatAssets[format] = asset;
-      } finally {
-        await browser.close();
+      if (index === 0) {
+        imageSource = { source: post.feature_image ? "feature" : "none", imageUrl: post.feature_image || "" };
       }
+
+      variants.push({
+        index: index + 1,
+        image_source: imageSource,
+        llm_output: variantLlmOutput || { generated_html: "" },
+        assets: formatAssets
+      });
     }
-
-    variants.push({
-      index: index + 1,
-      image_source: imageSource,
-      llm_output: variantLlmOutput || { generated_html: "" },
-      assets: formatAssets
-    });
+  } finally {
+    // Close browser once after all rendering is complete
+    await browser.close();
   }
 
   const primaryVariant = variants[0];
@@ -1188,41 +1296,82 @@ async function renderStoreSingleAsset(env: Env, browser: any, args: { key: strin
   };
 }
 
+/**
+ * OPTIMIZED: Render a single asset using an existing browser instance.
+ * Creates a new page, renders, and closes the page - but keeps browser alive.
+ */
+async function renderStoreSingleAssetWithPage(
+  env: Env,
+  browser: any,
+  args: { key: string; format: string; rawHtml?: string; formatLabel: string; width: number; height: number }
+): Promise<StoredAsset> {
+  const html = args.rawHtml;
+  if (!html) throw new HttpError(500, "No HTML provided for rendering");
+
+  const png = await renderPng(browser, html, args.width, args.height);
+
+  await env.OUTPUT_BUCKET.put(args.key, png, {
+    httpMetadata: {
+      contentType: "image/png",
+      cacheControl: (PIPELINE_CONFIG.runtime?.asset_cache_control as string) || "public, max-age=31536000, immutable"
+    }
+  });
+
+  return {
+    format: args.formatLabel,
+    key: args.key,
+    url: buildPublicUrl(env, args.key)
+  };
+}
+
+/**
+ * OPTIMIZED: Render HTML to PNG with reduced wait times.
+ * - Uses domcontentloaded instead of networkidle0 for faster initial load
+ * - Reduces Tailwind detection timeout from 3000ms to 1500ms
+ * - Removes fixed 150ms wait, uses immediate RAF instead
+ * - Parallelizes font and image loading checks
+ */
 async function renderPng(browser: any, html: string, width: number, height: number): Promise<Uint8Array> {
   const page = await browser.newPage();
   try {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
-    await page.setContent(html, { waitUntil: "networkidle0", timeout: 15_000 });
+    
+    // Use domcontentloaded for faster initial render, then wait for specific conditions
+    await page.setContent(html, { waitUntil: "domcontentloaded", timeout: 10_000 });
 
+    // OPTIMIZED: Combined wait for Tailwind + fonts + images in a single evaluate
     await page.evaluate(`
       (async () => {
-        const maxWait = 3000;
+        // Wait for Tailwind styles (reduced from 3000ms to 1500ms)
+        const maxWait = 1500;
         const start = Date.now();
         while (Date.now() - start < maxWait) {
           const tailwindStyles = document.querySelector('style[data-tailwind]') || 
                                  document.querySelector('style:not([id])');
-          if (tailwindStyles && tailwindStyles.textContent && tailwindStyles.textContent.length > 1000) {
+          if (tailwindStyles && tailwindStyles.textContent && tailwindStyles.textContent.length > 500) {
             break;
           }
-          await new Promise(r => setTimeout(r, 50));
+          await new Promise(r => setTimeout(r, 25));
         }
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        await new Promise((resolve) => setTimeout(resolve, 150));
+        
+        // Single RAF for layout stabilization (removed extra 150ms wait)
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        
+        // Wait for fonts and images in parallel
+        await Promise.all([
+          document.fonts.ready,
+          Promise.all(Array.from(document.images).map(async (img) => {
+            try { await img.decode(); } catch {}
+          }))
+        ]);
       })();
     `);
 
+    // Check for custom render completion flag (reduced timeout)
     await page.waitForFunction(
       "() => typeof window.__RICH_RENDER_DONE__ === 'undefined' || window.__RICH_RENDER_DONE__ === true",
-      { timeout: 7_000 }
+      { timeout: 3_000 }
     );
-
-    await page.evaluate(`
-      (async () => {
-        await document.fonts.ready;
-        const images = Array.from(document.images);
-        await Promise.all(images.map(async (img) => { try { await img.decode(); } catch {} }));
-      })();
-    `);
 
     const screenshot = await page.screenshot({ type: "png", clip: { x: 0, y: 0, width, height } });
     return screenshot instanceof Uint8Array ? screenshot : new Uint8Array(screenshot as ArrayBuffer);
