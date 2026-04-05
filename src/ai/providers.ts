@@ -23,23 +23,22 @@ export const MODEL_SETTINGS = {
 } as const;
 
 // ─── AI Gateway Configuration ────────────────────────────────────────────────
-// Default values hardcoded - no environment variables needed in deployment.
-// The gateway token is the only secret needed (via wrangler secret put).
 
 const DEFAULT_AI_GATEWAY_ACCOUNT_ID = "a19f853d1b3f6af9c7f2a8fa1e63bb27";
 const DEFAULT_AI_GATEWAY_ID = "tasbir";
 
-// Mixed model configuration via AI Gateway:
-// - Workers AI models via AI binding (not gateway HTTP) 
-// - External providers via AI Gateway with BYOK
-// All using BYOK - only AI_GATEWAY_TOKEN needed
+// Hybrid configuration:
+// - gemini-2.5-flash via AI Gateway (with BYOK) for standard tasks
+// - gemma-4 via direct Google API for advanced tasks  
+// - Workers AI for images (via AI binding)
 export const DYNAMIC_ROUTES = {
   DESIGN_TOKENS: "google-ai-studio/gemini-2.5-flash",
   HTML_LAYOUT: "google-ai-studio/gemini-2.5-flash",
   GENERIC: "google-ai-studio/gemini-2.5-flash",
+  ADVANCED: "gemma-4-31b-it",
 } as const;
 
-// Workers AI models used directly via AI binding
+// Workers AI models (used via AI binding)
 export const WORKERS_AI_MODELS = {
   TEXT: "@cf/google/gemma-4-26b-a4b-it",
   IMAGE: "@cf/black-forest-labs/flux-2-klein-9b",
@@ -49,21 +48,8 @@ function buildGatewayBaseUrl(): string {
   return `https://gateway.ai.cloudflare.com/v1/${DEFAULT_AI_GATEWAY_ACCOUNT_ID}/${DEFAULT_AI_GATEWAY_ID}`;
 }
 
-// ─── Model Creation ──────────────────────────────────────────────────────────
+// ─── Model Creation: AI Gateway (gemini-2.5-flash with BYOK) ────────────────
 
-/**
- * Creates a language model using AI Gateway with dynamic routing.
- * 
- * Uses the /compat (OpenAI-compatible) endpoint with dynamic routes.
- * The AI Gateway is configured with:
- * - BYOK (Bring Your Own Keys) for provider API keys (stored in dashboard)
- * - Dynamic routes for model selection and fallbacks
- * - Gateway authentication via cf-aig-authorization header
- * 
- * No environment variables needed in the code - only:
- * - AI_GATEWAY_TOKEN as a wrangler secret (for gateway auth)
- * - Provider API keys stored in AI Gateway dashboard (BYOK)
- */
 function createGatewayModel(gatewayToken: string | undefined, googleApiKey: string | undefined, route: string): LanguageModel {
   if (!gatewayToken && !googleApiKey) {
     throw new Error(
@@ -71,12 +57,9 @@ function createGatewayModel(gatewayToken: string | undefined, googleApiKey: stri
     );
   }
 
-  // Use /compat endpoint (OpenAI-compatible) with google-ai-studio/{model} format
   const baseURL = `${buildGatewayBaseUrl()}/compat`;
   console.log(`[ai-gateway] Creating model with baseURL: ${baseURL}, route: ${route}`);
-  console.log(`[ai-gateway] Using direct API key: ${googleApiKey ? 'yes' : 'no'}, Using gateway token: ${gatewayToken ? 'yes' : 'no'}`);
 
-  // Use direct API key OR BYOK (gateway token only)
   const apiKey = googleApiKey || "not-used-with-byok";
   
   const openai = createOpenAI({
@@ -85,7 +68,6 @@ function createGatewayModel(gatewayToken: string | undefined, googleApiKey: stri
     headers: gatewayToken ? {
       "cf-aig-authorization": `Bearer ${gatewayToken}`,
     } : {},
-    // Add fetch wrapper for better error logging
     fetch: async (url, init) => {
       console.log(`[ai-gateway] Request to: ${url}`);
       console.log(`[ai-gateway] Request method: ${init?.method || 'GET'}`);
@@ -95,7 +77,6 @@ function createGatewayModel(gatewayToken: string | undefined, googleApiKey: stri
         console.log(`[ai-gateway] Response status: ${response.status} ${response.statusText}`);
         
         if (!response.ok) {
-          // Clone response to read body without consuming it
           const clonedResponse = response.clone();
           try {
             const errorBody = await clonedResponse.text();
@@ -113,14 +94,46 @@ function createGatewayModel(gatewayToken: string | undefined, googleApiKey: stri
     },
   });
 
-  // Use .chat() for google-ai-studio endpoint with Gemini/Gemma API
   return openai.chat(route);
 }
 
-/**
- * Creates a model chain for design token generation.
- * Uses the "dynamic/design-tokens" route configured in AI Gateway.
- */
+// ─── Model Creation: Direct Google API (gemma-4) ───────────────────────────
+
+function createDirectGoogleModel(googleApiKey: string | undefined, model: string = "gemma-4-31b-it"): LanguageModel {
+  if (!googleApiKey) {
+    throw new Error(
+      "GOOGLE_API_KEY is required for direct Google API. Set via 'wrangler secret put GOOGLE_API_KEY'"
+    );
+  }
+
+  console.log(`[google-direct] Creating model: ${model} with direct API`);
+
+  const baseURL = "https://generativelanguage.googleapis.com/v1";
+  
+  const openai = createOpenAI({
+    apiKey: googleApiKey,
+    baseURL,
+    fetch: async (url, init) => {
+      const urlStr = url.toString();
+      const modifiedUrl = urlStr.replace("/chat/completions", "");
+      console.log(`[google-direct] Request to: ${modifiedUrl}`);
+      
+      try {
+        const response = await fetch(modifiedUrl, init);
+        console.log(`[google-direct] Response status: ${response.status} ${response.statusText}`);
+        return response;
+      } catch (error) {
+        console.error(`[google-direct] Fetch error:`, error);
+        throw error;
+      }
+    },
+  });
+
+  return openai.chat(model);
+}
+
+// ─── Model Chain Functions ───────────────────────────────────────────────────
+
 export function createModelChain(config: ProviderConfig): LanguageModel[] {
   return [createGatewayModel(config.gatewayToken, config.googleApiKey, DYNAMIC_ROUTES.DESIGN_TOKENS)];
 }
@@ -133,11 +146,18 @@ export function createHtmlLayoutModelChain(config: ProviderConfig): LanguageMode
   return [createGatewayModel(config.gatewayToken, config.googleApiKey, DYNAMIC_ROUTES.HTML_LAYOUT)];
 }
 
+export function createAdvancedModelChain(config: ProviderConfig): LanguageModel[] {
+  return [createDirectGoogleModel(config.googleApiKey, DYNAMIC_ROUTES.ADVANCED)];
+}
+
+// ─── Workers AI Helpers ───────────────────────────────────────────────────────
+
+export function getWorkersAiImageModel(aiBinding: Ai): Ai {
+  return aiBinding;
+}
+
 // ─── Env Resolution ──────────────────────────────────────────────────────────
 
-/**
- * Resolves provider configuration from the environment.
- */
 export function resolveProviderConfig(aiBinding: Ai, gatewayToken?: string, googleApiKey?: string): ProviderConfig {
   if (!aiBinding) {
     throw new Error(
