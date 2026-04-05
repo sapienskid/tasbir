@@ -12,25 +12,42 @@ export interface StreamCallbacks {
   onError?: (error: Error) => void;
 }
 
-const HTML_LAYOUT_SYSTEM_PROMPT = `You are an elite social media visual designer and modern web layout engineer.
+const HTML_LAYOUT_SYSTEM_PROMPT = `You are an elite social media post art director and layout engineer.
 
-Your task is to generate ONE COMPLETE, SELF-CONTAINED HTML document for a social media visual post.
+Generate ONE complete, self-contained HTML document for a static social media post image.
 
-Rules:
-- The HTML must be a full standalone document with <!DOCTYPE html>, <html>, <head>, and <body>
-- Use Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
-- Use normal Tailwind utility classes for all styling (e.g. bg-gray-900, text-white, font-bold, p-8)
-- Write clean, professional HTML like a normal web developer would
-- The design must be exactly sized for the given width x height viewport
-- Prioritize platform-native composition that performs well as an image in social feeds
-- Build strong visual hierarchy with clear focal point, fast scannability, and thumbnail legibility
-- Typography must be bold, professional, and highly readable at first glance
-- The design must feel premium, dynamic, and conversion-oriented
-- Never include text in generated images - all text is HTML/CSS
-- No external libraries except Tailwind CDN
-- Return ONLY the HTML document as raw text
-- Do not return JSON
-- Do not return captions, notes, markdown fences, or explanations`;
+Hard constraints:
+- The output is a social post composition, NOT a web page.
+- No website patterns: no navbars, footers, menus, sidebars, blog layout, multi-section page flow, or scroll-based storytelling.
+- Treat the design as one locked frame that will be screenshotted.
+- The HTML must be full standalone markup with <!DOCTYPE html>, <html>, <head>, and <body>.
+- Use Tailwind CDN only: <script src="https://cdn.tailwindcss.com"></script>.
+- Use Tailwind utility classes for styling.
+- No external libraries except Tailwind CDN.
+
+Canvas and overflow rules:
+- The composition must be exactly the requested width x height.
+- Use html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }.
+- Build one root frame container that fills the canvas (w-full h-full overflow-hidden).
+- Never rely on page scrolling; no content may extend outside the frame.
+- Prefer reducing copy and simplifying structure over shrinking everything.
+- Adapt copy density to the requested style, but keep scannability high and preserve clear hierarchy.
+
+Quality and style rules:
+- Prioritize platform-native composition and feed readability.
+- Establish a clear focal point and strong hierarchy for thumbnail legibility.
+- Deliver an intentional, carefully designed visual with strong structure and readability.
+- Avoid generic "marketing template" output. Use specific composition choices, asymmetry, spacing rhythm, and clear typography contrast.
+- Never include text baked into generated images; all text must remain HTML/CSS.
+- Avoid visual effects that reduce readability.
+
+Before returning, self-check:
+- Is this unmistakably a social post and not a webpage?
+- Is all content fully visible within the fixed canvas with zero overflow/clipping?
+- Is the copy concise enough to scan quickly on mobile?
+
+Return ONLY the raw HTML document.
+Do not return JSON, markdown fences, notes, or explanations.`;
 
 export interface HtmlLayoutArgs {
   platform: string;
@@ -67,6 +84,9 @@ Source Content Excerpt: ${args.excerpt}
 Source Content:
 ${args.content}
 
+Design Tokens:
+${args.designTokens}
+
 ${args.generatedImage ? `GENERATED IMAGE AVAILABLE:
 - Image Type: ${args.generatedImage.imageType}
 - Generation Prompt: ${args.generatedImage.prompt}
@@ -81,9 +101,12 @@ ${args.userInstructionsAppend ? `Additional rendering constraints:\n${args.userI
 ${renderedUserInstructionBlock}
 
 Instructions:
-- Create a high-impact visual design using the source content.
+- Create a high-impact social post visual using the source content.
+- Keep it as a single-frame composition, not a webpage.
 - Use normal Tailwind classes for styling.
+- Ensure content fits the fixed frame with no overflow, clipping, or hidden text.
 - Keep typography highly readable with clear hierarchy.
+- Match the requested style and content density while preserving legibility and composition balance.
 ${args.generatedImage ? "- Incorporate the generated image effectively in the design layout." : ""}
 
 Return only one complete HTML document as raw text.`;
