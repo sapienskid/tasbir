@@ -44,6 +44,11 @@ export interface HtmlLayoutArgs {
   systemPrompt?: string;
   userInstructions?: string | string[];
   userInstructionsAppend?: string;
+  generatedImage?: {
+    dataUrl: string;
+    imageType: string;
+    prompt: string;
+  };
 }
 
 function buildPrompt(args: HtmlLayoutArgs): string {
@@ -59,6 +64,14 @@ Source Content Excerpt: ${args.excerpt}
 Source Content:
 ${args.content}
 
+${args.generatedImage ? `GENERATED IMAGE AVAILABLE:
+- Image Type: ${args.generatedImage.imageType}
+- Generation Prompt: ${args.generatedImage.prompt}
+- Data URL: ${args.generatedImage.dataUrl}
+
+IMPORTANT: Use this generated image in your HTML as a background or prominent visual element. Use it as src attribute for an <img> tag or as a CSS background-image.
+` : ""}
+
 ${args.userPrompt ? `User specifically asked for: ${args.userPrompt}` : ""}
 ${args.userInstructionsAppend ? `Additional rendering constraints:\n${args.userInstructionsAppend}` : ""}
 
@@ -68,6 +81,7 @@ Instructions:
 - Create a high-impact visual design using the source content.
 - Use normal Tailwind classes for styling.
 - Keep typography highly readable with clear hierarchy.
+${args.generatedImage ? "- Incorporate the generated image effectively in the design layout." : ""}
 
 Return only one complete HTML document as raw text.`;
 }

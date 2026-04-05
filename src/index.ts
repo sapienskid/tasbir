@@ -8,6 +8,14 @@ import {
   createModelChain,
   resolveProviderConfig,
 } from "./ai";
+import {
+  decideImageGeneration,
+  generateImage,
+  generateImagesForFormats,
+  imageToDataUrl,
+  type ImageDecision,
+  type GeneratedImage,
+} from "./lib/ai-image";
 import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, setFormat, deleteFormat, loadFormatsFromStorage, type FormatConfig } from "./config";
 import {
   HttpError,
@@ -1217,6 +1225,7 @@ async function runHtmlLayoutAgent(
   userPrompt?: string,
   overrides?: LlmPromptOverrides,
   designInstructions?: string,
+  generatedImage?: GeneratedImage,
 ): Promise<LlmOutput> {
   const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
   const models = createModelChain(providerConfig);
@@ -1243,6 +1252,11 @@ async function runHtmlLayoutAgent(
     userInstructionsAppend: designInstructions
       ? [overrides?.userInstructionsAppend || "", designInstructions].filter(Boolean).join("\n")
       : overrides?.userInstructionsAppend,
+    generatedImage: generatedImage ? {
+      dataUrl: imageToDataUrl(generatedImage.data),
+      imageType: generatedImage.imageType,
+      prompt: generatedImage.prompt,
+    } : undefined,
   });
 
   return {
@@ -1357,6 +1371,57 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
   const keyPrefix = buildR2KeyPrefix(env, post.slug, sharedStorage);
 
+  // AI IMAGE GENERATION: Generate images if requested
+  let imageDecision: ImageDecision | null = null;
+  let generatedImages: Map<string, GeneratedImage | null> = new Map();
+  
+  if (body.image?.mode === 'ai' && env.AI) {
+    try {
+      console.log(`[ai-image] Deciding if image generation is needed for content`);
+      const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
+      
+      imageDecision = await decideImageGeneration(
+        providerConfig,
+        {
+          title: post.title,
+          excerpt: post.custom_excerpt || post.excerpt || "",
+          contentType: classification?.type,
+          brandTone: settings.brand.tone,
+        },
+        {
+          primaryColor: (designTokensForRun as any)?.colors?.primary?.['500'],
+          style: (designTokensForRun as any)?.meta?.aesthetic,
+        }
+      );
+      
+      if (imageDecision.shouldGenerate && imageDecision.imageType !== 'none') {
+        console.log(`[ai-image] Generating ${imageDecision.imageType} image: ${imageDecision.prompt}`);
+        
+        // Generate images for all requested formats
+        const formatsArray = [...outputPlan.formats];
+        const formatConfigs = formatsArray
+          .map(format => {
+            const config = getFormatConfig(format);
+            return config && config.width && config.height ? { 
+              name: format, 
+              width: config.width, 
+              height: config.height 
+            } : null;
+          })
+          .filter((f): f is { name: string; width: number; height: number } => f !== null);
+        
+        if (formatConfigs.length > 0) {
+          generatedImages = await generateImagesForFormats(env.AI, imageDecision, formatConfigs);
+          console.log(`[ai-image] Generated ${generatedImages.size} images for formats: ${Array.from(generatedImages.keys()).join(', ')}`);
+        }
+      } else {
+        console.log(`[ai-image] Decision: ${imageDecision.reasoning}`);
+      }
+    } catch (error) {
+      console.warn(`[ai-image] Image generation failed:`, error);
+    }
+  }
+
   // OPTIMIZATION: Launch browser ONCE for the entire request
   const browser = await launchRenderingBrowser(env);
   
@@ -1439,6 +1504,9 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
               ? [`DESIGN SYSTEM INSTRUCTIONS (follow these closely):`, designInstructions].join('\n')
               : undefined;
 
+            // Get generated image for this format
+            const generatedImage = generatedImages.get(format);
+
             llmOutput = await runHtmlLayoutAgent(
               env,
               post,
@@ -1451,6 +1519,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
               variantPrompt,
               agentContext.copyOverrides,
               instructionsWithDesignGuidance,
+              generatedImage || undefined,
             );
             
             // CACHE: Store the generated HTML for future requests
@@ -1645,6 +1714,59 @@ export async function runPipelineFromPostWithProgress(
     }
   }
 
+  // AI IMAGE GENERATION: Generate images if requested
+  let imageDecision: ImageDecision | null = null;
+  let generatedImages: Map<string, GeneratedImage | null> = new Map();
+  
+  if (body.image?.mode === 'ai' && env.AI) {
+    try {
+      onProgress({ type: "generating", message: "Deciding on AI image generation..." });
+      console.log(`[ai-image] Deciding if image generation is needed for content`);
+      const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
+      
+      imageDecision = await decideImageGeneration(
+        providerConfig,
+        {
+          title: post.title,
+          excerpt: post.custom_excerpt || post.excerpt || "",
+          contentType: classification?.type,
+          brandTone: settings.brand.tone,
+        },
+        {
+          primaryColor: (designTokensForRun as any)?.colors?.primary?.['500'],
+          style: (designTokensForRun as any)?.meta?.aesthetic,
+        }
+      );
+      
+      if (imageDecision.shouldGenerate && imageDecision.imageType !== 'none') {
+        onProgress({ type: "generating", message: `Generating ${imageDecision.imageType} images...` });
+        console.log(`[ai-image] Generating ${imageDecision.imageType} image: ${imageDecision.prompt}`);
+        
+        // Generate images for all requested formats
+        const formatsArray = [...outputPlan.formats];
+        const formatConfigs = formatsArray
+          .map(format => {
+            const config = getFormatConfig(format);
+            return config && config.width && config.height ? { 
+              name: format, 
+              width: config.width, 
+              height: config.height 
+            } : null;
+          })
+          .filter((f): f is { name: string; width: number; height: number } => f !== null);
+        
+        if (formatConfigs.length > 0) {
+          generatedImages = await generateImagesForFormats(env.AI, imageDecision, formatConfigs);
+          console.log(`[ai-image] Generated ${generatedImages.size} images for formats: ${Array.from(generatedImages.keys()).join(', ')}`);
+        }
+      } else {
+        console.log(`[ai-image] Decision: ${imageDecision.reasoning}`);
+      }
+    } catch (error) {
+      console.warn(`[ai-image] Image generation failed:`, error);
+    }
+  }
+
   const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
   const keyPrefix = buildR2KeyPrefix(env, post.slug, sharedStorage);
   const formatsArray = [...outputPlan.formats];
@@ -1718,6 +1840,9 @@ export async function runPipelineFromPostWithProgress(
               ? [`DESIGN SYSTEM INSTRUCTIONS (follow these closely):`, designInstructions].join('\n')
               : undefined;
 
+            // Get generated image for this format  
+            const generatedImage = generatedImages.get(format);
+
             llmOutput = await runHtmlLayoutAgent(
               env,
               post,
@@ -1730,6 +1855,7 @@ export async function runPipelineFromPostWithProgress(
               variantPrompt,
               agentContext.copyOverrides,
               instructionsWithDesignGuidance,
+              generatedImage || undefined,
             );
 
             // Cache the result if caching is enabled
