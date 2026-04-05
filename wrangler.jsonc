@@ -15,6 +15,18 @@
 	"browser": {
 		"binding": "BROWSER"
 	},
+	"kv_namespaces": [
+		{
+			"binding": "SETTINGS_KV",
+			"id": "settings-kv-dev",
+			"preview_id": "settings-kv-dev"
+		},
+		{
+			"binding": "TEMPLATES_KV",
+			"id": "templates-kv-dev",
+			"preview_id": "templates-kv-dev"
+		}
+	],
 	"durable_objects": {
 		"bindings": [
 			{
@@ -52,6 +64,16 @@
 			"browser": {
 				"binding": "BROWSER"
 			},
+			"kv_namespaces": [
+				{
+					"binding": "SETTINGS_KV",
+					"id": "settings-kv-staging"
+				},
+				{
+					"binding": "TEMPLATES_KV",
+					"id": "templates-kv-staging"
+				}
+			],
 			"vars": {
 				"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
 			},
@@ -70,6 +92,16 @@
 			"browser": {
 				"binding": "BROWSER"
 			},
+			"kv_namespaces": [
+				{
+					"binding": "SETTINGS_KV",
+					"id": "settings-kv-prod"
+				},
+				{
+					"binding": "TEMPLATES_KV",
+					"id": "templates-kv-prod"
+				}
+			],
 			"vars": {
 				"API_AUTH_REQUIRE_FOR_PREVIEW": "true"
 			},

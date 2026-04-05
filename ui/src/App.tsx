@@ -126,14 +126,11 @@ export default function App() {
   const [configSaved, setConfigSaved] = useState(false)
   const [studioResult, setStudioResult] = useState<any>(null)
   const [studioGenerating, setStudioGenerating] = useState(false)
-  const [studioRerendering, setStudioRerendering] = useState(false)
   const [studioMode, setStudioMode] = useState<'content' | 'slug'>('content')
   const [studioTitle, setStudioTitle] = useState('')
   const [studioContent, setStudioContent] = useState('')
   const [studioSlug, setStudioSlug] = useState('')
   const [studioFormats, setStudioFormats] = useState(['instagram-portrait', 'twitter-card'])
-  const [studioCacheMode, setStudioCacheMode] = useState<'off' | 'read-only' | 'write-only' | 'read-write'>('read-write')
-  const [studioCacheKey, setStudioCacheKey] = useState('local-dev')
 
   useEffect(() => {
     loadConfig()
@@ -316,15 +313,9 @@ export default function App() {
     setStudioGenerating(true)
     setError(null)
     try {
-      const htmlCache = {
-        mode: studioCacheMode,
-        key: studioCacheKey.trim() || undefined,
-      }
-
       const shared: any = {
         output: { formats: studioFormats, postCount: 1 },
         image: { mode: 'none' },
-        htmlCache,
         designTokens: tokens,
       }
 
@@ -344,38 +335,6 @@ export default function App() {
       setError(e.message || 'Generation failed')
     } finally {
       setStudioGenerating(false)
-    }
-  }
-
-  async function handleStudioRenderFromCache() {
-    if (!studioResult?.slug) {
-      setError('Generate once before re-rendering from cache')
-      return
-    }
-
-    setStudioRerendering(true)
-    setError(null)
-    try {
-      const resolvedCacheKey = studioResult?.html_cache?.key || studioCacheKey.trim() || undefined
-      const rerender = await api.renderFromCache({
-        slug: studioResult.slug,
-        output: { formats: studioFormats, postCount: 1 },
-        htmlCache: { mode: studioCacheMode, key: resolvedCacheKey },
-        variantIndex: 1,
-        designTokens: tokens,
-      })
-
-      setStudioResult((prev: any) => ({
-        ...prev,
-        assets: {
-          ...(prev?.assets || {}),
-          ...(rerender.assets || {}),
-        },
-      }))
-    } catch (e: any) {
-      setError(e.message || 'Cache re-render failed')
-    } finally {
-      setStudioRerendering(false)
     }
   }
 
@@ -438,12 +397,8 @@ export default function App() {
                 content={studioContent} setContent={setStudioContent}
                 slug={studioSlug} setSlug={setStudioSlug}
                 formats={studioFormats} toggleFormat={toggleStudioFormat}
-                cacheMode={studioCacheMode} setCacheMode={setStudioCacheMode}
-                cacheKey={studioCacheKey} setCacheKey={setStudioCacheKey}
                 availableFormats={availableFormats}
                 generating={studioGenerating} onGenerate={handleStudioGenerate}
-                rerendering={studioRerendering}
-                onRenderFromCache={handleStudioRenderFromCache}
                 result={studioResult} tokens={tokens}
                 expandedSections={expandedSections} toggleSection={toggleSection}
                 onUpdateTokenColor={updateTokenColor}
@@ -483,7 +438,7 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-auto relative min-h-0" style={{ background: '#1c1c1c' }}>
                 {activeTab === 'studio' ? (
-                  <StudioScreenshotPanel result={studioResult} generating={studioGenerating || studioRerendering} />
+                  <StudioScreenshotPanel result={studioResult} generating={studioGenerating} />
                 ) : tokens ? (
                   <PreviewFrame tokens={tokens} />
                 ) : (
@@ -568,11 +523,10 @@ function TokensTab({ vibeInput, setVibeInput, activePreset, applyPreset, primary
 
 /* ── Studio Tab ── */
 
-function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, cacheMode, setCacheMode, cacheKey, setCacheKey, availableFormats, generating, onGenerate, rerendering, onRenderFromCache, result, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
+function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, availableFormats, generating, onGenerate, result, tokens, expandedSections, toggleSection, onUpdateTokenColor, onUpdateAccentColor }: any) {
 
   return (
     <>
-      {/* Generation Controls */}
       <div className="p-3.5 space-y-3 border-b" style={{ borderColor: '#252525' }}>
         <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Content Source</div>
         <div className="flex gap-1">
@@ -595,55 +549,15 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
             </button>
           ))}
         </div>
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>HTML Cache</div>
-        <div className="grid grid-cols-2 gap-2">
-          <select
-            value={cacheMode}
-            onChange={(e: any) => setCacheMode(e.target.value)}
-            className="rounded border px-2 py-2 text-[10px] outline-none"
-            style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
-          >
-            <option value="off">off</option>
-            <option value="read-only">read-only</option>
-            <option value="write-only">write-only</option>
-            <option value="read-write">read-write</option>
-          </select>
-          <input
-            value={cacheKey}
-            onChange={(e: any) => setCacheKey(e.target.value)}
-            placeholder="cache key"
-            className="rounded border px-2 py-2 text-[10px] outline-none"
-            style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
-          />
-        </div>
         <button onClick={onGenerate} disabled={generating || !tokens} className="w-full py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
           {generating ? 'Generating…' : 'Generate Posts'}
-        </button>
-        <button
-          onClick={onRenderFromCache}
-          disabled={rerendering || !result?.slug}
-          className="w-full py-2 rounded font-bold text-[10px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25 border"
-          style={{ background: '#0b0b0b', borderColor: '#3d3d3d', color: '#e2e2e2' }}
-        >
-          {rerendering ? 'Re-rendering Cache…' : 'Re-render Cached HTML'}
         </button>
         {result && (
           <div className="p-2.5 rounded text-[10px] font-mono" style={{ background: '#0b0b0b', color: '#999', lineHeight: 1.6 }}>
             <div>Slug: {result.slug}</div>
             <div>Formats: {result.requested_formats?.join(', ')}</div>
-            {result.html_cache && (
-              <>
-                <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>
-                  Cache: {result.html_cache.mode} | hits {result.html_cache.summary.hits} | misses {result.html_cache.summary.misses} | writes {result.html_cache.summary.writes}
-                </div>
-                <div style={{ color: '#777' }}>
-                  {Object.entries(result.html_cache.primary_variant_by_format || {}).map(([k, v]: [string, any]) => `${k}:${v}`).join('  ')}
-                </div>
-              </>
-            )}
             {result.llm_output?.generated_html && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>HTML: Ready</div>}
             {result.assets && <div className="mt-1 pt-1 border-t" style={{ borderColor: '#252525' }}>Assets: {Object.keys(result.assets).filter((k: string) => result.assets[k]).length}</div>}
-
           </div>
         )}
       </div>
@@ -707,7 +621,7 @@ function StudioScreenshotPanel({ result, generating }: { result: any; generating
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
         <div className="text-3xl opacity-25">◻</div>
         <div className="text-[12px] font-semibold tracking-wide">No Rendered Assets</div>
-        <div className="text-[11px]" style={{ color: '#777' }}>Try Generate or Re-render Cached HTML</div>
+        <div className="text-[11px]" style={{ color: '#777' }}>Try Generate</div>
       </div>
     )
   }
