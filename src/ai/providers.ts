@@ -27,15 +27,15 @@ export const MODEL_SETTINGS = {
 const DEFAULT_AI_GATEWAY_ACCOUNT_ID = "a19f853d1b3f6af9c7f2a8fa1e63bb27";
 const DEFAULT_AI_GATEWAY_ID = "tasbir";
 
-// Hybrid configuration:
-// - gemini-2.5-flash via AI Gateway (with BYOK) for standard tasks
-// - gemma-4 via direct Google API for advanced tasks  
+// Configuration:
+// - gemini-2.5-flash via AI Gateway (works with BYOK)
+// - gemma-4 via direct Google API (separate, requires GOOGLE_API_KEY)
 // - Workers AI for images (via AI binding)
 export const DYNAMIC_ROUTES = {
   DESIGN_TOKENS: "google-ai-studio/gemini-2.5-flash",
   HTML_LAYOUT: "google-ai-studio/gemini-2.5-flash",
   GENERIC: "google-ai-studio/gemini-2.5-flash",
-  ADVANCED: "gemma-4-31b-it",
+  ADVANCED: "gemma-4-31b-it", // via direct API
 } as const;
 
 // Workers AI models (used via AI binding)
