@@ -16,14 +16,20 @@ export {
 
 import { normalizeDesignTokensForRendering, type DesignTokens } from "../../shared/tokens";
 
+/**
+ * Generates design tokens using AI via Cloudflare AI Gateway.
+ * Uses dynamic routes configured in AI Gateway for model selection and fallbacks.
+ * Only requires AI_GATEWAY_TOKEN as a wrangler secret.
+ */
 export async function generateTokensAI(
   vibe: string,
-  env: Record<string, string | undefined>,
+  aiBinding: Ai,
+  gatewayToken?: string,
+  googleApiKey?: string,
   primaryHint?: string,
   secondaryHint?: string,
-  aiBinding?: Ai,
 ): Promise<DesignTokens> {
-  const providerConfig = resolveProviderConfig(env, aiBinding);
+  const providerConfig = resolveProviderConfig(aiBinding, gatewayToken, googleApiKey);
   const models = createModelChain(providerConfig);
 
   let enhancedVibe = vibe;

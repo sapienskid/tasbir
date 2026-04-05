@@ -31,6 +31,11 @@ export interface ResolvedSecurityConfig {
 }
 
 export interface Env {
+  AI_GATEWAY_ACCOUNT_ID?: string;
+  AI_GATEWAY_ID?: string;
+  AI_GATEWAY_TOKEN?: string;
+  AI_GATEWAY_ROUTE_DESIGN_TOKENS?: string;
+  AI_GATEWAY_ROUTE_GENERIC?: string;
   GOOGLE_API_KEY?: string;
   GOOGLE_MODEL?: string;
   GOOGLE_FAST_MODEL?: string;

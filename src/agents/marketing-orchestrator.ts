@@ -5,11 +5,8 @@ import { createModelChain, resolveProviderConfig } from "../ai/providers";
 
 interface Env {
   AI: Ai;
+  AI_GATEWAY_TOKEN?: string;
   GOOGLE_API_KEY?: string;
-  GOOGLE_MODEL?: string;
-  CLOUDFLARE_API_TOKEN?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
-  LLM_MODEL?: string;
 }
 
 interface PromptProfilePayload {
@@ -119,16 +116,8 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
     ].join("\n");
 
     try {
-      const providerConfig = resolveProviderConfig(
-        {
-          GOOGLE_API_KEY: this.env.GOOGLE_API_KEY,
-          GOOGLE_MODEL: this.env.GOOGLE_MODEL,
-          CLOUDFLARE_API_TOKEN: this.env.CLOUDFLARE_API_TOKEN,
-          CLOUDFLARE_ACCOUNT_ID: this.env.CLOUDFLARE_ACCOUNT_ID,
-          LLM_MODEL: this.env.LLM_MODEL,
-        },
-        this.env.AI,
-      );
+      // Use AI binding with gateway configured in wrangler.jsonc - no env vars needed
+      const providerConfig = resolveProviderConfig(this.env.AI, this.env.AI_GATEWAY_TOKEN, this.env.GOOGLE_API_KEY);
       const models = createModelChain(providerConfig);
 
       const result = await generateObject({

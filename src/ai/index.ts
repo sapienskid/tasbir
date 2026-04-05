@@ -4,7 +4,9 @@ export { generateOrchestration, type OrchestratorOutput } from "./agents/orchest
 export {
   createModelChain,
   createFastModelChain,
+  createHtmlLayoutModelChain,
   resolveProviderConfig,
+  DYNAMIC_ROUTES,
   type ProviderConfig,
   isRateLimitError,
   isRetryableError,

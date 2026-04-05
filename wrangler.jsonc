@@ -23,7 +23,10 @@
 		"dev": {
 			"name": "tasbir",
 			"ai": {
-				"binding": "AI"
+				"binding": "AI",
+				"gateway": {
+					"id": "tasbir"
+				}
 			},
 			"browser": {
 				"binding": "BROWSER"
@@ -62,7 +65,10 @@
 		"staging": {
 			"name": "tasbir",
 			"ai": {
-				"binding": "AI"
+				"binding": "AI",
+				"gateway": {
+					"id": "tasbir"
+				}
 			},
 			"browser": {
 				"binding": "BROWSER"
@@ -98,7 +104,10 @@
 		"production": {
 			"name": "tasbir",
 			"ai": {
-				"binding": "AI"
+				"binding": "AI",
+				"gateway": {
+					"id": "tasbir"
+				}
 			},
 			"browser": {
 				"binding": "BROWSER"

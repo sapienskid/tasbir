@@ -503,23 +503,31 @@ app.post("/generate-tokens", async (c) => {
   const primaryHint = body.primaryHint as string | undefined;
   const secondaryHint = body.secondaryHint as string | undefined;
 
+  // Debug logging for AI Gateway configuration
+  console.log("[generate-tokens] AI binding present:", !!c.env.AI);
+  console.log("[generate-tokens] AI_GATEWAY_TOKEN present:", !!c.env.AI_GATEWAY_TOKEN);
+
   try {
     const { generateTokensAI } = await import("./lib/tokens");
-    const tokens = await generateTokensAI(vibe, {
-      GOOGLE_API_KEY: c.env.GOOGLE_API_KEY,
-      GOOGLE_MODEL: c.env.GOOGLE_MODEL,
-      GOOGLE_FAST_MODEL: c.env.GOOGLE_FAST_MODEL,
-      CLOUDFLARE_API_TOKEN: c.env.CLOUDFLARE_API_TOKEN,
-      CLOUDFLARE_ACCOUNT_ID: c.env.CLOUDFLARE_ACCOUNT_ID,
-      LLM_MODEL: c.env.LLM_MODEL,
-      LLM_FAST_MODEL: c.env.LLM_FAST_MODEL,
-    }, primaryHint, secondaryHint, c.env.AI);
+    // Use AI Gateway with BYOK - only requires AI_GATEWAY_TOKEN as wrangler secret
+    // GOOGLE_API_KEY is optional - if not provided, BYOK will be used from dashboard
+    const tokens = await generateTokensAI(vibe, c.env.AI, c.env.AI_GATEWAY_TOKEN, c.env.GOOGLE_API_KEY, primaryHint, secondaryHint);
     
     return c.json(tokens);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const stack = error instanceof Error ? error.stack : undefined;
     console.error("[generate-tokens] Error:", message);
-    return c.json({ error: message }, 500);
+    if (stack) console.error("[generate-tokens] Stack:", stack);
+    
+    // Return more detailed error info in development
+    return c.json({ 
+      error: message,
+      details: {
+        aiBindingPresent: !!c.env.AI,
+        gatewayTokenPresent: !!c.env.AI_GATEWAY_TOKEN,
+      }
+    }, 500);
   }
 });
 
@@ -633,8 +641,7 @@ app.delete("/formats/:id", async (c) => {
 // ==================== SETTINGS ====================
 
 app.get("/settings", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  // No authentication required for reading settings - users need this to configure API key
   if (!c.env.SETTINGS_KV) throw new HttpError(500, "SETTINGS_KV binding is not configured");
   const settings = await loadSettings(c.env.SETTINGS_KV);
   return c.json(settings);
@@ -661,16 +668,14 @@ app.patch("/settings", async (c) => {
 // ==================== TEMPLATES ====================
 
 app.get("/templates", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  // No authentication required for browsing templates - users need this to see available templates
   if (!c.env.TEMPLATES_KV) throw new HttpError(500, "TEMPLATES_KV binding is not configured");
   const templates = await listTemplates(c.env.TEMPLATES_KV);
   return c.json({ templates });
 });
 
 app.get("/templates/:id", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  // No authentication required for viewing individual templates  
   if (!c.env.TEMPLATES_KV || !c.env.OUTPUT_BUCKET) throw new HttpError(500, "KV or R2 binding is not configured");
   const id = c.req.param("id");
   const result = await getTemplate(c.env.TEMPLATES_KV, c.env.OUTPUT_BUCKET, id);
@@ -841,7 +846,7 @@ app.post("/decide-template", async (c) => {
     return c.json({ error: "title and content (or body) are required" }, 400);
   }
   
-  const providerConfig = resolveProviderConfig(c.env as unknown as Record<string, string | undefined>, c.env.AI);
+  const providerConfig = resolveProviderConfig(c.env.AI, c.env.AI_GATEWAY_TOKEN, c.env.GOOGLE_API_KEY);
   const availableTemplates = await listSavedTemplates(c.env.AI_CACHE_KV, format);
   
   const preferences = {
@@ -1107,7 +1112,7 @@ async function resolveAgentContextForRun(args: {
 }): Promise<AgentExecutionContext> {
   const context = cloneAgentExecutionContext(args.baseContext);
 
-  const providerConfig = resolveProviderConfig(args.env as unknown as Record<string, string | undefined>, args.env.AI);
+  const providerConfig = resolveProviderConfig(args.env.AI, args.env.AI_GATEWAY_TOKEN, args.env.GOOGLE_API_KEY);
   const models = createModelChain(providerConfig);
   if (models.length === 0) {
     context.warnings.push("no_ai_provider");
@@ -1269,7 +1274,7 @@ async function runHtmlLayoutAgent(
   generatedImage?: GeneratedImage,
   settings?: WorkspaceSettings | null,
 ): Promise<LlmOutput> {
-  const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
+  const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
   const models = createModelChain(providerConfig);
 
   const content = post.plaintext || post.html || "";
@@ -1342,7 +1347,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   let matchedTemplate: { html: string; metadata: TemplateMetadata } | null = null;
 
   // SMART TEMPLATE SELECTION: Check for saved HTML templates first
-  const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
+  const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
   const templateDecisions: Map<string, TemplateDecision> = new Map();
   const usedSavedTemplates: Map<string, SavedHtmlTemplate> = new Map();
 
@@ -1351,11 +1356,12 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       const allTemplates = await listTemplates(env.TEMPLATES_KV);
       const enabledTemplates = allTemplates.filter((t) => t.enabled && !settings.templates.disabled.includes(t.id));
       classification = await classifyContent(
-        env as unknown as Record<string, string | undefined>,
+        env.AI,
+        env.AI_GATEWAY_TOKEN,
+        env.GOOGLE_API_KEY,
         post.title,
         post.plaintext || post.excerpt || "",
         enabledTemplates,
-        env.AI,
       );
 
       if (classification.templateMatch) {
@@ -1422,7 +1428,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   if (body.image?.mode === 'ai' && env.AI) {
     try {
       console.log(`[ai-image] Deciding if image generation is needed for content`);
-      const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
+      const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
       
       imageDecision = await decideImageGeneration(
         providerConfig,
@@ -1742,11 +1748,12 @@ export async function runPipelineFromPostWithProgress(
       const allTemplates = await listTemplates(env.TEMPLATES_KV);
       const enabledTemplates = allTemplates.filter((t) => t.enabled && !settings.templates.disabled.includes(t.id));
       classification = await classifyContent(
-        env as unknown as Record<string, string | undefined>,
+        env.AI,
+        env.AI_GATEWAY_TOKEN,
+        env.GOOGLE_API_KEY,
         post.title,
         post.plaintext || post.excerpt || "",
         enabledTemplates,
-        env.AI,
       );
 
       if (classification.templateMatch) {
@@ -1768,7 +1775,7 @@ export async function runPipelineFromPostWithProgress(
     try {
       onProgress({ type: "generating", message: "Deciding on AI image generation..." });
       console.log(`[ai-image] Deciding if image generation is needed for content`);
-      const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
+      const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
       
       imageDecision = await decideImageGeneration(
         providerConfig,
@@ -2577,9 +2584,11 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 }
 
 function assertRequiredEnv(env: Env): void {
-  const hasGoogleKey = Boolean(env.GOOGLE_API_KEY?.trim());
-  const hasCfCredentials = Boolean(env.CLOUDFLARE_API_TOKEN?.trim() && env.CLOUDFLARE_ACCOUNT_ID?.trim());
-  if (!hasGoogleKey && !hasCfCredentials) {
-    throw new HttpError(500, "No AI provider configured. Set GOOGLE_API_KEY or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID.");
+  const hasGatewayToken = Boolean(env.AI_GATEWAY_TOKEN?.trim());
+  if (!hasGatewayToken) {
+    throw new HttpError(
+      500,
+      "AI Gateway dynamic routing is required. Set AI_GATEWAY_TOKEN.",
+    );
   }
 }

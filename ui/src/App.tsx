@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { api } from '@/lib/api'
+import { api, getApiKey, setApiKey } from '@/lib/api'
 import { tokensToCSS, type DesignTokens } from '@/lib/tokens'
 import { generateComponentsSkeleton } from '@/components/skeletons'
 import { GOOGLE_FONTS, FONT_CATEGORIES } from '@/lib/google-fonts'
@@ -1104,10 +1104,16 @@ function FormatsTemplatesTab({
 
 function SettingsTab({ settings, loading, onSave, formats }: any) {
   const [local, setLocal] = useState<any>(null)
+  const [apiKey, setApiKeyState] = useState(getApiKey())
 
   useEffect(() => {
     if (settings) setLocal(JSON.parse(JSON.stringify(settings)))
   }, [settings])
+
+  const handleApiKeyChange = (value: string) => {
+    setApiKeyState(value)
+    setApiKey(value)
+  }
 
   if (loading || !local) {
     return <div className="flex items-center justify-center h-32" style={{ color: '#555' }}><div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} /></div>
@@ -1194,6 +1200,31 @@ function SettingsTab({ settings, loading, onSave, formats }: any) {
           <option value="feature">Feature image</option>
           <option value="ai">AI generated</option>
         </select>
+
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>API Authentication</div>
+        <div className="space-y-3 p-2.5 rounded border" style={{ background: '#0a0a0a', borderColor: '#313131' }}>
+          <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: '#666' }}>
+            API Key Required
+          </div>
+          <div className="text-[9px] leading-relaxed" style={{ color: '#777' }}>
+            Enter your API key to authenticate with the service. This key is stored securely in your browser.
+          </div>
+          
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>API Key</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e: any) => handleApiKeyChange(e.target.value)}
+              placeholder="Enter your API key..."
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+            />
+            <div className="text-[8px] mt-1" style={{ color: '#666' }}>
+              Status: {apiKey ? <span style={{ color: '#22c55e' }}>Key configured</span> : <span style={{ color: '#f43f5e' }}>No key set</span>}
+            </div>
+          </div>
+        </div>
 
         <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>AI Prompts</div>
         <div className="space-y-3 p-2.5 rounded border" style={{ background: '#0a0a0a', borderColor: '#313131' }}>

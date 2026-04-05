@@ -1,5 +1,6 @@
 const RAW_API_BASE = (import.meta.env.VITE_API_BASE || "").trim();
 const API_BASE = RAW_API_BASE.replace(/\/+$/, "");
+const API_KEY_STORAGE_KEY = "tasbir:api-key";
 
 function buildApiUrl(path: string): string {
   if (!API_BASE) return path;
@@ -44,10 +45,29 @@ export interface GenerationResult {
   }>;
 }
 
-let _apiKey = import.meta.env.VITE_API_KEY || "";
+function readStoredApiKey(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return window.localStorage.getItem(API_KEY_STORAGE_KEY)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+let _apiKey = (import.meta.env.VITE_API_KEY || "").trim() || readStoredApiKey();
 
 export function setApiKey(key: string) {
-  _apiKey = key;
+  _apiKey = key.trim();
+  if (typeof window === "undefined") return;
+  try {
+    if (_apiKey) {
+      window.localStorage.setItem(API_KEY_STORAGE_KEY, _apiKey);
+    } else {
+      window.localStorage.removeItem(API_KEY_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage errors (private mode, quota, etc.) and still keep in-memory key.
+  }
 }
 
 export function getApiKey() {

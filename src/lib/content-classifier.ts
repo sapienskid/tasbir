@@ -49,13 +49,14 @@ Return JSON:
  * OPTIMIZED: Uses fast model for classification (simple decision task).
  */
 export async function classifyContent(
-  env: Record<string, string | undefined>,
+  aiBinding: Ai,
+  gatewayToken: string | undefined,
+  googleApiKey: string | undefined,
   title: string,
   content: string,
   availableTemplates: TemplateMetadata[],
-  aiBinding?: Ai,
 ): Promise<ContentClassification> {
-  const providerConfig = resolveProviderConfig(env, aiBinding);
+  const providerConfig = resolveProviderConfig(aiBinding, gatewayToken, googleApiKey);
   
   // OPTIMIZATION: Use fast model for classification (simple task)
   const models = createFastModelChain(providerConfig);
