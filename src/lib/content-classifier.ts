@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { createModelChain, resolveProviderConfig } from "../ai/providers";
+import { createFastModelChain, resolveProviderConfig } from "../ai/providers";
 import type { TemplateMetadata } from "./templates";
 
 export interface ContentClassification {
@@ -44,6 +44,10 @@ Return JSON:
 }`;
 };
 
+/**
+ * Classify content to determine template match and content type.
+ * OPTIMIZED: Uses fast model for classification (simple decision task).
+ */
 export async function classifyContent(
   env: Record<string, string | undefined>,
   title: string,
@@ -52,7 +56,9 @@ export async function classifyContent(
   aiBinding?: Ai,
 ): Promise<ContentClassification> {
   const providerConfig = resolveProviderConfig(env, aiBinding);
-  const models = createModelChain(providerConfig);
+  
+  // OPTIMIZATION: Use fast model for classification (simple task)
+  const models = createFastModelChain(providerConfig);
   const model = models[0];
 
   try {

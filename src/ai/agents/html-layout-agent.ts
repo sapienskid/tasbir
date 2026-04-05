@@ -1,7 +1,13 @@
-import { generateText, type LanguageModel } from "ai";
+import { generateText, streamText, type LanguageModel } from "ai";
 
 export interface HtmlLayoutOutput {
   generated_html: string;
+}
+
+export interface StreamCallbacks {
+  onChunk?: (chunk: string) => void;
+  onComplete?: (html: string) => void;
+  onError?: (error: Error) => void;
 }
 
 const HTML_LAYOUT_SYSTEM_PROMPT = `You are an elite social media visual designer and modern web layout engineer.
@@ -24,33 +30,26 @@ Rules:
 - Do not return JSON
 - Do not return captions, notes, markdown fences, or explanations`;
 
-export async function generateHtmlLayout(
-  models: LanguageModel[],
-  args: {
-    platform: string;
-    formatName?: string;
-    formatInstruction?: string;
-    width: number;
-    height: number;
-    title: string;
-    excerpt: string;
-    content: string;
-    designTokens: string;
-    userPrompt?: string;
-    systemPrompt?: string;
-    userInstructions?: string | string[];
-    userInstructionsAppend?: string;
-  },
-): Promise<HtmlLayoutOutput> {
-  const errors: Error[] = [];
-  const renderedUserInstructionBlock = renderUserInstructionBlock(args);
+export interface HtmlLayoutArgs {
+  platform: string;
+  formatName?: string;
+  formatInstruction?: string;
+  width: number;
+  height: number;
+  title: string;
+  excerpt: string;
+  content: string;
+  designTokens: string;
+  userPrompt?: string;
+  systemPrompt?: string;
+  userInstructions?: string | string[];
+  userInstructionsAppend?: string;
+}
 
-  for (const model of models) {
-    try {
-      const result = await generateText({
-        model,
-        system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
-        prompt: `Generate a social post design for the platform: ${args.platform}${args.formatName ? ` (${args.formatName})` : ""} (${args.width}x${args.height}).
+function buildPrompt(args: HtmlLayoutArgs): string {
+  const renderedUserInstructionBlock = renderUserInstructionBlock(args);
+  
+  return `Generate a social post design for the platform: ${args.platform}${args.formatName ? ` (${args.formatName})` : ""} (${args.width}x${args.height}).
 
 ${args.formatInstruction ? `FORMAT-SPECIFIC CREATIVE DIRECTION:\n${args.formatInstruction}\n` : ""}
 
@@ -70,7 +69,21 @@ Instructions:
 - Use normal Tailwind classes for styling.
 - Keep typography highly readable with clear hierarchy.
 
-Return only one complete HTML document as raw text.`,
+Return only one complete HTML document as raw text.`;
+}
+
+export async function generateHtmlLayout(
+  models: LanguageModel[],
+  args: HtmlLayoutArgs,
+): Promise<HtmlLayoutOutput> {
+  const errors: Error[] = [];
+
+  for (const model of models) {
+    try {
+      const result = await generateText({
+        model,
+        system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
+        prompt: buildPrompt(args),
         temperature: 0.7,
       });
 
@@ -83,6 +96,50 @@ Return only one complete HTML document as raw text.`,
   }
 
   throw new AggregateError(errors, "HTML layout generation failed across all providers");
+}
+
+/**
+ * STREAMING: Generate HTML layout with streaming support for real-time progress.
+ * Returns an async generator that yields chunks as they arrive.
+ */
+export async function* streamHtmlLayout(
+  models: LanguageModel[],
+  args: HtmlLayoutArgs,
+): AsyncGenerator<{ type: "chunk" | "complete" | "error"; data: string }> {
+  const errors: Error[] = [];
+
+  for (const model of models) {
+    try {
+      const result = streamText({
+        model,
+        system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
+        prompt: buildPrompt(args),
+        temperature: 0.7,
+      });
+
+      let fullText = "";
+      
+      for await (const chunk of result.textStream) {
+        fullText += chunk;
+        yield { type: "chunk", data: chunk };
+      }
+
+      const generatedHtml = extractHtml(fullText);
+      yield { type: "complete", data: generatedHtml };
+      return;
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      errors.push(err);
+      if (!isRetryableError(error)) {
+        yield { type: "error", data: err.message };
+        throw error;
+      }
+    }
+  }
+
+  const aggregateError = new AggregateError(errors, "HTML layout generation failed across all providers");
+  yield { type: "error", data: aggregateError.message };
+  throw aggregateError;
 }
 
 function renderUserInstructionBlock(args: {

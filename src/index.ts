@@ -750,6 +750,52 @@ app.post("/generate-from-content", async (c) => {
   return c.json(result);
 });
 
+/**
+ * STREAMING: Generate content with real-time progress updates via Server-Sent Events.
+ * This endpoint streams generation progress for better UX on slow connections.
+ */
+app.post("/generate-from-content/stream", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  enforceRateLimit(c.req.raw, security, "generate-from-content");
+
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const validated = validateDirectContentRequestBody(body);
+  const post = buildPostFromDirectContent(validated, security);
+  
+  // Create SSE response
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        // Send initial event
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "start", message: "Starting generation..." })}\n\n`));
+        
+        // Run pipeline with progress updates
+        const result = await runPipelineFromPostWithProgress(post, c.env, validated, security, (progress) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(progress)}\n\n`));
+        });
+        
+        // Send completion event
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "complete", result })}\n\n`));
+        controller.close();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", message })}\n\n`));
+        controller.close();
+      }
+    }
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+  });
+});
+
 app.post("/webhook/ghost", async (c) => {
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "webhook");
@@ -772,7 +818,7 @@ app.post("/webhook/ghost", async (c) => {
 
 app.notFound((c) => c.json({
   error: "Not found",
-  routes: ["POST /generate", "POST /generate-from-content", "POST /webhook/ghost", "GET /health", "GET /settings", "PUT /settings", "PATCH /settings", "GET /templates", "GET /templates/:id", "PUT /templates/:id", "DELETE /templates/:id", "POST /templates/:id/toggle", "POST /templates/:id/validate", "GET /config/design-tokens", "GET /config/prompts", "GET /config/formats"]
+  routes: ["POST /generate", "POST /generate-from-content", "POST /generate-from-content/stream", "POST /webhook/ghost", "GET /health", "GET /settings", "PUT /settings", "PATCH /settings", "GET /templates", "GET /templates/:id", "PUT /templates/:id", "DELETE /templates/:id", "POST /templates/:id/toggle", "POST /templates/:id/validate", "GET /config/design-tokens", "GET /config/prompts", "GET /config/formats"]
 }, 404 as any));
 
 app.onError((err, c) => {
@@ -1275,6 +1321,238 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
     slug: post.slug,
     post_url: post.url,
     requested_formats: [...outputPlan.formats],
+    image_source: primaryVariant.image_source,
+    llm_output: primaryVariant.llm_output,
+    agentic: summarizeAgentExecution(agentContexts),
+    assets: primaryVariant.assets,
+    variants: outputPlan.postCount > 1 ? variants : undefined,
+    classification: classification ? {
+      type: classification.type,
+      templateUsed: classification.templateMatch,
+      reasoning: classification.reasoning,
+    } : undefined,
+  };
+}
+
+interface StreamProgress {
+  type: "start" | "classifying" | "generating" | "rendering" | "complete" | "error";
+  message: string;
+  format?: string;
+  progress?: number;
+  total?: number;
+}
+
+/**
+ * STREAMING: Pipeline with progress callback for real-time updates.
+ * Provides progress events that can be streamed to clients via SSE.
+ */
+export async function runPipelineFromPostWithProgress(
+  post: GhostPost,
+  env: Env,
+  body: GenerateRequestBody | DirectContentRequestBody,
+  security: ResolvedSecurityConfig,
+  onProgress: (progress: StreamProgress) => void
+) {
+  const settings = env.SETTINGS_KV ? await loadSettings(env.SETTINGS_KV) : getDefaultSettings();
+  const outputPlan = resolveOutputPlanWithSettings(body.output, settings);
+  const defaultTokens = await loadDesignTokensForGeneration(env);
+  const designTokensForRun = resolveDesignTokensForRequest(body.designTokens, defaultTokens);
+  
+  const precomputedTokens = precomputeDesignTokenAssets(designTokensForRun);
+  const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
+  const designInstructions = extractDesignInstructions(designTokensForRun);
+  const designTokensHash = await hashDesignTokens(designTokensForRun);
+  const useCache = shouldUseCache({ postCount: outputPlan.postCount });
+  
+  const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
+  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null> }> = [];
+  const baseAgentContext = resolveAgentExecutionContext(body.agent);
+  const agentContexts: AgentExecutionContext[] = [];
+  const sharedStorage = resolveBatchStorageOptions(body.storage);
+
+  let classification: ContentClassification | null = null;
+  let matchedTemplate: { html: string; metadata: TemplateMetadata } | null = null;
+
+  // Classification phase
+  if (settings.templates.autoSelect && env.TEMPLATES_KV) {
+    onProgress({ type: "classifying", message: "Analyzing content..." });
+    try {
+      const allTemplates = await listTemplates(env.TEMPLATES_KV);
+      const enabledTemplates = allTemplates.filter((t) => t.enabled && !settings.templates.disabled.includes(t.id));
+      classification = await classifyContent(
+        env as unknown as Record<string, string | undefined>,
+        post.title,
+        post.plaintext || post.excerpt || "",
+        enabledTemplates,
+        env.AI,
+      );
+
+      if (classification.templateMatch) {
+        const templateResult = await getTemplate(env.TEMPLATES_KV, env.OUTPUT_BUCKET, classification.templateMatch);
+        if (templateResult) {
+          matchedTemplate = { html: templateResult.html, metadata: templateResult.metadata };
+        }
+      }
+    } catch (error) {
+      console.warn("[classification] Failed to classify content or load template:", error);
+    }
+  }
+
+  const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
+  const keyPrefix = buildR2KeyPrefix(env, post.slug, sharedStorage);
+  const formatsArray = [...outputPlan.formats];
+  const totalFormats = formatsArray.length;
+
+  const browser = await launchRenderingBrowser(env);
+  
+  try {
+    for (let index = 0; index < outputPlan.postCount; index += 1) {
+      const variantPrompt = outputPlan.postCount > 1
+        ? [effectivePrompt?.trim(), `Variation index ${index + 1} of ${outputPlan.postCount}.`].filter(Boolean).join(" ")
+        : effectivePrompt;
+
+      const agentContext = await resolveAgentContextForRun({
+        env,
+        post,
+        baseContext: baseAgentContext,
+        userPrompt: variantPrompt,
+        requestedFormats: formatsArray
+      });
+      agentContexts.push(agentContext);
+
+      const formatConfigs = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter(f => f.config);
+      const formatAssets: Record<string, StoredAsset | null> = {};
+      let variantLlmOutput: LlmOutput | null = null;
+      let imageSource: SelectedImage = { source: "none", imageUrl: "" };
+
+      // Generate and render each format with progress updates
+      for (let i = 0; i < formatConfigs.length; i++) {
+        const { format, config } = formatConfigs[i];
+        if (!config) continue;
+
+        onProgress({ 
+          type: "generating", 
+          message: `Generating ${format}...`,
+          format,
+          progress: i + 1,
+          total: totalFormats
+        });
+
+        let llmOutput: LlmOutput | null = null;
+
+        // Check cache first
+        if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
+          const cacheKey = await generateCacheKey({
+            title: post.title,
+            content: post.plaintext || post.excerpt || "",
+            format,
+            width: config.width,
+            height: config.height,
+            prompt: variantPrompt,
+            designTokensHash,
+          });
+          
+          const cached = await getCachedHtml(env.AI_CACHE_KV, cacheKey);
+          if (cached) {
+            llmOutput = { generated_html: cached.html };
+            onProgress({ type: "generating", message: `Using cached ${format}`, format, progress: i + 1, total: totalFormats });
+          }
+        }
+        
+        // If not cached, generate
+        if (!llmOutput) {
+          if (matchedTemplate && classification) {
+            const slotValues = { ...classification.slotValues };
+            if (!slotValues.headline) slotValues.headline = post.title;
+            if (!slotValues.brand) slotValues.brand = brandName;
+            llmOutput = { generated_html: fillTemplateSlots(matchedTemplate.html, slotValues) };
+          } else {
+            const instructionsWithDesignGuidance = designInstructions
+              ? [`DESIGN SYSTEM INSTRUCTIONS (follow these closely):`, designInstructions].join('\n')
+              : undefined;
+
+            llmOutput = await runHtmlLayoutAgent(
+              env,
+              post,
+              format,
+              config.name,
+              config.aiInstruction,
+              config.width,
+              config.height,
+              designTokensPrompt,
+              variantPrompt,
+              agentContext.copyOverrides,
+              instructionsWithDesignGuidance,
+            );
+
+            // Cache the result if caching is enabled
+            if (useCache && env.AI_CACHE_KV) {
+              const cacheKey = await generateCacheKey({
+                title: post.title,
+                content: post.plaintext || post.excerpt || "",
+                format,
+                width: config.width,
+                height: config.height,
+                prompt: variantPrompt,
+                designTokensHash,
+              });
+              
+              setCachedHtml(env.AI_CACHE_KV, cacheKey, {
+                html: llmOutput.generated_html,
+                generatedAt: Date.now(),
+                contentHash: designTokensHash,
+                format,
+              }).catch(() => {});
+            }
+          }
+        }
+
+        const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
+
+        onProgress({ 
+          type: "rendering", 
+          message: `Rendering ${format}...`,
+          format,
+          progress: i + 1,
+          total: totalFormats
+        });
+
+        const asset = await renderStoreSingleAssetWithPage(env, browser, {
+          key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
+          format,
+          rawHtml: finalHtml,
+          formatLabel: format,
+          width: config.width,
+          height: config.height,
+        });
+
+        formatAssets[format] = asset;
+        if (!variantLlmOutput) variantLlmOutput = { generated_html: finalHtml };
+      }
+
+      if (index === 0) {
+        imageSource = { source: post.feature_image ? "feature" : "none", imageUrl: post.feature_image || "" };
+      }
+
+      variants.push({
+        index: index + 1,
+        image_source: imageSource,
+        llm_output: variantLlmOutput || { generated_html: "" },
+        assets: formatAssets
+      });
+    }
+  } finally {
+    await browser.close();
+  }
+
+  const primaryVariant = variants[0];
+  if (!primaryVariant) throw new HttpError(500, "Generation pipeline did not produce any output variants");
+
+  return {
+    ok: true,
+    slug: post.slug,
+    post_url: post.url,
+    requested_formats: formatsArray,
     image_source: primaryVariant.image_source,
     llm_output: primaryVariant.llm_output,
     agentic: summarizeAgentExecution(agentContexts),
