@@ -5,7 +5,7 @@ import {
   generateHtmlLayout,
   normalizeSourceContent,
   stripHtml,
-  createModelChain,
+  createAdvancedModelChain,
   resolveProviderConfig,
 } from "./ai";
 import {
@@ -1126,7 +1126,7 @@ async function resolveAgentContextForRun(args: {
   const context = cloneAgentExecutionContext(args.baseContext);
 
   const providerConfig = resolveProviderConfig(args.env.AI, args.env.AI_GATEWAY_TOKEN, args.env.GOOGLE_API_KEY);
-  const models = createModelChain(providerConfig);
+  const models = createAdvancedModelChain(providerConfig);
   if (models.length === 0) {
     context.warnings.push("no_ai_provider");
     return context;
@@ -1295,7 +1295,7 @@ async function runHtmlLayoutAgent(
   settings?: WorkspaceSettings | null,
 ): Promise<LlmOutput> {
   const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
-  const models = createModelChain(providerConfig);
+  const models = createAdvancedModelChain(providerConfig);
 
   const content = post.plaintext || post.html || "";
   const systemPrompt = [...(Array.isArray(overrides?.systemPrompt) ? overrides.systemPrompt : overrides?.systemPrompt ? [overrides.systemPrompt] : [])].join("\n");

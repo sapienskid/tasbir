@@ -5,6 +5,7 @@ export {
   createModelChain,
   createFastModelChain,
   createHtmlLayoutModelChain,
+  createAdvancedModelChain,
   resolveProviderConfig,
   DYNAMIC_ROUTES,
   type ProviderConfig,

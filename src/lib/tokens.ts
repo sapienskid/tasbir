@@ -1,4 +1,4 @@
-import { createModelChain, resolveProviderConfig } from "../ai";
+import { createAdvancedModelChain, resolveProviderConfig } from "../ai";
 import { generateDesignTokens } from "../ai/agents/design-token-agent";
 
 // Re-export everything from the shared token package
@@ -33,7 +33,7 @@ export async function generateTokensAI(
   secondaryHint?: string,
 ): Promise<DesignTokens> {
   const providerConfig = resolveProviderConfig(aiBinding, gatewayToken, googleApiKey);
-  const models = createModelChain(providerConfig);
+  const models = createAdvancedModelChain(providerConfig);
 
   let enhancedVibe = vibe;
   if (primaryHint || secondaryHint) {
