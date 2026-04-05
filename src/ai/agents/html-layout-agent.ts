@@ -1,4 +1,6 @@
 import { generateText, streamText, type LanguageModel } from "ai";
+import { createPromptConfig, type PromptConfig } from "../../lib/prompt-utils.js";
+import type { WorkspaceSettings } from "../../lib/settings.js";
 
 export interface HtmlLayoutOutput {
   generated_html: string;
@@ -44,6 +46,7 @@ export interface HtmlLayoutArgs {
   systemPrompt?: string;
   userInstructions?: string | string[];
   userInstructionsAppend?: string;
+  settings?: WorkspaceSettings | null;
   generatedImage?: {
     dataUrl: string;
     imageType: string;
@@ -91,12 +94,25 @@ export async function generateHtmlLayout(
   args: HtmlLayoutArgs,
 ): Promise<HtmlLayoutOutput> {
   const errors: Error[] = [];
+  
+  // Create enhanced prompt configuration
+  const promptConfig = createPromptConfig(
+    HTML_LAYOUT_SYSTEM_PROMPT,
+    args.settings,
+    'htmlGeneration'
+  );
+  
+  // Combine system prompts: base + custom + additional system prompt
+  const finalSystemPrompt = [
+    promptConfig.system,
+    args.systemPrompt
+  ].filter(Boolean).join("\n\n");
 
   for (const model of models) {
     try {
       const result = await generateText({
         model,
-        system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
+        system: finalSystemPrompt,
         prompt: buildPrompt(args),
         temperature: 0.7,
       });
@@ -121,12 +137,25 @@ export async function* streamHtmlLayout(
   args: HtmlLayoutArgs,
 ): AsyncGenerator<{ type: "chunk" | "complete" | "error"; data: string }> {
   const errors: Error[] = [];
+  
+  // Create enhanced prompt configuration
+  const promptConfig = createPromptConfig(
+    HTML_LAYOUT_SYSTEM_PROMPT,
+    args.settings,
+    'htmlGeneration'
+  );
+  
+  // Combine system prompts: base + custom + additional system prompt
+  const finalSystemPrompt = [
+    promptConfig.system,
+    args.systemPrompt
+  ].filter(Boolean).join("\n\n");
 
   for (const model of models) {
     try {
       const result = streamText({
         model,
-        system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
+        system: finalSystemPrompt,
         prompt: buildPrompt(args),
         temperature: 0.7,
       });

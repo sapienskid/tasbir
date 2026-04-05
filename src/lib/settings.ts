@@ -25,6 +25,14 @@ export interface WorkspaceSettings {
     mode: "auto" | "none" | "feature" | "ai";
     style: string;
   };
+  prompts: {
+    htmlGeneration: string;
+    contentCreation: string;
+    imageGeneration: string;
+    templateSelection: string;
+    designTokens: string;
+    customInstructions: string;
+  };
   designTokens: Record<string, unknown> | null;
   updatedAt: string;
 }
@@ -52,6 +60,14 @@ const DEFAULT_SETTINGS: WorkspaceSettings = {
   image: {
     mode: "auto",
     style: "editorial"
+  },
+  prompts: {
+    htmlGeneration: "",
+    contentCreation: "",
+    imageGeneration: "",
+    templateSelection: "", 
+    designTokens: "",
+    customInstructions: ""
   },
   designTokens: null,
   updatedAt: new Date().toISOString()

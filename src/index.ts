@@ -862,7 +862,8 @@ app.post("/decide-template", async (c) => {
     { title, excerpt, body: content, contentType },
     format,
     availableTemplates,
-    preferences
+    preferences,
+    c.env.SETTINGS_KV ? await loadSettings(c.env.SETTINGS_KV) : getDefaultSettings()
   );
   
   return c.json(decision);
@@ -1226,6 +1227,7 @@ async function runHtmlLayoutAgent(
   overrides?: LlmPromptOverrides,
   designInstructions?: string,
   generatedImage?: GeneratedImage,
+  settings?: WorkspaceSettings | null,
 ): Promise<LlmOutput> {
   const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
   const models = createModelChain(providerConfig);
@@ -1257,6 +1259,7 @@ async function runHtmlLayoutAgent(
       imageType: generatedImage.imageType,
       prompt: generatedImage.prompt,
     } : undefined,
+    settings,
   });
 
   return {
@@ -1347,7 +1350,8 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
               {
                 preferTemplates: settings.templates.autoSelect,
                 qualityThreshold: 3,
-              }
+              },
+              settings
             );
             templateDecisions.set(format, decision);
             
@@ -1391,7 +1395,8 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
         {
           primaryColor: (designTokensForRun as any)?.colors?.primary?.['500'],
           style: (designTokensForRun as any)?.meta?.aesthetic,
-        }
+        },
+        settings
       );
       
       if (imageDecision.shouldGenerate && imageDecision.imageType !== 'none') {
@@ -1520,6 +1525,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
               agentContext.copyOverrides,
               instructionsWithDesignGuidance,
               generatedImage || undefined,
+              settings,
             );
             
             // CACHE: Store the generated HTML for future requests
@@ -1735,7 +1741,8 @@ export async function runPipelineFromPostWithProgress(
         {
           primaryColor: (designTokensForRun as any)?.colors?.primary?.['500'],
           style: (designTokensForRun as any)?.meta?.aesthetic,
-        }
+        },
+        settings
       );
       
       if (imageDecision.shouldGenerate && imageDecision.imageType !== 'none') {
@@ -1856,6 +1863,7 @@ export async function runPipelineFromPostWithProgress(
               agentContext.copyOverrides,
               instructionsWithDesignGuidance,
               generatedImage || undefined,
+              settings,
             );
 
             // Cache the result if caching is enabled

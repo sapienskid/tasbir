@@ -1194,6 +1194,88 @@ function SettingsTab({ settings, loading, onSave, formats }: any) {
           <option value="feature">Feature image</option>
           <option value="ai">AI generated</option>
         </select>
+
+        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>AI Prompts</div>
+        <div className="space-y-3 p-2.5 rounded border" style={{ background: '#0a0a0a', borderColor: '#313131' }}>
+          <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: '#666' }}>
+            Custom AI Instructions (Optional)
+          </div>
+          <div className="text-[9px] leading-relaxed" style={{ color: '#777' }}>
+            Customize how AI generates content and visuals. Leave fields empty to use system defaults.
+          </div>
+          
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>HTML Generation</label>
+            <textarea
+              value={local.prompts?.htmlGeneration || ''}
+              onChange={(e: any) => set(['prompts', 'htmlGeneration'], e.target.value)}
+              placeholder="Additional instructions for HTML layout generation..."
+              rows={3}
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
+              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+            />
+          </div>
+          
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Content Creation</label>
+            <textarea
+              value={local.prompts?.contentCreation || ''}
+              onChange={(e: any) => set(['prompts', 'contentCreation'], e.target.value)}
+              placeholder="Instructions for AI copywriting and content generation..."
+              rows={3}
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
+              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+            />
+          </div>
+          
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>AI Image Generation</label>
+            <textarea
+              value={local.prompts?.imageGeneration || ''}
+              onChange={(e: any) => set(['prompts', 'imageGeneration'], e.target.value)}
+              placeholder="Style guidance for AI-generated images..."
+              rows={2}
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
+              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+            />
+          </div>
+          
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Template Selection</label>
+            <textarea
+              value={local.prompts?.templateSelection || ''}
+              onChange={(e: any) => set(['prompts', 'templateSelection'], e.target.value)}
+              placeholder="Guidelines for when AI should use templates vs. generate new layouts..."
+              rows={2}
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
+              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+            />
+          </div>
+          
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Design Tokens</label>
+            <textarea
+              value={local.prompts?.designTokens || ''}
+              onChange={(e: any) => set(['prompts', 'designTokens'], e.target.value)}
+              placeholder="Instructions for AI design token generation..."
+              rows={2}
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
+              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+            />
+          </div>
+          
+          <div>
+            <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Custom Instructions</label>
+            <textarea
+              value={local.prompts?.customInstructions || ''}
+              onChange={(e: any) => set(['prompts', 'customInstructions'], e.target.value)}
+              placeholder="General instructions that apply to all AI operations..."
+              rows={3}
+              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
+              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+            />
+          </div>
+        </div>
       </div>
       <div className="p-3 border-t flex-shrink-0" style={{ borderColor: '#252525' }}>
         <button onClick={handleSave} className="w-full py-2 rounded font-bold text-[10px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">

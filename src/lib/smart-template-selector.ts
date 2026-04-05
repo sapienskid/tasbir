@@ -17,6 +17,8 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { createFastModelChain, resolveProviderConfig, type ProviderConfig } from "../ai/providers";
+import { createPromptConfig } from "./prompt-utils.js";
+import type { WorkspaceSettings } from "./settings.js";
 
 export interface SavedHtmlTemplate {
   id: string;
@@ -65,7 +67,8 @@ export async function decideTemplateOrGenerate(
     preferTemplates?: boolean;      // Bias towards using templates
     alwaysGenerate?: boolean;       // Force generation
     qualityThreshold?: number;      // Min template quality to consider
-  }
+  },
+  settings?: WorkspaceSettings | null
 ): Promise<TemplateDecision> {
   // Fast path: if user wants to always generate, skip AI decision
   if (preferences?.alwaysGenerate) {
@@ -116,10 +119,9 @@ export async function decideTemplateOrGenerate(
       quality: t.quality,
     }));
 
-    const result = await generateObject({
-      model,
-      schema: TemplateDecisionSchema,
-      system: `You are a smart template selector for social media content generation.
+    // Create enhanced prompt configuration
+    const promptConfig = createPromptConfig(
+      `You are a smart template selector for social media content generation.
 Your job is to decide whether to use an existing HTML template or generate new HTML.
 
 Decision criteria:
@@ -128,6 +130,14 @@ Decision criteria:
 - Consider template quality ratings and usage counts
 - Prefer templates for common content types (quotes, metrics, simple insights)
 - Generate new for stories, tutorials, complex narratives, or unique requests`,
+      settings,
+      'templateSelection'
+    );
+
+    const result = await generateObject({
+      model,
+      schema: TemplateDecisionSchema,
+      system: promptConfig.system,
 
       prompt: `Decide: use existing template or generate new HTML?
 

@@ -8,6 +8,8 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { createFastModelChain, resolveProviderConfig, type ProviderConfig } from "../ai/providers";
+import { createPromptConfig } from "./prompt-utils.js";
+import type { WorkspaceSettings } from "./settings.js";
 
 export type ImageType = "background" | "illustration" | "pattern" | "gradient" | "none";
 
@@ -49,7 +51,8 @@ export async function decideImageGeneration(
   designHints?: {
     primaryColor?: string;
     style?: string;
-  }
+  },
+  settings?: WorkspaceSettings | null
 ): Promise<ImageDecision> {
   const models = createFastModelChain(providerConfig);
   const model = models[0];
@@ -66,10 +69,9 @@ export async function decideImageGeneration(
   }
 
   try {
-    const result = await generateObject({
-      model,
-      schema: ImageDecisionSchema,
-      system: `You are a creative director for social media visual content.
+    // Create enhanced prompt configuration
+    const promptConfig = createPromptConfig(
+      `You are a creative director for social media visual content.
 Your job is to decide if and what type of AI-generated image would enhance a social post.
 
 Guidelines:
@@ -83,6 +85,14 @@ Consider:
 - Content type (quotes work well with backgrounds, data with illustrations)
 - Brand tone (professional vs playful affects image style)
 - Readability (images should not compete with text)`,
+      settings,
+      'imageGeneration'
+    );
+
+    const result = await generateObject({
+      model,
+      schema: ImageDecisionSchema,
+      system: promptConfig.system,
 
       prompt: `Decide if this social post needs an AI-generated image:
 
