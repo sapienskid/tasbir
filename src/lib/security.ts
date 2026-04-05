@@ -31,21 +31,25 @@ export interface ResolvedSecurityConfig {
 }
 
 export interface Env {
+  GOOGLE_API_KEY?: string;
+  GOOGLE_MODEL?: string;
+  GOOGLE_FAST_MODEL?: string;
   CLOUDFLARE_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
-  CLOUDFLARE_MODEL?: string;
-  CLOUDFLARE_FAST_MODEL?: string;
+  LLM_MODEL?: string;
+  LLM_FAST_MODEL?: string;
+  IMAGE_MODEL?: string;
   AI: Ai;
   BROWSER: Fetcher;
   OUTPUT_BUCKET: R2Bucket;
-  GHOST_API_URL: string;
-  GHOST_CONTENT_API_KEY: string;
+  SETTINGS_KV?: KVNamespace;
+  TEMPLATES_KV?: KVNamespace;
+  GHOST_API_URL?: string;
+  GHOST_CONTENT_API_KEY?: string;
   GHOST_WEBHOOK_TOKEN?: string;
   GHOST_WEBHOOK_SECRET?: string;
   R2_PUBLIC_BASE_URL?: string;
   BRAND_NAME?: string;
-  LLM_MODEL?: string;
-  IMAGE_MODEL?: string;
   R2_KEY_PREFIX?: string;
   NOTIFY_WEBHOOK_URL?: string;
   API_KEYS?: string;
@@ -156,7 +160,7 @@ export function resolveSecurityConfig(env: Env): ResolvedSecurityConfig {
       max_json_body_bytes: 256_000
     },
     rate_limit: {
-      enabled: true,
+      enabled: false,
       window_seconds: 60,
       max_requests_per_window: 30
     },
@@ -171,34 +175,8 @@ export function resolveSecurityConfig(env: Env): ResolvedSecurityConfig {
   const envApiKeys = splitCsv(env.API_KEYS);
   merged.apiKeys = new Set(envApiKeys);
 
-  const envAllowedOrigins = splitCsv(env.CORS_ALLOWED_ORIGINS);
-  if (envAllowedOrigins.length > 0) {
-    merged.cors.allowed_origins = envAllowedOrigins.map((o) => o.toLowerCase());
-  }
-
-  const envAllowedHeaders = splitCsv(env.CORS_ALLOWED_HEADERS);
-  if (envAllowedHeaders.length > 0) {
-    merged.cors.allowed_headers = envAllowedHeaders.map((h) => h.toLowerCase());
-  }
-
   if (env.API_AUTH_REQUIRE_FOR_PREVIEW !== undefined) {
     merged.api_auth.require_for_generate = parseBooleanString(env.API_AUTH_REQUIRE_FOR_PREVIEW, merged.api_auth.require_for_generate);
-  }
-
-  if (env.CORS_ALLOW_CREDENTIALS !== undefined) {
-    merged.cors.allow_credentials = parseBooleanString(env.CORS_ALLOW_CREDENTIALS, merged.cors.allow_credentials);
-  }
-  if (env.CORS_MAX_AGE_SECONDS !== undefined) {
-    merged.cors.max_age_seconds = Math.round(clampNumber(Number(env.CORS_MAX_AGE_SECONDS), 0, 86400, merged.cors.max_age_seconds));
-  }
-  if (env.RATE_LIMIT_ENABLED !== undefined) {
-    merged.rate_limit.enabled = parseBooleanString(env.RATE_LIMIT_ENABLED, merged.rate_limit.enabled);
-  }
-  if (env.RATE_LIMIT_WINDOW_SECONDS !== undefined) {
-    merged.rate_limit.window_seconds = Math.round(clampNumber(Number(env.RATE_LIMIT_WINDOW_SECONDS), 1, 3600, merged.rate_limit.window_seconds));
-  }
-  if (env.RATE_LIMIT_MAX_REQUESTS_PER_WINDOW !== undefined) {
-    merged.rate_limit.max_requests_per_window = Math.round(clampNumber(Number(env.RATE_LIMIT_MAX_REQUESTS_PER_WINDOW), 1, 10_000, merged.rate_limit.max_requests_per_window));
   }
 
   const notifyHostAllowlist = new Set(merged.outbound.allowed_notify_hosts);

@@ -1,26 +1,35 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { LanguageModel } from "ai";
 
 export interface ProviderConfig {
-  cloudflareApiToken?: string;
-  cloudflareAccountId?: string;
-  cloudflareModel?: string;
-  cloudflareFastModel?: string;
+  googleApiKey?: string;
+  googleModel?: string;
+  googleFastModel?: string;
+  cfApiToken?: string;
+  cfAccountId?: string;
+  cfModel?: string;
+  cfFastModel?: string;
 }
 
 export function createModelChain(config: ProviderConfig): LanguageModel[] {
   const models: LanguageModel[] = [];
 
-  if (config.cloudflareApiToken && config.cloudflareAccountId) {
-    const cloudflare = createOpenAI({
-      apiKey: config.cloudflareApiToken,
-      baseURL: `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/ai/v1`,
+  if (config.googleApiKey) {
+    const google = createGoogleGenerativeAI({ apiKey: config.googleApiKey });
+    models.push(google(config.googleModel || "gemini-2.5-flash"));
+  }
+
+  if (config.cfApiToken && config.cfAccountId) {
+    const cf = createOpenAI({
+      apiKey: config.cfApiToken,
+      baseURL: `https://api.cloudflare.com/client/v4/accounts/${config.cfAccountId}/ai/v1`,
     });
-    models.push(cloudflare(config.cloudflareModel || "@cf/openai/gpt-oss-120b"));
+    models.push(cf(config.cfModel || "@cf/openai/gpt-oss-120b"));
   }
 
   if (models.length === 0) {
-    throw new Error("No AI provider configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.");
+    throw new Error("No AI provider configured. Set GOOGLE_API_KEY or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID.");
   }
 
   return models;
@@ -29,16 +38,21 @@ export function createModelChain(config: ProviderConfig): LanguageModel[] {
 export function createFastModelChain(config: ProviderConfig): LanguageModel[] {
   const models: LanguageModel[] = [];
 
-  if (config.cloudflareApiToken && config.cloudflareAccountId) {
-    const cloudflare = createOpenAI({
-      apiKey: config.cloudflareApiToken,
-      baseURL: `https://api.cloudflare.com/client/v4/accounts/${config.cloudflareAccountId}/ai/v1`,
+  if (config.googleApiKey) {
+    const google = createGoogleGenerativeAI({ apiKey: config.googleApiKey });
+    models.push(google(config.googleFastModel || config.googleModel || "gemini-2.5-flash"));
+  }
+
+  if (config.cfApiToken && config.cfAccountId) {
+    const cf = createOpenAI({
+      apiKey: config.cfApiToken,
+      baseURL: `https://api.cloudflare.com/client/v4/accounts/${config.cfAccountId}/ai/v1`,
     });
-    models.push(cloudflare(config.cloudflareFastModel || "@cf/meta/llama-3.1-8b-instruct-fp8-fast"));
+    models.push(cf(config.cfFastModel || config.cfModel || "@cf/openai/gpt-oss-120b"));
   }
 
   if (models.length === 0) {
-    throw new Error("No AI provider configured. Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID.");
+    throw new Error("No AI provider configured. Set GOOGLE_API_KEY or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID.");
   }
 
   return models;
@@ -46,10 +60,13 @@ export function createFastModelChain(config: ProviderConfig): LanguageModel[] {
 
 export function resolveProviderConfig(env: Record<string, string | undefined>): ProviderConfig {
   return {
-    cloudflareApiToken: env.CLOUDFLARE_API_TOKEN || env.CF_API_TOKEN,
-    cloudflareAccountId: env.CLOUDFLARE_ACCOUNT_ID || env.CF_ACCOUNT_ID,
-    cloudflareModel: env.CLOUDFLARE_MODEL || env.LLM_MODEL,
-    cloudflareFastModel: env.CLOUDFLARE_FAST_MODEL || env.LLM_FAST_MODEL,
+    googleApiKey: env.GOOGLE_API_KEY,
+    googleModel: env.GOOGLE_MODEL,
+    googleFastModel: env.GOOGLE_FAST_MODEL,
+    cfApiToken: env.CLOUDFLARE_API_TOKEN,
+    cfAccountId: env.CLOUDFLARE_ACCOUNT_ID,
+    cfModel: env.LLM_MODEL,
+    cfFastModel: env.LLM_FAST_MODEL,
   };
 }
 

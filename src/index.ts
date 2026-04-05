@@ -410,10 +410,13 @@ app.post("/generate-tokens", async (c) => {
   try {
     const { generateTokensAI } = await import("./lib/tokens");
     const tokens = await generateTokensAI(vibe, {
+      GOOGLE_API_KEY: c.env.GOOGLE_API_KEY,
+      GOOGLE_MODEL: c.env.GOOGLE_MODEL,
+      GOOGLE_FAST_MODEL: c.env.GOOGLE_FAST_MODEL,
       CLOUDFLARE_API_TOKEN: c.env.CLOUDFLARE_API_TOKEN,
       CLOUDFLARE_ACCOUNT_ID: c.env.CLOUDFLARE_ACCOUNT_ID,
-      CLOUDFLARE_MODEL: c.env.CLOUDFLARE_MODEL,
-      CLOUDFLARE_FAST_MODEL: c.env.CLOUDFLARE_FAST_MODEL,
+      LLM_MODEL: c.env.LLM_MODEL,
+      LLM_FAST_MODEL: c.env.LLM_FAST_MODEL,
     }, primaryHint, secondaryHint);
     
     return c.json(tokens);
@@ -1324,8 +1327,13 @@ function buildPostFromDirectContent(input: DirectContentRequestBody, security: R
 }
 
 async function fetchGhostPost(env: Env, slug: string): Promise<GhostPost> {
-  const base = env.GHOST_API_URL.replace(/\/+$/, "");
-  const endpoint = `${base}/posts/slug/${encodeURIComponent(slug)}/?key=${encodeURIComponent(env.GHOST_CONTENT_API_KEY)}&include=tags,authors&formats=html,plaintext`;
+  const ghostUrl = env.GHOST_API_URL;
+  const ghostKey = env.GHOST_CONTENT_API_KEY;
+  if (!ghostUrl) throw new HttpError(500, "GHOST_API_URL is not configured");
+  if (!ghostKey) throw new HttpError(500, "GHOST_CONTENT_API_KEY is not configured");
+
+  const base = ghostUrl.replace(/\/+$/, "");
+  const endpoint = `${base}/posts/slug/${encodeURIComponent(slug)}/?key=${encodeURIComponent(ghostKey)}&include=tags,authors&formats=html,plaintext`;
   const response = await fetch(endpoint, { headers: { accept: "application/json" } });
 
   if (!response.ok) {
@@ -1645,6 +1653,9 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 }
 
 function assertRequiredEnv(env: Env): void {
-  if (!env.GHOST_API_URL?.trim()) throw new HttpError(500, "Missing env var GHOST_API_URL");
-  if (!env.GHOST_CONTENT_API_KEY?.trim()) throw new HttpError(500, "Missing env var GHOST_CONTENT_API_KEY");
+  const hasGoogleKey = Boolean(env.GOOGLE_API_KEY?.trim());
+  const hasCfCredentials = Boolean(env.CLOUDFLARE_API_TOKEN?.trim() && env.CLOUDFLARE_ACCOUNT_ID?.trim());
+  if (!hasGoogleKey && !hasCfCredentials) {
+    throw new HttpError(500, "No AI provider configured. Set GOOGLE_API_KEY or CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID.");
+  }
 }
