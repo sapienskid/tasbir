@@ -27,22 +27,6 @@
 			"preview_id": "templates-kv-dev"
 		}
 	],
-	"durable_objects": {
-		"bindings": [
-			{
-				"name": "MARKETING_ORCHESTRATOR",
-				"class_name": "MarketingOrchestratorAgent"
-			}
-		]
-	},
-	"migrations": [
-		{
-			"tag": "v1",
-			"new_sqlite_classes": [
-				"MarketingOrchestratorAgent"
-			]
-		}
-	],
 	"r2_buckets": [
 		{
 			"binding": "OUTPUT_BUCKET",

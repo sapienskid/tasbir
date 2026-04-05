@@ -41,8 +41,11 @@ export function createModelChain(config: ProviderConfig): LanguageModel[] {
     return models;
   }
 
-  // Cloudflare Workers AI
-  if (config.aiBinding) {
+  // Cloudflare Workers AI — only use binding when actually deployed
+  // In local dev, the binding exists but throws "needs to be run remotely"
+  const isDeployed = typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
+
+  if (isDeployed && config.aiBinding) {
     const workersai = createWorkersAI({ binding: config.aiBinding });
     models.push(workersai(config.cfModel || "@cf/openai/gpt-oss-120b"));
   } else if (config.cfApiToken && config.cfAccountId) {
@@ -71,7 +74,9 @@ export function createFastModelChain(config: ProviderConfig): LanguageModel[] {
     return models;
   }
 
-  if (config.aiBinding) {
+  const isDeployed = typeof navigator !== "undefined" && navigator.userAgent === "Cloudflare-Workers";
+
+  if (isDeployed && config.aiBinding) {
     const workersai = createWorkersAI({ binding: config.aiBinding });
     models.push(workersai(config.cfFastModel || config.cfModel || "@cf/meta/llama-3.3-70b-instruct-fp8-fast"));
   } else if (config.cfApiToken && config.cfAccountId) {

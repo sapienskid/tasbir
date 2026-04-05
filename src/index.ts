@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
-import type { MarketingOrchestratorAgent } from "./agents/marketing-orchestrator";
 import {
   generateHtmlLayout,
   normalizeSourceContent,
@@ -98,7 +97,6 @@ async function launchRenderingBrowser(env: Env): Promise<any> {
 }
 
 interface Env extends SecurityEnv {
-  MARKETING_ORCHESTRATOR?: DurableObjectNamespace<MarketingOrchestratorAgent>;
   SETTINGS_KV?: KVNamespace;
   TEMPLATES_KV?: KVNamespace;
 }
@@ -698,8 +696,6 @@ app.onError((err, c) => {
   return c.json({ error: message }, 500 as any);
 });
 
-export { MarketingOrchestratorAgent } from "./agents/marketing-orchestrator";
-
 export default app;
 
 // ==================== AGENT CONTEXT ====================
@@ -782,10 +778,6 @@ async function resolveAgentContextForRun(args: {
   requestedFormats: string[];
 }): Promise<AgentExecutionContext> {
   const context = cloneAgentExecutionContext(args.baseContext);
-  if (!args.env.MARKETING_ORCHESTRATOR) {
-    context.warnings.push("agent_binding_missing");
-    return context;
-  }
 
   const providerConfig = resolveProviderConfig(args.env as unknown as Record<string, string | undefined>, args.env.AI);
   const models = createModelChain(providerConfig);
