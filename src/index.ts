@@ -787,55 +787,79 @@ async function resolveAgentContextForRun(args: {
     return context;
   }
 
-  const orchestratorId = args.env.MARKETING_ORCHESTRATOR.idFromName(`marketing-${args.post.slug}`);
-  const orchestratorStub = args.env.MARKETING_ORCHESTRATOR.get(orchestratorId);
+  const providerConfig = resolveProviderConfig(args.env as unknown as Record<string, string | undefined>, args.env.AI);
+  const models = createModelChain(providerConfig);
+  if (models.length === 0) {
+    context.warnings.push("no_ai_provider");
+    return context;
+  }
 
-  const payload = {
-    post: {
-      title: args.post.title,
-      excerpt: args.post.custom_excerpt || args.post.excerpt || "",
-      plaintext: args.post.plaintext || stripHtml(args.post.html || ""),
-      tags: (args.post.tags ?? []).map((item) => item.name ?? "").filter(Boolean)
-    },
-    requestedFormats: args.requestedFormats,
-    userPrompt: args.userPrompt,
-    promptProfile: {
-      mastermind: context.promptProfile.mastermind,
-      strategist: context.promptProfile.strategist,
-      copywriter: context.promptProfile.copywriter,
-      visualDirector: context.promptProfile.visualDirector,
-      renderGuard: context.promptProfile.renderGuard
-    },
-    renderPolicy: context.renderPolicy
-  };
+  const sourceBody = (args.post.plaintext ?? "").trim();
+  const sourceExcerpt = (args.post.excerpt ?? "").trim();
+  const sourceText = sourceBody || sourceExcerpt;
+  const truncatedSource = sourceText.length > 14000 ? `${sourceText.slice(0, 14000)}...` : sourceText;
+  const tags = (args.post.tags ?? []).slice(0, 8).join(", ");
+  const requestedFormats = args.requestedFormats.join(", ");
+
+  const systemPrompt = [
+    ...context.promptProfile.mastermind,
+    ...context.promptProfile.strategist,
+    ...context.promptProfile.copywriter,
+    ...context.promptProfile.visualDirector,
+    ...context.promptProfile.renderGuard,
+    "Return strict JSON matching the required response schema."
+  ].filter(Boolean).join("\n");
+
+  const prompt = [
+    "Build one creative campaign orchestration decision for social content generation.",
+    "",
+    `Requested output formats: ${requestedFormats || "(none)"}`,
+    `User prompt: ${args.userPrompt?.trim() || "(none)"}`,
+    "",
+    "Source content:",
+    `<title>${args.post.title.trim()}</title>`,
+    `<excerpt>${sourceExcerpt || "(none)"}</excerpt>`,
+    `<tags>${tags || "(none)"}</tags>`,
+    "<body>",
+    truncatedSource || "(none)",
+    "</body>",
+    "",
+    "Produce concise notes for:",
+    "- strategic_brief: campaign intent, creative angle, and hook strategy",
+    "- copywriter_notes: platform tone, structure, and copy direction",
+    "- visual_notes: image direction and composition guidance",
+    "- warnings: potential quality/compliance risks"
+  ].join("\n");
 
   try {
-    const response = await orchestratorStub.fetch("http://marketing-agent.local/orchestrate", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload)
+    const { generateObject } = await import("ai");
+    const { z } = await import("zod");
+    const schema = z.object({
+      strategic_brief: z.string(),
+      copywriter_notes: z.string(),
+      visual_notes: z.string(),
+      warnings: z.array(z.string())
     });
-    if (!response.ok) {
-      context.warnings.push(`agent_orchestrator_http_${response.status}`);
-      return context;
-    }
-    const raw = (await response.json()) as unknown;
-    const parsed = parseAgentOrchestrationResponse(raw);
-    if (!parsed) {
-      context.warnings.push("agent_orchestrator_invalid_payload");
-      return context;
-    }
 
-    context.strategicBrief = parsed.strategic_brief;
-    context.visualNotes = [context.visualNotes, parsed.visual_notes].filter(Boolean).join("\n");
+    const result = await generateObject({
+      model: models[0],
+      system: systemPrompt,
+      prompt,
+      schema,
+      temperature: 0.7,
+      maxOutputTokens: 900,
+    });
+
+    context.strategicBrief = result.object.strategic_brief;
+    context.visualNotes = [context.visualNotes, result.object.visual_notes].filter(Boolean).join("\n");
     context.copyOverrides = {
       ...context.copyOverrides,
-      userInstructionsAppend: [context.copyOverrides?.userInstructionsAppend, parsed.copywriter_notes].filter(Boolean).join("\n")
+      userInstructionsAppend: [context.copyOverrides?.userInstructionsAppend, result.object.copywriter_notes].filter(Boolean).join("\n")
     };
-    context.warnings = [...new Set([...context.warnings, ...parsed.warnings])];
+    context.warnings = [...new Set([...context.warnings, ...result.object.warnings])];
     return context;
   } catch {
-    context.warnings.push("agent_orchestrator_request_failed");
+    context.warnings.push("orchestrator_request_failed");
     return context;
   }
 }

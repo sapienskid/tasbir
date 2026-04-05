@@ -38,15 +38,14 @@ export function createModelChain(config: ProviderConfig): LanguageModel[] {
   if (config.googleApiKey) {
     const google = createGoogleGenerativeAI({ apiKey: config.googleApiKey });
     models.push(google(config.googleModel || "gemini-2.5-flash"));
+    return models;
   }
 
   // Cloudflare Workers AI
   if (config.aiBinding) {
-    // Inside a Worker: use binding directly, no credentials needed
     const workersai = createWorkersAI({ binding: config.aiBinding });
     models.push(workersai(config.cfModel || "@cf/openai/gpt-oss-120b"));
   } else if (config.cfApiToken && config.cfAccountId) {
-    // Local dev / non-Worker: use REST API
     const cf = createOpenAI({
       apiKey: config.cfApiToken,
       baseURL: `https://api.cloudflare.com/client/v4/accounts/${config.cfAccountId}/ai/v1`,
@@ -69,6 +68,7 @@ export function createFastModelChain(config: ProviderConfig): LanguageModel[] {
   if (config.googleApiKey) {
     const google = createGoogleGenerativeAI({ apiKey: config.googleApiKey });
     models.push(google(config.googleFastModel || config.googleModel || "gemini-2.5-flash"));
+    return models;
   }
 
   if (config.aiBinding) {
