@@ -1,8 +1,14 @@
 import { Agent } from "agents";
-import { PIPELINE_CONFIG } from "../config";
+import { generateObject } from "ai";
+import { z } from "zod";
+import { createModelChain, resolveProviderConfig } from "../ai/providers";
 
 interface Env {
   AI: Ai;
+  GOOGLE_API_KEY?: string;
+  GOOGLE_MODEL?: string;
+  CLOUDFLARE_API_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
   LLM_MODEL?: string;
 }
 
@@ -21,20 +27,6 @@ interface RenderPolicyPayload {
   allowTextInAiImages: boolean;
 }
 
-interface PlatformGoalPayload {
-  posts?: number;
-  feed?: number;
-  carousel?: number;
-  story?: number;
-}
-
-interface PlatformGoalsPayload {
-  instagram?: PlatformGoalPayload;
-  facebook?: PlatformGoalPayload;
-  linkedin?: PlatformGoalPayload;
-  twitter?: PlatformGoalPayload;
-}
-
 interface OrchestratorRequestPayload {
   post: {
     title: string;
@@ -46,11 +38,6 @@ interface OrchestratorRequestPayload {
   userPrompt?: string;
   promptProfile: PromptProfilePayload;
   renderPolicy: RenderPolicyPayload;
-  platformGoals?: PlatformGoalsPayload;
-  variantContext?: {
-    platform?: string;
-    variantIndex?: number;
-  };
 }
 
 interface OrchestratorResponsePayload {
@@ -60,24 +47,12 @@ interface OrchestratorResponsePayload {
   warnings: string[];
 }
 
-const ORCHESTRATOR_RESPONSE_SCHEMA: Record<string, unknown> = {
-  type: "object",
-  properties: {
-    strategic_brief: { type: "string" },
-    copywriter_notes: { type: "string" },
-    visual_notes: { type: "string" },
-    warnings: {
-      type: "array",
-      items: { type: "string" }
-    }
-  },
-  required: [
-    "strategic_brief",
-    "copywriter_notes",
-    "visual_notes",
-    "warnings"
-  ]
-};
+const ORCHESTRATOR_SCHEMA = z.object({
+  strategic_brief: z.string(),
+  copywriter_notes: z.string(),
+  visual_notes: z.string(),
+  warnings: z.array(z.string())
+});
 
 export class MarketingOrchestratorAgent extends Agent<Env> {
   async onRequest(request: Request): Promise<Response> {
@@ -99,20 +74,11 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
     const sourceBody = (input.post.plaintext ?? "").trim();
     const sourceExcerpt = (input.post.excerpt ?? "").trim();
     const sourceText = sourceBody || sourceExcerpt;
-    const limits = (PIPELINE_CONFIG.generation?.limits as any) ?? {};
-    const postTextMaxChars = (limits.post_text_max_chars as number) ?? 14000;
-    const truncatedSource =
-      sourceText.length > postTextMaxChars
-        ? `${sourceText.slice(0, postTextMaxChars)}...`
-        : sourceText;
+    const truncatedSource = sourceText.length > 14000 ? `${sourceText.slice(0, 14000)}...` : sourceText;
 
     const tags = (input.post.tags ?? []).slice(0, 8).join(", ");
     const requestedFormats = input.requestedFormats.join(", ");
     const userPrompt = input.userPrompt?.trim() || "(none)";
-    const platformGoals = serializePlatformGoals(input.platformGoals);
-    const variantLabel = input.variantContext?.platform
-      ? `${input.variantContext.platform}${input.variantContext.variantIndex ? ` #${input.variantContext.variantIndex}` : ""}`
-      : "none";
 
     const policyNotes = [
       `allow_markdown=${input.renderPolicy.allowMarkdown}`,
@@ -128,17 +94,13 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
       ...input.promptProfile.visualDirector,
       ...input.promptProfile.renderGuard,
       "Return strict JSON matching the required response schema."
-    ]
-      .filter(Boolean)
-      .join("\n");
+    ].filter(Boolean).join("\n");
 
     const prompt = [
-      "Build one campaign orchestration decision for social content generation.",
+      "Build one creative campaign orchestration decision for social content generation.",
       "",
       `Requested output formats: ${requestedFormats || "(none)"}`,
-      `Variant context: ${variantLabel}`,
       `Render policy: ${policyNotes}`,
-      `Platform goals: ${platformGoals}`,
       `User prompt: ${userPrompt}`,
       "",
       "Source content:",
@@ -150,32 +112,34 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
       "</body>",
       "",
       "Produce concise notes for:",
-      "- strategic_brief: campaign intent and angle guidance",
-      "- copywriter_notes: platform tone and structure guidance",
-      "- visual_notes: image direction and no-text image policy reminders",
+      "- strategic_brief: campaign intent, creative angle, and hook strategy",
+      "- copywriter_notes: platform tone, structure, and copy direction",
+      "- visual_notes: image direction and composition guidance",
       "- warnings: potential quality/compliance risks"
     ].join("\n");
 
     try {
-      const orchestratorModel =
-        ((PIPELINE_CONFIG.generation?.agents?.models as Record<string, unknown> | undefined)?.orchestrator_model as
-          | string
-          | undefined) || "@cf/openai/gpt-oss-120b";
-      const model = (this.env.LLM_MODEL || orchestratorModel) as keyof AiModels;
-      const raw = await this.env.AI.run(model, {
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt }
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: ORCHESTRATOR_RESPONSE_SCHEMA
+      const providerConfig = resolveProviderConfig(
+        {
+          GOOGLE_API_KEY: this.env.GOOGLE_API_KEY,
+          GOOGLE_MODEL: this.env.GOOGLE_MODEL,
+          CLOUDFLARE_API_TOKEN: this.env.CLOUDFLARE_API_TOKEN,
+          CLOUDFLARE_ACCOUNT_ID: this.env.CLOUDFLARE_ACCOUNT_ID,
+          LLM_MODEL: this.env.LLM_MODEL,
         },
+        this.env.AI,
+      );
+      const models = createModelChain(providerConfig);
+
+      const result = await generateObject({
+        model: models[0],
+        system: systemPrompt,
+        prompt,
+        schema: ORCHESTRATOR_SCHEMA,
         temperature: 0.7,
-        max_tokens: 900
+        maxOutputTokens: 900,
       });
-      const parsed = parseModelJson(raw) as Record<string, unknown>;
-      return normalizeResponse(parsed, input.renderPolicy);
+      return normalizeResponse(result.object, input.renderPolicy);
     } catch {
       return fallbackResponse(input);
     }
@@ -186,8 +150,7 @@ function fallbackResponse(input: OrchestratorRequestPayload): OrchestratorRespon
   const formatSummary = input.requestedFormats.join(", ") || "requested formats";
   return {
     strategic_brief: `Create platform-native assets for ${formatSummary} with clear hooks, practical middle content, and concrete CTA endings.`,
-    copywriter_notes:
-      "Write concise platform-native copy, complete sentences, and non-repetitive angles. Keep captions informative and conversion-oriented.",
+    copywriter_notes: "Write concise platform-native copy, complete sentences, and non-repetitive angles. Keep captions informative and conversion-oriented.",
     visual_notes: input.renderPolicy.allowTextInAiImages
       ? "Use clean editorial visuals aligned to the message."
       : "Use clean editorial visuals with intentional negative space. Never include text artifacts in generated images.",
@@ -212,21 +175,6 @@ function normalizeResponse(
   };
 }
 
-function parseModelJson(raw: unknown): Record<string, unknown> {
-  if (!raw || typeof raw !== "object") {
-    throw new Error("Model response was not an object");
-  }
-  const response = (raw as Record<string, unknown>).response;
-  if (typeof response !== "string") {
-    throw new Error("Model response payload missing string response field");
-  }
-  const parsed = JSON.parse(response);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("Model response JSON was not an object");
-  }
-  return parsed as Record<string, unknown>;
-}
-
 async function parseRequestPayload(request: Request): Promise<OrchestratorRequestPayload | null> {
   try {
     const data = await request.json();
@@ -240,49 +188,19 @@ async function parseRequestPayload(request: Request): Promise<OrchestratorReques
 }
 
 function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  return value
-    .map((item) => (typeof item === "string" ? item.trim() : ""))
-    .filter(Boolean);
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
 }
 
 function toSingleLine(value: unknown, fallback: string): string {
-  if (typeof value !== "string") {
-    return fallback;
-  }
+  if (typeof value !== "string") return fallback;
   const compact = value.replace(/\s+/g, " ").trim();
   return compact || fallback;
-}
-
-function serializePlatformGoals(goals: PlatformGoalsPayload | undefined): string {
-  if (!goals) {
-    return "(none)";
-  }
-  const lines: string[] = [];
-  for (const [platform, goal] of Object.entries(goals)) {
-    if (!goal || typeof goal !== "object") {
-      continue;
-    }
-    const goalParts = [
-      goal.posts !== undefined ? `posts=${goal.posts}` : "",
-      goal.feed !== undefined ? `feed=${goal.feed}` : "",
-      goal.carousel !== undefined ? `carousel=${goal.carousel}` : "",
-      goal.story !== undefined ? `story=${goal.story}` : ""
-    ].filter(Boolean);
-    if (goalParts.length > 0) {
-      lines.push(`${platform}[${goalParts.join(", ")}]`);
-    }
-  }
-  return lines.length > 0 ? lines.join("; ") : "(none)";
 }
 
 function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: {
-      "content-type": "application/json; charset=utf-8"
-    }
+    headers: { "content-type": "application/json; charset=utf-8" }
   });
 }
