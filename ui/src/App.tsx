@@ -130,8 +130,6 @@ export default function App() {
   const [studioTitle, setStudioTitle] = useState('')
   const [studioContent, setStudioContent] = useState('')
   const [studioSlug, setStudioSlug] = useState('')
-  const [studioFormats, setStudioFormats] = useState<string[]>([])
-  const [studioImageMode, setStudioImageMode] = useState<'none' | 'auto' | 'ai'>('auto')
   const [settings, setSettings] = useState<any>(null)
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [templates, setTemplates] = useState<any[]>([])
@@ -199,10 +197,6 @@ export default function App() {
       const cfg = await api.getConfig()
       setServerConfig(cfg)
       setEditingConfig(JSON.parse(JSON.stringify(cfg)))
-      const formatIds = Object.keys(cfg?.formats || {})
-      if (formatIds.length > 0) {
-        setStudioFormats(formatIds)
-      }
     } catch { /* ignore */ }
     setConfigLoading(false)
   }
@@ -212,9 +206,6 @@ export default function App() {
     try {
       const s = await api.getSettings()
       setSettings(s)
-      if (s?.formats?.enabled && s.formats.enabled.length > 0) {
-        setStudioFormats(s.formats.enabled)
-      }
     } catch {
       // ignore
     }
@@ -332,9 +323,14 @@ export default function App() {
     setStudioGenerating(true)
     setError(null)
     try {
+      // Use settings from Settings tab
+      const enabledFormats = settings?.formats?.enabled || []
+      const postCount = settings?.formats?.postCount || 1
+      const imageMode = settings?.image?.mode || 'auto'
+      
       const shared: any = {
-        output: { formats: studioFormats, postCount: 1 },
-        image: { mode: studioImageMode },
+        output: { formats: enabledFormats, postCount },
+        image: { mode: imageMode },
         designTokens: tokens || undefined,
       }
 
@@ -355,10 +351,6 @@ export default function App() {
     } finally {
       setStudioGenerating(false)
     }
-  }
-
-  function toggleStudioFormat(id: string) {
-    setStudioFormats(prev => prev.includes(id) ? prev.filter(f => f !== id) : [...prev, id])
   }
 
   const availableFormats = Object.entries(editingConfig?.formats || {}).map(([id, f]: [string, any]) => ({
@@ -423,8 +415,6 @@ export default function App() {
     try {
       await api.deleteFormat(id)
       await loadConfig()
-      // Remove from selected formats if present
-      setStudioFormats(prev => prev.filter(f => f !== id))
     } catch (e: any) {
       setError(e.message || 'Failed to delete format')
     }
@@ -658,9 +648,6 @@ export default function App() {
                 title={studioTitle} setTitle={setStudioTitle}
                 content={studioContent} setContent={setStudioContent}
                 slug={studioSlug} setSlug={setStudioSlug}
-                formats={studioFormats} toggleFormat={toggleStudioFormat}
-                availableFormats={availableFormats}
-                imageMode={studioImageMode} setImageMode={setStudioImageMode}
                 generating={studioGenerating} onGenerate={handleStudioGenerate}
                 result={studioResult}
               />
@@ -799,7 +786,7 @@ export default function App() {
 
 /* ── Studio Tab ── */
 
-function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, formats, toggleFormat, availableFormats, imageMode, setImageMode, generating, onGenerate, result }: any) {
+function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, setSlug, generating, onGenerate, result }: any) {
   return (
     <>
       <div className="p-3.5 space-y-3 border-b" style={{ borderColor: '#252525' }}>
@@ -811,32 +798,16 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
         {mode === 'content' ? (
           <>
             <input value={title} onChange={(e: any) => setTitle(e.target.value)} placeholder="Post title…" className="w-full rounded border px-2.5 py-2 text-[11px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
-            <textarea value={content} onChange={(e: any) => setContent(e.target.value)} placeholder="Paste content…" rows={3} className="w-full rounded border px-2.5 py-2 text-[11px] outline-none resize-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5 }} />
+            <textarea value={content} onChange={(e: any) => setContent(e.target.value)} placeholder="Paste content or article text…" rows={4} className="w-full rounded border px-2.5 py-2 text-[11px] outline-none resize-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5 }} />
           </>
         ) : (
           <input value={slug} onChange={(e: any) => setSlug(e.target.value)} placeholder="my-post-slug" className="w-full rounded border px-2.5 py-2 text-[11px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
         )}
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Formats</div>
-        <div className="flex flex-wrap gap-1">
-          {availableFormats.map((f: any) => (
-            <button key={f.id} onClick={() => toggleFormat(f.id)} className={`text-[9px] font-bold tracking-wider px-2 py-1 rounded border transition-all ${formats.includes(f.id) ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>
-              {f.label} <span style={{ color: '#3d3d3d' }}>{f.dims}</span>
-            </button>
-          ))}
-        </div>
-        <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Image Generation</div>
-        <div className="flex gap-1">
-          <button onClick={() => setImageMode('none')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${imageMode === 'none' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>None</button>
-          <button onClick={() => setImageMode('auto')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${imageMode === 'auto' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>Auto</button>
-          <button onClick={() => setImageMode('ai')} className={`flex-1 text-[9px] font-bold uppercase tracking-wider py-1.5 rounded border transition-all ${imageMode === 'ai' ? 'text-[#0b0b0b] border-white bg-white' : 'text-[#555] border-[#313131]'}`}>AI Gen</button>
-        </div>
         <div className="text-[8px]" style={{ color: '#444' }}>
-          {imageMode === 'none' && 'No images will be included'}
-          {imageMode === 'auto' && 'Uses existing images from content or generates if needed'}
-          {imageMode === 'ai' && 'Always generates new AI images based on content'}
+          Settings from the Settings tab will be used (formats, post count, image mode)
         </div>
-        <button onClick={onGenerate} disabled={generating} className="w-full py-2 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
-          {generating ? 'Generating…' : 'Generate Posts'}
+        <button onClick={onGenerate} disabled={generating} className="w-full py-3 rounded font-bold text-[11px] tracking-widest uppercase cursor-pointer transition-opacity disabled:opacity-25" style={{ background: '#fff', color: '#0b0b0b' }}>
+          {generating ? 'Generating…' : 'Generate'}
         </button>
         {result && (
           <div className="p-2.5 rounded text-[10px] font-mono" style={{ background: '#0b0b0b', color: '#999', lineHeight: 1.6 }}>
@@ -873,22 +844,22 @@ function FormatsTemplatesTab({
           onClick={() => setSubTab('formats')} 
           className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider border-b transition-all ${subTab === 'formats' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#888]'}`}
         >
-          Output Formats
+          Sizes
         </button>
         <button 
           onClick={() => setSubTab('templates')} 
           className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider border-b transition-all ${subTab === 'templates' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#888]'}`}
         >
-          HTML Templates
+          Templates
         </button>
       </div>
 
-      {/* Formats Section */}
+      {/* Sizes Section */}
       {subTab === 'formats' && (
         <>
           <div className="p-3.5 space-y-2 border-b" style={{ borderColor: '#252525' }}>
             <div className="flex items-center justify-between">
-              <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Output Formats</div>
+              <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Output Sizes</div>
               <button onClick={() => onOpenFormatEditor()} className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">+ New</button>
             </div>
 
