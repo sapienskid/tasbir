@@ -127,6 +127,7 @@ interface Env extends SecurityEnv {
   SETTINGS_KV?: KVNamespace;
   TEMPLATES_KV?: KVNamespace;
   AI_CACHE_KV?: KVNamespace;
+  ASSETS?: Fetcher;
 }
 
 interface ImageGenerationOptions {
@@ -984,7 +985,54 @@ app.onError((err, c) => {
   return c.json({ error: message }, 500 as any);
 });
 
-export default app;
+const API_ROUTE_PATTERNS = [
+  /^\/health$/,
+  /^\/config(?:\/|$)/,
+  /^\/asset(?:\/|$)/,
+  /^\/generate-tokens$/,
+  /^\/tokens(?:\/|$)/,
+  /^\/formats(?:\/|$)/,
+  /^\/settings(?:\/|$)/,
+  /^\/templates(?:\/|$)/,
+  /^\/saved-templates(?:\/|$)/,
+  /^\/decide-template$/,
+  /^\/generate(?:\/|$)/,
+  /^\/generate-from-content(?:\/|$)/,
+  /^\/webhook\/ghost$/,
+];
+
+function isApiRoute(pathname: string): boolean {
+  return API_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
+async function serveStaticAssetOrSpa(request: Request, env: Env): Promise<Response | null> {
+  if (!env.ASSETS) return null;
+  if (request.method !== "GET" && request.method !== "HEAD") return null;
+
+  const direct = await env.ASSETS.fetch(request);
+  if (direct.status !== 404) return direct;
+
+  const url = new URL(request.url);
+  const indexRequest = new Request(`${url.origin}/index.html`, request);
+  const indexResponse = await env.ASSETS.fetch(indexRequest);
+  if (indexResponse.status !== 404) return indexResponse;
+
+  return null;
+}
+
+export default {
+  async fetch(request: Request, env: Env, executionCtx: ExecutionContext): Promise<Response> {
+    const pathname = new URL(request.url).pathname;
+    if (isApiRoute(pathname)) {
+      return app.fetch(request, env, executionCtx);
+    }
+
+    const staticResponse = await serveStaticAssetOrSpa(request, env);
+    if (staticResponse) return staticResponse;
+
+    return app.fetch(request, env, executionCtx);
+  },
+};
 
 // ==================== AGENT CONTEXT ====================
 

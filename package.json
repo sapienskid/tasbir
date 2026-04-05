@@ -8,16 +8,15 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm run typecheck && vitest run --passWithNoTests",
     "dashboard": "pnpm run --dir ui dev",
+    "build:ui": "pnpm run --dir ui build",
     "ui:build": "pnpm run --dir ui build",
     "ui:lint": "pnpm run --dir ui lint",
     "validate": "pnpm run test && pnpm run ui:build && pnpm run ui:lint",
     "dev:server": "wrangler dev --local --ip 127.0.0.1 --port 8787",
     "dev:all": "concurrently --kill-others-on-fail --names \"server,ui\" \"pnpm run dev:server\" \"pnpm run dashboard\"",
-    "deploy:staging": "wrangler deploy --env staging",
-    "deploy:production": "wrangler deploy --env production",
-    "deploy": "pnpm run deploy:production",
-    "deploy:ui": "pnpm run --dir ui build && wrangler pages deploy ui/dist --project-name ${CF_PAGES_PROJECT_NAME}",
-    "deploy:all": "pnpm run deploy:production && pnpm run deploy:ui"
+    "deploy:staging": "pnpm run build:ui && wrangler deploy --env staging",
+    "deploy:production": "pnpm run build:ui && wrangler deploy --env production",
+    "deploy": "pnpm run deploy:production"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "latest",

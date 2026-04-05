@@ -112,6 +112,8 @@ Returns dependency status (R2, KV namespaces).
 
 ## Deployment
 
+Single deploy model: the Cloudflare Worker serves both the API and the dashboard UI from one URL.
+
 ```bash
 pnpm run validate
 pnpm run deploy:staging
@@ -164,32 +166,33 @@ wrangler secret put CLOUDFLARE_ACCOUNT_ID --env production
 
 You can override CORS and host allowlists with env vars from `.dev.vars.example`.
 
-### 4. Deploy Worker
+### 4. Deploy (UI + API Together)
 
 ```bash
 pnpm run deploy:staging
 pnpm run deploy:production
 ```
 
-### 5. Deploy Dashboard (Optional)
+This builds `ui/dist` and deploys one Worker that serves:
 
-If deploying `ui/` to Cloudflare Pages:
+- API routes (for example `/generate-from-content`, `/settings`, `/templates`)
+- UI/static assets and SPA routes from the same domain
 
-```bash
-export CF_PAGES_PROJECT_NAME="your-pages-project"
-pnpm run deploy:ui
-```
+### 5. UI Runtime Config
+
+For all-in-one deployment, keep the UI API base empty (same-origin calls).
 
 Set `ui/.env.production`:
 
 ```bash
-VITE_API_BASE="https://social-post-pipeline.<subdomain>.workers.dev"
+VITE_API_BASE=""
 VITE_API_KEY="<same-api-key-used-by-worker>"
 ```
 
 ### 6. Smoke Test Production
 
 ```bash
+curl https://social-post-pipeline.<subdomain>.workers.dev/
 curl https://social-post-pipeline.<subdomain>.workers.dev/health
 curl -X POST https://social-post-pipeline.<subdomain>.workers.dev/generate-from-content \
   -H 'x-api-key: <api-key>' \

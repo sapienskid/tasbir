@@ -6,6 +6,10 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	"assets": {
+		"directory": "./ui/dist",
+		"binding": "ASSETS"
+	},
 	"vars": {
 		"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
 		"RATE_LIMIT_ENABLED": "true",
