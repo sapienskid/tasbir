@@ -127,17 +127,18 @@ function createDirectGoogleModel(googleApiKey: string | undefined, model: string
 }
 
 // ─── Model Chain Functions ───────────────────────────────────────────────────
+// All text generation now uses gemma-4 via direct Google API to avoid rate limiting
 
 export function createModelChain(config: ProviderConfig): LanguageModel[] {
-  return [createGatewayModel(config.googleApiKey, DYNAMIC_ROUTES.DESIGN_TOKENS)];
+  return [createAdvancedModelChain(config)[0]];
 }
 
 export function createFastModelChain(config: ProviderConfig): LanguageModel[] {
-  return [createGatewayModel(config.googleApiKey, DYNAMIC_ROUTES.GENERIC)];
+  return [createAdvancedModelChain(config)[0]];
 }
 
 export function createHtmlLayoutModelChain(config: ProviderConfig): LanguageModel[] {
-  return [createGatewayModel(config.googleApiKey, DYNAMIC_ROUTES.HTML_LAYOUT)];
+  return [createAdvancedModelChain(config)[0]];
 }
 
 export function createAdvancedModelChain(config: ProviderConfig): LanguageModel[] {
