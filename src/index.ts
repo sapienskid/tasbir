@@ -57,6 +57,17 @@ import {
   shouldUseCache,
   type CacheEntry,
 } from "./lib/ai-cache";
+import {
+  decideTemplateOrGenerate,
+  getSavedTemplate,
+  saveHtmlAsTemplate,
+  listSavedTemplates,
+  deleteSavedTemplate,
+  rateTemplate,
+  recordTemplateUsage,
+  type SavedHtmlTemplate,
+  type TemplateDecision,
+} from "./lib/smart-template-selector";
 
 interface LlmPromptOverrides {
   systemPrompt?: string | string[];
@@ -713,6 +724,142 @@ app.post("/templates/:id/validate", async (c) => {
   return c.json(result);
 });
 
+// ==================== SAVED HTML TEMPLATES (Smart Selection) ====================
+
+/**
+ * List all saved HTML templates for smart selection.
+ * These are full HTML designs that can be reused for similar content.
+ */
+app.get("/saved-templates", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
+  
+  const format = c.req.query("format");
+  const templates = await listSavedTemplates(c.env.AI_CACHE_KV, format);
+  return c.json({ templates });
+});
+
+/**
+ * Get a specific saved HTML template by ID.
+ */
+app.get("/saved-templates/:id", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
+  
+  const id = c.req.param("id");
+  const template = await getSavedTemplate(c.env.AI_CACHE_KV, id);
+  if (!template) return c.json({ error: "Template not found" }, 404);
+  return c.json(template);
+});
+
+/**
+ * Save generated HTML as a reusable template.
+ * Call this after generation when the output looks good.
+ */
+app.post("/saved-templates", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
+  
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const html = typeof body.html === "string" ? body.html : "";
+  if (!html) return c.json({ error: "html is required" }, 400);
+  
+  const name = typeof body.name === "string" ? body.name : "Untitled Template";
+  const description = typeof body.description === "string" ? body.description : "";
+  const format = typeof body.format === "string" ? body.format : "instagram-square";
+  const contentTypes = Array.isArray(body.contentTypes) ? body.contentTypes.filter((t): t is string => typeof t === "string") : [];
+  const tags = Array.isArray(body.tags) ? body.tags.filter((t): t is string => typeof t === "string") : [];
+  
+  const template = await saveHtmlAsTemplate(c.env.AI_CACHE_KV, {
+    name,
+    description,
+    html,
+    contentTypes,
+    format,
+    tags,
+  });
+  
+  return c.json({ ok: true, template });
+});
+
+/**
+ * Delete a saved HTML template.
+ */
+app.delete("/saved-templates/:id", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
+  
+  const id = c.req.param("id");
+  const deleted = await deleteSavedTemplate(c.env.AI_CACHE_KV, id);
+  if (!deleted) return c.json({ error: "Template not found" }, 404);
+  return c.json({ ok: true });
+});
+
+/**
+ * Rate a saved template (1-5 stars).
+ * Higher-rated templates are preferred by the AI selector.
+ */
+app.post("/saved-templates/:id/rate", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
+  
+  const id = c.req.param("id");
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const quality = typeof body.quality === "number" ? body.quality : 3;
+  
+  if (quality < 1 || quality > 5) {
+    return c.json({ error: "quality must be between 1 and 5" }, 400);
+  }
+  
+  await rateTemplate(c.env.AI_CACHE_KV, id, quality);
+  return c.json({ ok: true });
+});
+
+/**
+ * Ask AI to decide: use existing template or generate new HTML?
+ * This is the core of the smart template selection system.
+ */
+app.post("/decide-template", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
+  
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const title = typeof body.title === "string" ? body.title : "";
+  const excerpt = typeof body.excerpt === "string" ? body.excerpt : "";
+  const content = typeof body.content === "string" ? body.content : typeof body.body === "string" ? body.body : "";
+  const format = typeof body.format === "string" ? body.format : "instagram-square";
+  const contentType = typeof body.contentType === "string" ? body.contentType : undefined;
+  
+  if (!title || !content) {
+    return c.json({ error: "title and content (or body) are required" }, 400);
+  }
+  
+  const providerConfig = resolveProviderConfig(c.env as unknown as Record<string, string | undefined>, c.env.AI);
+  const availableTemplates = await listSavedTemplates(c.env.AI_CACHE_KV, format);
+  
+  const preferences = {
+    preferTemplates: body.preferTemplates === true,
+    alwaysGenerate: body.alwaysGenerate === true,
+    qualityThreshold: typeof body.qualityThreshold === "number" ? body.qualityThreshold : 3,
+  };
+  
+  const decision = await decideTemplateOrGenerate(
+    providerConfig,
+    { title, excerpt, body: content, contentType },
+    format,
+    availableTemplates,
+    preferences
+  );
+  
+  return c.json(decision);
+});
+
 app.post("/generate", async (c) => {
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "generate");
@@ -818,7 +965,7 @@ app.post("/webhook/ghost", async (c) => {
 
 app.notFound((c) => c.json({
   error: "Not found",
-  routes: ["POST /generate", "POST /generate-from-content", "POST /generate-from-content/stream", "POST /webhook/ghost", "GET /health", "GET /settings", "PUT /settings", "PATCH /settings", "GET /templates", "GET /templates/:id", "PUT /templates/:id", "DELETE /templates/:id", "POST /templates/:id/toggle", "POST /templates/:id/validate", "GET /config/design-tokens", "GET /config/prompts", "GET /config/formats"]
+  routes: ["POST /generate", "POST /generate-from-content", "POST /generate-from-content/stream", "POST /webhook/ghost", "GET /health", "GET /settings", "PUT /settings", "PATCH /settings", "GET /templates", "GET /templates/:id", "PUT /templates/:id", "DELETE /templates/:id", "POST /templates/:id/toggle", "POST /templates/:id/validate", "GET /saved-templates", "GET /saved-templates/:id", "POST /saved-templates", "DELETE /saved-templates/:id", "POST /saved-templates/:id/rate", "POST /decide-template", "GET /config/design-tokens", "GET /config/prompts", "GET /config/formats"]
 }, 404 as any));
 
 app.onError((err, c) => {
@@ -1129,13 +1276,18 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   const useCache = shouldUseCache({ postCount: outputPlan.postCount });
   
   const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
-  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null>; cacheHit?: boolean }> = [];
+  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null>; cacheHit?: boolean; templateDecision?: TemplateDecision }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
   const agentContexts: AgentExecutionContext[] = [];
   const sharedStorage = resolveBatchStorageOptions(body.storage);
 
   let classification: ContentClassification | null = null;
   let matchedTemplate: { html: string; metadata: TemplateMetadata } | null = null;
+
+  // SMART TEMPLATE SELECTION: Check for saved HTML templates first
+  const providerConfig = resolveProviderConfig(env as unknown as Record<string, string | undefined>, env.AI);
+  const templateDecisions: Map<string, TemplateDecision> = new Map();
+  const usedSavedTemplates: Map<string, SavedHtmlTemplate> = new Map();
 
   if (settings.templates.autoSelect && env.TEMPLATES_KV) {
     try {
@@ -1158,6 +1310,48 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
     } catch (error) {
       console.warn("[classification] Failed to classify content or load template:", error);
     }
+  }
+
+  // SMART TEMPLATE: For each format, decide whether to use saved HTML template or generate new
+  if (env.AI_CACHE_KV && !matchedTemplate) {
+    const formatsArray = [...outputPlan.formats];
+    await Promise.all(
+      formatsArray.map(async (format) => {
+        try {
+          const savedTemplates = await listSavedTemplates(env.AI_CACHE_KV!, format);
+          if (savedTemplates.length > 0) {
+            const decision = await decideTemplateOrGenerate(
+              providerConfig,
+              {
+                title: post.title,
+                excerpt: post.custom_excerpt || post.excerpt || "",
+                body: post.plaintext || "",
+                contentType: classification?.type,
+              },
+              format,
+              savedTemplates,
+              {
+                preferTemplates: settings.templates.autoSelect,
+                qualityThreshold: 3,
+              }
+            );
+            templateDecisions.set(format, decision);
+            
+            // If decision is to use template, load it
+            if (decision.action === "use_template" && decision.templateId) {
+              const savedTemplate = await getSavedTemplate(env.AI_CACHE_KV!, decision.templateId);
+              if (savedTemplate) {
+                usedSavedTemplates.set(format, savedTemplate);
+                // Record usage for popularity tracking
+                recordTemplateUsage(env.AI_CACHE_KV!, decision.templateId).catch(() => {});
+              }
+            }
+          }
+        } catch (error) {
+          console.warn(`[smart-template] Failed to decide for ${format}:`, error);
+        }
+      })
+    );
   }
 
   const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
@@ -1188,10 +1382,27 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       // Track cache hits for this variant
       let variantCacheHits = 0;
       
-      // Generate all HTML outputs in parallel (with caching)
+      // Generate all HTML outputs in parallel (with caching and smart template selection)
       const htmlOutputs = await Promise.all(
         formatConfigs.map(async ({ format, config }) => {
-          if (!config) return { format, output: null, cacheHit: false };
+          if (!config) return { format, output: null, cacheHit: false, usedSavedTemplate: false };
+          
+          // SMART TEMPLATE: Check if we should use a saved HTML template for this format
+          const savedTemplate = usedSavedTemplates.get(format);
+          const templateDecision = templateDecisions.get(format);
+          
+          if (savedTemplate && templateDecision?.action === "use_template") {
+            console.log(`[smart-template] Using saved template "${savedTemplate.name}" for ${format}`);
+            const finalHtml = injectDesignTokensIntoHtmlFast(savedTemplate.html, precomputedTokens);
+            return { 
+              format, 
+              output: { generated_html: finalHtml }, 
+              config, 
+              cacheHit: false, 
+              usedSavedTemplate: true,
+              templateDecision,
+            };
+          }
           
           // CACHE: Try to get cached HTML first (only for single-variant requests)
           if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
@@ -1211,7 +1422,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
               variantCacheHits++;
               // Still inject tokens in case they changed slightly
               const finalHtml = injectDesignTokensIntoHtmlFast(cached.html, precomputedTokens);
-              return { format, output: { generated_html: finalHtml }, config, cacheHit: true, cacheKey };
+              return { format, output: { generated_html: finalHtml }, config, cacheHit: true, cacheKey, templateDecision };
             }
           }
           
@@ -1266,14 +1477,22 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
 
           // Use pre-computed token assets for injection
           const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
-          return { format, output: { generated_html: finalHtml }, config, cacheHit: false };
+          return { 
+            format, 
+            output: { generated_html: finalHtml }, 
+            config, 
+            cacheHit: false,
+            templateDecision,
+            // Mark if AI suggested saving this as template
+            suggestSaveAsTemplate: templateDecision?.suggestedSaveAsTemplate ?? false,
+          };
         })
       );
 
       // OPTIMIZATION: Render all formats in parallel using separate browser pages
       const renderResults = await Promise.all(
-        htmlOutputs.map(async ({ format, output, config, cacheHit }) => {
-          if (!output || !config) return { format, asset: null, cacheHit };
+        htmlOutputs.map(async ({ format, output, config, cacheHit, usedSavedTemplate, templateDecision, suggestSaveAsTemplate }) => {
+          if (!output || !config) return { format, asset: null, cacheHit, usedSavedTemplate, templateDecision, suggestSaveAsTemplate };
           
           const asset = await renderStoreSingleAssetWithPage(env, browser, {
             key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
@@ -1284,17 +1503,23 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
             height: config.height,
           });
           
-          return { format, asset, output, cacheHit };
+          return { format, asset, output, cacheHit, usedSavedTemplate, templateDecision, suggestSaveAsTemplate };
         })
       );
 
       const formatAssets: Record<string, StoredAsset | null> = {};
       let variantLlmOutput: LlmOutput | null = null;
       let imageSource: SelectedImage = { source: "none", imageUrl: "" };
+      const smartTemplateInfo: Record<string, { used: boolean; templateId?: string; suggestSave?: boolean }> = {};
 
-      for (const { format, asset, output } of renderResults) {
+      for (const { format, asset, output, usedSavedTemplate, templateDecision, suggestSaveAsTemplate } of renderResults) {
         if (asset) formatAssets[format] = asset;
         if (!variantLlmOutput && output) variantLlmOutput = output;
+        smartTemplateInfo[format] = {
+          used: usedSavedTemplate ?? false,
+          templateId: templateDecision?.templateId,
+          suggestSave: suggestSaveAsTemplate,
+        };
       }
 
       if (index === 0) {
@@ -1305,7 +1530,8 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
         index: index + 1,
         image_source: imageSource,
         llm_output: variantLlmOutput || { generated_html: "" },
-        assets: formatAssets
+        assets: formatAssets,
+        templateDecision: Object.keys(smartTemplateInfo).length > 0 ? smartTemplateInfo as any : undefined,
       });
     }
   } finally {
@@ -1315,6 +1541,26 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
 
   const primaryVariant = variants[0];
   if (!primaryVariant) throw new HttpError(500, "Generation pipeline did not produce any output variants");
+
+  // Summarize smart template decisions for response
+  const smartTemplateSummary = templateDecisions.size > 0 ? {
+    decisions: Object.fromEntries(
+      Array.from(templateDecisions.entries()).map(([format, decision]) => [
+        format,
+        {
+          action: decision.action,
+          templateId: decision.templateId,
+          confidence: decision.confidence,
+          suggestSave: decision.suggestedSaveAsTemplate,
+        },
+      ])
+    ),
+    templatesUsed: Array.from(usedSavedTemplates.entries()).map(([format, template]) => ({
+      format,
+      templateId: template.id,
+      templateName: template.name,
+    })),
+  } : undefined;
 
   return {
     ok: true,
@@ -1331,6 +1577,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       templateUsed: classification.templateMatch,
       reasoning: classification.reasoning,
     } : undefined,
+    smartTemplates: smartTemplateSummary,
   };
 }
 
