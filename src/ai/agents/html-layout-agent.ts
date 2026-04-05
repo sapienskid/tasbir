@@ -10,14 +10,9 @@ Your task is to generate ONE COMPLETE, SELF-CONTAINED HTML document for a social
 
 Rules:
 - The HTML must be a full standalone document with <!DOCTYPE html>, <html>, <head>, and <body>
-- Use Tailwind CSS via CDN
-- Configure Tailwind with the provided design tokens
-- Use Tailwind utility classes for all styling
-- Use only token-backed Tailwind theme classes for colors/spacing/typography/radius/shadow where available
-- You MUST consume design tokens in styling via var(--...) when utilities cannot directly express a token
-- Do NOT hardcode palette hex/rgb/hsl/oklch/color() values for UI colors
-- Do NOT use arbitrary Tailwind color classes such as bg-[#...], text-[rgb(...)], border-[hsl(...)]
-- Ensure readable contrast by pairing foreground tokens with the chosen surface/color tokens
+- Use Tailwind CSS via CDN: <script src="https://cdn.tailwindcss.com"></script>
+- Use normal Tailwind utility classes for all styling (e.g. bg-gray-900, text-white, font-bold, p-8)
+- Write clean, professional HTML like a normal web developer would
 - The design must be exactly sized for the given width x height viewport
 - Prioritize platform-native composition that performs well as an image in social feeds
 - Build strong visual hierarchy with clear focal point, fast scannability, and thumbnail legibility
@@ -59,8 +54,6 @@ export async function generateHtmlLayout(
 
 ${args.formatInstruction ? `FORMAT-SPECIFIC CREATIVE DIRECTION:\n${args.formatInstruction}\n` : ""}
 
-Design tokens: ${args.designTokens}
-
 Source Content Title: ${args.title}
 Source Content Excerpt: ${args.excerpt}
 
@@ -74,36 +67,14 @@ ${renderedUserInstructionBlock}
 
 Instructions:
 - Create a high-impact visual design using the source content.
-- Use tokenized Tailwind theme classes for all visual styling.
-- If a token exists, never use hardcoded color values.
-- Keep typography highly readable with clear hierarchy and contrast-safe text/background pairing.
+- Use normal Tailwind classes for styling.
+- Keep typography highly readable with clear hierarchy.
 
 Return only one complete HTML document as raw text.`,
         temperature: 0.3,
       });
 
-      let generatedHtml = extractHtml(result.text);
-      if (!hasDesignTokenUsage(generatedHtml)) {
-        const retry = await generateText({
-          model,
-          system: [HTML_LAYOUT_SYSTEM_PROMPT, args.systemPrompt || ""].filter(Boolean).join("\n\n"),
-          prompt: `Your previous HTML violated token usage constraints.
-
-Regenerate and ensure styles use token variables directly (e.g. var(--surface-base), var(--text-primary), var(--color-primary-500), var(--font-sans)).
-At least 5 style declarations in the document must reference var(--...).
-
-Platform: ${args.platform}${args.formatName ? ` (${args.formatName})` : ""} (${args.width}x${args.height})
-Design tokens: ${args.designTokens}
-Title: ${args.title}
-Excerpt: ${args.excerpt}
-Content:\n${args.content}
-
-Return only one complete HTML document as raw text.`,
-          temperature: 0.2,
-        });
-        generatedHtml = extractHtml(retry.text);
-      }
-
+      const generatedHtml = extractHtml(result.text);
       return { generated_html: generatedHtml };
     } catch (error) {
       errors.push(error instanceof Error ? error : new Error(String(error)));
@@ -112,28 +83,6 @@ Return only one complete HTML document as raw text.`,
   }
 
   throw new AggregateError(errors, "HTML layout generation failed across all providers");
-}
-
-function hasDesignTokenUsage(html: string): boolean {
-  const matches = html.match(/var\(--[a-z0-9-]+\)/gi) || [];
-  return matches.length >= 10;
-}
-
-function hasHardcodedColorLiterals(html: string): boolean {
-  const colorLiteralPatterns = [
-    /#[0-9a-f]{3,8}\b/gi,
-    /\brgba?\s*\(/gi,
-    /\bhsla?\s*\(/gi,
-    /\boklch\s*\(/gi,
-    /\bcolor\s*\(/gi,
-  ];
-
-  for (const pattern of colorLiteralPatterns) {
-    if (pattern.test(html)) return true;
-  }
-
-  const arbitraryColorClass = /(bg|text|border|from|via|to)-\[(#|rgb|rgba|hsl|hsla|oklch|color:)/i;
-  return arbitraryColorClass.test(html);
 }
 
 function renderUserInstructionBlock(args: {

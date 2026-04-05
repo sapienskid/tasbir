@@ -330,25 +330,11 @@ app.get("/asset", async (c) => {
   });
 });
 
-function applyBodyDesignSystemClasses(html: string): string {
-  return html.replace(/<body([^>]*)>/i, (match, attrs) => {
-    const current = String(attrs || "");
-    const classMatch = current.match(/class\s*=\s*"([^"]*)"|class\s*=\s*'([^']*)'/i);
-    const required = ["font-sans", "bg-surface-base", "text-content-primary"];
-    if (classMatch) {
-      const existing = (classMatch[1] || classMatch[2] || "").trim();
-      const all = [...new Set([...existing.split(/\s+/).filter(Boolean), ...required])].join(" ");
-      return match.replace(classMatch[0], `class="${all}"`);
-    }
-    return `<body${current} class="${required.join(" ")}">`;
-  });
-}
-
 function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown>): string {
   if (!html.trim()) return html;
 
   const normalizedTokens = normalizeDesignTokensForRendering(tokens);
-  let nextHtml = applyBodyDesignSystemClasses(stripInjectedDesignTokens(html));
+  let nextHtml = stripInjectedDesignTokens(html);
   const cssVars = tokensToCSSFromRaw(normalizedTokens);
   const fontLinks = fontImportFromTokens(normalizedTokens);
   const tailwindConfig = JSON.stringify(buildTailwindConfigFromTokens(normalizedTokens));
@@ -359,16 +345,8 @@ function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown
     "  padding: 0;",
     "  width: 100%;",
     "  height: 100%;",
-    "  background: var(--surface-base);",
-    "  color: var(--text-primary);",
-    "  font-family: var(--font-sans);",
     "}",
     "*, *::before, *::after { box-sizing: border-box; }",
-    "h1, h2, h3, h4, h5, h6 { color: var(--text-primary, inherit); }",
-    "p, span, li, small { color: var(--text-secondary, inherit); }",
-    ".ds-accent { color: var(--text-accent, var(--color-primary-500)); }",
-    ".ds-surface { background: var(--surface-elevated, transparent); }",
-    ".ds-border { border-color: var(--color-neutral-300); }",
   ].join("\n");
 
   const hasTailwindCdn = /<script[^>]+src=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/i.test(nextHtml);
@@ -385,7 +363,7 @@ function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown
     }
   }
 
-  const injectedBlock = `${fontLinks}\n<style id=\"tasbir-design-tokens\">\n${cssVars}\n\n/* Baseline design-system application */\n${baseline}\n</style>`;
+  const injectedBlock = `${fontLinks}\n<style id="tasbir-design-tokens">\n${cssVars}\n\n${baseline}\n</style>`;
 
   if (/<\/head>/i.test(nextHtml)) {
     return nextHtml.replace(/<\/head>/i, `${injectedBlock}\n</head>`);
@@ -396,7 +374,7 @@ function injectDesignTokensIntoHtml(html: string, tokens: Record<string, unknown
   if (/<html[^>]*>/i.test(nextHtml)) {
     return nextHtml.replace(/<html[^>]*>/i, (m) => `${m}\n<head>\n${injectedBlock}\n</head>`);
   }
-  return `<!DOCTYPE html>\n<html>\n<head>\n${tailwindConfigScript}\n<script src="https://cdn.tailwindcss.com"></script>\n${injectedBlock}\n</head>\n<body class="font-sans bg-surface-base text-content-primary">${nextHtml}</body>\n</html>`;
+  return `<!DOCTYPE html>\n<html>\n<head>\n${tailwindConfigScript}\n<script src="https://cdn.tailwindcss.com"></script>\n${injectedBlock}\n</head>\n<body>${nextHtml}</body>\n</html>`;
 }
 
 async function loadDesignTokensForGeneration(env: Env): Promise<Record<string, unknown>> {
