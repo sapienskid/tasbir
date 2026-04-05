@@ -9,11 +9,8 @@ import {
   resolveProviderConfig,
 } from "./ai";
 import {
-  decideImageGeneration,
   generateImage,
-  generateImagesForFormats,
   imageToDataUrl,
-  type ImageDecision,
   type GeneratedImage,
 } from "./lib/ai-image";
 import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, setFormat, deleteFormat, loadFormatsFromStorage, type FormatConfig } from "./config";
@@ -1490,19 +1487,30 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   // AI IMAGE GENERATION: Use orchestrator's image decisions
   let generatedImages: Map<string, GeneratedImage | null> = new Map();
   
+  // Get effective image mode: body overrides settings
+  const effectiveImageMode = body.image?.mode || settings.image?.mode || 'auto';
+  
   // Generate images based on orchestrator's planned posts
   if (orchestratorPlan?.plannedPosts && env.AI) {
     try {
-      // Filter posts that need AI-generated images
-      const postsNeedingImages = orchestratorPlan.plannedPosts.filter(post => 
-        post.imageSpec && 
-        post.imageSpec.type !== 'none' && 
-        post.imageSpec.type !== 'feature' &&
-        post.imageMode !== 'none'
-      );
+      // Filter posts that need AI-generated images based on effective image mode
+      const postsNeedingImages = orchestratorPlan.plannedPosts.filter(post => {
+        // If user set 'none', skip all
+        if (effectiveImageMode === 'none') return false;
+        // If user set 'ai', always generate
+        if (effectiveImageMode === 'ai') return true;
+        // If 'auto' or 'feature', use orchestrator's decision
+        if (effectiveImageMode === 'auto' || effectiveImageMode === 'feature') {
+          return post.imageSpec && 
+            post.imageSpec.type !== 'none' && 
+            post.imageSpec.type !== 'feature' &&
+            post.imageMode !== 'none';
+        }
+        return false;
+      });
       
       if (postsNeedingImages.length > 0) {
-        console.log(`[ai-image] Generating images for ${postsNeedingImages.length} posts based on orchestrator decisions`);
+        console.log(`[ai-image] Generating images for ${postsNeedingImages.length} posts based on orchestrator decisions (mode: ${effectiveImageMode})`);
         
         // Generate images in parallel for each post that needs them
         const imagePromises = postsNeedingImages.map(async (post) => {
@@ -1529,7 +1537,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
         
         console.log(`[ai-image] Generated ${generatedImages.size} images: ${Array.from(generatedImages.keys()).join(', ')}`);
       } else {
-        console.log(`[ai-image] No posts require AI-generated images based on orchestrator`);
+        console.log(`[ai-image] No posts require AI-generated images based on orchestrator (mode: ${effectiveImageMode})`);
       }
     } catch (error) {
       console.warn(`[ai-image] Image generation failed:`, error);
@@ -1893,54 +1901,61 @@ export async function runPipelineFromPostWithProgress(
     }
   }
 
-  // AI IMAGE GENERATION: Generate images if requested
-  let imageDecision: ImageDecision | null = null;
+  // AI IMAGE GENERATION: Use orchestrator's image decisions
   let generatedImages: Map<string, GeneratedImage | null> = new Map();
   
-  if (body.image?.mode === 'ai' && env.AI) {
+  // Get effective image mode: body overrides settings
+  const effectiveImageMode = body.image?.mode || settings.image?.mode || 'auto';
+  
+  // Generate images based on orchestrator's planned posts
+  if (orchestratorPlan?.plannedPosts && env.AI) {
     try {
-      onProgress({ type: "generating", message: "Deciding on AI image generation..." });
-      console.log(`[ai-image] Deciding if image generation is needed for content`);
-      const providerConfig = resolveProviderConfig(env.AI, env.AI_GATEWAY_TOKEN, env.GOOGLE_API_KEY);
-      
-      imageDecision = await decideImageGeneration(
-        providerConfig,
-        {
-          title: post.title,
-          excerpt: post.custom_excerpt || post.excerpt || "",
-          contentType: classification?.type,
-          brandTone: settings.brand.tone,
-        },
-        {
-          primaryColor: (designTokensForRun as any)?.colors?.primary?.['500'],
-          style: (designTokensForRun as any)?.meta?.aesthetic,
-        },
-        settings
-      );
-      
-      if (imageDecision.shouldGenerate && imageDecision.imageType !== 'none') {
-        onProgress({ type: "generating", message: `Generating ${imageDecision.imageType} images...` });
-        console.log(`[ai-image] Generating ${imageDecision.imageType} image: ${imageDecision.prompt}`);
-        
-        // Generate images for all requested formats
-        const formatsArray = [...outputPlan.formats];
-        const formatConfigs = formatsArray
-          .map(format => {
-            const config = getFormatConfig(format);
-            return config && config.width && config.height ? { 
-              name: format, 
-              width: config.width, 
-              height: config.height 
-            } : null;
-          })
-          .filter((f): f is { name: string; width: number; height: number } => f !== null);
-        
-        if (formatConfigs.length > 0) {
-          generatedImages = await generateImagesForFormats(env.AI, imageDecision, formatConfigs);
-          console.log(`[ai-image] Generated ${generatedImages.size} images for formats: ${Array.from(generatedImages.keys()).join(', ')}`);
+      // Filter posts that need AI-generated images based on effective image mode
+      const postsNeedingImages = orchestratorPlan.plannedPosts.filter(post => {
+        // If user set 'none', skip all
+        if (effectiveImageMode === 'none') return false;
+        // If user set 'ai', always generate
+        if (effectiveImageMode === 'ai') return true;
+        // If 'auto' or 'feature', use orchestrator's decision
+        if (effectiveImageMode === 'auto' || effectiveImageMode === 'feature') {
+          return post.imageSpec && 
+            post.imageSpec.type !== 'none' && 
+            post.imageSpec.type !== 'feature' &&
+            post.imageMode !== 'none';
         }
+        return false;
+      });
+      
+      if (postsNeedingImages.length > 0) {
+        onProgress({ type: "generating", message: `Generating ${postsNeedingImages.length} illustrations...` });
+        console.log(`[ai-image] Generating images for ${postsNeedingImages.length} posts based on orchestrator decisions`);
+        
+        // Generate images in parallel for each post that needs them
+        const imagePromises = postsNeedingImages.map(async (post) => {
+          const imageSpec = post.imageSpec!;
+          if (!imageSpec.prompt) return { format: post.format, image: null };
+          
+          try {
+            const image = await generateImage(env.AI, imageSpec.prompt, {
+              width: post.width || 1200,
+              height: post.height || 630,
+              style: imageSpec.style,
+            });
+            return { format: post.format, image };
+          } catch (e) {
+            console.warn(`[ai-image] Failed to generate for ${post.format}:`, e);
+            return { format: post.format, image: null };
+          }
+        });
+        
+        const results = await Promise.all(imagePromises);
+        for (const { format, image } of results) {
+          generatedImages.set(format, image);
+        }
+        
+        console.log(`[ai-image] Generated ${generatedImages.size} images: ${Array.from(generatedImages.keys()).join(', ')}`);
       } else {
-        console.log(`[ai-image] Decision: ${imageDecision.reasoning}`);
+        console.log(`[ai-image] No posts require AI-generated images based on orchestrator (mode: ${effectiveImageMode})`);
       }
     } catch (error) {
       console.warn(`[ai-image] Image generation failed:`, error);
