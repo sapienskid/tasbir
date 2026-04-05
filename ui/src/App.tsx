@@ -112,7 +112,7 @@ function resolveShadowPreviewValue(input: unknown, key: string): string {
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [activeTab, setActiveTab] = useState<'studio' | 'templates' | 'formats' | 'settings' | 'tokens'>('studio')
+  const [activeTab, setActiveTab] = useState<'studio' | 'templates' | 'settings' | 'tokens'>('studio')
   const [tokens, setTokens] = useState<DesignTokens | null>(null)
   const [generating, setGenerating] = useState(false)
   const [vibeInput, setVibeInput] = useState('')
@@ -643,8 +643,7 @@ export default function App() {
           <div className="flex border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
             {([
               { id: 'studio' as const, label: 'Studio' },
-              { id: 'templates' as const, label: 'Templates' },
-              { id: 'formats' as const, label: 'Formats' },
+              { id: 'templates' as const, label: 'Templates & Formats' },
               { id: 'settings' as const, label: 'Settings' },
               { id: 'tokens' as const, label: 'Tokens' },
             ]).map(tab => (
@@ -667,7 +666,7 @@ export default function App() {
               />
             )}
             {activeTab === 'templates' && (
-              <TemplatesTab
+              <FormatsTemplatesTab
                 templates={templates}
                 loading={templatesLoading}
                 editingTemplate={editingTemplate}
@@ -679,17 +678,13 @@ export default function App() {
                 onDeleteTemplate={handleDeleteTemplate}
                 onToggleTemplate={handleToggleTemplate}
                 onUpdatePreview={updateTemplatePreview}
-              />
-            )}
-            {activeTab === 'formats' && (
-              <FormatsTab
                 formats={availableFormats}
                 editingFormat={editingFormat}
                 setEditingFormat={setEditingFormat}
                 formatSaving={formatSaving}
-                onOpenEditor={openFormatEditor}
-                onSave={handleSaveFormat}
-                onDelete={handleDeleteFormat}
+                onOpenFormatEditor={openFormatEditor}
+                onSaveFormat={handleSaveFormat}
+                onDeleteFormat={handleDeleteFormat}
               />
             )}
             {activeTab === 'settings' && (
@@ -863,214 +858,247 @@ function StudioTab({ mode, setMode, title, setTitle, content, setContent, slug, 
 
 /* ── Templates Tab ── */
 
-function TemplatesTab({ templates, loading, editingTemplate, setEditingTemplate, templateHtml, setTemplateHtml, openTemplateEditor, onSaveTemplate, onDeleteTemplate, onToggleTemplate, onUpdatePreview }: any) {
+function FormatsTemplatesTab({ 
+  templates, loading, editingTemplate, setEditingTemplate, templateHtml, setTemplateHtml, 
+  openTemplateEditor, onSaveTemplate, onDeleteTemplate, onToggleTemplate, onUpdatePreview,
+  formats, editingFormat, setEditingFormat, formatSaving, onOpenFormatEditor, onSaveFormat, onDeleteFormat 
+}: any) {
+  const [subTab, setSubTab] = useState<'formats' | 'templates'>('formats')
+
   return (
     <>
-      <div className="p-3.5 space-y-2 border-b" style={{ borderColor: '#252525' }}>
-        <div className="flex items-center justify-between">
-          <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Templates</div>
-          <button onClick={() => openTemplateEditor()} className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">+ New</button>
-        </div>
+      {/* Sub-tab navigation */}
+      <div className="flex border-b flex-shrink-0" style={{ borderColor: '#252525' }}>
+        <button 
+          onClick={() => setSubTab('formats')} 
+          className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider border-b transition-all ${subTab === 'formats' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#888]'}`}
+        >
+          Output Formats
+        </button>
+        <button 
+          onClick={() => setSubTab('templates')} 
+          className={`flex-1 py-2 text-[10px] font-bold uppercase tracking-wider border-b transition-all ${subTab === 'templates' ? 'text-white border-white' : 'text-[#555] border-transparent hover:text-[#888]'}`}
+        >
+          HTML Templates
+        </button>
+      </div>
 
-        {editingTemplate && (
-          <div className="space-y-2">
-            <input
-              value={editingTemplate.name}
-              onChange={(e: any) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
-              placeholder="Template name"
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
-              style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
-            />
-            <input
-              value={editingTemplate.description}
-              onChange={(e: any) => setEditingTemplate({ ...editingTemplate, description: e.target.value })}
-              placeholder="Description"
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
-              style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
-            />
-            <div className="flex gap-2">
-              <input
-                value={editingTemplate.id}
-                onChange={(e: any) => setEditingTemplate({ ...editingTemplate, id: e.target.value })}
-                placeholder="ID (e.g. quote-card)"
-                className="flex-1 rounded border px-2 py-1.5 text-[10px] font-mono outline-none"
-                style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
-              />
-              <select
-                value={editingTemplate.category}
-                onChange={(e: any) => setEditingTemplate({ ...editingTemplate, category: e.target.value })}
-                className="rounded border px-2 py-1.5 text-[10px] outline-none"
-                style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
-              >
-                <option value="quote">Quote</option>
-                <option value="metric">Metric</option>
-                <option value="list">List</option>
-                <option value="carousel">Carousel</option>
-                <option value="custom">Custom</option>
-              </select>
+      {/* Formats Section */}
+      {subTab === 'formats' && (
+        <>
+          <div className="p-3.5 space-y-2 border-b" style={{ borderColor: '#252525' }}>
+            <div className="flex items-center justify-between">
+              <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Output Formats</div>
+              <button onClick={() => onOpenFormatEditor()} className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">+ New</button>
             </div>
-            <textarea
-              value={templateHtml}
-              onChange={(e: any) => { setTemplateHtml(e.target.value); onUpdatePreview(e.target.value) }}
-              placeholder="<!DOCTYPE html>..."
-              rows={8}
-              className="w-full rounded border px-2 py-2 text-[10px] font-mono outline-none resize-y"
-              style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5 }}
-            />
-            {editingTemplate.slots && editingTemplate.slots.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {editingTemplate.slots.map((slot: string) => (
-                  <span key={slot} className="text-[8px] font-mono px-1.5 py-0.5 rounded" style={{ background: '#1c1c1c', color: '#60a5fa', border: '1px solid #1e3a5f' }}>{`{{${slot}}}`}</span>
+
+            {editingFormat && (
+              <div className="space-y-2 p-2.5 rounded border" style={{ background: '#0a0a0a', borderColor: '#313131' }}>
+                <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: '#666' }}>
+                  {editingFormat.isNew ? 'New Format' : 'Edit Format'}
+                </div>
+                <input
+                  value={editingFormat.name}
+                  onChange={(e: any) => setEditingFormat({ ...editingFormat, name: e.target.value })}
+                  placeholder="Format name (e.g. Instagram Story)"
+                  className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                  style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+                />
+                {editingFormat.isNew && (
+                  <input
+                    value={editingFormat.id}
+                    onChange={(e: any) => setEditingFormat({ ...editingFormat, id: e.target.value })}
+                    placeholder="ID (e.g. ig-story, auto-generated if empty)"
+                    className="w-full rounded border px-2 py-1.5 text-[10px] outline-none font-mono"
+                    style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+                  />
+                )}
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Width</label>
+                    <input
+                      type="number"
+                      value={editingFormat.width}
+                      onChange={(e: any) => setEditingFormat({ ...editingFormat, width: Number(e.target.value) })}
+                      className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                      style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Height</label>
+                    <input
+                      type="number"
+                      value={editingFormat.height}
+                      onChange={(e: any) => setEditingFormat({ ...editingFormat, height: Number(e.target.value) })}
+                      className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                      style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>AI Instructions</label>
+                  <textarea
+                    value={editingFormat.aiInstruction}
+                    onChange={(e: any) => setEditingFormat({ ...editingFormat, aiInstruction: e.target.value })}
+                    placeholder="Optional instructions for AI when generating for this format..."
+                    rows={2}
+                    className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
+                    style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={onSaveFormat}
+                    disabled={formatSaving}
+                    className="flex-1 py-1.5 rounded font-bold text-[9px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all disabled:opacity-25"
+                  >
+                    {formatSaving ? 'Saving…' : 'Save Format'}
+                  </button>
+                  <button
+                    onClick={() => setEditingFormat(null)}
+                    className="py-1.5 px-3 rounded font-bold text-[9px] uppercase tracking-wider border border-[#313131] text-[#555] hover:border-[#444] hover:text-[#888] transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-3.5">
+            {formats.length === 0 ? (
+              <div className="p-4 text-center" style={{ color: '#555', fontSize: 11 }}>No formats configured. Add one to get started.</div>
+            ) : (
+              <div className="space-y-1">
+                {formats.map((f: any) => (
+                  <div key={f.id} className="flex items-center gap-2 p-2 rounded" style={{ background: '#0b0b0b' }}>
+                    <button onClick={() => onOpenFormatEditor(f)} className="flex-1 text-left">
+                      <div className="text-[10px] font-medium" style={{ color: '#e2e2e2' }}>{f.label}</div>
+                      <div className="text-[8px]" style={{ color: '#555' }}>
+                        {f.dims}
+                        {f.aiInstruction && <span className="ml-1.5 px-1 py-0.5 rounded" style={{ background: '#1c1c1c' }}>AI hints</span>}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => onDeleteFormat(f.id)}
+                      className="text-[8px] px-1.5 py-0.5 rounded border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e15] transition-all"
+                    >
+                      Del
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
-            <div className="flex gap-2">
-              <button onClick={onSaveTemplate} className="flex-1 py-1.5 rounded font-bold text-[10px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">Save</button>
-              <button onClick={() => setEditingTemplate(null)} className="py-1.5 px-3 rounded font-bold text-[10px] uppercase tracking-wider border border-[#313131] text-[#555] hover:border-[#444] hover:text-[#888] transition-all">Close</button>
-            </div>
           </div>
-        )}
+        </>
+      )}
 
-        {loading ? (
-          <div className="flex items-center justify-center py-4"><div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} /></div>
-        ) : templates.length === 0 ? (
-          <div className="p-4 text-center" style={{ color: '#555', fontSize: 11 }}>No templates yet. Create one to get started.</div>
-        ) : (
-          <div className="space-y-1">
-            {templates.map((t: any) => (
-              <div key={t.id} className="flex items-center gap-2 p-2 rounded" style={{ background: '#0b0b0b', opacity: t.enabled ? 1 : 0.5 }}>
-                <button
-                  onClick={() => onToggleTemplate(t.id, !t.enabled)}
-                  className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${t.enabled ? 'text-[#22c55e]' : 'text-[#555]'}`}
-                >
-                  {t.enabled ? 'ON' : 'OFF'}
-                </button>
-                <button onClick={() => openTemplateEditor(t)} className="flex-1 text-left">
-                  <div className="text-[10px] font-medium">{t.name || t.id}</div>
-                  <div className="text-[8px]" style={{ color: '#555' }}>{t.category} · {t.slots?.length || 0} slots</div>
-                </button>
-                <button onClick={() => onDeleteTemplate(t.id)} className="text-[8px] px-1.5 py-0.5 rounded border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e15]">Del</button>
+      {/* Templates Section */}
+      {subTab === 'templates' && (
+        <>
+          <div className="p-3.5 space-y-2 border-b" style={{ borderColor: '#252525' }}>
+            <div className="flex items-center justify-between">
+              <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>HTML Templates</div>
+              <button onClick={() => openTemplateEditor()} className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">+ New</button>
+            </div>
+
+            {editingTemplate && (
+              <div className="space-y-2">
+                <input
+                  value={editingTemplate.name}
+                  onChange={(e: any) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
+                  placeholder="Template name"
+                  className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                  style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+                />
+                <input
+                  value={editingTemplate.description}
+                  onChange={(e: any) => setEditingTemplate({ ...editingTemplate, description: e.target.value })}
+                  placeholder="Description"
+                  className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                  style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+                />
+                <div className="flex gap-2">
+                  <input
+                    value={editingTemplate.id}
+                    onChange={(e: any) => setEditingTemplate({ ...editingTemplate, id: e.target.value })}
+                    placeholder="ID (e.g. quote-card)"
+                    className="flex-1 rounded border px-2 py-1.5 text-[10px] font-mono outline-none"
+                    style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+                  />
+                  <select
+                    value={editingTemplate.category}
+                    onChange={(e: any) => setEditingTemplate({ ...editingTemplate, category: e.target.value })}
+                    className="rounded border px-2 py-1.5 text-[10px] outline-none"
+                    style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
+                  >
+                    <option value="quote">Quote</option>
+                    <option value="metric">Metric</option>
+                    <option value="list">List</option>
+                    <option value="carousel">Carousel</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+                <textarea
+                  value={templateHtml}
+                  onChange={(e: any) => { setTemplateHtml(e.target.value); onUpdatePreview(e.target.value) }}
+                  placeholder="HTML template with slots {{headline}}, {{body}}, etc."
+                  rows={8}
+                  className="w-full rounded border px-2 py-1.5 text-[10px] font-mono outline-none resize-none"
+                  style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.4 }}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={onSaveTemplate}
+                    className="flex-1 py-1.5 rounded font-bold text-[9px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all"
+                  >
+                    Save Template
+                  </button>
+                  <button
+                    onClick={() => { setEditingTemplate(null); setTemplateHtml('') }}
+                    className="py-1.5 px-3 rounded font-bold text-[9px] uppercase tracking-wider border border-[#313131] text-[#555] hover:border-[#444] hover:text-[#888] transition-all"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
+
+          <div className="p-3.5">
+            {loading ? (
+              <div className="flex items-center justify-center py-4"><div className="w-4 h-4 border-2 rounded-full animate-spin" style={{ borderColor: '#313131', borderTopColor: '#fff' }} /></div>
+            ) : templates.length === 0 ? (
+              <div className="p-4 text-center" style={{ color: '#555', fontSize: 11 }}>No templates yet. Create one to get started.</div>
+            ) : (
+              <div className="space-y-1">
+                {templates.map((t: any) => (
+                  <div key={t.id} className="flex items-center gap-2 p-2 rounded" style={{ background: '#0b0b0b', opacity: t.enabled ? 1 : 0.5 }}>
+                    <button
+                      onClick={() => onToggleTemplate(t.id, !t.enabled)}
+                      className={`text-[8px] font-mono px-1.5 py-0.5 rounded ${t.enabled ? 'text-[#22c55e]' : 'text-[#555]'}`}
+                    >
+                      {t.enabled ? 'ON' : 'OFF'}
+                    </button>
+                    <button onClick={() => openTemplateEditor(t)} className="flex-1 text-left">
+                      <div className="text-[10px] font-medium">{t.name || t.id}</div>
+                      <div className="text-[8px]" style={{ color: '#555' }}>{t.category} · {t.slots?.length || 0} slots</div>
+                    </button>
+                    <button onClick={() => onDeleteTemplate(t.id)} className="text-[8px] px-1.5 py-0.5 rounded border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e15]">Del</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </>
   )
 }
 
 /* ── Formats Tab ── */
 
-function FormatsTab({ formats, editingFormat, setEditingFormat, formatSaving, onOpenEditor, onSave, onDelete }: any) {
-  return (
-    <>
-      <div className="p-3.5 space-y-2 border-b" style={{ borderColor: '#252525' }}>
-        <div className="flex items-center justify-between">
-          <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#555' }}>Output Formats</div>
-          <button onClick={() => onOpenEditor()} className="text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all">+ New</button>
-        </div>
 
-        {editingFormat && (
-          <div className="space-y-2 p-2.5 rounded border" style={{ background: '#0a0a0a', borderColor: '#313131' }}>
-            <div className="text-[8px] font-bold uppercase tracking-widest" style={{ color: '#666' }}>
-              {editingFormat.isNew ? 'New Format' : 'Edit Format'}
-            </div>
-            <input
-              value={editingFormat.name}
-              onChange={(e: any) => setEditingFormat({ ...editingFormat, name: e.target.value })}
-              placeholder="Format name (e.g. Instagram Story)"
-              className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
-              style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-            />
-            {editingFormat.isNew && (
-              <input
-                value={editingFormat.id}
-                onChange={(e: any) => setEditingFormat({ ...editingFormat, id: e.target.value })}
-                placeholder="ID (e.g. ig-story, auto-generated if empty)"
-                className="w-full rounded border px-2 py-1.5 text-[10px] outline-none font-mono"
-                style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-              />
-            )}
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Width</label>
-                <input
-                  type="number"
-                  value={editingFormat.width}
-                  onChange={(e: any) => setEditingFormat({ ...editingFormat, width: Number(e.target.value) })}
-                  className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
-                  style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-                />
-              </div>
-              <div className="flex-1">
-                <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>Height</label>
-                <input
-                  type="number"
-                  value={editingFormat.height}
-                  onChange={(e: any) => setEditingFormat({ ...editingFormat, height: Number(e.target.value) })}
-                  className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
-                  style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="text-[8px] font-bold uppercase tracking-wider block mb-1" style={{ color: '#555' }}>AI Instructions</label>
-              <textarea
-                value={editingFormat.aiInstruction}
-                onChange={(e: any) => setEditingFormat({ ...editingFormat, aiInstruction: e.target.value })}
-                placeholder="Optional instructions for AI when generating for this format..."
-                rows={2}
-                className="w-full rounded border px-2 py-1.5 text-[10px] outline-none resize-none"
-                style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={onSave}
-                disabled={formatSaving}
-                className="flex-1 py-1.5 rounded font-bold text-[9px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all disabled:opacity-25"
-              >
-                {formatSaving ? 'Saving…' : 'Save Format'}
-              </button>
-              <button
-                onClick={() => setEditingFormat(null)}
-                className="py-1.5 px-3 rounded font-bold text-[9px] uppercase tracking-wider border border-[#313131] text-[#555] hover:border-[#444] hover:text-[#888] transition-all"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="p-3.5">
-        {formats.length === 0 ? (
-          <div className="p-4 text-center" style={{ color: '#555', fontSize: 11 }}>No formats configured. Add one to get started.</div>
-        ) : (
-          <div className="space-y-1">
-            {formats.map((f: any) => (
-              <div key={f.id} className="flex items-center gap-2 p-2 rounded" style={{ background: '#0b0b0b' }}>
-                <button onClick={() => onOpenEditor(f)} className="flex-1 text-left">
-                  <div className="text-[10px] font-medium" style={{ color: '#e2e2e2' }}>{f.label}</div>
-                  <div className="text-[8px]" style={{ color: '#555' }}>
-                    {f.dims}
-                    {f.aiInstruction && <span className="ml-1.5 px-1 py-0.5 rounded" style={{ background: '#1c1c1c' }}>AI hints</span>}
-                  </div>
-                </button>
-                <button
-                  onClick={() => onDelete(f.id)}
-                  className="text-[8px] px-1.5 py-0.5 rounded border border-[#f43f5e] text-[#f43f5e] hover:bg-[#f43f5e15] transition-all"
-                >
-                  Del
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </>
-  )
-}
 
 /* ── Settings Tab ── */
 
