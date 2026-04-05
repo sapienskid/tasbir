@@ -31,18 +31,18 @@
 			"kv_namespaces": [
 				{
 					"binding": "SETTINGS_KV",
-					"id": "settings-kv-dev",
-					"preview_id": "settings-kv-dev"
+					"id": "198d0935a8c64a3f91e53c923ce47154",
+					"preview_id": "198d0935a8c64a3f91e53c923ce47154"
 				},
 				{
 					"binding": "TEMPLATES_KV",
-					"id": "templates-kv-dev",
-					"preview_id": "templates-kv-dev"
+					"id": "3b7c9bfd0aab4f42bede90574fd3399a",
+					"preview_id": "3b7c9bfd0aab4f42bede90574fd3399a"
 				},
 				{
 					"binding": "AI_CACHE_KV",
-					"id": "ai-cache-kv-dev",
-					"preview_id": "ai-cache-kv-dev"
+					"id": "3f89c45b35a5493bbb578299e5a1a742",
+					"preview_id": "3f89c45b35a5493bbb578299e5a1a742"
 				}
 			],
 			"vars": {
@@ -70,15 +70,15 @@
 			"kv_namespaces": [
 				{
 					"binding": "SETTINGS_KV",
-					"id": "settings-kv-staging"
+					"id": "c2a6ce61516b46d9b9893bd46964db42"
 				},
 				{
 					"binding": "TEMPLATES_KV",
-					"id": "templates-kv-staging"
+					"id": "a582edf59f1b4b47b3183e98a7370191"
 				},
 				{
 					"binding": "AI_CACHE_KV",
-					"id": "ai-cache-kv-staging"
+					"id": "9ac6d1e07f7c4126a7c28637535bf0de"
 				}
 			],
 			"vars": {
@@ -106,15 +106,15 @@
 			"kv_namespaces": [
 				{
 					"binding": "SETTINGS_KV",
-					"id": "settings-kv-prod"
+					"id": "524a3bbf4d5f43cd821d08593d24cf83"
 				},
 				{
 					"binding": "TEMPLATES_KV",
-					"id": "templates-kv-prod"
+					"id": "16d13f95d3004cd4931f6b07e016bf6f"
 				},
 				{
 					"binding": "AI_CACHE_KV",
-					"id": "ai-cache-kv-prod"
+					"id": "d81d8c5672db4f69aa7c985be0c183dc"
 				}
 			],
 			"vars": {
