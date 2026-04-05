@@ -49,6 +49,14 @@ import {
 } from "./lib/templates";
 import { classifyContent, type ContentClassification } from "./lib/content-classifier";
 import { checkHealth } from "./lib/health";
+import {
+  generateCacheKey,
+  hashDesignTokens,
+  getCachedHtml,
+  setCachedHtml,
+  shouldUseCache,
+  type CacheEntry,
+} from "./lib/ai-cache";
 
 interface LlmPromptOverrides {
   systemPrompt?: string | string[];
@@ -99,6 +107,7 @@ async function launchRenderingBrowser(env: Env): Promise<any> {
 interface Env extends SecurityEnv {
   SETTINGS_KV?: KVNamespace;
   TEMPLATES_KV?: KVNamespace;
+  AI_CACHE_KV?: KVNamespace;
 }
 
 interface ImageGenerationOptions {
@@ -1069,8 +1078,12 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
   const designInstructions = extractDesignInstructions(designTokensForRun);
   
+  // CACHE: Generate design tokens hash for cache key
+  const designTokensHash = await hashDesignTokens(designTokensForRun);
+  const useCache = shouldUseCache({ postCount: outputPlan.postCount });
+  
   const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
-  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null> }> = [];
+  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null>; cacheHit?: boolean }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
   const agentContexts: AgentExecutionContext[] = [];
   const sharedStorage = resolveBatchStorageOptions(body.storage);
@@ -1126,10 +1139,35 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       const formatsArray = [...outputPlan.formats];
       const formatConfigs = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter(f => f.config);
       
-      // Generate all HTML outputs in parallel
+      // Track cache hits for this variant
+      let variantCacheHits = 0;
+      
+      // Generate all HTML outputs in parallel (with caching)
       const htmlOutputs = await Promise.all(
         formatConfigs.map(async ({ format, config }) => {
-          if (!config) return { format, output: null };
+          if (!config) return { format, output: null, cacheHit: false };
+          
+          // CACHE: Try to get cached HTML first (only for single-variant requests)
+          if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
+            const cacheKey = await generateCacheKey({
+              title: post.title,
+              content: post.plaintext || post.excerpt || "",
+              format,
+              width: config.width,
+              height: config.height,
+              prompt: variantPrompt,
+              designTokensHash,
+            });
+            
+            const cached = await getCachedHtml(env.AI_CACHE_KV, cacheKey);
+            if (cached) {
+              console.log(`[ai-cache] HIT for ${format}`);
+              variantCacheHits++;
+              // Still inject tokens in case they changed slightly
+              const finalHtml = injectDesignTokensIntoHtmlFast(cached.html, precomputedTokens);
+              return { format, output: { generated_html: finalHtml }, config, cacheHit: true, cacheKey };
+            }
+          }
           
           let llmOutput: LlmOutput;
 
@@ -1157,18 +1195,39 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
               agentContext.copyOverrides,
               instructionsWithDesignGuidance,
             );
+            
+            // CACHE: Store the generated HTML for future requests
+            if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
+              const cacheKey = await generateCacheKey({
+                title: post.title,
+                content: post.plaintext || post.excerpt || "",
+                format,
+                width: config.width,
+                height: config.height,
+                prompt: variantPrompt,
+                designTokensHash,
+              });
+              
+              // Don't await cache write - fire and forget
+              setCachedHtml(env.AI_CACHE_KV, cacheKey, {
+                html: llmOutput.generated_html,
+                generatedAt: Date.now(),
+                contentHash: designTokensHash,
+                format,
+              }).catch(() => {/* ignore cache errors */});
+            }
           }
 
           // Use pre-computed token assets for injection
           const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
-          return { format, output: { generated_html: finalHtml }, config };
+          return { format, output: { generated_html: finalHtml }, config, cacheHit: false };
         })
       );
 
       // OPTIMIZATION: Render all formats in parallel using separate browser pages
       const renderResults = await Promise.all(
-        htmlOutputs.map(async ({ format, output, config }) => {
-          if (!output || !config) return { format, asset: null };
+        htmlOutputs.map(async ({ format, output, config, cacheHit }) => {
+          if (!output || !config) return { format, asset: null, cacheHit };
           
           const asset = await renderStoreSingleAssetWithPage(env, browser, {
             key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
@@ -1179,7 +1238,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
             height: config.height,
           });
           
-          return { format, asset, output };
+          return { format, asset, output, cacheHit };
         })
       );
 
