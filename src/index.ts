@@ -30,6 +30,23 @@ import {
   getDefaultDesignTokens,
   normalizeDesignTokensForRendering,
 } from "../shared/tokens";
+import {
+  loadSettings,
+  saveSettings,
+  patchSettings,
+  getDefaultSettings,
+  type WorkspaceSettings,
+} from "./lib/settings";
+import {
+  listTemplates,
+  getTemplate,
+  saveTemplate,
+  deleteTemplate,
+  toggleTemplate,
+  fillTemplateSlots,
+  extractSlotsFromHtml,
+  validateTemplateHtml,
+} from "./lib/templates";
 
 interface LlmPromptOverrides {
   systemPrompt?: string | string[];
@@ -530,6 +547,101 @@ app.delete("/formats/:id", async (c) => {
   }
 });
 
+// ==================== SETTINGS ====================
+
+app.get("/settings", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  if (!c.env.SETTINGS_KV) throw new HttpError(500, "SETTINGS_KV binding is not configured");
+  const settings = await loadSettings(c.env.SETTINGS_KV);
+  return c.json(settings);
+});
+
+app.put("/settings", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+  if (!c.env.SETTINGS_KV) throw new HttpError(500, "SETTINGS_KV binding is not configured");
+  const body = await readJsonBody<Partial<WorkspaceSettings>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  await saveSettings(c.env.SETTINGS_KV, body as WorkspaceSettings);
+  return c.json({ ok: true });
+});
+
+app.patch("/settings", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+  if (!c.env.SETTINGS_KV) throw new HttpError(500, "SETTINGS_KV binding is not configured");
+  const body = await readJsonBody<Partial<WorkspaceSettings>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const settings = await patchSettings(c.env.SETTINGS_KV, body);
+  return c.json({ ok: true, settings });
+});
+
+// ==================== TEMPLATES ====================
+
+app.get("/templates", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  if (!c.env.TEMPLATES_KV) throw new HttpError(500, "TEMPLATES_KV binding is not configured");
+  const templates = await listTemplates(c.env.TEMPLATES_KV);
+  return c.json({ templates });
+});
+
+app.get("/templates/:id", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate-from-content");
+  if (!c.env.TEMPLATES_KV || !c.env.OUTPUT_BUCKET) throw new HttpError(500, "KV or R2 binding is not configured");
+  const id = c.req.param("id");
+  const result = await getTemplate(c.env.TEMPLATES_KV, c.env.OUTPUT_BUCKET, id);
+  if (!result) return c.json({ error: "Template not found" }, 404);
+  return c.json(result);
+});
+
+app.put("/templates/:id", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+  if (!c.env.TEMPLATES_KV || !c.env.OUTPUT_BUCKET) throw new HttpError(500, "KV or R2 binding is not configured");
+  const id = c.req.param("id");
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const html = typeof body.html === "string" ? body.html : "";
+  if (!html) return c.json({ error: "html is required" }, 400);
+  const metadata = await saveTemplate(c.env.TEMPLATES_KV, c.env.OUTPUT_BUCKET, id, html, {
+    name: typeof body.name === "string" ? body.name : undefined,
+    description: typeof body.description === "string" ? body.description : undefined,
+    category: typeof body.category === "string" ? body.category : undefined,
+  });
+  return c.json({ ok: true, metadata });
+});
+
+app.delete("/templates/:id", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+  if (!c.env.TEMPLATES_KV || !c.env.OUTPUT_BUCKET) throw new HttpError(500, "KV or R2 binding is not configured");
+  const id = c.req.param("id");
+  const deleted = await deleteTemplate(c.env.TEMPLATES_KV, c.env.OUTPUT_BUCKET, id);
+  if (!deleted) return c.json({ error: "Template not found" }, 404);
+  return c.json({ ok: true });
+});
+
+app.post("/templates/:id/toggle", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+  if (!c.env.TEMPLATES_KV) throw new HttpError(500, "TEMPLATES_KV binding is not configured");
+  const id = c.req.param("id");
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const enabled = typeof body.enabled === "boolean" ? body.enabled : true;
+  const metadata = await toggleTemplate(c.env.TEMPLATES_KV, id, enabled);
+  if (!metadata) return c.json({ error: "Template not found" }, 404);
+  return c.json({ ok: true, metadata });
+});
+
+app.post("/templates/:id/validate", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+  const html = typeof body.html === "string" ? body.html : "";
+  const result = validateTemplateHtml(html);
+  return c.json(result);
+});
+
 app.post("/generate", async (c) => {
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "generate");
@@ -589,7 +701,7 @@ app.post("/webhook/ghost", async (c) => {
 
 app.notFound((c) => c.json({
   error: "Not found",
-  routes: ["POST /generate", "POST /generate-from-content", "POST /webhook/ghost", "GET /health", "GET /config/design-tokens", "GET /config/prompts", "GET /config/formats"]
+  routes: ["POST /generate", "POST /generate-from-content", "POST /webhook/ghost", "GET /health", "GET /settings", "PUT /settings", "PATCH /settings", "GET /templates", "GET /templates/:id", "PUT /templates/:id", "DELETE /templates/:id", "POST /templates/:id/toggle", "POST /templates/:id/validate", "GET /config/design-tokens", "GET /config/prompts", "GET /config/formats"]
 }, 404 as any));
 
 app.onError((err, c) => {
