@@ -139,12 +139,24 @@ export async function generateImage(
   }
 ): Promise<GeneratedImage | null> {
   const enhancedPrompt = buildEnhancedPrompt(prompt, options?.style);
-  const negativePrompt = options?.negativePrompt || DEFAULT_NEGATIVE_PROMPT;
+  const width = options?.width || 1024;
+  const height = options?.height || 1024;
 
   try {
-    // Use FLUX Klein for fast generation
+    const form = new FormData();
+    form.append('prompt', enhancedPrompt);
+    form.append('width', String(width));
+    form.append('height', String(height));
+
+    const formResponse = new Response(form);
+    const formStream = formResponse.body!;
+    const formContentType = formResponse.headers.get('content-type')!;
+
     const result = await ai.run("@cf/black-forest-labs/flux-2-klein-9b", {
-      prompt: enhancedPrompt,
+      multipart: {
+        body: formStream,
+        contentType: formContentType,
+      },
     });
 
     if (!result || typeof result !== "object") {
@@ -152,14 +164,12 @@ export async function generateImage(
       return null;
     }
 
-    // FLUX returns image data directly
     const imageData = (result as any).image;
     if (!imageData) {
       console.warn("[ai-image] No image data in result");
       return null;
     }
 
-    // Convert base64 to ArrayBuffer if needed
     const arrayBuffer = typeof imageData === "string" 
       ? base64ToArrayBuffer(imageData)
       : imageData;
