@@ -235,8 +235,7 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
     ].join("\n");
 
     try {
-      // Use gemma-4 directly via Google API for advanced orchestration
-      const providerConfig = resolveProviderConfig(this.env.AI, this.env.GOOGLE_API_KEY);
+      const providerConfig = resolveProviderConfig(this.env.GOOGLE_API_KEY);
       const models = createAdvancedModelChain(providerConfig);
 
       const result = await generateObject({
@@ -249,7 +248,7 @@ export class MarketingOrchestratorAgent extends Agent<Env> {
       });
       return normalizeResponse(result.object, input.renderPolicy);
     } catch (error) {
-      console.error("[marketing-orchestrator] gemma-4 failed, using fallback:", error);
+      console.warn("[marketing-orchestrator] generateObject failed, using fallback:", error);
       return fallbackResponse(input);
     }
   }
@@ -446,7 +445,7 @@ export async function callOrchestrator(
     imageConfig: input.imageConfig,
   };
 
-  const providerConfig = resolveProviderConfig(ai, googleApiKey);
+  const providerConfig = resolveProviderConfig(googleApiKey);
   const models = createAdvancedModelChain(providerConfig);
 
   const sourceBody = (input.post.plaintext ?? "").trim();
@@ -554,7 +553,36 @@ export async function callOrchestrator(
       plannedPosts: response.plannedPosts || [],
     };
   } catch (error) {
-    console.error("[callOrchestrator] gemma-4 failed, using fallback:", error);
+    console.warn("[callOrchestrator] generateObject failed, trying text fallback:", error);
+    try {
+      const { generateText } = await import("ai");
+      const textResult = await generateText({
+        model: models[0],
+        system: systemPrompt,
+        prompt,
+        temperature: 0.7,
+        maxOutputTokens: 1200,
+      });
+
+      const jsonMatch = textResult.text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const validated = ORCHESTRATOR_SCHEMA.safeParse(parsed);
+        if (validated.success) {
+          const response = normalizeResponse(validated.data, input.renderPolicy);
+          return {
+            strategic_brief: response.strategic_brief,
+            copywriter_notes: response.copywriter_notes,
+            visual_notes: response.visual_notes,
+            warnings: response.warnings,
+            plannedPosts: response.plannedPosts || [],
+          };
+        }
+      }
+    } catch (textError) {
+      console.warn("[callOrchestrator] Text fallback also failed:", textError);
+    }
+    console.warn("[callOrchestrator] Using fallback response");
     return fallbackResponse(payload) as OrchestratorOutput;
   }
 }

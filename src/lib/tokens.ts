@@ -26,12 +26,11 @@ import { normalizeDesignTokensForRendering, type DesignTokens } from "../../shar
  */
 export async function generateTokensAI(
   vibe: string,
-  aiBinding: Ai,
   googleApiKey?: string,
   primaryHint?: string,
   secondaryHint?: string,
 ): Promise<DesignTokens> {
-  const providerConfig = resolveProviderConfig(aiBinding, googleApiKey);
+  const providerConfig = resolveProviderConfig(googleApiKey);
   const models = createAdvancedModelChain(providerConfig);
 
   let enhancedVibe = vibe;

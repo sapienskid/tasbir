@@ -7,10 +7,10 @@ export {
   createHtmlLayoutModelChain,
   createAdvancedModelChain,
   resolveProviderConfig,
-  DYNAMIC_ROUTES,
   type ProviderConfig,
   isRateLimitError,
   isRetryableError,
 } from "./providers";
 export { generateWithFallback, generateJsonWithFallback } from "./generate";
+export { generateObjectWithRetry } from "./generate-object";
 export { normalizeSourceContent, stripHtml, ensureLength, clampNumber } from "./normalization";

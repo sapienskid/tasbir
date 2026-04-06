@@ -155,14 +155,12 @@ export async function generateHtmlLayout(
 ): Promise<HtmlLayoutOutput> {
   const errors: Error[] = [];
   
-  // Create enhanced prompt configuration
   const promptConfig = createPromptConfig(
     HTML_LAYOUT_SYSTEM_PROMPT,
     args.settings,
     'htmlGeneration'
   );
   
-  // Combine system prompts: base + custom + additional system prompt
   const finalSystemPrompt = [
     promptConfig.system,
     args.systemPrompt
@@ -180,8 +178,8 @@ export async function generateHtmlLayout(
       const generatedHtml = extractHtml(result.text);
       return { generated_html: generatedHtml };
     } catch (error) {
+      console.warn("[html-layout-agent] Attempt failed:", error);
       errors.push(error instanceof Error ? error : new Error(String(error)));
-      if (!isRetryableError(error)) throw error;
     }
   }
 
@@ -198,14 +196,12 @@ export async function* streamHtmlLayout(
 ): AsyncGenerator<{ type: "chunk" | "complete" | "error"; data: string }> {
   const errors: Error[] = [];
   
-  // Create enhanced prompt configuration
   const promptConfig = createPromptConfig(
     HTML_LAYOUT_SYSTEM_PROMPT,
     args.settings,
     'htmlGeneration'
   );
   
-  // Combine system prompts: base + custom + additional system prompt
   const finalSystemPrompt = [
     promptConfig.system,
     args.systemPrompt
@@ -233,10 +229,7 @@ export async function* streamHtmlLayout(
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       errors.push(err);
-      if (!isRetryableError(error)) {
-        yield { type: "error", data: err.message };
-        throw error;
-      }
+      console.warn("[html-layout-agent] Streaming attempt failed:", err);
     }
   }
 
@@ -306,12 +299,4 @@ function extractHtml(text: string): string {
   }
 
   return cleaned;
-}
-
-function isRetryableError(error: unknown): boolean {
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return msg.includes("429") || msg.includes("too many requests") || msg.includes("quota exceeded") || msg.includes("rate limit") || msg.includes("500") || msg.includes("503");
-  }
-  return false;
 }

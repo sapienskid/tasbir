@@ -516,7 +516,7 @@ app.post("/generate-tokens", async (c) => {
   console.log("[generate-tokens] GOOGLE_API_KEY present:", !!c.env.GOOGLE_API_KEY);
   
   try {
-    const tokens = await generateTokensAI(vibe, c.env.AI, c.env.GOOGLE_API_KEY, primaryHint, secondaryHint);
+    const tokens = await generateTokensAI(vibe, c.env.GOOGLE_API_KEY, primaryHint, secondaryHint);
     return c.json(tokens);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -849,7 +849,7 @@ app.post("/decide-template", async (c) => {
     return c.json({ error: "title and content (or body) are required" }, 400);
   }
   
-  const providerConfig = resolveProviderConfig(c.env.AI, c.env.GOOGLE_API_KEY);
+  const providerConfig = resolveProviderConfig(c.env.GOOGLE_API_KEY);
   const availableTemplates = await listSavedTemplates(c.env.AI_CACHE_KV, format);
   
   const preferences = {
@@ -1115,7 +1115,7 @@ async function resolveAgentContextForRun(args: {
 }): Promise<AgentExecutionContext> {
   const context = cloneAgentExecutionContext(args.baseContext);
 
-  const providerConfig = resolveProviderConfig(args.env.AI, args.env.GOOGLE_API_KEY);
+  const providerConfig = resolveProviderConfig(args.env.GOOGLE_API_KEY);
   const models = createAdvancedModelChain(providerConfig);
   if (models.length === 0) {
     context.warnings.push("no_ai_provider");
@@ -1284,7 +1284,7 @@ async function runHtmlLayoutAgent(
   imageSpec?: ImageSpecInput,
   settings?: WorkspaceSettings | null,
 ): Promise<LlmOutput> {
-  const providerConfig = resolveProviderConfig(env.AI, env.GOOGLE_API_KEY);
+  const providerConfig = resolveProviderConfig(env.GOOGLE_API_KEY);
   const models = createAdvancedModelChain(providerConfig);
 
   const content = post.plaintext || post.html || "";
@@ -1398,7 +1398,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   }
 
   // SMART TEMPLATE SELECTION: Check for saved HTML templates first
-  const providerConfig = resolveProviderConfig(env.AI, env.GOOGLE_API_KEY);
+  const providerConfig = resolveProviderConfig(env.GOOGLE_API_KEY);
   const templateDecisions: Map<string, TemplateDecision> = new Map();
   const usedSavedTemplates: Map<string, SavedHtmlTemplate> = new Map();
 
@@ -1407,7 +1407,6 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       const allTemplates = await listTemplates(env.TEMPLATES_KV);
       const enabledTemplates = allTemplates.filter((t) => t.enabled && !settings.templates.disabled.includes(t.id));
       classification = await classifyContent(
-        env.AI,
         env.GOOGLE_API_KEY,
         post.title,
         post.plaintext || post.excerpt || "",
@@ -1868,7 +1867,6 @@ export async function runPipelineFromPostWithProgress(
       const allTemplates = await listTemplates(env.TEMPLATES_KV);
       const enabledTemplates = allTemplates.filter((t) => t.enabled && !settings.templates.disabled.includes(t.id));
       classification = await classifyContent(
-        env.AI,
         env.GOOGLE_API_KEY,
         post.title,
         post.plaintext || post.excerpt || "",

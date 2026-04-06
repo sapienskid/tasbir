@@ -1,4 +1,4 @@
-import { generateText, generateObject, type LanguageModel } from "ai";
+import { generateObject, generateText, type LanguageModel } from "ai";
 import { z } from "zod";
 
 const DESIGN_TOKEN_SCHEMA = z.object({
@@ -199,11 +199,6 @@ const DESIGN_TOKEN_SCHEMA = z.object({
     aesthetic: z.string(),
     palette: z.string(),
     instructions: z.string(),
-    /**
-     * Semantic Design Brief: A compact natural language summary for AI agents.
-     * This replaces passing full token JSON to content generation prompts.
-     * Should describe: color mood, typography feel, spacing density, visual style.
-     */
     semanticBrief: z.string().optional(),
   }),
 });
@@ -345,6 +340,11 @@ OUTPUT REQUIREMENTS
 - Every field in the schema MUST be present
 - No markdown formatting, no explanation, only JSON`;
 
+function extractJsonFromText(text: string): string | null {
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  return jsonMatch ? jsonMatch[0] : null;
+}
+
 export async function generateDesignTokens(
   models: LanguageModel[],
   vibe: string,
@@ -427,21 +427,34 @@ VALIDATION RULES:
       });
       return result.object;
     } catch (error) {
+      console.warn("[design-token-agent] generateObject failed, trying generateText fallback:", error);
+      try {
+        const textResult = await generateText({
+          model,
+          system: DESIGN_TOKEN_SYSTEM_PROMPT,
+          prompt: `Generate a complete design token system for this vibe: "${vibe}"
+
+Return ONLY valid JSON matching the schema. No markdown, no explanation.`,
+          temperature: 0.9,
+        });
+
+        const jsonStr = extractJsonFromText(textResult.text);
+        if (jsonStr) {
+          const parsed = JSON.parse(jsonStr);
+          const validated = DESIGN_TOKEN_SCHEMA.safeParse(parsed);
+          if (validated.success) {
+            return validated.data;
+          }
+          console.warn("[design-token-agent] JSON extracted but validation failed:", validated.error);
+        }
+      } catch (textError) {
+        console.warn("[design-token-agent] generateText fallback also failed:", textError);
+      }
       const errMsg = error instanceof Error ? error.message : String(error);
-      console.error(`[design-token-agent] Provider failed:`, errMsg);
-      errors.push(error instanceof Error ? error : new Error(String(error)));
-      if (!isRetryableError(error)) throw error;
+      errors.push(error instanceof Error ? error : new Error(errMsg));
     }
   }
 
   const errorDetails = errors.map(e => e.message).join('; ');
   throw new Error(`Design token generation failed across all providers: ${errorDetails}`);
-}
-
-function isRetryableError(error: unknown): boolean {
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return msg.includes("429") || msg.includes("too many requests") || msg.includes("quota exceeded") || msg.includes("rate limit") || msg.includes("500") || msg.includes("503");
-  }
-  return false;
 }

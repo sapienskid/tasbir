@@ -22,7 +22,12 @@ export async function generateOrchestration(
     systemPrompt: string;
   },
 ): Promise<OrchestratorOutput> {
-  const errors: Error[] = [];
+  const fallback = (): OrchestratorOutput => ({
+    strategic_brief: `Create platform-native assets for ${args.formats.join(", ")} with clear hooks, practical middle content, and concrete CTA endings.`,
+    copywriter_notes: "Write concise platform-native copy, complete sentences, and non-repetitive angles.",
+    visual_notes: "Use clean editorial visuals aligned to the message.",
+    warnings: ["orchestrator_fallback_used"],
+  });
 
   for (const model of models) {
     try {
@@ -51,23 +56,9 @@ Produce concise notes for:
       });
       return result.object;
     } catch (error) {
-      errors.push(error instanceof Error ? error : new Error(String(error)));
-      if (!isRetryableError(error)) throw error;
+      console.warn("[orchestrator-agent] Attempt failed:", error);
     }
   }
 
-  return {
-    strategic_brief: `Create platform-native assets for ${args.formats.join(", ")} with clear hooks, practical middle content, and concrete CTA endings.`,
-    copywriter_notes: "Write concise platform-native copy, complete sentences, and non-repetitive angles.",
-    visual_notes: "Use clean editorial visuals aligned to the message.",
-    warnings: ["orchestrator_fallback_used"],
-  };
-}
-
-function isRetryableError(error: unknown): boolean {
-  if (error instanceof Error) {
-    const msg = error.message.toLowerCase();
-    return msg.includes("429") || msg.includes("too many requests") || msg.includes("quota exceeded") || msg.includes("rate limit") || msg.includes("500") || msg.includes("503");
-  }
-  return false;
+  return fallback();
 }
