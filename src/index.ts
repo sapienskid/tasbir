@@ -118,8 +118,6 @@ interface GhostPost {
 const ORCHESTRATOR_TIMEOUT_MS = 12_000;
 /** Max time for a single AI image generation call (Workers AI) */
 const IMAGE_GEN_TIMEOUT_MS = 10_000;
-/** Max time for HTML layout generation (Gemini generateText) */
-const HTML_LAYOUT_TIMEOUT_MS = 15_000;
 /** Max time for browser launch/reconnect */
 const BROWSER_LAUNCH_TIMEOUT_MS = 8_000;
 /** Max time for a single page render (screenshot) */
@@ -1750,29 +1748,28 @@ export async function runPipelineFromPost(
             const generatedImage = generatedImages.get(format);
 
             _log.info("html-gen-start", { format });
-            llmOutput = await withTimeout(
-              runHtmlLayoutAgent(
-                env,
-                post,
-                format,
-                config.name,
-                config.aiInstruction,
-                plannedPost?.width || config.width,
-                plannedPost?.height || config.height,
-                designTokensPrompt,
-                variantPrompt,
-                agentContext.copyOverrides,
-                instructionsWithDesignGuidance,
-                generatedImage || undefined,
-                plannedPost?.imageSpec ? {
-                  type: plannedPost.imageSpec.type || 'background',
-                  position: plannedPost.imageSpec.position || 'background',
-                  count: plannedPost.imageSpec.count || 1,
-                } : undefined,
-                settings,
-              ),
-              HTML_LAYOUT_TIMEOUT_MS,
-              `HTML layout generation for ${format}`
+            // No timeout on HTML generation — Gemini can legitimately take 30–60s.
+            // The browser is only launched after all HTML is ready, so there is no
+            // idle-browser race condition to guard against here.
+            llmOutput = await runHtmlLayoutAgent(
+              env,
+              post,
+              format,
+              config.name,
+              config.aiInstruction,
+              plannedPost?.width || config.width,
+              plannedPost?.height || config.height,
+              designTokensPrompt,
+              variantPrompt,
+              agentContext.copyOverrides,
+              instructionsWithDesignGuidance,
+              generatedImage || undefined,
+              plannedPost?.imageSpec ? {
+                type: plannedPost.imageSpec.type || 'background',
+                position: plannedPost.imageSpec.position || 'background',
+                count: plannedPost.imageSpec.count || 1,
+              } : undefined,
+              settings,
             );
             _log.info("html-gen-complete", { format });
             
@@ -2248,29 +2245,26 @@ export async function runPipelineFromPostWithProgress(
                 p.format.toLowerCase() === format.toLowerCase()
               ) || null;
 
-              llmOutput = await withTimeout(
-                runHtmlLayoutAgent(
-                  env,
-                  post,
-                  format,
-                  config.name,
-                  config.aiInstruction,
-                  config.width,
-                  config.height,
-                  designTokensPrompt,
-                  variantPrompt,
-                  agentContext.copyOverrides,
-                  instructionsWithDesignGuidance,
-                  generatedImage || undefined,
-                  plannedPost?.imageSpec ? {
-                    type: plannedPost.imageSpec.type || 'background',
-                    position: plannedPost.imageSpec.position || 'background',
-                    count: plannedPost.imageSpec.count || 1,
-                  } : undefined,
-                  settings,
-                ),
-                HTML_LAYOUT_TIMEOUT_MS,
-                `HTML layout generation for ${format}`
+              // No timeout on HTML generation — Gemini can legitimately take 30–60s.
+              llmOutput = await runHtmlLayoutAgent(
+                env,
+                post,
+                format,
+                config.name,
+                config.aiInstruction,
+                config.width,
+                config.height,
+                designTokensPrompt,
+                variantPrompt,
+                agentContext.copyOverrides,
+                instructionsWithDesignGuidance,
+                generatedImage || undefined,
+                plannedPost?.imageSpec ? {
+                  type: plannedPost.imageSpec.type || 'background',
+                  position: plannedPost.imageSpec.position || 'background',
+                  count: plannedPost.imageSpec.count || 1,
+                } : undefined,
+                settings,
               );
 
               // Cache the result
