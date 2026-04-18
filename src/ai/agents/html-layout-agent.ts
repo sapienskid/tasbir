@@ -76,20 +76,26 @@ ${args.content}
 
 ${designInfo}
 
+${args.settings?.brand?.logo_url ? `BRAND LOGO AVAILABLE:
+- You can use the brand logo in the layout using EXACTLY this variable: {{brand_logo}}
+- Example: <img src="{{brand_logo}}" class="w-12 h-12 object-contain" alt="${args.settings.brand.name || 'Brand'} Logo">` : ""}
+
 ${args.generatedImage ? `GENERATED IMAGE AVAILABLE:
 - Image Type: ${args.generatedImage.imageType}
 - Position: ${args.imageSpec?.position || 'background'}
 - Count: ${args.imageSpec?.count || 1}
 
 IMAGE USAGE RULES:
-- Embed the image using: <img src="${args.generatedImage.dataUrl.slice(0, 50)}..."> or CSS background
+- Embed the generated image using exactly this variable for the src/url: {{image_url}}
+- Example (img tag): <img src="{{image_url}}" class="w-full h-full object-cover">
+- Example (css bg): <div style="background-image: url('{{image_url}}');" class="bg-cover bg-center"></div>
 - Position: ${args.imageSpec?.position || 'background'} (background | hero | left | right | overlay)
 - For background: use as full-bleed background with text overlay on top
 - For hero: place image at top, text below in content area
 - For left/right: split layout with image on one side, text on other
 - For overlay: place image behind text with gradient overlay for readability
 - NEVER put text INSIDE the image - text goes in HTML elements on top
-- The image is already generated - just embed and position it correctly
+- Never use placeholder domains or fake urls. Use EXACTLY {{image_url}}
 ` : ""}
 
 ${args.userPrompt ? `User specifically asked for: ${args.userPrompt}` : ""}
@@ -158,6 +164,13 @@ export async function generateHtmlLayout(
          }
       }
 
+      if (args.generatedImage?.dataUrl) {
+         slots['image_url'] = args.generatedImage.dataUrl;
+      }
+      if (args.settings?.brand?.logo_url) {
+         slots['brand_logo'] = args.settings.brand.logo_url;
+      }
+
       // If slots were successfully extracted, use them, otherwise return raw content as fallback
       const generatedHtml = Object.keys(slots).length > 0 
          ? fillTemplateSlots(templateHtml, slots) 
@@ -214,7 +227,29 @@ export async function* streamHtmlLayout(
         yield { type: "chunk", data: chunk };
       }
 
-      const generatedHtml = extractHtml(fullText);
+      const templateHtml = extractHtml(fullText);
+      let slots: Record<string, string> = {};
+      const jsonMatch = fullText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+      if (jsonMatch) {
+         try { slots = JSON.parse(jsonMatch[1]); } catch(e) {}
+      } else {
+         const firstBrace = fullText.lastIndexOf('{');
+         const lastBrace = fullText.lastIndexOf('}');
+         if (firstBrace > 0 && lastBrace > firstBrace) {
+            try { slots = JSON.parse(fullText.slice(firstBrace, lastBrace + 1)); } catch(e) {}
+         }
+      }
+
+      if (args.generatedImage?.dataUrl) {
+         slots['image_url'] = args.generatedImage.dataUrl;
+      }
+      if (args.settings?.brand?.logo_url) {
+         slots['brand_logo'] = args.settings.brand.logo_url;
+      }
+      const generatedHtml = Object.keys(slots).length > 0 
+         ? fillTemplateSlots(templateHtml, slots) 
+         : templateHtml;
+
       yield { type: "complete", data: generatedHtml };
       return;
     } catch (error) {

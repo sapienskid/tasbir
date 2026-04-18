@@ -1156,6 +1156,18 @@ function SettingsTab({ settings, loading, onSave, formats }: any) {
         {/* Combined Strategy Section */}
         <Section id="strategy" label="Strategy" defaultCollapsed={false}>
           <input value={local.brand?.name || ''} onChange={(e: any) => set(['brand', 'name'], e.target.value)} placeholder="Brand name" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+          <div className="flex gap-2 items-center">
+            <input value={local.brand?.logo_url || ''} onChange={(e: any) => set(['brand', 'logo_url'], e.target.value)} placeholder="Brand Logo URL or base64" className="flex-1 rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            <input type="file" id="logoUpload" className="hidden" accept="image/*" onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              const reader = new FileReader()
+              reader.onload = (re) => set(['brand', 'logo_url'], re.target?.result as string)
+              reader.readAsDataURL(file)
+            }} />
+            <button onClick={() => document.getElementById('logoUpload')?.click()} className="whitespace-nowrap px-3 py-1.5 rounded transition-all text-[10px] font-bold" style={{ background: '#252525', color: '#fff' }}>Upload</button>
+            {local.brand?.logo_url && <img src={local.brand.logo_url} alt="Logo" className="w-6 h-6 object-contain rounded" style={{ background: '#fff' }} />}
+          </div>
           <input value={local.brand?.tone || ''} onChange={(e: any) => set(['brand', 'tone'], e.target.value)} placeholder="Tone (e.g. confident, practical)" className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
           <select value={local.campaign?.goal || 'awareness'} onChange={(e: any) => set(['campaign', 'goal'], e.target.value)} className="w-full rounded border px-2 py-1.5 text-[10px] outline-none" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}>
             <option value="awareness">Goal: Awareness</option>

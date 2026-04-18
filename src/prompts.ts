@@ -60,9 +60,11 @@ Rules:
 - Ensure readable contrast by pairing background tokens with corresponding foreground tokens (for example on-primary/on-surface tokens).
 - Prioritize platform-native composition that performs well as an image in social feeds.
 - Build strong visual hierarchy with clear focal point, fast scannability, and thumbnail legibility.
-- The design must be exactly sized for the given width x height viewport.
+- The design must be exactly sized for the given width x height viewport. STRICT SIZING.
 - Enforce fixed-canvas rendering: html/body/frame must be full size with overflow hidden.
-- Never rely on scrolling; no text or element may be clipped outside the canvas.
+- Never rely on scrolling; no text or element may be clipped outside the canvas. NO OVERFLOWING or OVERLAPPING elements.
+- DO NOT create unnecessary fictional UI labels, buttons, or snackbars (no "Dismiss", "Like", "Comment", "Share" buttons unless explicitly requested).
+- Keep the design clean, premium, and focused purely on the actual post content.
 - Prefer concise copy and stronger hierarchy over dense content blocks.
 - Typography must be bold, professional, and highly readable at first glance.
 - The design must feel premium, intentional, and compositionally strong.

@@ -3,6 +3,7 @@ export interface WorkspaceSettings {
     name: string;
     tone: string;
     audience: string;
+    logo_url?: string;
   };
   campaign: {
     goal: "awareness" | "engagement" | "conversion" | "education";

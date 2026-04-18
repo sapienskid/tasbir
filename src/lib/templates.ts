@@ -26,7 +26,8 @@ export function fillTemplateSlots(html: string, slotValues: Record<string, strin
   let result = html;
   for (const [key, value] of Object.entries(slotValues)) {
     const pattern = new RegExp(`\\{\\{${key}\\}\\}`, "g");
-    result = result.replace(pattern, escapeForHtml(value));
+    const replacement = (key === 'image_url' || key === 'brand_logo') ? value : escapeForHtml(value);
+    result = result.replace(pattern, replacement);
   }
   return result;
 }
