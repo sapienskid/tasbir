@@ -985,6 +985,36 @@ app.post("/generate-from-content/stream", async (c) => {
   });
 });
 
+app.post("/save-to-r2", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+
+  const body = await readJsonBody<{ dataUri: string, key: string }>(c.req.raw, security.request_limits.max_json_body_bytes * 10); // allow larger bodies for base64 images
+  if (!body.dataUri || !body.key) {
+    throw new HttpError(400, "Missing dataUri or key");
+  }
+  
+  const matches = body.dataUri.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) {
+    throw new HttpError(400, "Invalid dataUri format");
+  }
+
+  const binary = atob(matches[2]);
+  const png = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    png[i] = binary.charCodeAt(i);
+  }
+
+  await c.env.OUTPUT_BUCKET.put(body.key, png, {
+    httpMetadata: {
+      contentType: "image/png",
+      cacheControl: (PIPELINE_CONFIG.runtime?.asset_cache_control as string) || "public, max-age=31536000, immutable"
+    }
+  });
+
+  return c.json({ ok: true, url: buildPublicUrl(c.env, body.key) });
+});
+
 app.post("/webhook/ghost", async (c) => {
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "webhook");
@@ -2260,6 +2290,16 @@ function buildEffectivePrompt(bodyPrompt: string | undefined, settings: Workspac
 
 // ==================== RENDERING ====================
 
+function formatToDataUri(png: Uint8Array): string {
+  // Convert standard Uint8Array to base64
+  let binary = "";
+  const len = png.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(png[i]);
+  }
+  return `data:image/png;base64,${btoa(binary)}`;
+}
+
 async function renderStoreSingleAsset(env: Env, browser: any, args: { key: string; format: string; rawHtml?: string; formatLabel: string }): Promise<StoredAsset> {
   const formatCfg = getFormatConfig(args.format);
   if (!formatCfg) throw new HttpError(400, `Unknown format: ${args.format}`);
@@ -2269,17 +2309,10 @@ async function renderStoreSingleAsset(env: Env, browser: any, args: { key: strin
 
   const png = await renderPng(browser, html, formatCfg.width, formatCfg.height);
 
-  await env.OUTPUT_BUCKET.put(args.key, png, {
-    httpMetadata: {
-      contentType: "image/png",
-      cacheControl: (PIPELINE_CONFIG.runtime?.asset_cache_control as string) || "public, max-age=31536000, immutable"
-    }
-  });
-
   return {
     format: args.formatLabel,
     key: args.key,
-    url: buildPublicUrl(env, args.key)
+    url: formatToDataUri(png)
   };
 }
 
@@ -2297,17 +2330,10 @@ async function renderStoreSingleAssetWithPage(
 
   const png = await renderPng(browser, html, args.width, args.height);
 
-  await env.OUTPUT_BUCKET.put(args.key, png, {
-    httpMetadata: {
-      contentType: "image/png",
-      cacheControl: (PIPELINE_CONFIG.runtime?.asset_cache_control as string) || "public, max-age=31536000, immutable"
-    }
-  });
-
   return {
     format: args.formatLabel,
     key: args.key,
-    url: buildPublicUrl(env, args.key)
+    url: formatToDataUri(png)
   };
 }
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import JSZip from 'jszip'
 import { api, getApiKey, setApiKey } from '@/lib/api'
 import { tokensToCSS, type DesignTokens } from '@/lib/tokens'
 import { generateComponentsSkeleton } from '@/components/skeletons'
@@ -124,12 +125,31 @@ export default function App() {
   const [, setServerConfig] = useState<any>(null)
   const [, setConfigLoading] = useState(false)
   const [editingConfig, setEditingConfig] = useState<any>(null)
-  const [studioResult, setStudioResult] = useState<any>(null)
+  const [studioResult, setStudioResult] = useState<any>(() => {
+    try {
+      const saved = localStorage.getItem('tasbir:studioResult')
+      return saved ? JSON.parse(saved) : null
+    } catch { return null }
+  })
   const [studioGenerating, setStudioGenerating] = useState(false)
   const [studioMode, setStudioMode] = useState<'content' | 'slug'>('content')
   const [studioTitle, setStudioTitle] = useState('')
-  const [studioContent, setStudioContent] = useState('')
+  const [studioContent, setStudioContent] = useState(() => {
+    return localStorage.getItem('tasbir:studioContent') || ''
+  })
   const [studioSlug, setStudioSlug] = useState('')
+
+  useEffect(() => {
+    localStorage.setItem('tasbir:studioContent', studioContent)
+  }, [studioContent])
+
+  useEffect(() => {
+    if (studioResult) {
+      localStorage.setItem('tasbir:studioResult', JSON.stringify(studioResult))
+    } else {
+      localStorage.removeItem('tasbir:studioResult')
+    }
+  }, [studioResult])
   const [settings, setSettings] = useState<any>(null)
   const [settingsLoading, setSettingsLoading] = useState(false)
   const [templates, setTemplates] = useState<any[]>([])
@@ -1182,17 +1202,54 @@ function SettingsTab({ settings, loading, onSave, formats }: any) {
         </Section>
 
         {/* Advanced Section (collapsed by default) */}
-        <Section id="advanced" label="Advanced" defaultCollapsed={true}>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e: any) => handleApiKeyChange(e.target.value)}
-            placeholder="API Key..."
-            className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
-            style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
-          />
-          <div className="text-[8px]" style={{ color: '#666' }}>
-            {apiKey ? <span style={{ color: '#22c55e' }}>✓ Configured</span> : <span style={{ color: '#f43f5e' }}>✗ Missing</span>}
+        <Section id="advanced" label="Webhook & API Connections" defaultCollapsed={true}>
+          <div className="space-y-4">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#888' }}>Authentication</div>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e: any) => handleApiKeyChange(e.target.value)}
+                placeholder="API Key..."
+                className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+              />
+              <div className="text-[8px] mt-1" style={{ color: '#666' }}>
+                {apiKey ? <span style={{ color: '#22c55e' }}>✓ Configured</span> : <span style={{ color: '#f43f5e' }}>✗ Missing</span>}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#888' }}>Ghost CMS Webhook</div>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={local.integrations?.ghost?.url || ''}
+                  onChange={(e: any) => set(['integrations', 'ghost', 'url'], e.target.value)}
+                  placeholder="https://your-ghost-url.com"
+                  className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                  style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+                />
+                <input
+                  type="password"
+                  value={local.integrations?.ghost?.token || ''}
+                  onChange={(e: any) => set(['integrations', 'ghost', 'token'], e.target.value)}
+                  placeholder="Ghost Admin API Key..."
+                  className="w-full rounded border px-2 py-1.5 text-[10px] outline-none"
+                  style={{ background: '#0b0b0b', borderColor: '#252525', color: '#e2e2e2' }}
+                />
+                <label className="flex items-center gap-2 cursor-pointer mt-2 text-[10px]">
+                  <input
+                    type="checkbox"
+                    checked={local.integrations?.ghost?.enabled || false}
+                    onChange={(e: any) => set(['integrations', 'ghost', 'enabled'], e.target.checked)}
+                    className="accent-blue-500"
+                  />
+                  <span style={{ color: '#888' }}>Enable Ghost Webhook</span>
+                </label>
+              </div>
+            </div>
+            
           </div>
         </Section>
       </div>
@@ -1249,6 +1306,29 @@ function SettingsPreview({ settings }: any) {
 function StudioScreenshotPanel({ result, generating }: { result: any; generating: boolean }) {
   const entries = Object.entries(result?.assets || {}).filter(([, asset]: [string, any]) => Boolean(asset?.key || asset?.url)) as Array<[string, any]>
 
+  const handleDownloadAll = async () => {
+    const zip = new JSZip();
+    for (const [format, asset] of entries) {
+      if (asset.url && asset.url.startsWith('data:image/png;base64,')) {
+        const base64Data = asset.url.replace(/^data:image\/png;base64,/, '');
+        zip.file(`${format}.png`, base64Data, { base64: true });
+      } else if (asset.url) {
+        try {
+          const res = await fetch(asset.url);
+          const blob = await res.blob();
+          zip.file(`${format}.png`, blob);
+        } catch (e) {
+          console.error('Failed to fetch', format, e);
+        }
+      }
+    }
+    const content = await zip.generateAsync({ type: 'blob' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(content);
+    link.download = 'tasbir-assets.zip';
+    link.click();
+  };
+
   if (generating) {
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2.5" style={{ color: '#666' }}>
@@ -1279,11 +1359,18 @@ function StudioScreenshotPanel({ result, generating }: { result: any; generating
   }
 
   return (
-    <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-      {entries.map(([format, asset]) => (
-        <AssetPreviewCard key={format} format={format} asset={asset} />
-      ))}
-    </div>
+    <>
+      <div className="flex justify-end px-4 pt-4 pb-0">
+        <button onClick={handleDownloadAll} className="px-4 py-2 rounded text-[11px] font-bold uppercase tracking-wider bg-white text-black transition-opacity hover:opacity-90">
+          Download ZIP
+        </button>
+      </div>
+      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+        {entries.map(([format, asset]) => (
+          <AssetPreviewCard key={format} format={format} asset={asset} />
+        ))}
+      </div>
+    </>
   )
 }
 
@@ -1311,14 +1398,23 @@ function TemplatePreview({ html }: { html: string }) {
 }
 
 function AssetPreviewCard({ format, asset }: { format: string; asset: any }) {
-  const [resolvedSrc, setResolvedSrc] = useState<string>(asset?.url || '')
-  const [loading, setLoading] = useState(Boolean(asset?.key))
+  const [resolvedSrc, setResolvedSrc] = useState<string>('')
+  const [loading, setLoading] = useState(true)
+  const [savingR2, setSavingR2] = useState(false)
+  const [savedR2, setSavedR2] = useState(false)
 
   useEffect(() => {
     let active = true
     let localBlobUrl: string | null = null
 
     async function load() {
+      // If the URL already a data URI or a direct HTTP URL we can use it immediately without blob
+      if (asset?.url && (asset.url.startsWith('data:') || asset.url.startsWith('http'))) {
+        setResolvedSrc(asset.url)
+        setLoading(false)
+        return
+      }
+
       if (!asset?.key) {
         setResolvedSrc(asset?.url || '')
         setLoading(false)
@@ -1351,19 +1447,47 @@ function AssetPreviewCard({ format, asset }: { format: string; asset: any }) {
     }
   }, [asset?.key, asset?.url])
 
+  const handleSaveToR2 = async () => {
+    if (!asset?.key || !resolvedSrc.startsWith('data:image')) return;
+    try {
+      setSavingR2(true);
+      await api.saveToR2(asset.key, resolvedSrc);
+      setSavedR2(true);
+      setTimeout(() => setSavedR2(false), 2000);
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save to R2');
+    } finally {
+      setSavingR2(false);
+    }
+  }
+
   return (
     <div
-      className="rounded overflow-hidden self-start"
+      className="rounded overflow-hidden self-start relative group"
       style={{ background: '#111' }}
       aria-label={`${format} screenshot card`}
     >
       {resolvedSrc ? (
-        <img
-          src={resolvedSrc}
-          alt={`${format} screenshot`}
-          className="w-full h-auto block"
-          loading="lazy"
-        />
+        <>
+          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity z-10 flex gap-2">
+            {resolvedSrc.startsWith('data:image') && (
+              <button 
+                onClick={handleSaveToR2} 
+                disabled={savingR2 || savedR2}
+                className="bg-black/80 text-white px-3 py-1.5 rounded text-[10px] font-bold tracking-wider uppercase border border-white/20 hover:bg-black"
+              >
+                {savingR2 ? 'Saving...' : savedR2 ? 'Saved!' : 'Save to R2'}
+              </button>
+            )}
+          </div>
+          <img
+            src={resolvedSrc}
+            alt={`${format} screenshot`}
+            className="w-full h-auto block"
+            loading="lazy"
+          />
+        </>
       ) : (
         <div className="w-full flex items-center justify-center text-[9px]" style={{ minHeight: 120, color: '#666' }}>
           {loading ? 'Loading preview…' : 'Preview unavailable'}

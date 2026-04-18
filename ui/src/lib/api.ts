@@ -160,6 +160,11 @@ export const api = {
     return URL.createObjectURL(blob);
   },
 
+  saveToR2: (key: string, dataUri: string) => request<{ ok: boolean; url: string }>("/save-to-r2", {
+    method: "POST",
+    body: JSON.stringify({ key, dataUri }),
+  }),
+
   getSettings: () => request<any>("/settings"),
   saveSettings: (settings: any) => request<{ ok: boolean }>("/settings", {
     method: "PUT",

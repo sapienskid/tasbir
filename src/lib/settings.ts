@@ -33,6 +33,18 @@ export interface WorkspaceSettings {
     designTokens: string;
     customInstructions: string;
   };
+  integrations?: {
+    ghost?: {
+      url: string;
+      token: string;
+      enabled: boolean;
+    };
+    webhook?: {
+      url: string;
+      secret: string;
+      enabled: boolean;
+    };
+  };
   designTokens: Record<string, unknown> | null;
   updatedAt: string;
 }
@@ -68,6 +80,10 @@ const DEFAULT_SETTINGS: WorkspaceSettings = {
     templateSelection: "", 
     designTokens: "",
     customInstructions: ""
+  },
+  integrations: {
+    ghost: { url: "", token: "", enabled: false },
+    webhook: { url: "", secret: "", enabled: false }
   },
   designTokens: null,
   updatedAt: new Date().toISOString()
