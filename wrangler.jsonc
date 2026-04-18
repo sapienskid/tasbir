@@ -41,11 +41,6 @@
 					"binding": "TEMPLATES_KV",
 					"id": "3b7c9bfd0aab4f42bede90574fd3399a",
 					"preview_id": "3b7c9bfd0aab4f42bede90574fd3399a"
-				},
-				{
-					"binding": "AI_CACHE_KV",
-					"id": "3f89c45b35a5493bbb578299e5a1a742",
-					"preview_id": "3f89c45b35a5493bbb578299e5a1a742"
 				}
 			],
 			"vars": {
@@ -81,10 +76,6 @@
 				{
 					"binding": "TEMPLATES_KV",
 					"id": "a582edf59f1b4b47b3183e98a7370191"
-				},
-				{
-					"binding": "AI_CACHE_KV",
-					"id": "9ac6d1e07f7c4126a7c28637535bf0de"
 				}
 			],
 			"vars": {
@@ -120,10 +111,6 @@
 				{
 					"binding": "TEMPLATES_KV",
 					"id": "16d13f95d3004cd4931f6b07e016bf6f"
-				},
-				{
-					"binding": "AI_CACHE_KV",
-					"id": "d81d8c5672db4f69aa7c985be0c183dc"
 				}
 			],
 			"vars": {

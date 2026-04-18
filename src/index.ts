@@ -65,14 +65,6 @@ import {
 import { classifyContent, type ContentClassification } from "./lib/content-classifier";
 import { checkHealth } from "./lib/health";
 import {
-  generateCacheKey,
-  hashDesignTokens,
-  getCachedHtml,
-  setCachedHtml,
-  shouldUseCache,
-  type CacheEntry,
-} from "./lib/ai-cache";
-import {
   decideTemplateOrGenerate,
   getSavedTemplate,
   saveHtmlAsTemplate,
@@ -165,7 +157,6 @@ function isBrowserConnected(browser: any): boolean {
 interface Env extends SecurityEnv {
   SETTINGS_KV?: KVNamespace;
   TEMPLATES_KV?: KVNamespace;
-  AI_CACHE_KV?: KVNamespace;
   ASSETS?: Fetcher;
 }
 
@@ -788,135 +779,85 @@ app.post("/templates/:id/validate", async (c) => {
  * These are full HTML designs that can be reused for similar content.
  */
 app.get("/saved-templates", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate-from-content");
-  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
-  
-  const format = c.req.query("format");
-  const templates = await listSavedTemplates(c.env.AI_CACHE_KV, format);
-  return c.json({ templates });
-});
+   const security = resolveSecurityConfig(c.env);
+   enforceApiAuth(c.req.raw, security, "generate-from-content");
+   
+   // AI cache removed per user request - returning empty templates
+   return c.json({ templates: [] });
+ });
 
 /**
  * Get a specific saved HTML template by ID.
  */
 app.get("/saved-templates/:id", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate-from-content");
-  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
-  
-  const id = c.req.param("id");
-  const template = await getSavedTemplate(c.env.AI_CACHE_KV, id);
-  if (!template) return c.json({ error: "Template not found" }, 404);
-  return c.json(template);
-});
+   const security = resolveSecurityConfig(c.env);
+   enforceApiAuth(c.req.raw, security, "generate-from-content");
+   
+   // AI cache removed per user request - template not found
+   return c.json({ error: "Template not found" }, 404);
+ });
 
 /**
  * Save generated HTML as a reusable template.
  * Call this after generation when the output looks good.
  */
 app.post("/saved-templates", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate");
-  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
-  
-  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
-  const html = typeof body.html === "string" ? body.html : "";
-  if (!html) return c.json({ error: "html is required" }, 400);
-  
-  const name = typeof body.name === "string" ? body.name : "Untitled Template";
-  const description = typeof body.description === "string" ? body.description : "";
-  const format = typeof body.format === "string" ? body.format : "instagram-square";
-  const contentTypes = Array.isArray(body.contentTypes) ? body.contentTypes.filter((t): t is string => typeof t === "string") : [];
-  const tags = Array.isArray(body.tags) ? body.tags.filter((t): t is string => typeof t === "string") : [];
-  
-  const template = await saveHtmlAsTemplate(c.env.AI_CACHE_KV, {
-    name,
-    description,
-    html,
-    contentTypes,
-    format,
-    tags,
-  });
-  
-  return c.json({ ok: true, template });
-});
+   const security = resolveSecurityConfig(c.env);
+   enforceApiAuth(c.req.raw, security, "generate");
+   
+   // AI cache removed per user request - not saving templates
+   return c.json({ error: "Template saving disabled (AI cache removed)" }, 501);
+ });
 
 /**
  * Delete a saved HTML template.
  */
 app.delete("/saved-templates/:id", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate");
-  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
-  
-  const id = c.req.param("id");
-  const deleted = await deleteSavedTemplate(c.env.AI_CACHE_KV, id);
-  if (!deleted) return c.json({ error: "Template not found" }, 404);
-  return c.json({ ok: true });
-});
+   const security = resolveSecurityConfig(c.env);
+   enforceApiAuth(c.req.raw, security, "generate");
+   
+   // AI cache removed per user request - template deletion disabled
+   return c.json({ error: "Template deletion disabled (AI cache removed)" }, 501);
+ });
 
 /**
  * Rate a saved template (1-5 stars).
  * Higher-rated templates are preferred by the AI selector.
  */
 app.post("/saved-templates/:id/rate", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate");
-  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
-  
-  const id = c.req.param("id");
-  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
-  const quality = typeof body.quality === "number" ? body.quality : 3;
-  
-  if (quality < 1 || quality > 5) {
-    return c.json({ error: "quality must be between 1 and 5" }, 400);
-  }
-  
-  await rateTemplate(c.env.AI_CACHE_KV, id, quality);
-  return c.json({ ok: true });
-});
+   const security = resolveSecurityConfig(c.env);
+   enforceApiAuth(c.req.raw, security, "generate");
+   
+   // AI cache removed per user request - rating disabled
+   return c.json({ error: "Template rating disabled (AI cache removed)" }, 501);
+ });
 
 /**
  * Ask AI to decide: use existing template or generate new HTML?
  * This is the core of the smart template selection system.
  */
 app.post("/decide-template", async (c) => {
-  const security = resolveSecurityConfig(c.env);
-  enforceApiAuth(c.req.raw, security, "generate-from-content");
-  if (!c.env.AI_CACHE_KV) throw new HttpError(500, "AI_CACHE_KV binding is not configured");
-  
-  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
-  const title = typeof body.title === "string" ? body.title : "";
-  const excerpt = typeof body.excerpt === "string" ? body.excerpt : "";
-  const content = typeof body.content === "string" ? body.content : typeof body.body === "string" ? body.body : "";
-  const format = typeof body.format === "string" ? body.format : "instagram-square";
-  const contentType = typeof body.contentType === "string" ? body.contentType : undefined;
-  
-  if (!title || !content) {
-    return c.json({ error: "title and content (or body) are required" }, 400);
-  }
-  
-  const providerConfig = resolveProviderConfig(c.env.GOOGLE_API_KEY);
-  const availableTemplates = await listSavedTemplates(c.env.AI_CACHE_KV, format);
-  
-  const preferences = {
-    preferTemplates: body.preferTemplates === true,
-    alwaysGenerate: body.alwaysGenerate === true,
-    qualityThreshold: typeof body.qualityThreshold === "number" ? body.qualityThreshold : 3,
-  };
-  
-  const decision = await decideTemplateOrGenerate(
-    providerConfig,
-    { title, excerpt, body: content, contentType },
-    format,
-    availableTemplates,
-    preferences,
-    c.env.SETTINGS_KV ? await loadSettings(c.env.SETTINGS_KV) : getDefaultSettings()
-  );
-  
-  return c.json(decision);
-});
+   const security = resolveSecurityConfig(c.env);
+   enforceApiAuth(c.req.raw, security, "generate-from-content");
+   
+   // AI cache removed per user request - always generate new HTML
+   const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+   const title = typeof body.title === "string" ? body.title : "";
+   const excerpt = typeof body.excerpt === "string" ? body.excerpt : "";
+   const content = typeof body.content === "string" ? body.content : typeof body.body === "string" ? body.body : "";
+   const format = typeof body.format === "string" ? body.format : "instagram-square";
+   const contentType = typeof body.contentType === "string" ? body.contentType : undefined;
+   
+   if (!title || !content) {
+     return c.json({ error: "title and content (or body) are required" }, 400);
+   }
+   
+   // Always generate new HTML since cache is removed
+   return c.json({
+     useTemplate: false,
+     reason: "AI cache removed - always generating new HTML"
+   });
+ });
 
 app.post("/generate", async (c) => {
   const security = resolveSecurityConfig(c.env);
@@ -1458,9 +1399,8 @@ export async function runPipelineFromPost(
   const designTokensPrompt = precomputedTokens.semanticBrief;
   const designInstructions = extractDesignInstructions(designTokensForRun);
   
-  // CACHE: Generate design tokens hash for cache key
-  const designTokensHash = await hashDesignTokens(designTokensForRun);
-  const useCache = shouldUseCache({ postCount: outputPlan.postCount });
+   // Cache removed per user request
+   const useCache = false;
   
   const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
   const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null>; cacheHit?: boolean; templateDecision?: TemplateDecision }> = [];
@@ -1534,57 +1474,10 @@ export async function runPipelineFromPost(
           matchedTemplate = { html: templateResult.html, metadata: templateResult.metadata };
         }
       }
-    } catch (error) {
-      _log.warn("classification-failed", { error: error instanceof Error ? error.message : String(error) });
+     } catch (error) {
+       _log.warn("classification-failed", { error: error instanceof Error ? error.message : String(error) });
+     }
     }
-  }
-
-  // SMART TEMPLATE: For each format, decide whether to use saved HTML template or generate new
-  if (env.AI_CACHE_KV && !matchedTemplate) {
-    const formatsArray = [...outputPlan.formats];
-    await Promise.all(
-      formatsArray.map(async (format) => {
-        try {
-          const savedTemplates = await listSavedTemplates(env.AI_CACHE_KV!, format);
-          if (savedTemplates.length > 0) {
-            const decision = await withTimeout(
-              decideTemplateOrGenerate(
-                providerConfig,
-                {
-                  title: post.title,
-                  excerpt: post.custom_excerpt || post.excerpt || "",
-                  body: post.plaintext || "",
-                  contentType: classification?.type,
-                },
-                format,
-                savedTemplates,
-                {
-                  preferTemplates: settings.templates.autoSelect,
-                  qualityThreshold: 3,
-                },
-                settings,
-              ),
-              TEMPLATE_DECIDE_TIMEOUT_MS,
-              `Template decision for ${format}`
-            );
-            templateDecisions.set(format, decision);
-            
-            // If decision is to use template, load it
-            if (decision.action === "use_template" && decision.templateId) {
-              const savedTemplate = await getSavedTemplate(env.AI_CACHE_KV!, decision.templateId);
-              if (savedTemplate) {
-                usedSavedTemplates.set(format, savedTemplate);
-                // Record usage for popularity tracking (fire-and-forget is OK for non-critical)
-                recordTemplateUsage(env.AI_CACHE_KV!, decision.templateId).catch(() => {});
-              }
-            }
-          }
-        } catch (error) {
-          _log.warn("smart-template-decision-failed", { format, error: error instanceof Error ? error.message : String(error) });
-        }
-      })
-    );
-  }
 
   const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
   const keyPrefix = buildR2KeyPrefix(env, post.slug, sharedStorage);
@@ -1651,16 +1544,15 @@ export async function runPipelineFromPost(
   // ===== PHASE 1: Generate all HTML FIRST (before launching browser) =====
   // This minimizes the time the browser connection sits idle.
   
-  const allHtmlOutputs: Array<{
-    index: number;
-    format: string;
-    html: string;
-    config: FormatConfig;
-    cacheHit: boolean;
-    usedSavedTemplate?: boolean;
-    templateDecision?: TemplateDecision;
-    suggestSaveAsTemplate?: boolean;
-  }> = [];
+   const allHtmlOutputs: Array<{
+     index: number;
+     format: string;
+     html: string;
+     config: FormatConfig;
+     usedSavedTemplate?: boolean;
+     templateDecision?: TemplateDecision;
+     suggestSaveAsTemplate?: boolean;
+   }> = [];
 
   for (let index = 0; index < outputPlan.postCount; index += 1) {
     const variantPrompt = outputPlan.postCount > 1
@@ -1703,25 +1595,7 @@ export async function runPipelineFromPost(
             };
           }
           
-          // CACHE: Try to get cached HTML first
-          if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
-            const cacheKey = await generateCacheKey({
-              title: post.title,
-              content: post.plaintext || post.excerpt || "",
-              format,
-              width: config.width,
-              height: config.height,
-              prompt: variantPrompt,
-              designTokensHash,
-            });
-            
-            const cached = await getCachedHtml(env.AI_CACHE_KV, cacheKey);
-            if (cached) {
-              _log.info("cache-hit", { format });
-              const finalHtml = injectDesignTokensIntoHtmlFast(cached.html, precomputedTokens);
-              return { index, format, html: finalHtml, config, cacheHit: true, templateDecision };
-            }
-          }
+           // Cache removed per user request
           
           let llmOutput: LlmOutput;
 
@@ -1773,24 +1647,7 @@ export async function runPipelineFromPost(
             );
             _log.info("html-gen-complete", { format });
             
-            // CACHE: Store the generated HTML (fire-and-forget is OK for cache)
-            if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
-              const cacheKey = await generateCacheKey({
-                title: post.title,
-                content: post.plaintext || post.excerpt || "",
-                format,
-                width: config.width,
-                height: config.height,
-                prompt: variantPrompt,
-                designTokensHash,
-              });
-              setCachedHtml(env.AI_CACHE_KV, cacheKey, {
-                html: llmOutput.generated_html,
-                generatedAt: Date.now(),
-                contentHash: designTokensHash,
-                format,
-              }).catch(() => {});
-            }
+
           }
 
           const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
@@ -1827,7 +1684,7 @@ export async function runPipelineFromPost(
   _log.info("render-phase-start", { totalFormats: allHtmlOutputs.length });
   let browser = await launchRenderingBrowser(env);
   
-  const renderedAssets: Map<string, { index: number; asset: StoredAsset; html: string; format: string; cacheHit: boolean; usedSavedTemplate?: boolean; templateDecision?: TemplateDecision; suggestSaveAsTemplate?: boolean }> = new Map();
+   const renderedAssets: Map<string, { index: number; asset: StoredAsset; html: string; format: string; usedSavedTemplate?: boolean; templateDecision?: TemplateDecision; suggestSaveAsTemplate?: boolean }> = new Map();
 
   try {
     for (const htmlOutput of allHtmlOutputs) {
@@ -1857,16 +1714,15 @@ export async function runPipelineFromPost(
         _log.info("render-complete", { format: htmlOutput.format, key: asset.key });
 
         const mapKey = `${htmlOutput.index}:${htmlOutput.format}`;
-        renderedAssets.set(mapKey, {
-          index: htmlOutput.index,
-          asset,
-          html: htmlOutput.html,
-          format: htmlOutput.format,
-          cacheHit: htmlOutput.cacheHit,
-          usedSavedTemplate: htmlOutput.usedSavedTemplate,
-          templateDecision: htmlOutput.templateDecision,
-          suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
-        });
+         renderedAssets.set(mapKey, {
+           index: htmlOutput.index,
+           asset,
+           html: htmlOutput.html,
+           format: htmlOutput.format,
+           usedSavedTemplate: htmlOutput.usedSavedTemplate,
+           templateDecision: htmlOutput.templateDecision,
+           suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
+         });
       } catch (renderErr) {
         // If this is a "Connection closed" error, try to reconnect ONCE
         const errMsg = renderErr instanceof Error ? renderErr.message : String(renderErr);
@@ -1893,12 +1749,11 @@ export async function runPipelineFromPost(
             renderedAssets.set(mapKey, {
               index: htmlOutput.index,
               asset,
-              html: htmlOutput.html,
-              format: htmlOutput.format,
-              cacheHit: htmlOutput.cacheHit,
-              usedSavedTemplate: htmlOutput.usedSavedTemplate,
-              templateDecision: htmlOutput.templateDecision,
-              suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
+               html: htmlOutput.html,
+               format: htmlOutput.format,
+               usedSavedTemplate: htmlOutput.usedSavedTemplate,
+               templateDecision: htmlOutput.templateDecision,
+               suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
             });
             _log.info("render-retry-success", { format: htmlOutput.format });
           } catch (retryErr) {
@@ -2025,10 +1880,10 @@ export async function runPipelineFromPostWithProgress(
   const designTokensForRun = resolveDesignTokensForRequest(body.designTokens, defaultTokens);
   
   const precomputedTokens = precomputeDesignTokenAssets(designTokensForRun);
-  const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
-  const designInstructions = extractDesignInstructions(designTokensForRun);
-  const designTokensHash = await hashDesignTokens(designTokensForRun);
-  const useCache = shouldUseCache({ postCount: outputPlan.postCount });
+   const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
+   const designInstructions = extractDesignInstructions(designTokensForRun);
+   // Cache removed per user request
+   const useCache = false;
   
   const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
   const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; assets: Record<string, StoredAsset | null> }> = [];
@@ -2208,25 +2063,8 @@ export async function runPipelineFromPostWithProgress(
 
         let llmOutput: LlmOutput | null = null;
 
-        try {
-          // Check cache first
-          if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
-            const cacheKey = await generateCacheKey({
-              title: post.title,
-              content: post.plaintext || post.excerpt || "",
-              format,
-              width: config.width,
-              height: config.height,
-              prompt: variantPrompt,
-              designTokensHash,
-            });
-            
-            const cached = await getCachedHtml(env.AI_CACHE_KV, cacheKey);
-            if (cached) {
-              llmOutput = { generated_html: cached.html };
-              onProgress({ type: "generating", message: `Using cached ${format}`, format, progress: i + 1, total: totalFormats });
-            }
-          }
+         try {
+           // Cache removed per user request
           
           // If not cached, generate
           if (!llmOutput) {
@@ -2267,24 +2105,7 @@ export async function runPipelineFromPostWithProgress(
                 settings,
               );
 
-              // Cache the result
-              if (useCache && env.AI_CACHE_KV) {
-                const cacheKey = await generateCacheKey({
-                  title: post.title,
-                  content: post.plaintext || post.excerpt || "",
-                  format,
-                  width: config.width,
-                  height: config.height,
-                  prompt: variantPrompt,
-                  designTokensHash,
-                });
-                setCachedHtml(env.AI_CACHE_KV, cacheKey, {
-                  html: llmOutput.generated_html,
-                  generatedAt: Date.now(),
-                  contentHash: designTokensHash,
-                  format,
-                }).catch(() => {});
-              }
+
             }
           }
 
