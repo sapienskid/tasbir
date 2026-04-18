@@ -8,7 +8,7 @@
     "dev:ui": "pnpm run --dir ui dev",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "build": "pnpm run --dir ui build",
+    "build": "pnpm --dir ui install && pnpm run --dir ui build",
     "deploy:staging": "wrangler deploy --env staging",
     "deploy": "wrangler deploy --env production"
   },
