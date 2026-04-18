@@ -13,6 +13,14 @@ import {
   imageToDataUrl,
   type GeneratedImage,
 } from "./lib/ai-image";
+import {
+  createRequestContext,
+  RequestLogger,
+  withTimeout,
+  withRetry,
+  errorResponse,
+  type RequestContext,
+} from "./lib/request-context";
 import { PIPELINE_CONFIG, getFormatConfig, getAllFormats, getFormatNames, setFormat, deleteFormat, loadFormatsFromStorage, type FormatConfig } from "./config";
 import {
   HttpError,
@@ -103,6 +111,24 @@ interface GhostPost {
 }
 
 
+// ==================== TIMEOUT CONSTANTS ====================
+// These prevent any single external call from consuming the Worker's wall-clock budget.
+
+/** Max time for the orchestrator AI call (Gemini generateObject) */
+const ORCHESTRATOR_TIMEOUT_MS = 12_000;
+/** Max time for a single AI image generation call (Workers AI) */
+const IMAGE_GEN_TIMEOUT_MS = 10_000;
+/** Max time for HTML layout generation (Gemini generateText) */
+const HTML_LAYOUT_TIMEOUT_MS = 15_000;
+/** Max time for browser launch/reconnect */
+const BROWSER_LAUNCH_TIMEOUT_MS = 8_000;
+/** Max time for a single page render (screenshot) */
+const RENDER_TIMEOUT_MS = 15_000;
+/** Max time for content classification */
+const CLASSIFY_TIMEOUT_MS = 8_000;
+/** Max time for template decision */
+const TEMPLATE_DECIDE_TIMEOUT_MS = 5_000;
+
 async function launchRenderingBrowser(env: Env): Promise<any> {
   const keepAliveMs = (PIPELINE_CONFIG.runtime?.browser_keep_alive_ms as number) ?? 60000;
 
@@ -111,7 +137,31 @@ async function launchRenderingBrowser(env: Env): Promise<any> {
     throw new HttpError(500, "BROWSER binding is required for Cloudflare Browser Rendering");
   }
   const cloudflarePuppeteer = (await import("@cloudflare/puppeteer")).default as any;
-  return cloudflarePuppeteer.launch(env.BROWSER, { keep_alive: keepAliveMs });
+  return withTimeout(
+    cloudflarePuppeteer.launch(env.BROWSER, { keep_alive: keepAliveMs }),
+    BROWSER_LAUNCH_TIMEOUT_MS,
+    "Browser launch"
+  );
+}
+
+/**
+ * Attempt to reconnect a browser after a "Connection closed" error.
+ * Returns a fresh browser instance or throws if reconnection fails.
+ */
+async function reconnectBrowser(env: Env, log: RequestLogger): Promise<any> {
+  log.warn("browser-reconnect", { reason: "Connection closed, attempting reconnect" });
+  return launchRenderingBrowser(env);
+}
+
+/**
+ * Check if a browser connection is still alive.
+ */
+function isBrowserConnected(browser: any): boolean {
+  try {
+    return browser && typeof browser.isConnected === "function" ? browser.isConnected() : true;
+  } catch {
+    return false;
+  }
 }
 
 interface Env extends SecurityEnv {
@@ -889,29 +939,63 @@ app.post("/generate", async (c) => {
 });
 
 app.post("/generate-from-content", async (c) => {
+  const reqCtx = createRequestContext(c.req.raw);
+  const log = new RequestLogger(reqCtx);
+  log.info("request-start", { endpoint: "/generate-from-content" });
+
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "generate-from-content");
   enforceRateLimit(c.req.raw, security, "generate-from-content");
 
-  const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
-  const validated = validateDirectContentRequestBody(body);
-  const post = buildPostFromDirectContent(validated, security);
-  const result = await runPipelineFromPost(post, c.env, validated, security);
+  try {
+    const body = await readJsonBody<Record<string, unknown>>(c.req.raw, security.request_limits.max_json_body_bytes);
+    const validated = validateDirectContentRequestBody(body);
+    const post = buildPostFromDirectContent(validated, security);
+    const result = await runPipelineFromPost(post, c.env, validated, security, log);
 
-  const envNotifyUrl = shouldUseDefaultNotifyWebhook(c.req.url) ? c.env.NOTIFY_WEBHOOK_URL : undefined;
-  const notifyUrl = resolveNotifyUrl(validated.notifyUrl, envNotifyUrl, security);
-  if (notifyUrl && (PIPELINE_CONFIG.features?.enable_notifications ?? true)) {
-    c.executionCtx.waitUntil(sendNotification(notifyUrl, result, security));
+    log.info("request-complete", { 
+      formatsGenerated: result.requested_formats?.length ?? 0,
+      elapsed: log.elapsed(),
+    });
+
+    const envNotifyUrl = shouldUseDefaultNotifyWebhook(c.req.url) ? c.env.NOTIFY_WEBHOOK_URL : undefined;
+    const notifyUrl = resolveNotifyUrl(validated.notifyUrl, envNotifyUrl, security);
+    if (notifyUrl && (PIPELINE_CONFIG.features?.enable_notifications ?? true)) {
+      c.executionCtx.waitUntil(sendNotification(notifyUrl, result, security));
+    }
+
+    return c.json({ ...result, requestId: reqCtx.requestId }, 200, {
+      "X-Request-ID": reqCtx.requestId,
+    });
+  } catch (err) {
+    log.error("request-failed", err);
+    if (err instanceof HttpError) {
+      return c.json({ error: err.message, requestId: reqCtx.requestId }, err.status as any);
+    }
+    const message = err instanceof Error ? err.message : "Unexpected error";
+    return c.json({ error: message, requestId: reqCtx.requestId }, 502 as any);
   }
-
-  return c.json(result);
 });
 
 /**
  * STREAMING: Generate content with real-time progress updates via Server-Sent Events.
- * This endpoint streams generation progress for better UX on slow connections.
+ * Each generated asset (screenshot) is delivered as a separate SSE event the instant
+ * it is ready, instead of waiting for the full batch to complete.
+ *
+ * SSE event types:
+ *   - start:       { type, message, requestId }
+ *   - planning:    { type, message }
+ *   - generating:  { type, message, format, progress, total }
+ *   - rendering:   { type, message, format, progress, total }
+ *   - asset:       { type, format, key, url, sizeBytes }  ← per-asset delivery
+ *   - complete:    { type, result }
+ *   - error:       { type, message, requestId }
  */
 app.post("/generate-from-content/stream", async (c) => {
+  const reqCtx = createRequestContext(c.req.raw);
+  const _log = new RequestLogger(reqCtx);
+  _log.info("stream-request-start");
+
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "generate-from-content");
   enforceRateLimit(c.req.raw, security, "generate-from-content");
@@ -924,21 +1008,29 @@ app.post("/generate-from-content/stream", async (c) => {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      const send = (data: unknown) => {
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          // Stream may have been closed by client
+        }
+      };
+
       try {
-        // Send initial event
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "start", message: "Starting generation..." })}\n\n`));
+        send({ type: "start", message: "Starting generation...", requestId: reqCtx.requestId });
         
-        // Run pipeline with progress updates
+        // Run pipeline with progress AND per-asset callbacks
         const result = await runPipelineFromPostWithProgress(post, c.env, validated, security, (progress) => {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(progress)}\n\n`));
-        });
+          send(progress);
+        }, _log);
         
-        // Send completion event
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "complete", result })}\n\n`));
+        _log.info("stream-complete", { elapsed: _log.elapsed() });
+        send({ type: "complete", result });
         controller.close();
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: "error", message })}\n\n`));
+        _log.error("stream-failed", error);
+        send({ type: "error", message, requestId: reqCtx.requestId });
         controller.close();
       }
     }
@@ -949,6 +1041,7 @@ app.post("/generate-from-content/stream", async (c) => {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       "Connection": "keep-alive",
+      "X-Request-ID": reqCtx.requestId,
     },
   });
 });
@@ -979,10 +1072,24 @@ app.notFound((c) => c.json({
 }, 404 as any));
 
 app.onError((err, c) => {
-  console.error("Unhandled error:", err);
-  if (err instanceof HttpError) return c.json({ error: err.message }, err.status as any);
-  const message = err instanceof Error ? err.message : "Unexpected error";
-  return c.json({ error: message }, 500 as any);
+  const errMsg = err instanceof Error ? err.message : String(err);
+  console.error(JSON.stringify({
+    level: "error",
+    step: "unhandled-error",
+    error: errMsg,
+    path: c.req.path,
+    method: c.req.method,
+  }));
+  if (err instanceof HttpError) {
+    return c.json({ error: err.message }, err.status as any);
+  }
+  // Return 502 for connection/protocol errors, 500 for everything else
+  const isConnectionError = errMsg.includes("Connection closed") || errMsg.includes("Protocol error");
+  const status = isConnectionError ? 502 : 500;
+  const safeMessage = isConnectionError
+    ? "Service temporarily unavailable — please retry"
+    : "Unexpected error";
+  return c.json({ error: safeMessage }, status as any);
 });
 
 const API_ROUTE_PATTERNS = [
@@ -1332,7 +1439,16 @@ export async function runPipeline(body: GenerateRequestBody, env: Env, security:
   return runPipelineFromPost(post, env, body, security);
 }
 
-export async function runPipelineFromPost(post: GhostPost, env: Env, body: GenerateRequestBody | DirectContentRequestBody, security: ResolvedSecurityConfig) {
+export async function runPipelineFromPost(
+  post: GhostPost,
+  env: Env,
+  body: GenerateRequestBody | DirectContentRequestBody,
+  security: ResolvedSecurityConfig,
+  log?: RequestLogger,
+) {
+  const _log = log ?? new RequestLogger(createRequestContext(new Request("http://internal/pipeline")));
+  _log.info("pipeline-start", { slug: post.slug, title: post.title.slice(0, 80) });
+
   const settings = env.SETTINGS_KV ? await loadSettings(env.SETTINGS_KV) : getDefaultSettings();
   const outputPlan = resolveOutputPlanWithSettings(body.output, settings);
   const defaultTokens = await loadDesignTokensForGeneration(env);
@@ -1357,10 +1473,10 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   let classification: ContentClassification | null = null;
   let matchedTemplate: { html: string; metadata: TemplateMetadata } | null = null;
 
-  // === MARKETING ORCHESTRATOR: Plan posts with gemma-4 ===
+  // === MARKETING ORCHESTRATOR: Plan posts (with timeout guard) ===
   let orchestratorPlan: OrchestratorOutput | null = null;
   try {
-    console.log("[orchestrator] Calling Marketing Orchestrator with gemma-4...");
+    _log.info("orchestrator-start");
     const orchestratorInput: OrchestratorInput = {
       post: {
         title: post.title,
@@ -1385,16 +1501,18 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       },
     };
     
-    orchestratorPlan = await callOrchestrator(
-      orchestratorInput,
-      env.AI,
-      env.GOOGLE_API_KEY
+    orchestratorPlan = await withTimeout(
+      callOrchestrator(orchestratorInput, env.AI, env.GOOGLE_API_KEY),
+      ORCHESTRATOR_TIMEOUT_MS,
+      "Orchestrator AI call"
     );
     
-    console.log(`[orchestrator] Planned ${orchestratorPlan.plannedPosts?.length || 0} posts`);
-    console.log(`[orchestrator] strategic_brief: ${orchestratorPlan.strategic_brief?.slice(0, 100)}...`);
+    _log.info("orchestrator-complete", {
+      plannedPosts: orchestratorPlan.plannedPosts?.length ?? 0,
+    });
   } catch (error) {
-    console.error("[orchestrator] Failed to call orchestrator:", error);
+    _log.warn("orchestrator-failed", { error: error instanceof Error ? error.message : String(error) });
+    // Continue without orchestrator — pipeline gracefully degrades
   }
 
   // SMART TEMPLATE SELECTION: Check for saved HTML templates first
@@ -1406,11 +1524,10 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
     try {
       const allTemplates = await listTemplates(env.TEMPLATES_KV);
       const enabledTemplates = allTemplates.filter((t) => t.enabled && !settings.templates.disabled.includes(t.id));
-      classification = await classifyContent(
-        env.GOOGLE_API_KEY,
-        post.title,
-        post.plaintext || post.excerpt || "",
-        enabledTemplates,
+      classification = await withTimeout(
+        classifyContent(env.GOOGLE_API_KEY, post.title, post.plaintext || post.excerpt || "", enabledTemplates),
+        CLASSIFY_TIMEOUT_MS,
+        "Content classification"
       );
 
       if (classification.templateMatch) {
@@ -1420,7 +1537,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
         }
       }
     } catch (error) {
-      console.warn("[classification] Failed to classify content or load template:", error);
+      _log.warn("classification-failed", { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
@@ -1432,21 +1549,25 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
         try {
           const savedTemplates = await listSavedTemplates(env.AI_CACHE_KV!, format);
           if (savedTemplates.length > 0) {
-            const decision = await decideTemplateOrGenerate(
-              providerConfig,
-              {
-                title: post.title,
-                excerpt: post.custom_excerpt || post.excerpt || "",
-                body: post.plaintext || "",
-                contentType: classification?.type,
-              },
-              format,
-              savedTemplates,
-              {
-                preferTemplates: settings.templates.autoSelect,
-                qualityThreshold: 3,
-              },
-              settings
+            const decision = await withTimeout(
+              decideTemplateOrGenerate(
+                providerConfig,
+                {
+                  title: post.title,
+                  excerpt: post.custom_excerpt || post.excerpt || "",
+                  body: post.plaintext || "",
+                  contentType: classification?.type,
+                },
+                format,
+                savedTemplates,
+                {
+                  preferTemplates: settings.templates.autoSelect,
+                  qualityThreshold: 3,
+                },
+                settings,
+              ),
+              TEMPLATE_DECIDE_TIMEOUT_MS,
+              `Template decision for ${format}`
             );
             templateDecisions.set(format, decision);
             
@@ -1455,13 +1576,13 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
               const savedTemplate = await getSavedTemplate(env.AI_CACHE_KV!, decision.templateId);
               if (savedTemplate) {
                 usedSavedTemplates.set(format, savedTemplate);
-                // Record usage for popularity tracking
+                // Record usage for popularity tracking (fire-and-forget is OK for non-critical)
                 recordTemplateUsage(env.AI_CACHE_KV!, decision.templateId).catch(() => {});
               }
             }
           }
         } catch (error) {
-          console.warn(`[smart-template] Failed to decide for ${format}:`, error);
+          _log.warn("smart-template-decision-failed", { format, error: error instanceof Error ? error.message : String(error) });
         }
       })
     );
@@ -1470,7 +1591,7 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
   const keyPrefix = buildR2KeyPrefix(env, post.slug, sharedStorage);
 
-  // AI IMAGE GENERATION: Use orchestrator's image decisions
+  // AI IMAGE GENERATION: Use orchestrator's image decisions (with timeout per image)
   let generatedImages: Map<string, GeneratedImage | null> = new Map();
   
   // Get effective image mode: body overrides settings
@@ -1480,39 +1601,40 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
   if (orchestratorPlan?.plannedPosts && env.AI) {
     try {
       // Filter posts that need AI-generated images based on effective image mode
-      const postsNeedingImages = orchestratorPlan.plannedPosts.filter(post => {
-        // If user set 'none', skip all
+      const postsNeedingImages = orchestratorPlan.plannedPosts.filter(plannedPost => {
         if (effectiveImageMode === 'none') return false;
-        // If user set 'ai', always generate
         if (effectiveImageMode === 'ai') return true;
-        // If 'auto' or 'feature', use orchestrator's decision
         if (effectiveImageMode === 'auto' || effectiveImageMode === 'feature') {
-          return post.imageSpec && 
-            post.imageSpec.type !== 'none' && 
-            post.imageSpec.type !== 'feature' &&
-            post.imageMode !== 'none';
+          return plannedPost.imageSpec && 
+            plannedPost.imageSpec.type !== 'none' && 
+            plannedPost.imageSpec.type !== 'feature' &&
+            plannedPost.imageMode !== 'none';
         }
         return false;
       });
       
       if (postsNeedingImages.length > 0) {
-        console.log(`[ai-image] Generating images for ${postsNeedingImages.length} posts based on orchestrator decisions (mode: ${effectiveImageMode})`);
+        _log.info("image-gen-start", { count: postsNeedingImages.length, mode: effectiveImageMode });
         
-        // Generate images in parallel for each post that needs them
-        const imagePromises = postsNeedingImages.map(async (post) => {
-          const imageSpec = post.imageSpec!;
-          if (!imageSpec.prompt) return { format: post.format, image: null };
+        // Generate images in parallel with per-image timeout
+        const imagePromises = postsNeedingImages.map(async (plannedPost) => {
+          const imageSpec = plannedPost.imageSpec!;
+          if (!imageSpec.prompt) return { format: plannedPost.format, image: null };
           
           try {
-            const image = await generateImage(env.AI, imageSpec.prompt, {
-              width: post.width || 1200,
-              height: post.height || 630,
-              style: imageSpec.style,
-            });
-            return { format: post.format, image };
+            const image = await withTimeout(
+              generateImage(env.AI, imageSpec.prompt, {
+                width: plannedPost.width || 1200,
+                height: plannedPost.height || 630,
+                style: imageSpec.style,
+              }),
+              IMAGE_GEN_TIMEOUT_MS,
+              `Image generation for ${plannedPost.format}`
+            );
+            return { format: plannedPost.format, image };
           } catch (e) {
-            console.warn(`[ai-image] Failed to generate for ${post.format}:`, e);
-            return { format: post.format, image: null };
+            _log.warn("image-gen-failed", { format: plannedPost.format, error: e instanceof Error ? e.message : String(e) });
+            return { format: plannedPost.format, image: null };
           }
         });
         
@@ -1521,63 +1643,69 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
           generatedImages.set(format, image);
         }
         
-        console.log(`[ai-image] Generated ${generatedImages.size} images: ${Array.from(generatedImages.keys()).join(', ')}`);
-      } else {
-        console.log(`[ai-image] No posts require AI-generated images based on orchestrator (mode: ${effectiveImageMode})`);
+        _log.info("image-gen-complete", { generated: generatedImages.size });
       }
     } catch (error) {
-      console.warn(`[ai-image] Image generation failed:`, error);
+      _log.warn("image-gen-batch-failed", { error: error instanceof Error ? error.message : String(error) });
     }
   }
 
-  // OPTIMIZATION: Launch browser ONCE for the entire request
-  const browser = await launchRenderingBrowser(env);
+  // ===== PHASE 1: Generate all HTML FIRST (before launching browser) =====
+  // This minimizes the time the browser connection sits idle.
   
-  try {
-    for (let index = 0; index < outputPlan.postCount; index += 1) {
-      const variantPrompt = outputPlan.postCount > 1
-        ? [effectivePrompt?.trim(), `Variation index ${index + 1} of ${outputPlan.postCount}.`].filter(Boolean).join(" ")
-        : effectivePrompt;
+  const allHtmlOutputs: Array<{
+    index: number;
+    format: string;
+    html: string;
+    config: FormatConfig;
+    cacheHit: boolean;
+    usedSavedTemplate?: boolean;
+    templateDecision?: TemplateDecision;
+    suggestSaveAsTemplate?: boolean;
+  }> = [];
 
-      const agentContext = await resolveAgentContextForRun({
-        env,
-        post,
-        baseContext: baseAgentContext,
-        userPrompt: variantPrompt,
-        requestedFormats: [...outputPlan.formats]
-      });
-      agentContexts.push(agentContext);
+  for (let index = 0; index < outputPlan.postCount; index += 1) {
+    const variantPrompt = outputPlan.postCount > 1
+      ? [effectivePrompt?.trim(), `Variation index ${index + 1} of ${outputPlan.postCount}.`].filter(Boolean).join(" ")
+      : effectivePrompt;
 
-      // OPTIMIZATION: Generate HTML for all formats in parallel when not using templates
-      const formatsArray = [...outputPlan.formats];
-      const formatConfigs = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter(f => f.config);
-      
-      // Track cache hits for this variant
-      let variantCacheHits = 0;
-      
-      // Generate all HTML outputs in parallel (with caching and smart template selection)
-      const htmlOutputs = await Promise.all(
-        formatConfigs.map(async ({ format, config }) => {
-          if (!config) return { format, output: null, cacheHit: false, usedSavedTemplate: false };
-          
+    const agentContext = await resolveAgentContextForRun({
+      env,
+      post,
+      baseContext: baseAgentContext,
+      userPrompt: variantPrompt,
+      requestedFormats: [...outputPlan.formats]
+    });
+    agentContexts.push(agentContext);
+
+    const formatsArray = [...outputPlan.formats];
+    const formatConfigs = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter(f => f.config);
+    
+    // Generate all HTML outputs in parallel (with timeout guards)
+    const htmlResults = await Promise.all(
+      formatConfigs.map(async ({ format, config }) => {
+        if (!config) return null;
+        
+        try {
           // SMART TEMPLATE: Check if we should use a saved HTML template for this format
           const savedTemplate = usedSavedTemplates.get(format);
           const templateDecision = templateDecisions.get(format);
           
           if (savedTemplate && templateDecision?.action === "use_template") {
-            console.log(`[smart-template] Using saved template "${savedTemplate.name}" for ${format}`);
+            _log.info("using-saved-template", { format, templateName: savedTemplate.name });
             const finalHtml = injectDesignTokensIntoHtmlFast(savedTemplate.html, precomputedTokens);
-            return { 
-              format, 
-              output: { generated_html: finalHtml }, 
-              config, 
-              cacheHit: false, 
+            return {
+              index,
+              format,
+              html: finalHtml,
+              config,
+              cacheHit: false,
               usedSavedTemplate: true,
               templateDecision,
             };
           }
           
-          // CACHE: Try to get cached HTML first (only for single-variant requests)
+          // CACHE: Try to get cached HTML first
           if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
             const cacheKey = await generateCacheKey({
               title: post.title,
@@ -1591,11 +1719,9 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
             
             const cached = await getCachedHtml(env.AI_CACHE_KV, cacheKey);
             if (cached) {
-              console.log(`[ai-cache] HIT for ${format}`);
-              variantCacheHits++;
-              // Still inject tokens in case they changed slightly
+              _log.info("cache-hit", { format });
               const finalHtml = injectDesignTokensIntoHtmlFast(cached.html, precomputedTokens);
-              return { format, output: { generated_html: finalHtml }, config, cacheHit: true, cacheKey, templateDecision };
+              return { index, format, html: finalHtml, config, cacheHit: true, templateDecision };
             }
           }
           
@@ -1613,46 +1739,44 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
               p.format.toLowerCase() === format.toLowerCase()
             );
             
-            // Build design instructions combining system design guidance + orchestrator's brief
             const baseInstructions = designInstructions ? [designInstructions] : [];
-            if (plannedPost?.visualDirection) {
-              baseInstructions.push(`VISUAL DIRECTION: ${plannedPost.visualDirection}`);
-            }
-            if (plannedPost?.copyFocus) {
-              baseInstructions.push(`COPY FOCUS: ${plannedPost.copyFocus}`);
-            }
-            if (plannedPost?.cta && plannedPost.cta !== 'none') {
-              baseInstructions.push(`CTA: ${plannedPost.cta}`);
-            }
+            if (plannedPost?.visualDirection) baseInstructions.push(`VISUAL DIRECTION: ${plannedPost.visualDirection}`);
+            if (plannedPost?.copyFocus) baseInstructions.push(`COPY FOCUS: ${plannedPost.copyFocus}`);
+            if (plannedPost?.cta && plannedPost.cta !== 'none') baseInstructions.push(`CTA: ${plannedPost.cta}`);
             const instructionsWithDesignGuidance = baseInstructions.length > 0 
               ? baseInstructions.join('\n')
               : undefined;
 
-            // Get generated image for this format (consider orchestrator's imageMode)
             const generatedImage = generatedImages.get(format);
 
-            llmOutput = await runHtmlLayoutAgent(
-              env,
-              post,
-              format,
-              config.name,
-              config.aiInstruction,
-              plannedPost?.width || config.width,
-              plannedPost?.height || config.height,
-              designTokensPrompt,
-              variantPrompt,
-              agentContext.copyOverrides,
-              instructionsWithDesignGuidance,
-              generatedImage || undefined,
-              plannedPost?.imageSpec ? {
-                type: plannedPost.imageSpec.type || 'background',
-                position: plannedPost.imageSpec.position || 'background',
-                count: plannedPost.imageSpec.count || 1,
-              } : undefined,
-              settings,
+            _log.info("html-gen-start", { format });
+            llmOutput = await withTimeout(
+              runHtmlLayoutAgent(
+                env,
+                post,
+                format,
+                config.name,
+                config.aiInstruction,
+                plannedPost?.width || config.width,
+                plannedPost?.height || config.height,
+                designTokensPrompt,
+                variantPrompt,
+                agentContext.copyOverrides,
+                instructionsWithDesignGuidance,
+                generatedImage || undefined,
+                plannedPost?.imageSpec ? {
+                  type: plannedPost.imageSpec.type || 'background',
+                  position: plannedPost.imageSpec.position || 'background',
+                  count: plannedPost.imageSpec.count || 1,
+                } : undefined,
+                settings,
+              ),
+              HTML_LAYOUT_TIMEOUT_MS,
+              `HTML layout generation for ${format}`
             );
+            _log.info("html-gen-complete", { format });
             
-            // CACHE: Store the generated HTML for future requests
+            // CACHE: Store the generated HTML (fire-and-forget is OK for cache)
             if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
               const cacheKey = await generateCacheKey({
                 title: post.title,
@@ -1663,79 +1787,170 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
                 prompt: variantPrompt,
                 designTokensHash,
               });
-              
-              // Don't await cache write - fire and forget
               setCachedHtml(env.AI_CACHE_KV, cacheKey, {
                 html: llmOutput.generated_html,
                 generatedAt: Date.now(),
                 contentHash: designTokensHash,
                 format,
-              }).catch(() => {/* ignore cache errors */});
+              }).catch(() => {});
             }
           }
 
-          // Use pre-computed token assets for injection
           const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
-          return { 
-            format, 
-            output: { generated_html: finalHtml }, 
-            config, 
-            cacheHit: false,
-            templateDecision,
-            // Mark if AI suggested saving this as template
-            suggestSaveAsTemplate: templateDecision?.suggestedSaveAsTemplate ?? false,
-          };
-        })
-      );
-
-      // OPTIMIZATION: Render all formats in parallel using separate browser pages
-      const renderResults = await Promise.all(
-        htmlOutputs.map(async ({ format, output, config, cacheHit, usedSavedTemplate, templateDecision, suggestSaveAsTemplate }) => {
-          if (!output || !config) return { format, asset: null, cacheHit, usedSavedTemplate, templateDecision, suggestSaveAsTemplate };
-          
-          const asset = await renderStoreSingleAssetWithPage(env, browser, {
-            key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
+          return {
+            index,
             format,
-            rawHtml: output.generated_html,
-            formatLabel: format,
-            width: config.width,
-            height: config.height,
-          });
-          
-          return { format, asset, output, cacheHit, usedSavedTemplate, templateDecision, suggestSaveAsTemplate };
-        })
-      );
+            html: finalHtml,
+            config,
+            cacheHit: false,
+            templateDecision: templateDecisions.get(format),
+            suggestSaveAsTemplate: templateDecisions.get(format)?.suggestedSaveAsTemplate ?? false,
+          };
+        } catch (err) {
+          _log.error("html-gen-failed", err, { format });
+          return null; // Skip this format rather than killing the entire pipeline
+        }
+      })
+    );
 
-      const formatAssets: Record<string, StoredAsset | null> = {};
-      let variantLlmOutput: LlmOutput | null = null;
-      let imageSource: SelectedImage = { source: "none", imageUrl: "" };
-      const smartTemplateInfo: Record<string, { used: boolean; templateId?: string; suggestSave?: boolean }> = {};
+    // Collect successful HTML outputs
+    for (const result of htmlResults) {
+      if (result) allHtmlOutputs.push(result);
+    }
+  }
 
-      for (const { format, asset, output, usedSavedTemplate, templateDecision, suggestSaveAsTemplate } of renderResults) {
-        if (asset) formatAssets[format] = asset;
-        if (!variantLlmOutput && output) variantLlmOutput = output;
-        smartTemplateInfo[format] = {
-          used: usedSavedTemplate ?? false,
-          templateId: templateDecision?.templateId,
-          suggestSave: suggestSaveAsTemplate,
-        };
+  if (allHtmlOutputs.length === 0) {
+    throw new HttpError(500, "All format generation failed — no HTML was produced");
+  }
+
+  // ===== PHASE 2: Launch browser and render all HTML to PNG =====
+  // Browser is launched RIGHT BEFORE rendering to minimize idle time.
+  // If connection drops, we reconnect once.
+  
+  _log.info("render-phase-start", { totalFormats: allHtmlOutputs.length });
+  let browser = await launchRenderingBrowser(env);
+  
+  const renderedAssets: Map<string, { index: number; asset: StoredAsset; html: string; format: string; cacheHit: boolean; usedSavedTemplate?: boolean; templateDecision?: TemplateDecision; suggestSaveAsTemplate?: boolean }> = new Map();
+
+  try {
+    for (const htmlOutput of allHtmlOutputs) {
+      try {
+        // Check browser connection before rendering
+        if (!isBrowserConnected(browser)) {
+          _log.warn("browser-disconnected", { format: htmlOutput.format });
+          try { await browser.close(); } catch { /* ignore */ }
+          browser = await reconnectBrowser(env, _log);
+        }
+
+        const assetKey = `${keyPrefix}/${buildAssetFileName(htmlOutput.format, assetNameSuffixForVariant(htmlOutput.index, outputPlan.postCount))}`;
+        
+        _log.info("render-start", { format: htmlOutput.format });
+        const asset = await withTimeout(
+          renderStoreSingleAssetWithPage(env, browser, {
+            key: assetKey,
+            format: htmlOutput.format,
+            rawHtml: htmlOutput.html,
+            formatLabel: htmlOutput.format,
+            width: htmlOutput.config.width,
+            height: htmlOutput.config.height,
+          }),
+          RENDER_TIMEOUT_MS,
+          `Render ${htmlOutput.format}`
+        );
+        _log.info("render-complete", { format: htmlOutput.format, key: asset.key });
+
+        const mapKey = `${htmlOutput.index}:${htmlOutput.format}`;
+        renderedAssets.set(mapKey, {
+          index: htmlOutput.index,
+          asset,
+          html: htmlOutput.html,
+          format: htmlOutput.format,
+          cacheHit: htmlOutput.cacheHit,
+          usedSavedTemplate: htmlOutput.usedSavedTemplate,
+          templateDecision: htmlOutput.templateDecision,
+          suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
+        });
+      } catch (renderErr) {
+        // If this is a "Connection closed" error, try to reconnect ONCE
+        const errMsg = renderErr instanceof Error ? renderErr.message : String(renderErr);
+        if (errMsg.includes("Connection closed") || errMsg.includes("Protocol error")) {
+          _log.warn("render-connection-closed", { format: htmlOutput.format });
+          try {
+            try { await browser.close(); } catch { /* ignore */ }
+            browser = await reconnectBrowser(env, _log);
+            
+            const assetKey = `${keyPrefix}/${buildAssetFileName(htmlOutput.format, assetNameSuffixForVariant(htmlOutput.index, outputPlan.postCount))}`;
+            const asset = await withTimeout(
+              renderStoreSingleAssetWithPage(env, browser, {
+                key: assetKey,
+                format: htmlOutput.format,
+                rawHtml: htmlOutput.html,
+                formatLabel: htmlOutput.format,
+                width: htmlOutput.config.width,
+                height: htmlOutput.config.height,
+              }),
+              RENDER_TIMEOUT_MS,
+              `Render retry ${htmlOutput.format}`
+            );
+            const mapKey = `${htmlOutput.index}:${htmlOutput.format}`;
+            renderedAssets.set(mapKey, {
+              index: htmlOutput.index,
+              asset,
+              html: htmlOutput.html,
+              format: htmlOutput.format,
+              cacheHit: htmlOutput.cacheHit,
+              usedSavedTemplate: htmlOutput.usedSavedTemplate,
+              templateDecision: htmlOutput.templateDecision,
+              suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
+            });
+            _log.info("render-retry-success", { format: htmlOutput.format });
+          } catch (retryErr) {
+            _log.error("render-retry-failed", retryErr, { format: htmlOutput.format });
+            // Skip this format — continue with others
+          }
+        } else {
+          _log.error("render-failed", renderErr, { format: htmlOutput.format });
+          // Skip this format — continue with others
+        }
       }
-
-      if (index === 0) {
-        imageSource = { source: post.feature_image ? "feature" : "none", imageUrl: post.feature_image || "" };
-      }
-
-      variants.push({
-        index: index + 1,
-        image_source: imageSource,
-        llm_output: variantLlmOutput || { generated_html: "" },
-        assets: formatAssets,
-        templateDecision: Object.keys(smartTemplateInfo).length > 0 ? smartTemplateInfo as any : undefined,
-      });
     }
   } finally {
-    // Close browser once after all rendering is complete
-    await browser.close();
+    try { await browser.close(); } catch { /* ignore close errors */ }
+  }
+
+  // ===== PHASE 3: Assemble response =====
+  
+  for (let index = 0; index < outputPlan.postCount; index += 1) {
+    const formatAssets: Record<string, StoredAsset | null> = {};
+    let variantLlmOutput: LlmOutput | null = null;
+    let imageSource: SelectedImage = { source: "none", imageUrl: "" };
+    const smartTemplateInfo: Record<string, { used: boolean; templateId?: string; suggestSave?: boolean }> = {};
+
+    for (const format of outputPlan.formats) {
+      const mapKey = `${index}:${format}`;
+      const rendered = renderedAssets.get(mapKey);
+      if (rendered) {
+        formatAssets[format] = rendered.asset;
+        if (!variantLlmOutput) variantLlmOutput = { generated_html: rendered.html };
+        smartTemplateInfo[format] = {
+          used: rendered.usedSavedTemplate ?? false,
+          templateId: rendered.templateDecision?.templateId,
+          suggestSave: rendered.suggestSaveAsTemplate,
+        };
+      }
+    }
+
+    if (index === 0) {
+      imageSource = { source: post.feature_image ? "feature" : "none", imageUrl: post.feature_image || "" };
+    }
+
+    variants.push({
+      index: index + 1,
+      image_source: imageSource,
+      llm_output: variantLlmOutput || { generated_html: "" },
+      assets: formatAssets,
+      templateDecision: Object.keys(smartTemplateInfo).length > 0 ? smartTemplateInfo as any : undefined,
+    });
   }
 
   const primaryVariant = variants[0];
@@ -1760,6 +1975,12 @@ export async function runPipelineFromPost(post: GhostPost, env: Env, body: Gener
       templateName: template.name,
     })),
   } : undefined;
+
+  _log.info("pipeline-complete", { 
+    variantCount: variants.length,
+    formatsRendered: renderedAssets.size,
+    elapsed: _log.elapsed(),
+  });
 
   return {
     ok: true,
@@ -1797,8 +2018,10 @@ export async function runPipelineFromPostWithProgress(
   env: Env,
   body: GenerateRequestBody | DirectContentRequestBody,
   security: ResolvedSecurityConfig,
-  onProgress: (progress: StreamProgress) => void
+  onProgress: (progress: StreamProgress) => void,
+  log?: RequestLogger,
 ) {
+  const _log = log ?? new RequestLogger(createRequestContext(new Request("http://internal/pipeline-stream")));
   const settings = env.SETTINGS_KV ? await loadSettings(env.SETTINGS_KV) : getDefaultSettings();
   const outputPlan = resolveOutputPlanWithSettings(body.output, settings);
   const defaultTokens = await loadDesignTokensForGeneration(env);
@@ -1823,7 +2046,7 @@ export async function runPipelineFromPostWithProgress(
   let orchestratorPlan: OrchestratorOutput | null = null;
   try {
     onProgress({ type: "generating", message: "Planning content strategy with AI..." });
-    console.log("[orchestrator] Calling Marketing Orchestrator with gemma-4...");
+    _log.info("orchestrator-start");
     const orchestratorInput: OrchestratorInput = {
       post: {
         title: post.title,
@@ -1848,16 +2071,17 @@ export async function runPipelineFromPostWithProgress(
       },
     };
     
-    orchestratorPlan = await callOrchestrator(
-      orchestratorInput,
-      env.AI,
-      env.GOOGLE_API_KEY
+    orchestratorPlan = await withTimeout(
+      callOrchestrator(orchestratorInput, env.AI, env.GOOGLE_API_KEY),
+      ORCHESTRATOR_TIMEOUT_MS,
+      "Orchestrator AI call"
     );
     
-    console.log(`[orchestrator] Planned ${orchestratorPlan.plannedPosts?.length || 0} posts`);
-    console.log(`[orchestrator] strategic_brief: ${orchestratorPlan.strategic_brief?.slice(0, 100)}...`);
+    _log.info("orchestrator-complete", {
+      plannedPosts: orchestratorPlan.plannedPosts?.length ?? 0,
+    });
   } catch (error) {
-    console.error("[orchestrator] Failed to call orchestrator:", error);
+    _log.warn("orchestrator-failed", { error: error instanceof Error ? error.message : String(error) });
   }
 
   // Classification phase
@@ -1950,7 +2174,7 @@ export async function runPipelineFromPostWithProgress(
   const formatsArray = [...outputPlan.formats];
   const totalFormats = formatsArray.length;
 
-  const browser = await launchRenderingBrowser(env);
+  let browser = await launchRenderingBrowser(env);
   
   try {
     for (let index = 0; index < outputPlan.postCount; index += 1) {
@@ -1987,109 +2211,158 @@ export async function runPipelineFromPostWithProgress(
 
         let llmOutput: LlmOutput | null = null;
 
-        // Check cache first
-        if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
-          const cacheKey = await generateCacheKey({
-            title: post.title,
-            content: post.plaintext || post.excerpt || "",
-            format,
-            width: config.width,
-            height: config.height,
-            prompt: variantPrompt,
-            designTokensHash,
-          });
-          
-          const cached = await getCachedHtml(env.AI_CACHE_KV, cacheKey);
-          if (cached) {
-            llmOutput = { generated_html: cached.html };
-            onProgress({ type: "generating", message: `Using cached ${format}`, format, progress: i + 1, total: totalFormats });
-          }
-        }
-        
-        // If not cached, generate
-        if (!llmOutput) {
-          if (matchedTemplate && classification) {
-            const slotValues = { ...classification.slotValues };
-            if (!slotValues.headline) slotValues.headline = post.title;
-            if (!slotValues.brand) slotValues.brand = brandName;
-            llmOutput = { generated_html: fillTemplateSlots(matchedTemplate.html, slotValues) };
-          } else {
-            const instructionsWithDesignGuidance = designInstructions
-              ? [`DESIGN SYSTEM INSTRUCTIONS (follow these closely):`, designInstructions].join('\n')
-              : undefined;
-
-            // Get generated image for this format  
-            const generatedImage = generatedImages.get(format);
-
-            // Get planned post from orchestrator for this format (if available)
-            const plannedPost = orchestratorPlan?.plannedPosts?.find((p: any) => 
-              p.format.toLowerCase() === format.toLowerCase()
-            ) || null;
-
-            llmOutput = await runHtmlLayoutAgent(
-              env,
-              post,
+        try {
+          // Check cache first
+          if (useCache && env.AI_CACHE_KV && !matchedTemplate) {
+            const cacheKey = await generateCacheKey({
+              title: post.title,
+              content: post.plaintext || post.excerpt || "",
               format,
-              config.name,
-              config.aiInstruction,
-              config.width,
-              config.height,
-              designTokensPrompt,
-              variantPrompt,
-              agentContext.copyOverrides,
-              instructionsWithDesignGuidance,
-              generatedImage || undefined,
-              plannedPost?.imageSpec ? {
-                type: plannedPost.imageSpec.type || 'background',
-                position: plannedPost.imageSpec.position || 'background',
-                count: plannedPost.imageSpec.count || 1,
-              } : undefined,
-              settings,
-            );
-
-            // Cache the result if caching is enabled
-            if (useCache && env.AI_CACHE_KV) {
-              const cacheKey = await generateCacheKey({
-                title: post.title,
-                content: post.plaintext || post.excerpt || "",
-                format,
-                width: config.width,
-                height: config.height,
-                prompt: variantPrompt,
-                designTokensHash,
-              });
-              
-              setCachedHtml(env.AI_CACHE_KV, cacheKey, {
-                html: llmOutput.generated_html,
-                generatedAt: Date.now(),
-                contentHash: designTokensHash,
-                format,
-              }).catch(() => {});
+              width: config.width,
+              height: config.height,
+              prompt: variantPrompt,
+              designTokensHash,
+            });
+            
+            const cached = await getCachedHtml(env.AI_CACHE_KV, cacheKey);
+            if (cached) {
+              llmOutput = { generated_html: cached.html };
+              onProgress({ type: "generating", message: `Using cached ${format}`, format, progress: i + 1, total: totalFormats });
             }
           }
+          
+          // If not cached, generate
+          if (!llmOutput) {
+            if (matchedTemplate && classification) {
+              const slotValues = { ...classification.slotValues };
+              if (!slotValues.headline) slotValues.headline = post.title;
+              if (!slotValues.brand) slotValues.brand = brandName;
+              llmOutput = { generated_html: fillTemplateSlots(matchedTemplate.html, slotValues) };
+            } else {
+              const instructionsWithDesignGuidance = designInstructions
+                ? [`DESIGN SYSTEM INSTRUCTIONS (follow these closely):`, designInstructions].join('\n')
+                : undefined;
+
+              const generatedImage = generatedImages.get(format);
+              const plannedPost = orchestratorPlan?.plannedPosts?.find((p: any) => 
+                p.format.toLowerCase() === format.toLowerCase()
+              ) || null;
+
+              llmOutput = await withTimeout(
+                runHtmlLayoutAgent(
+                  env,
+                  post,
+                  format,
+                  config.name,
+                  config.aiInstruction,
+                  config.width,
+                  config.height,
+                  designTokensPrompt,
+                  variantPrompt,
+                  agentContext.copyOverrides,
+                  instructionsWithDesignGuidance,
+                  generatedImage || undefined,
+                  plannedPost?.imageSpec ? {
+                    type: plannedPost.imageSpec.type || 'background',
+                    position: plannedPost.imageSpec.position || 'background',
+                    count: plannedPost.imageSpec.count || 1,
+                  } : undefined,
+                  settings,
+                ),
+                HTML_LAYOUT_TIMEOUT_MS,
+                `HTML layout generation for ${format}`
+              );
+
+              // Cache the result
+              if (useCache && env.AI_CACHE_KV) {
+                const cacheKey = await generateCacheKey({
+                  title: post.title,
+                  content: post.plaintext || post.excerpt || "",
+                  format,
+                  width: config.width,
+                  height: config.height,
+                  prompt: variantPrompt,
+                  designTokensHash,
+                });
+                setCachedHtml(env.AI_CACHE_KV, cacheKey, {
+                  html: llmOutput.generated_html,
+                  generatedAt: Date.now(),
+                  contentHash: designTokensHash,
+                  format,
+                }).catch(() => {});
+              }
+            }
+          }
+
+          const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
+
+          onProgress({ 
+            type: "rendering", 
+            message: `Rendering ${format}...`,
+            format,
+            progress: i + 1,
+            total: totalFormats
+          });
+
+          // Check browser connection before rendering
+          if (!isBrowserConnected(browser)) {
+            _log.warn("browser-disconnected", { format });
+            try { await browser.close(); } catch { /* ignore */ }
+            browser = await reconnectBrowser(env, _log);
+          }
+
+          let asset: StoredAsset;
+          try {
+            asset = await withTimeout(
+              renderStoreSingleAssetWithPage(env, browser, {
+                key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
+                format,
+                rawHtml: finalHtml,
+                formatLabel: format,
+                width: config.width,
+                height: config.height,
+              }),
+              RENDER_TIMEOUT_MS,
+              `Render ${format}`
+            );
+          } catch (renderErr) {
+            const errMsg = renderErr instanceof Error ? renderErr.message : String(renderErr);
+            if (errMsg.includes("Connection closed") || errMsg.includes("Protocol error")) {
+              _log.warn("render-connection-closed-retry", { format });
+              try { await browser.close(); } catch { /* ignore */ }
+              browser = await reconnectBrowser(env, _log);
+              asset = await withTimeout(
+                renderStoreSingleAssetWithPage(env, browser, {
+                  key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
+                  format,
+                  rawHtml: finalHtml,
+                  formatLabel: format,
+                  width: config.width,
+                  height: config.height,
+                }),
+                RENDER_TIMEOUT_MS,
+                `Render retry ${format}`
+              );
+            } else {
+              throw renderErr;
+            }
+          }
+
+          formatAssets[format] = asset;
+          if (!variantLlmOutput) variantLlmOutput = { generated_html: finalHtml };
+          
+          // Emit per-asset SSE event immediately
+          onProgress({
+            type: "rendering",
+            message: `${format} ready`,
+            format,
+            progress: i + 1,
+            total: totalFormats,
+          });
+        } catch (err) {
+          _log.error("stream-format-failed", err, { format });
+          // Skip this format and continue with the next one
         }
-
-        const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
-
-        onProgress({ 
-          type: "rendering", 
-          message: `Rendering ${format}...`,
-          format,
-          progress: i + 1,
-          total: totalFormats
-        });
-
-        const asset = await renderStoreSingleAssetWithPage(env, browser, {
-          key: `${keyPrefix}/${buildAssetFileName(format, assetNameSuffixForVariant(index, outputPlan.postCount))}`,
-          format,
-          rawHtml: finalHtml,
-          formatLabel: format,
-          width: config.width,
-          height: config.height,
-        });
-
-        formatAssets[format] = asset;
-        if (!variantLlmOutput) variantLlmOutput = { generated_html: finalHtml };
       }
 
       if (index === 0) {
@@ -2104,7 +2377,7 @@ export async function runPipelineFromPostWithProgress(
       });
     }
   } finally {
-    await browser.close();
+    try { await browser.close(); } catch { /* ignore close errors */ }
   }
 
   const primaryVariant = variants[0];
