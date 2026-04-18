@@ -2,6 +2,8 @@ import { generateText, streamText, type LanguageModel } from "ai";
 import { createPromptConfig, type PromptConfig } from "../../lib/prompt-utils.js";
 import type { WorkspaceSettings } from "../../lib/settings.js";
 
+import { HTML_LAYOUT_SYSTEM_PROMPT } from "../../prompts.js";
+
 export interface HtmlLayoutOutput {
   generated_html: string;
 }
@@ -12,42 +14,6 @@ export interface StreamCallbacks {
   onError?: (error: Error) => void;
 }
 
-const HTML_LAYOUT_SYSTEM_PROMPT = `You are an elite social media post art director and layout engineer.
-
-Generate ONE complete, self-contained HTML document for a static social media post image.
-
-Hard constraints:
-- The output is a social post composition, NOT a web page.
-- No website patterns: no navbars, footers, menus, sidebars, blog layout, multi-section page flow, or scroll-based storytelling.
-- Treat the design as one locked frame that will be screenshotted.
-- The HTML must be full standalone markup with <!DOCTYPE html>, <html>, <head>, and <body>.
-- Use Tailwind CDN only: <script src="https://cdn.tailwindcss.com"></script>.
-- Use Tailwind utility classes for styling.
-- No external libraries except Tailwind CDN.
-
-Canvas and overflow rules:
-- The composition must be exactly the requested width x height.
-- Use html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }.
-- Build one root frame container that fills the canvas (w-full h-full overflow-hidden).
-- Never rely on page scrolling; no content may extend outside the frame.
-- Prefer reducing copy and simplifying structure over shrinking everything.
-- Adapt copy density to the requested style, but keep scannability high and preserve clear hierarchy.
-
-Quality and style rules:
-- Prioritize platform-native composition and feed readability.
-- Establish a clear focal point and strong hierarchy for thumbnail legibility.
-- Deliver an intentional, carefully designed visual with strong structure and readability.
-- Avoid generic "marketing template" output. Use specific composition choices, asymmetry, spacing rhythm, and clear typography contrast.
-- Never include text baked into generated images; all text must remain HTML/CSS.
-- Avoid visual effects that reduce readability.
-
-Before returning, self-check:
-- Is this unmistakably a social post and not a webpage?
-- Is all content fully visible within the fixed canvas with zero overflow/clipping?
-- Is the copy concise enough to scan quickly on mobile?
-
-Return ONLY the raw HTML document.
-Do not return JSON, markdown fences, notes, or explanations.`;
 
 export interface HtmlLayoutArgs {
   platform: string;
