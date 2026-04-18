@@ -28,6 +28,7 @@ export interface WorkspaceSettings {
   prompts: {
     htmlGeneration: string;
     contentCreation: string;
+    contentClassification: string;
     imageGeneration: string;
     templateSelection: string;
     designTokens: string;
@@ -76,6 +77,7 @@ const DEFAULT_SETTINGS: WorkspaceSettings = {
   prompts: {
     htmlGeneration: "",
     contentCreation: "",
+    contentClassification: "",
     imageGeneration: "",
     templateSelection: "", 
     designTokens: "",

@@ -3,9 +3,12 @@ import { createPromptConfig, type PromptConfig } from "../../lib/prompt-utils.js
 import type { WorkspaceSettings } from "../../lib/settings.js";
 
 import { HTML_LAYOUT_SYSTEM_PROMPT } from "../../prompts.js";
+import { fillTemplateSlots } from "../../lib/templates.js";
 
 export interface HtmlLayoutOutput {
   generated_html: string;
+  template_html?: string;
+  slot_values?: Record<string, string>;
 }
 
 export interface StreamCallbacks {
@@ -141,8 +144,30 @@ export async function generateHtmlLayout(
         temperature: 0.7,
       });
 
-      const generatedHtml = extractHtml(result.text);
-      return { generated_html: generatedHtml };
+      const templateHtml = extractHtml(result.text);
+      let slots: Record<string, string> = {};
+      
+      const jsonMatch = result.text.match(/```json\s*(\{[\s\S]*?\})\s*```/);
+      if (jsonMatch) {
+         try { slots = JSON.parse(jsonMatch[1]); } catch(e) {}
+      } else {
+         const firstBrace = result.text.lastIndexOf('{');
+         const lastBrace = result.text.lastIndexOf('}');
+         if (firstBrace > 0 && lastBrace > firstBrace) {
+            try { slots = JSON.parse(result.text.slice(firstBrace, lastBrace + 1)); } catch(e) {}
+         }
+      }
+
+      // If slots were successfully extracted, use them, otherwise return raw content as fallback
+      const generatedHtml = Object.keys(slots).length > 0 
+         ? fillTemplateSlots(templateHtml, slots) 
+         : templateHtml;
+
+      return { 
+         generated_html: generatedHtml,
+         template_html: templateHtml,
+         slot_values: slots
+      };
     } catch (error) {
       console.warn("[html-layout-agent] Attempt failed:", error);
       errors.push(error instanceof Error ? error : new Error(String(error)));

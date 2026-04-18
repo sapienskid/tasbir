@@ -1099,7 +1099,8 @@ function SettingsTab({ settings, loading, onSave, formats }: any) {
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     strategy: false,  // brand + campaign combined
     output: false,   // formats + image + templates
-    advanced: true,   // api + prompts
+    prompts: true,     // AI prompts
+    advanced: true,   // api + connections
   })
 
   useEffect(() => {
@@ -1198,6 +1199,40 @@ function SettingsTab({ settings, loading, onSave, formats }: any) {
             <button onClick={() => set(['templates', 'autoSelect'], !local.templates?.autoSelect)} className={`text-[10px] font-mono px-2 py-0.5 rounded border ${local.templates?.autoSelect ? 'border-[#22c55e] text-[#22c55e]' : 'border-[#555] text-[#555]'}`}>
               {local.templates?.autoSelect ? 'ON' : 'OFF'}
             </button>
+          </div>
+        </Section>
+
+        {/* Prompts Section (collapsed by default) */}
+        <Section id="prompts" label="AI Personalities & Prompts" defaultCollapsed={true}>
+          <div className="space-y-4">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#888' }}>Content Classifier</div>
+              <textarea value={local.prompts?.contentClassification || ''} onChange={(e: any) => set(['prompts', 'contentClassification'], e.target.value)} placeholder="Guidelines for extracting content metadata and tags..." className="w-full h-16 rounded border px-2 py-1.5 text-[10px] outline-none resize-none font-mono" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#888' }}>Orchestrator Rules</div>
+              <textarea value={local.prompts?.contentCreation || ''} onChange={(e: any) => set(['prompts', 'contentCreation'], e.target.value)} placeholder="Marketing strategy and campaign generation guidelines..." className="w-full h-16 rounded border px-2 py-1.5 text-[10px] outline-none resize-none font-mono" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#888' }}>Image Generation Guidelines</div>
+              <textarea value={local.prompts?.imageGeneration || ''} onChange={(e: any) => set(['prompts', 'imageGeneration'], e.target.value)} placeholder="Guidelines for deciding on AI background images..." className="w-full h-16 rounded border px-2 py-1.5 text-[10px] outline-none resize-none font-mono" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#888' }}>Template Selection Rules</div>
+              <textarea value={local.prompts?.templateSelection || ''} onChange={(e: any) => set(['prompts', 'templateSelection'], e.target.value)} placeholder="Criteria to choose HTML template vs generate new layout..." className="w-full h-16 rounded border px-2 py-1.5 text-[10px] outline-none resize-none font-mono" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#888' }}>Layout Engineer (HTML)</div>
+              <textarea value={local.prompts?.htmlGeneration || ''} onChange={(e: any) => set(['prompts', 'htmlGeneration'], e.target.value)} placeholder="Instructions for Tailwind layout generation..." className="w-full h-16 rounded border px-2 py-1.5 text-[10px] outline-none resize-none font-mono" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#888' }}>Design Token Architect</div>
+              <textarea value={local.prompts?.designTokens || ''} onChange={(e: any) => set(['prompts', 'designTokens'], e.target.value)} placeholder="Rules for typography, shadow, and color scale generation..." className="w-full h-16 rounded border px-2 py-1.5 text-[10px] outline-none resize-none font-mono" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            </div>
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: '#888' }}>Global Rules (Applied Everywhere)</div>
+              <textarea value={local.prompts?.customInstructions || ''} onChange={(e: any) => set(['prompts', 'customInstructions'], e.target.value)} placeholder="e.g. Always write out full numbers instead of using digits..." className="w-full h-16 rounded border px-2 py-1.5 text-[10px] outline-none resize-none font-mono" style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }} />
+            </div>
           </div>
         </Section>
 

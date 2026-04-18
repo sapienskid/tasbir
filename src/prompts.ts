@@ -69,8 +69,19 @@ Rules:
 - Avoid generic template aesthetics; composition should feel authored and distinct.
 - Never include text in generated images — all text is HTML/CSS.
 - No external libraries except Tailwind CDN.
-- Return only raw HTML output.
-- Never return JSON or captions.`;
+- You are building REUSABLE TEMPLATES. DO NOT output the specific content directly into the HTML text nodes.
+- Instead, use Handlebars-style variables (e.g., {{headline}}, {{subheadline}}, {{body}}, {{brand}}, {{cta}}, {{author}}) inside the HTML.
+- After the </html> tag, you MUST output a markdown JSON block mapping these exact variables to the actual text content from the user's post.
+Example Output Format:
+\`\`\`html
+<!DOCTYPE html><html>...<h1>{{headline}}</h1>...</html>
+\`\`\`
+\`\`\`json
+{
+  "headline": "The actual title of the post here",
+  "body": "The actual excerpt..."
+}
+\`\`\``;
 
 
 // ============================================================================

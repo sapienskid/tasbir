@@ -33,6 +33,7 @@ export function mergePrompts(
 export function getCustomPrompts(settings?: WorkspaceSettings | null): {
   htmlGeneration: string;
   contentCreation: string;
+  contentClassification: string;
   imageGeneration: string;
   templateSelection: string;
   designTokens: string;
@@ -41,6 +42,7 @@ export function getCustomPrompts(settings?: WorkspaceSettings | null): {
   return {
     htmlGeneration: settings?.prompts?.htmlGeneration || '',
     contentCreation: settings?.prompts?.contentCreation || '',
+    contentClassification: settings?.prompts?.contentClassification || '',
     imageGeneration: settings?.prompts?.imageGeneration || '',
     templateSelection: settings?.prompts?.templateSelection || '',
     designTokens: settings?.prompts?.designTokens || '',
@@ -57,8 +59,11 @@ export function buildEnhancedPrompt(
   globalInstructions: string = '',
   context?: Record<string, unknown>
 ): string {
-  let basePrompt = Array.isArray(systemPrompt) ? systemPrompt.join('\n') : systemPrompt;
-  
+  // If user provides a custom prompt, it completely replaces the default system prompt base 
+  let basePrompt = customPrompt && customPrompt.trim() !== '' 
+    ? customPrompt.trim() 
+    : Array.isArray(systemPrompt) ? systemPrompt.join('\n') : systemPrompt;
+
   // Add context if provided
   if (context && Object.keys(context).length > 0) {
     const contextSection = '\n\nCONTEXT:\n' + 
@@ -72,11 +77,6 @@ export function buildEnhancedPrompt(
   // Add global custom instructions first (if any)
   if (globalInstructions && globalInstructions.trim() !== '') {
     basePrompt += `\n\nGLOBAL INSTRUCTIONS:\n${globalInstructions.trim()}`;
-  }
-  
-  // Add specific custom prompt last (highest priority)
-  if (customPrompt && customPrompt.trim() !== '') {
-    basePrompt += `\n\nCUSTOM INSTRUCTIONS:\n${customPrompt.trim()}`;
   }
   
   return basePrompt;
