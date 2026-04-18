@@ -1,3 +1,4 @@
+import { AI_IMAGE_PROMPT } from "../prompts.js";
 /**
  * AI Image Generation Service using Cloudflare Workers AI
  * 
@@ -71,20 +72,7 @@ export async function decideImageGeneration(
   try {
     // Create enhanced prompt configuration
     const promptConfig = createPromptConfig(
-      `You are a creative director for social media visual content.
-Your job is to decide if and what type of AI-generated image would enhance a social post.
-
-Guidelines:
-- Background images: subtle, atmospheric visuals that complement text overlay
-- Illustrations: conceptual graphics that represent the content theme
-- Patterns: abstract geometric or organic patterns for visual interest
-- Gradients: color transitions that create depth (when design tokens suggest gradients)
-- None: when the content is best served by typography alone
-
-Consider:
-- Content type (quotes work well with backgrounds, data with illustrations)
-- Brand tone (professional vs playful affects image style)
-- Readability (images should not compete with text)`,
+      AI_IMAGE_PROMPT,
       settings,
       'imageGeneration'
     );

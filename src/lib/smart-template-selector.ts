@@ -1,3 +1,4 @@
+import { SMART_TEMPLATE_SELECTOR_PROMPT } from "../prompts.js";
 /**
  * Smart Template Selection System
  * 
@@ -121,15 +122,7 @@ export async function decideTemplateOrGenerate(
 
     // Create enhanced prompt configuration
     const promptConfig = createPromptConfig(
-      `You are a smart template selector for social media content generation.
-Your job is to decide whether to use an existing HTML template or generate new HTML.
-
-Decision criteria:
-- Use templates when content closely matches a template's purpose and style
-- Generate new when content is unique, complex, or needs custom layout
-- Consider template quality ratings and usage counts
-- Prefer templates for common content types (quotes, metrics, simple insights)
-- Generate new for stories, tutorials, complex narratives, or unique requests`,
+      SMART_TEMPLATE_SELECTOR_PROMPT,
       settings,
       'templateSelection'
     );

@@ -1,3 +1,4 @@
+import { SOCIAL_COPYWRITER_PROMPT } from "../prompts.js";
 /**
  * Template-Based HTML Generation
  * 
@@ -175,8 +176,7 @@ export async function generateWithTemplate(
   const result = await generateObject({
     model,
     schema: SocialPostContentSchema,
-    system: `You are a social media copywriter. Generate engaging, punchy content for social media posts.
-Keep headlines SHORT and impactful (max 80 chars). Make it scroll-stopping.`,
+    system: SOCIAL_COPYWRITER_PROMPT,
     prompt: `Create social media content based on this source:
 
 Title: ${args.title}

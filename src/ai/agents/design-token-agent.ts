@@ -207,6 +207,18 @@ export type DesignTokens = z.infer<typeof DESIGN_TOKEN_SCHEMA>;
 
 import { DESIGN_TOKEN_SYSTEM_PROMPT } from "../../prompts.js";
 
+function extractJsonFromText(text: string): string {
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (match) return match[1];
+
+  const firstBrace = text.indexOf("{");
+  const lastBrace = text.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return text.substring(firstBrace, lastBrace + 1);
+  }
+  return text;
+}
+
 export async function generateDesignTokens(
   models: LanguageModel[],
   vibe: string,
