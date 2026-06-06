@@ -5,12 +5,6 @@ import { tokensToCSS, type DesignTokens } from '@/lib/tokens'
 import { generateComponentsSkeleton } from '@/components/skeletons'
 import { GOOGLE_FONTS, FONT_CATEGORIES } from '@/lib/google-fonts'
 
-declare global {
-  interface Window {
-    __openHtmlEditor: (format: string, asset: any, resolvedSrc: string) => void
-  }
-}
-
 const PRESETS = [
   { id: 'luxury', l: 'Luxury' },
   { id: 'brutalist', l: 'Brutalist' },
@@ -147,7 +141,6 @@ export default function App() {
   })
   const [studioSlug, setStudioSlug] = useState('')
   const [selectedAsset, setSelectedAsset] = useState<{ format: string; asset: any; resolvedSrc: string } | null>(null)
-  const [editorGenerating, setEditorGenerating] = useState(false)
 
   useEffect(() => {
     localStorage.setItem('tasbir:studioContent', studioContent)
@@ -196,17 +189,6 @@ export default function App() {
       // ignore
     }
   }, [tokens])
-
-  // Listen for tab change from editor
-  useEffect(() => {
-    const handler = (e: StorageEvent) => {
-      if (e.key === 'tasbir:activeTab' && e.newValue) {
-        setActiveTab(e.newValue as any)
-      }
-    }
-    window.addEventListener('storage', handler)
-    return () => window.removeEventListener('storage', handler)
-  }, [])
 
   async function loadSavedTokens() {
     try {
@@ -706,7 +688,6 @@ export default function App() {
               { id: 'templates' as const, label: 'Templates & Formats' },
               { id: 'settings' as const, label: 'Settings' },
               { id: 'tokens' as const, label: 'Tokens' },
-              { id: 'editor' as const, label: 'HTML Editor' },
             ]).map(tab => (
               <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex-1 py-3 border-b-2 transition-all ${activeTab === tab.id ? 'text-white border-white font-semibold' : 'text-[#555] border-transparent hover:text-[#888] font-medium'}`} style={{ fontSize: 11, letterSpacing: '0.05em' }}>{tab.label}</button>
             ))}
@@ -771,14 +752,6 @@ export default function App() {
                 studioResult={studioResult}
               />
             )}
-            {activeTab === 'editor' && (
-              <HtmlEditorTab
-                studioResult={studioResult}
-                editorGenerating={editorGenerating}
-                setEditorGenerating={setEditorGenerating}
-                tokens={tokens}
-              />
-            )}
           </div>
 
           {error && (
@@ -836,7 +809,7 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-auto relative min-h-0" style={{ background: '#1c1c1c' }}>
                 {activeTab === 'studio' ? (
-                  <StudioScreenshotPanel result={studioResult} generating={studioGenerating} onOpenAsset={(format, asset, resolvedSrc) => setSelectedAsset({ format, asset, resolvedSrc })} />
+                  <StudioScreenshotPanel result={studioResult} generating={studioGenerating} tokens={tokens} />
                 ) : activeTab === 'templates' ? (
                   <TemplatePreview html={templatePreviewHtml} />
                 ) : tokens ? (
@@ -1409,8 +1382,13 @@ function SettingsPreview({ settings }: any) {
 
 /* ── Studio Screenshot Panel ── */
 
-function StudioScreenshotPanel({ result, generating, onOpenAsset }: { result: any; generating: boolean; onOpenAsset?: (format: string, asset: any, resolvedSrc: string) => void }) {
+function StudioScreenshotPanel({ result, generating, tokens }: { result: any; generating: boolean; tokens: DesignTokens | null }) {
   const entries = Object.entries(result?.assets || {}).filter(([, asset]: [string, any]) => Boolean(asset?.key || asset?.url)) as Array<[string, any]>
+  const [editingFormat, setEditingFormat] = useState<string | null>(null)
+  const [editorHtml, setEditorHtml] = useState<string>('')
+  const [previewHtml, setPreviewHtml] = useState<string>('')
+  const [editorGenerating, setEditorGenerating] = useState(false)
+  const [editorError, setEditorError] = useState<string | null>(null)
 
   const handleDownloadAll = async () => {
     const zip = new JSZip();
@@ -1434,6 +1412,104 @@ function StudioScreenshotPanel({ result, generating, onOpenAsset }: { result: an
     link.download = 'tasbir-assets.zip';
     link.click();
   };
+
+  const handleEdit = (format: string, asset: any, _resolvedSrc: string) => {
+    setEditingFormat(format)
+    if (asset?.url && asset.url.startsWith('data:')) {
+      setEditorHtml(`// HTML for ${format}\n// Edit the HTML below and click Render to preview\n// Note: The actual HTML is embedded in the data URL`)
+    } else {
+      setEditorHtml(`// HTML for ${format}\n// Edit and click Render to preview`)
+    }
+    setPreviewHtml('')
+    setEditorError(null)
+  }
+
+  const handleRender = async () => {
+    if (!editorHtml.trim() || !tokens || !editingFormat) return
+    setEditorGenerating(true)
+    setEditorError(null)
+    try {
+      const fonts = [
+        tokens.typography?.fontSans,
+        tokens.typography?.fontSerif,
+        tokens.typography?.fontMono
+      ].filter(Boolean).map(f => f?.replace(/\s+/g, '+'))
+      
+      const fontImport = fonts.length > 0 
+        ? `<link href="https://fonts.googleapis.com/css2?${fonts.map(f => `family=${f}:wght@300;400;500;600;700;900`).join('&')}&display=swap" rel="stylesheet">`
+        : ''
+      
+      const cssVars = tokensToCSS(tokens)
+      
+      let finalHtml = editorHtml
+      finalHtml = finalHtml.replace('</head>', `${fontImport}\n</head>`)
+      finalHtml = finalHtml.replace('<style id="token-styles"></style>', `<style id="token-styles">${cssVars}</style>`)
+      if (!finalHtml.includes('id="token-styles"')) {
+        finalHtml = finalHtml.replace('</head>', `<style id="token-styles">${cssVars}</style>\n</head>`)
+      }
+      if (!finalHtml.includes('cdn.tailwindcss.com')) {
+        finalHtml = finalHtml.replace('</head>', `<script src="https://cdn.tailwindcss.com"></script>\n</head>`)
+      }
+
+      setPreviewHtml(finalHtml)
+    } catch (e: any) {
+      setEditorError(e.message || 'Render failed')
+    } finally {
+      setEditorGenerating(false)
+    }
+  }
+
+  const handleSave = async () => {
+    if (!editorHtml.trim() || !editingFormat || !result) return
+    setEditorGenerating(true)
+    try {
+      // Call the API to re-render and save
+      const apiKey = (import.meta.env.VITE_API_KEY || "").trim() || window.localStorage.getItem("tasbir:api-key")?.trim() || ""
+      const headers: Record<string, string> = { "Content-Type": "application/json" }
+      if (apiKey) headers["x-api-key"] = apiKey
+      
+      const response = await fetch(`/save-to-r2`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ 
+          key: `${result.slug}/${editingFormat}.html`,
+          dataUri: `data:text/html;base64,${btoa(editorHtml)}`
+        })
+      })
+      
+      if (!response.ok) throw new Error('Failed to save')
+      
+      // Also trigger re-render via generate endpoint
+      const renderResponse = await fetch(`/generate-from-content`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          title: result.slug,
+          content: 'Regenerated from edited HTML',
+          output: { formats: [editingFormat], postCount: 1 },
+          designTokens: tokens
+        })
+      })
+      
+      if (!renderResponse.ok) throw new Error('Failed to re-render')
+      
+      setEditingFormat(null)
+      setEditorHtml('')
+      setPreviewHtml('')
+      alert('Saved and re-rendered!')
+    } catch (e: any) {
+      setEditorError(e.message || 'Save failed')
+    } finally {
+      setEditorGenerating(false)
+    }
+  }
+
+  const handleCloseEditor = () => {
+    setEditingFormat(null)
+    setEditorHtml('')
+    setPreviewHtml('')
+    setEditorError(null)
+  }
 
   if (generating) {
     return (
@@ -1473,9 +1549,86 @@ function StudioScreenshotPanel({ result, generating, onOpenAsset }: { result: an
       </div>
       <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
         {entries.map(([format, asset]) => (
-          <AssetPreviewCard key={format} format={format} asset={asset} onOpen={onOpenAsset} />
+          <AssetPreviewCard 
+            key={format} 
+            format={format} 
+            asset={asset} 
+            isEditing={editingFormat === format}
+            onEdit={handleEdit}
+          />
         ))}
       </div>
+
+      {/* Inline Editor Overlay */}
+      {editingFormat && (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: 'rgba(0, 0, 0, 0.95)' }}>
+          <div className="flex items-center justify-between p-3 border-b" style={{ borderColor: '#252525', background: '#141414' }}>
+            <div className="flex items-center gap-3">
+              <button onClick={handleCloseEditor} className="p-1 rounded hover:bg-[#252525]" style={{ color: '#888' }}>✕</button>
+              <span className="font-medium text-white">{editingFormat}</span>
+              <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: '#3b82f6', color: 'white' }}>EDITING</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={handleRender} 
+                disabled={editorGenerating || !editorHtml.trim() || !tokens}
+                className="px-3 py-1.5 rounded font-bold text-[10px] uppercase tracking-wider bg-white text-black hover:opacity-90 disabled:opacity-25"
+              >
+                {editorGenerating ? 'Rendering…' : 'Render Preview'}
+              </button>
+              <button 
+                onClick={handleSave} 
+                disabled={editorGenerating || !editorHtml.trim()}
+                className="px-3 py-1.5 rounded font-bold text-[10px] uppercase tracking-wider border border-[#3b82f6] text-[#3b82f6] hover:bg-[#3b82f615] disabled:opacity-25"
+              >
+                Save & Re-render
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 flex overflow-hidden">
+            {/* Code Editor */}
+            <div className="w-1/2 flex flex-col border-r" style={{ borderColor: '#252525', background: '#0b0b0b', minWidth: 300 }}>
+              <div className="px-2 py-1 border-b" style={{ borderColor: '#252525' }}>
+                <span className="text-[9px] font-medium" style={{ color: '#888' }}>HTML Source</span>
+              </div>
+              <textarea
+                value={editorHtml}
+                onChange={(e) => setEditorHtml(e.target.value)}
+                className="flex-1 w-full resize-none p-2 text-[11px] font-mono outline-none"
+                style={{ background: '#0a0a0a', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5, fontFamily: 'monospace' }}
+                placeholder="// Edit HTML here... Use {{image_url}} for AI images, {{brand_logo}} for brand logo"
+                spellCheck={false}
+              />
+            </div>
+
+            {/* Live Preview */}
+            <div className="flex-1 flex flex-col overflow-auto" style={{ background: '#fff', minWidth: 300 }}>
+              <div className="px-2 py-1 border-b" style={{ borderColor: '#252525' }}>
+                <span className="text-[9px] font-medium" style={{ color: '#888' }}>Live Preview</span>
+              </div>
+              <div className="flex-1 relative p-4">
+                {previewHtml ? (
+                  <iframe
+                    srcDoc={previewHtml}
+                    className="w-full h-full border-0"
+                    style={{ background: '#fff' }}
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-[11px]" style={{ color: '#888' }}>
+                    Click "Render Preview" to see the result
+                  </div>
+                )}
+                {editorError && (
+                  <div className="absolute bottom-4 left-4 right-4 p-2 rounded text-[10px]" style={{ background: '#f43f5e', color: 'white' }}>
+                    {editorError}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
@@ -1503,7 +1656,7 @@ function TemplatePreview({ html }: { html: string }) {
   )
 }
 
-function AssetPreviewCard({ format, asset, onOpen }: { format: string; asset: any; onOpen?: (format: string, asset: any, resolvedSrc: string) => void }) {
+function AssetPreviewCard({ format, asset, isEditing, onEdit }: { format: string; asset: any; isEditing: boolean; onEdit?: (format: string, asset: any, resolvedSrc: string) => void }) {
   const [resolvedSrc, setResolvedSrc] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [savingR2, setSavingR2] = useState(false)
@@ -1514,7 +1667,6 @@ function AssetPreviewCard({ format, asset, onOpen }: { format: string; asset: an
     let localBlobUrl: string | null = null
 
     async function load() {
-      // If the URL already a data URI or a direct HTTP URL we can use it immediately without blob
       if (asset?.url && (asset.url.startsWith('data:') || asset.url.startsWith('http'))) {
         setResolvedSrc(asset.url)
         setLoading(false)
@@ -1568,6 +1720,22 @@ function AssetPreviewCard({ format, asset, onOpen }: { format: string; asset: an
     }
   }
 
+  if (isEditing) {
+    return (
+      <div className="rounded overflow-hidden self-start relative ring-2" style={{ background: '#111', borderColor: '#3b82f6' }}>
+        <div className="absolute top-2 left-2 bg-[#3b82f6] text-white px-2 py-0.5 rounded text-[8px] font-bold tracking-wider">
+          EDITING
+        </div>
+        <img
+          src={resolvedSrc}
+          alt={`${format} screenshot`}
+          className="w-full h-auto block opacity-50"
+          loading="lazy"
+        />
+      </div>
+    )
+  }
+
   return (
     <div
       className="rounded overflow-hidden self-start relative group"
@@ -1592,16 +1760,12 @@ function AssetPreviewCard({ format, asset, onOpen }: { format: string; asset: an
             alt={`${format} screenshot`}
             className="w-full h-auto block cursor-zoom-in"
             loading="lazy"
-            onClick={() => onOpen?.(format, asset, resolvedSrc)}
+            onClick={() => onEdit?.(format, asset, resolvedSrc)}
           />
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onOpen?.(format, asset, resolvedSrc);
-              // Also open in editor
-              if (window.__openHtmlEditor) {
-                window.__openHtmlEditor(format, asset, resolvedSrc);
-              }
+              onEdit?.(format, asset, resolvedSrc);
             }}
             className="absolute bottom-2 left-2 bg-black/80 text-white px-2 py-1 rounded text-[9px] font-medium tracking-wider uppercase border border-white/20 hover:bg-black"
           >
@@ -2119,171 +2283,6 @@ function MotionExplorer({ motion }: { motion: DesignTokens['motion'] }) {
           to { transform: translateX(11px) scale(1); opacity: 1; }
         }
       `}</style>
-    </div>
-  )
-}
-
-/* ── HTML Editor Tab ── */
-
-function HtmlEditorTab({ studioResult, editorGenerating, setEditorGenerating, tokens }: any) {
-  const [editorHtml, setEditorHtml] = useState<string>('')
-  const [previewHtml, setPreviewHtml] = useState<string>('')
-  const [activeFormat, setActiveFormat] = useState<string>('')
-  const [editorError, setEditorError] = useState<string | null>(null)
-
-  // Initialize editor with studio result if available
-  useEffect(() => {
-    if (studioResult?.assets) {
-      const entries = Object.entries(studioResult.assets).filter(([, asset]: [string, any]) => Boolean(asset?.key || asset?.url)) as Array<[string, any]>
-      if (entries.length > 0) {
-        const [format, asset] = entries[0]
-        if (asset?.url) {
-          setActiveFormat(format)
-          setEditorHtml(asset.url.startsWith('data:') ? `// HTML for ${format}\n// Edit the HTML below and click Render to preview` : `// HTML for ${format}\n// Edit and click Render to preview`)
-        }
-      }
-    }
-  }, [studioResult])
-
-  // Global function to open editor from asset cards
-  useEffect(() => {
-    window.__openHtmlEditor = (format: string, asset: any, _resolvedSrc: string) => {
-      // Store the format to open in localStorage, then dispatch event
-      localStorage.setItem('tasbir:editorFormat', format)
-      window.dispatchEvent(new CustomEvent('tasbir:openEditor', { detail: { format, asset } }))
-    }
-  }, [])
-
-  // Listen for open editor event
-  useEffect(() => {
-    const handler = (e: CustomEvent) => {
-      const { format, asset } = e.detail
-      setActiveFormat(format)
-      if (asset?.url && asset.url.startsWith('data:')) {
-        setEditorHtml(`// HTML for ${format}\n// Edit the HTML below and click Render to preview\n// Note: The actual HTML is embedded in the data URL`)
-      } else {
-        setEditorHtml(`// HTML for ${format}\n// Edit and click Render to preview`)
-      }
-      // Trigger tab change via localStorage
-      localStorage.setItem('tasbir:activeTab', 'editor')
-    }
-    window.addEventListener('tasbir:openEditor', handler as EventListener)
-    return () => window.removeEventListener('tasbir:openEditor', handler as EventListener)
-  }, [])
-
-  const handleRender = async () => {
-    if (!editorHtml.trim() || !tokens) return
-    setEditorGenerating(true)
-    setEditorError(null)
-    try {
-      const fonts = [
-        tokens.typography?.fontSans,
-        tokens.typography?.fontSerif,
-        tokens.typography?.fontMono
-      ].filter(Boolean).map(f => f?.replace(/\s+/g, '+'))
-      
-      const fontImport = fonts.length > 0 
-        ? `<link href="https://fonts.googleapis.com/css2?${fonts.map(f => `family=${f}:wght@300;400;500;600;700;900`).join('&')}&display=swap" rel="stylesheet">`
-        : ''
-      
-      const cssVars = tokensToCSS(tokens)
-      
-      let finalHtml = editorHtml
-      finalHtml = finalHtml.replace('</head>', `${fontImport}\n</head>`)
-      finalHtml = finalHtml.replace('<style id="token-styles"></style>', `<style id="token-styles">${cssVars}</style>`)
-      // Add tokens if not present
-      if (!finalHtml.includes('id="token-styles"')) {
-        finalHtml = finalHtml.replace('</head>', `<style id="token-styles">${cssVars}</style>\n</head>`)
-      }
-      if (!finalHtml.includes('cdn.tailwindcss.com')) {
-        finalHtml = finalHtml.replace('</head>', `<script src="https://cdn.tailwindcss.com"></script>\n</head>`)
-      }
-
-      setPreviewHtml(finalHtml)
-    } catch (e: any) {
-      setEditorError(e.message || 'Render failed')
-    } finally {
-      setEditorGenerating(false)
-    }
-  }
-
-  const handleSaveAsTemplate = async () => {
-    if (!editorHtml.trim() || !activeFormat) return
-    // This would save to templates - for now just alert
-    alert('Save as template functionality - implement as needed')
-  }
-
-  return (
-    <div className="p-3.5 space-y-3 h-full overflow-y-auto">
-      <div className="text-[9px] font-bold uppercase tracking-widest" style={{ color: '#888' }}>HTML Editor</div>
-      
-      <div className="flex gap-1 mb-2">
-        <select
-          value={activeFormat}
-          onChange={(e: any) => setActiveFormat(e.target.value)}
-          className="flex-1 rounded border px-2 py-1.5 text-[10px] outline-none"
-          style={{ background: '#0b0b0b', borderColor: '#313131', color: '#e2e2e2' }}
-        >
-          {studioResult?.assets && Object.entries(studioResult.assets)
-            .filter(([, asset]: [string, any]) => Boolean(asset?.key || asset?.url))
-            .map(([format]) => <option key={format} value={format}>{format}</option>)}
-        </select>
-      </div>
-
-      <div className="flex gap-2">
-        <button
-          onClick={handleRender}
-          disabled={editorGenerating || !editorHtml.trim() || !tokens}
-          className="flex-1 py-2 rounded font-bold text-[10px] uppercase tracking-wider border border-white text-white hover:bg-white hover:text-[#0b0b0b] transition-all disabled:opacity-25"
-        >
-          {editorGenerating ? 'Rendering…' : 'Render Preview'}
-        </button>
-        <button
-          onClick={handleSaveAsTemplate}
-          disabled={!editorHtml.trim()}
-          className="px-3 py-2 rounded font-bold text-[10px] uppercase tracking-wider border border-[#3b82f6] text-[#3b82f6] hover:bg-[#3b82f615] transition-all disabled:opacity-25"
-        >
-          Save as Template
-        </button>
-      </div>
-
-      {editorError && (
-        <div className="text-[10px] text-[#f43f5e]">{editorError}</div>
-      )}
-
-      <div className="flex-1 flex overflow-hidden" style={{ minHeight: 300 }}>
-        <div className="flex-1 flex flex-col border-r" style={{ borderColor: '#252525', background: '#0b0b0b' }}>
-          <div className="px-2 py-1 border-b" style={{ borderColor: '#252525' }}>
-            <span className="text-[9px] font-medium" style={{ color: '#888' }}>HTML Source</span>
-          </div>
-          <textarea
-            value={editorHtml}
-            onChange={(e: any) => setEditorHtml(e.target.value)}
-            className="flex-1 w-full resize-none p-2 text-[11px] font-mono outline-none"
-            style={{ background: '#0a0a0a', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5, fontFamily: 'monospace' }}
-            placeholder="// Edit HTML here... Use {{image_url}} for AI images, {{brand_logo}} for brand logo"
-            spellCheck={false}
-          />
-        </div>
-        <div className="flex-1 flex flex-col overflow-auto" style={{ background: '#fff' }}>
-          <div className="px-2 py-1 border-b" style={{ borderColor: '#252525' }}>
-            <span className="text-[9px] font-medium" style={{ color: '#888' }}>Live Preview ({activeFormat})</span>
-          </div>
-          <div className="flex-1 relative">
-            {previewHtml ? (
-              <iframe
-                srcDoc={previewHtml}
-                className="w-full h-full border-0"
-                style={{ background: '#fff' }}
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full text-[11px]" style={{ color: '#888' }}>
-                Click "Render Preview" to see the result
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
