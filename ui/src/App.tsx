@@ -133,15 +133,22 @@ export default function App() {
   })
   const [studioGenerating, setStudioGenerating] = useState(false)
   const [studioMode, setStudioMode] = useState<'content' | 'slug'>('content')
-  const [studioTitle, setStudioTitle] = useState('')
+  const [studioTitle, setStudioTitle] = useState(() => {
+    return localStorage.getItem('tasbir:studioTitle') || ''
+  })
   const [studioContent, setStudioContent] = useState(() => {
     return localStorage.getItem('tasbir:studioContent') || ''
   })
   const [studioSlug, setStudioSlug] = useState('')
+  const [selectedAsset, setSelectedAsset] = useState<{ format: string; asset: any; resolvedSrc: string } | null>(null)
 
   useEffect(() => {
     localStorage.setItem('tasbir:studioContent', studioContent)
   }, [studioContent])
+
+  useEffect(() => {
+    localStorage.setItem('tasbir:studioTitle', studioTitle)
+  }, [studioTitle])
 
   useEffect(() => {
     if (studioResult) {
@@ -633,6 +640,31 @@ export default function App() {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#0b0b0b', color: '#e2e2e2', fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13 }}>
+      {selectedAsset && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" 
+             onClick={() => setSelectedAsset(null)}
+             style={{ background: 'rgba(0, 0, 0, 0.95)' }}>
+          <div className="relative max-w-full max-h-full w-auto h-auto" onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={() => setSelectedAsset(null)}
+              className="absolute -top-12 right-0 z-10 p-2 rounded transition-colors"
+              style={{ background: '#1c1c1c', color: '#888', borderColor: '#313131' }}
+              aria-label="Close preview"
+            >
+              ✕
+            </button>
+            <img 
+              src={selectedAsset.resolvedSrc} 
+              alt={`${selectedAsset.format} screenshot`}
+              className="max-w-full max-h-[90vh] w-auto h-auto"
+              style={{ boxShadow: '0 24px 48px rgba(0,0,0,0.5)' }}
+            />
+            <div className="absolute -bottom-10 left-1/2 -translate-x-1/2 text-[10px] font-medium" style={{ color: '#888' }}>
+              {selectedAsset.format}
+            </div>
+          </div>
+        </div>
+      )}
       {!sidebarOpen && (
         <button onClick={() => setSidebarOpen(true)} className="fixed top-3 left-3 z-50 w-8 h-8 flex items-center justify-center rounded border transition-colors hover:bg-[#1c1c1c]" style={{ background: '#141414', borderColor: '#252525' }}>
           <span style={{ color: '#555', fontSize: 14 }}>☰</span>
@@ -777,7 +809,7 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-auto relative min-h-0" style={{ background: '#1c1c1c' }}>
                 {activeTab === 'studio' ? (
-                  <StudioScreenshotPanel result={studioResult} generating={studioGenerating} />
+                  <StudioScreenshotPanel result={studioResult} generating={studioGenerating} onOpenAsset={(format, asset, resolvedSrc) => setSelectedAsset({ format, asset, resolvedSrc })} />
                 ) : activeTab === 'templates' ? (
                   <TemplatePreview html={templatePreviewHtml} />
                 ) : tokens ? (
@@ -1350,7 +1382,7 @@ function SettingsPreview({ settings }: any) {
 
 /* ── Studio Screenshot Panel ── */
 
-function StudioScreenshotPanel({ result, generating }: { result: any; generating: boolean }) {
+function StudioScreenshotPanel({ result, generating, onOpenAsset }: { result: any; generating: boolean; onOpenAsset?: (format: string, asset: any, resolvedSrc: string) => void }) {
   const entries = Object.entries(result?.assets || {}).filter(([, asset]: [string, any]) => Boolean(asset?.key || asset?.url)) as Array<[string, any]>
 
   const handleDownloadAll = async () => {
@@ -1414,7 +1446,7 @@ function StudioScreenshotPanel({ result, generating }: { result: any; generating
       </div>
       <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
         {entries.map(([format, asset]) => (
-          <AssetPreviewCard key={format} format={format} asset={asset} />
+          <AssetPreviewCard key={format} format={format} asset={asset} onOpen={onOpenAsset} />
         ))}
       </div>
     </>
@@ -1444,7 +1476,7 @@ function TemplatePreview({ html }: { html: string }) {
   )
 }
 
-function AssetPreviewCard({ format, asset }: { format: string; asset: any }) {
+function AssetPreviewCard({ format, asset, onOpen }: { format: string; asset: any; onOpen?: (format: string, asset: any, resolvedSrc: string) => void }) {
   const [resolvedSrc, setResolvedSrc] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [savingR2, setSavingR2] = useState(false)
@@ -1531,8 +1563,9 @@ function AssetPreviewCard({ format, asset }: { format: string; asset: any }) {
           <img
             src={resolvedSrc}
             alt={`${format} screenshot`}
-            className="w-full h-auto block"
+            className="w-full h-auto block cursor-zoom-in"
             loading="lazy"
+            onClick={() => onOpen?.(format, asset, resolvedSrc)}
           />
         </>
       ) : (
