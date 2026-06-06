@@ -1401,7 +1401,8 @@ function SettingsPreview({ settings }: any) {
 function StudioScreenshotPanel({ result, generating, tokens, availableFormats, setStudioResult }: { result: any; generating: boolean; tokens: DesignTokens | null; availableFormats: any[]; setStudioResult: (result: any) => void }) {
   const entries = Object.entries(result?.assets || {}).filter(([, asset]: [string, any]) => Boolean(asset?.key || asset?.url)) as Array<[string, any]>
   const [editingFormat, setEditingFormat] = useState<string | null>(null)
-  const [editorHtml, setEditorHtml] = useState<string>('')
+  const [slotValues, setSlotValues] = useState<Record<string, string>>({})
+  const [templateHtml, setTemplateHtml] = useState<string>('')
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [editorGenerating, setEditorGenerating] = useState(false)
   const [editorError, setEditorError] = useState<string | null>(null)
@@ -1410,12 +1411,33 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
 
-  // Live preview with debouncing
+  // Extract slots from HTML
+  function extractSlots(html: string): string[] {
+    const slots = new Set<string>()
+    const pattern = /\{\{(\w+)\}\}/g
+    let match
+    while ((match = pattern.exec(html)) !== null) {
+      slots.add(match[1])
+    }
+    return Array.from(slots)
+  }
+
+  // Fill template with slot values
+  function fillTemplate(html: string, values: Record<string, string>): string {
+    let result = html
+    for (const [key, value] of Object.entries(values)) {
+      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value)
+    }
+    return result
+  }
+
+  // Auto-render preview when slot values change
   const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   useEffect(() => {
+    if (!templateHtml || !tokens || !editingFormat) return
     if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current)
     previewTimeoutRef.current = setTimeout(() => {
-      if (!editorHtml.trim() || !tokens || !editingFormat) return
+      const filledHtml = fillTemplate(templateHtml, slotValues)
       const fonts = [
         tokens.typography?.fontSans,
         tokens.typography?.fontSerif,
@@ -1428,7 +1450,7 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
       
       const cssVars = tokensToCSS(tokens)
       
-      let finalHtml = editorHtml
+      let finalHtml = filledHtml
       finalHtml = finalHtml.replace('</head>', `${fontImport}\n</head>`)
       finalHtml = finalHtml.replace('<style id="token-styles"></style>', `<style id="token-styles">${cssVars}</style>`)
       if (!finalHtml.includes('id="token-styles"')) {
@@ -1439,9 +1461,9 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
       }
 
       setPreviewHtml(finalHtml)
-    }, 500)
+    }, 300)
     return () => { if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current) }
-  }, [editorHtml, tokens, editingFormat])
+  }, [slotValues, templateHtml, tokens, editingFormat])
 
   const handleDownloadAll = async () => {
     const zip = new JSZip();
@@ -1468,22 +1490,28 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
 
   const handleEdit = (format: string, asset: any, _resolvedSrc: string) => {
     setEditingFormat(format)
-    // Use stored HTML if available, otherwise show placeholder
-    // Backend returns snake_case: html_by_format
+    // Use stored HTML if available
     const storedHtml = result?.html_by_format?.[format] || result?.htmlByFormat?.[format]
     if (storedHtml) {
-      setEditorHtml(storedHtml)
+      setTemplateHtml(storedHtml)
+      const slots = extractSlots(storedHtml)
+      const initialValues: Record<string, string> = {}
+      slots.forEach(slot => initialValues[slot] = '')
+      setSlotValues(initialValues)
     } else if (asset?.url && asset.url.startsWith('data:')) {
-      setEditorHtml(`// HTML for ${format}\n// Edit the HTML below and click Render to preview\n// Note: The actual HTML is embedded in the data URL`)
+      setTemplateHtml(`// HTML for ${format}\n// Edit the content below and preview updates automatically`)
+      setSlotValues({})
     } else {
-      setEditorHtml(`// HTML for ${format}\n// Edit and click Render to preview`)
+      setTemplateHtml(`// HTML for ${format}\n// Edit the content below and preview updates automatically`)
+      setSlotValues({})
     }
-    setPreviewHtml('')
-    setEditorError(null)
-  }
+  setPreviewHtml('')
+  setEditorError(null)
+}
 
   const handleSave = async () => {
-    if (!editorHtml.trim() || !editingFormat || !result || !tokens) return
+    if (!templateHtml || !editingFormat || !result || !tokens) return
+    if (Object.values(slotValues).every(v => !v.trim())) return
     setEditorGenerating(true)
     try {
       const apiKey = (import.meta.env.VITE_API_KEY || "").trim() || window.localStorage.getItem("tasbir:api-key")?.trim() || ""
@@ -1494,12 +1522,18 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
       const formatConfig = availableFormats.find((f: any) => f.id === editingFormat)
       if (!formatConfig) throw new Error('Format not found')
       
+      // Fill template with slot values
+      let filledHtml = templateHtml
+      for (const [key, value] of Object.entries(slotValues)) {
+        filledHtml = filledHtml.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value)
+      }
+      
       // Use the new render-html endpoint to re-render the edited HTML
       const response = await fetch(`/render-html`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          html: editorHtml,
+          html: filledHtml,
           width: formatConfig.width,
           height: formatConfig.height,
           format: editingFormat,
@@ -1528,7 +1562,8 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
       })
       
       setEditingFormat(null)
-      setEditorHtml('')
+      setSlotValues({})
+      setTemplateHtml('')
       setPreviewHtml('')
       alert('Saved and re-rendered!')
     } catch (e: any) {
@@ -1540,7 +1575,8 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
 
   const handleCloseEditor = () => {
     setEditingFormat(null)
-    setEditorHtml('')
+    setSlotValues({})
+    setTemplateHtml('')
     setPreviewHtml('')
     setEditorError(null)
   }
@@ -1605,7 +1641,7 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
             <div className="flex items-center gap-2">
               <button 
                 onClick={handleSave} 
-                disabled={editorGenerating || !editorHtml.trim()}
+                disabled={editorGenerating || Object.values(slotValues).every(v => !v.trim())}
                 className="px-3 py-1.5 rounded font-bold text-[10px] uppercase tracking-wider border border-[#3b82f6] text-[#3b82f6] hover:bg-[#3b82f615] disabled:opacity-25"
               >
                 Save & Re-render
@@ -1614,19 +1650,31 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
           </div>
 
           <div className="flex-1 flex overflow-hidden">
-            {/* Code Editor */}
+            {/* Content Editor - Slot-based */}
             <div className="w-1/2 flex flex-col border-r" style={{ borderColor: '#252525', background: '#0b0b0b', minWidth: 300 }}>
               <div className="px-2 py-1 border-b" style={{ borderColor: '#252525' }}>
-                <span className="text-[9px] font-medium" style={{ color: '#888' }}>HTML Source</span>
+                <span className="text-[9px] font-medium" style={{ color: '#888' }}>Content</span>
               </div>
-              <textarea
-                value={editorHtml}
-                onChange={(e) => setEditorHtml(e.target.value)}
-                className="flex-1 w-full resize-none p-2 text-[11px] font-mono outline-none"
-                style={{ background: '#0a0a0a', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5, fontFamily: 'monospace' }}
-                placeholder="// Edit HTML here... Use {{image_url}} for AI images, {{brand_logo}} for brand logo"
-                spellCheck={false}
-              />
+              <div className="flex-1 overflow-y-auto p-2 space-y-3">
+                {Object.keys(slotValues).length === 0 ? (
+                  <div className="text-[11px] text-center text-[#888] py-8">No editable content slots found</div>
+                ) : (
+                  Object.entries(slotValues).map(([slot, value]) => (
+                    <div key={slot} className="space-y-1">
+                      <label className="text-[9px] font-medium uppercase tracking-wider" style={{ color: '#888' }}>{slot}</label>
+                      <textarea
+                        value={value}
+                        onChange={(e) => setSlotValues(prev => ({ ...prev, [slot]: e.target.value }))}
+                        className="w-full resize-none p-2 text-[11px] font-mono outline-none"
+                        style={{ background: '#0a0a0a', borderColor: '#313131', color: '#e2e2e2', lineHeight: 1.5, fontFamily: 'monospace' }}
+                        placeholder={`Enter ${slot}...`}
+                        spellCheck={false}
+                        rows={slot.includes('body') || slot.includes('content') ? 4 : 2}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Live Preview */}
