@@ -19,113 +19,36 @@
 			"invocation_logs": false
 		}
 	},
-	"env": {
-		"dev": {
-			"name": "tasbir",
-			"ai": {
-				"binding": "AI",
-				"gateway": {
-					"id": "tasbir"
-				}
-			},
-			"browser": {
-				"binding": "BROWSER"
-			},
-			"kv_namespaces": [
-				{
-					"binding": "SETTINGS_KV",
-					"id": "198d0935a8c64a3f91e53c923ce47154",
-					"preview_id": "198d0935a8c64a3f91e53c923ce47154"
-				},
-				{
-					"binding": "TEMPLATES_KV",
-					"id": "3b7c9bfd0aab4f42bede90574fd3399a",
-					"preview_id": "3b7c9bfd0aab4f42bede90574fd3399a"
-				}
-			],
-			"vars": {
-				"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
-				"RATE_LIMIT_ENABLED": "true",
-				"RATE_LIMIT_WINDOW_SECONDS": "60",
-				"RATE_LIMIT_MAX_REQUESTS_PER_WINDOW": "120",
-				"ALLOW_PRIVATE_NETWORK_TARGETS": "false"
-			},
-			"r2_buckets": [
-				{
-					"binding": "OUTPUT_BUCKET",
-					"bucket_name": "social-post-assets"
-				}
-			]
-		},
-		"staging": {
-			"name": "tasbir",
-			"ai": {
-				"binding": "AI",
-				"gateway": {
-					"id": "tasbir"
-				}
-			},
-			"browser": {
-				"binding": "BROWSER"
-			},
-			"kv_namespaces": [
-				{
-					"binding": "SETTINGS_KV",
-					"id": "c2a6ce61516b46d9b9893bd46964db42"
-				},
-				{
-					"binding": "TEMPLATES_KV",
-					"id": "a582edf59f1b4b47b3183e98a7370191"
-				}
-			],
-			"vars": {
-				"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
-				"RATE_LIMIT_ENABLED": "true",
-				"RATE_LIMIT_WINDOW_SECONDS": "60",
-				"RATE_LIMIT_MAX_REQUESTS_PER_WINDOW": "120",
-				"ALLOW_PRIVATE_NETWORK_TARGETS": "false"
-			},
-			"r2_buckets": [
-				{
-					"binding": "OUTPUT_BUCKET",
-					"bucket_name": "social-post-assets"
-				}
-			]
-		},
-		"production": {
-			"name": "tasbir",
-			"ai": {
-				"binding": "AI",
-				"gateway": {
-					"id": "tasbir"
-				}
-			},
-			"browser": {
-				"binding": "BROWSER"
-			},
-			"kv_namespaces": [
-				{
-					"binding": "SETTINGS_KV",
-					"id": "524a3bbf4d5f43cd821d08593d24cf83"
-				},
-				{
-					"binding": "TEMPLATES_KV",
-					"id": "16d13f95d3004cd4931f6b07e016bf6f"
-				}
-			],
-			"vars": {
-				"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
-				"RATE_LIMIT_ENABLED": "true",
-				"RATE_LIMIT_WINDOW_SECONDS": "60",
-				"RATE_LIMIT_MAX_REQUESTS_PER_WINDOW": "120",
-				"ALLOW_PRIVATE_NETWORK_TARGETS": "false"
-			},
-			"r2_buckets": [
-				{
-					"binding": "OUTPUT_BUCKET",
-					"bucket_name": "social-post-assets"
-				}
-			]
+	"ai": {
+		"binding": "AI",
+		"gateway": {
+			"id": "tasbir"
 		}
-	}
+	},
+	"browser": {
+		"binding": "BROWSER"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "SETTINGS_KV",
+			"id": "524a3bbf4d5f43cd821d08593d24cf83"
+		},
+		{
+			"binding": "TEMPLATES_KV",
+			"id": "16d13f95d3004cd4931f6b07e016bf6f"
+		}
+	],
+	"vars": {
+		"API_AUTH_REQUIRE_FOR_PREVIEW": "true",
+		"RATE_LIMIT_ENABLED": "true",
+		"RATE_LIMIT_WINDOW_SECONDS": "60",
+		"RATE_LIMIT_MAX_REQUESTS_PER_WINDOW": "120",
+		"ALLOW_PRIVATE_NETWORK_TARGETS": "false"
+	},
+	"r2_buckets": [
+		{
+			"binding": "OUTPUT_BUCKET",
+			"bucket_name": "social-post-assets"
+		}
+	]
 }
