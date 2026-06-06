@@ -1508,7 +1508,7 @@ export async function runPipelineFromPost(
    const useCache = false;
   
   const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
-  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; html_by_format: Record<string, string>; assets: Record<string, StoredAsset | null>; cacheHit?: boolean; templateDecision?: TemplateDecision }> = [];
+  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; html_by_format: Record<string, string>; template_html_by_format: Record<string, string>; assets: Record<string, StoredAsset | null>; cacheHit?: boolean; templateDecision?: TemplateDecision }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
   const agentContexts: AgentExecutionContext[] = [];
   const sharedStorage = resolveBatchStorageOptions(body.storage);
@@ -1650,14 +1650,15 @@ export async function runPipelineFromPost(
   // This minimizes the time the browser connection sits idle.
   
    const allHtmlOutputs: Array<{
-     index: number;
-     format: string;
-     html: string;
-     config: FormatConfig;
-     usedSavedTemplate?: boolean;
-     templateDecision?: TemplateDecision;
-     suggestSaveAsTemplate?: boolean;
-   }> = [];
+      index: number;
+      format: string;
+      html: string;
+      template_html: string;
+      config: FormatConfig;
+      usedSavedTemplate?: boolean;
+      templateDecision?: TemplateDecision;
+      suggestSaveAsTemplate?: boolean;
+    }> = [];
 
   for (let index = 0; index < outputPlan.postCount; index += 1) {
     const variantPrompt = outputPlan.postCount > 1
@@ -1705,6 +1706,7 @@ export async function runPipelineFromPost(
               index,
               format,
               html: finalHtml,
+              template_html: savedTemplate.html,
               config,
               cacheHit: false,
               usedSavedTemplate: true,
@@ -1721,7 +1723,7 @@ export async function runPipelineFromPost(
             if (!slotValues.headline) slotValues.headline = post.title;
             if (!slotValues.brand) slotValues.brand = brandName;
             const filledHtml = fillTemplateSlots(matchedTemplate.html, slotValues);
-            llmOutput = { generated_html: filledHtml };
+            llmOutput = { generated_html: filledHtml, template_html: matchedTemplate.html };
            } else {
              // Use orchestrator's per-post brief if available
              const plannedPost = orchestratorPlan?.plannedPosts?.find(p => 
@@ -1787,6 +1789,7 @@ export async function runPipelineFromPost(
             index,
             format,
             html: finalHtml,
+            template_html: llmOutput.template_html || finalHtml,
             config,
             cacheHit: false,
             templateDecision: templateDecisions.get(format),
@@ -1816,7 +1819,7 @@ export async function runPipelineFromPost(
   _log.info("render-phase-start", { totalFormats: allHtmlOutputs.length });
   let browser = await launchRenderingBrowser(env);
   
-   const renderedAssets: Map<string, { index: number; asset: StoredAsset; html: string; format: string; usedSavedTemplate?: boolean; templateDecision?: TemplateDecision; suggestSaveAsTemplate?: boolean }> = new Map();
+   const renderedAssets: Map<string, { index: number; asset: StoredAsset; html: string; template_html: string; format: string; usedSavedTemplate?: boolean; templateDecision?: TemplateDecision; suggestSaveAsTemplate?: boolean }> = new Map();
 
   try {
     for (const htmlOutput of allHtmlOutputs) {
@@ -1846,15 +1849,16 @@ export async function runPipelineFromPost(
         _log.info("render-complete", { format: htmlOutput.format, key: asset.key });
 
         const mapKey = `${htmlOutput.index}:${htmlOutput.format}`;
-         renderedAssets.set(mapKey, {
-           index: htmlOutput.index,
-           asset,
-           html: htmlOutput.html,
-           format: htmlOutput.format,
-           usedSavedTemplate: htmlOutput.usedSavedTemplate,
-           templateDecision: htmlOutput.templateDecision,
-           suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
-         });
+          renderedAssets.set(mapKey, {
+            index: htmlOutput.index,
+            asset,
+            html: htmlOutput.html,
+            template_html: htmlOutput.template_html || htmlOutput.html,
+            format: htmlOutput.format,
+            usedSavedTemplate: htmlOutput.usedSavedTemplate,
+            templateDecision: htmlOutput.templateDecision,
+            suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
+          });
       } catch (renderErr) {
         // If this is a "Connection closed" error, try to reconnect ONCE
         const errMsg = renderErr instanceof Error ? renderErr.message : String(renderErr);
@@ -1881,11 +1885,12 @@ export async function runPipelineFromPost(
             renderedAssets.set(mapKey, {
               index: htmlOutput.index,
               asset,
-               html: htmlOutput.html,
-               format: htmlOutput.format,
-               usedSavedTemplate: htmlOutput.usedSavedTemplate,
-               templateDecision: htmlOutput.templateDecision,
-               suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
+              html: htmlOutput.html,
+              template_html: htmlOutput.template_html || htmlOutput.html,
+              format: htmlOutput.format,
+              usedSavedTemplate: htmlOutput.usedSavedTemplate,
+              templateDecision: htmlOutput.templateDecision,
+              suggestSaveAsTemplate: htmlOutput.suggestSaveAsTemplate,
             });
             _log.info("render-retry-success", { format: htmlOutput.format });
           } catch (retryErr) {
@@ -1913,12 +1918,15 @@ export async function runPipelineFromPost(
     let imageSource: SelectedImage = { source: "none", imageUrl: "" };
     const smartTemplateInfo: Record<string, { used: boolean; templateId?: string; suggestSave?: boolean }> = {};
 
+    const variantTemplateHtmlByFormat: Record<string, string> = {};
+
     for (const format of outputPlan.formats) {
       const mapKey = `${index}:${format}`;
       const rendered = renderedAssets.get(mapKey);
       if (rendered) {
         formatAssets[format] = rendered.asset;
         variantHtmlByFormat[format] = rendered.html;
+        variantTemplateHtmlByFormat[format] = rendered.template_html || rendered.html;
         // Also add to global map (use format with index suffix for uniqueness)
         const globalKey = outputPlan.postCount > 1 ? `${format}-v${index + 1}` : format;
         htmlByFormat[globalKey] = rendered.html;
@@ -1939,6 +1947,7 @@ export async function runPipelineFromPost(
       image_source: imageSource,
       llm_output: { generated_html: Object.values(variantHtmlByFormat)[0] || "" },
       html_by_format: variantHtmlByFormat,
+      template_html_by_format: variantTemplateHtmlByFormat,
       assets: formatAssets,
       templateDecision: Object.keys(smartTemplateInfo).length > 0 ? smartTemplateInfo as any : undefined,
     });
@@ -1973,6 +1982,15 @@ export async function runPipelineFromPost(
     elapsed: _log.elapsed(),
   });
 
+  // Build global template HTML map
+  const templateHtmlByFormat: Record<string, string> = {};
+  for (const variant of variants) {
+    for (const [format, html] of Object.entries(variant.template_html_by_format || {})) {
+      const globalKey = outputPlan.postCount > 1 ? `${format}-v${variant.index}` : format;
+      templateHtmlByFormat[globalKey] = html;
+    }
+  }
+
   return {
     ok: true,
     slug: post.slug,
@@ -1981,6 +1999,7 @@ export async function runPipelineFromPost(
     image_source: primaryVariant.image_source,
     llm_output: primaryVariant.llm_output,
     html_by_format: htmlByFormat,
+    template_html_by_format: templateHtmlByFormat,
     agentic: summarizeAgentExecution(agentContexts),
     assets: primaryVariant.assets,
     variants: outputPlan.postCount > 1 ? variants : undefined,
@@ -2026,7 +2045,7 @@ export async function runPipelineFromPostWithProgress(
    const useCache = false;
   
   const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
-  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; html_by_format: Record<string, string>; assets: Record<string, StoredAsset | null> }> = [];
+  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; html_by_format: Record<string, string>; template_html_by_format: Record<string, string>; assets: Record<string, StoredAsset | null> }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
   const agentContexts: AgentExecutionContext[] = [];
   const sharedStorage = resolveBatchStorageOptions(body.storage);
@@ -2186,6 +2205,7 @@ export async function runPipelineFromPostWithProgress(
       const formatConfigs = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter(f => f.config);
       const formatAssets: Record<string, StoredAsset | null> = {};
       const variantHtmlByFormat: Record<string, string> = {};
+      const variantTemplateHtmlByFormat: Record<string, string> = {};
       let variantLlmOutput: LlmOutput | null = null;
       let imageSource: SelectedImage = { source: "none", imageUrl: "" };
 
@@ -2250,6 +2270,7 @@ export async function runPipelineFromPostWithProgress(
 
           const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
           variantHtmlByFormat[format] = finalHtml;
+          variantTemplateHtmlByFormat[format] = llmOutput.template_html || llmOutput.generated_html;
 
           onProgress({ 
             type: "rendering", 
@@ -2329,6 +2350,7 @@ export async function runPipelineFromPostWithProgress(
         image_source: imageSource,
         llm_output: variantLlmOutput || { generated_html: "" },
         html_by_format: variantHtmlByFormat,
+        template_html_by_format: variantTemplateHtmlByFormat,
         assets: formatAssets
       });
     }
@@ -2341,10 +2363,15 @@ export async function runPipelineFromPostWithProgress(
 
   // Build global HTML map
   const htmlByFormat: Record<string, string> = {};
+  const templateHtmlByFormat: Record<string, string> = {};
   for (const variant of variants) {
     for (const [format, html] of Object.entries(variant.html_by_format || {})) {
       const globalKey = outputPlan.postCount > 1 ? `${format}-v${variant.index}` : format;
       htmlByFormat[globalKey] = html;
+    }
+    for (const [format, html] of Object.entries(variant.template_html_by_format || {})) {
+      const globalKey = outputPlan.postCount > 1 ? `${format}-v${variant.index}` : format;
+      templateHtmlByFormat[globalKey] = html;
     }
   }
 
@@ -2356,6 +2383,7 @@ export async function runPipelineFromPostWithProgress(
     image_source: primaryVariant.image_source,
     llm_output: primaryVariant.llm_output,
     html_by_format: htmlByFormat,
+    template_html_by_format: templateHtmlByFormat,
     agentic: summarizeAgentExecution(agentContexts),
     assets: primaryVariant.assets,
     variants: outputPlan.postCount > 1 ? variants : undefined,
