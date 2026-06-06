@@ -1709,7 +1709,9 @@ export async function runPipelineFromPost(
             _log.info("html-gen-complete", { format });
           }
 
-          const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
+          // PROGRAMMATIC FIX: Apply overflow prevention to generated HTML
+          const overflowFixedHtml = preventHtmlOverflow(llmOutput.generated_html, config.width, config.height);
+          const finalHtml = injectDesignTokensIntoHtmlFast(overflowFixedHtml, precomputedTokens);
           return {
             index,
             format,
@@ -2314,8 +2316,8 @@ function buildEffectivePrompt(bodyPrompt: string | undefined, settings: Workspac
   if (settings.campaign.cta) {
     parts.push(`Default CTA: ${settings.campaign.cta}`);
   }
-  if (settings.campaign.hashtags?.style) {
-    parts.push(`Hashtag style: ${settings.campaign.hashtags.style}${settings.campaign.hashtags.count ? ` (max ${settings.campaign.hashtags.count})` : ''}.`);
+  if (settings.campaign.hashtags?.style && settings.campaign.hashtags.style !== "none" && (settings.campaign.hashtags.count || 0) > 0) {
+    parts.push(`Hashtag style: ${settings.campaign.hashtags.style} (max ${settings.campaign.hashtags.count}).`);
   }
   if (classification) {
     parts.push(`Content type: ${classification.type}.`);
@@ -2865,4 +2867,92 @@ function requiredNumber(input: unknown, field: string): number {
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const numeric = typeof value === "number" && Number.isFinite(value) ? value : fallback;
   return Math.min(max, Math.max(min, numeric));
+}
+
+// ==================== PROGRAMMATIC HTML FIXES ====================
+
+/**
+ * Programmatically fix HTML to prevent overflow and overlapping issues
+ * This runs after AI generation to ensure layout integrity
+ */
+function preventHtmlOverflow(html: string, width: number, height: number): string {
+  let result = html;
+
+  // 1. Ensure root container has proper fixed sizing and overflow hidden
+  result = result.replace(
+    /<html[^>]*>/i,
+    (match) => match.replace(/>/i, ' style="width: 100%; height: 100%; margin: 0; padding: 0;">')
+  );
+  
+  result = result.replace(
+    /<body[^>]*>/i,
+    (match) => match.replace(/>/i, ` style="width: ${width}px; height: ${height}px; margin: 0; padding: 0; overflow: hidden; position: relative; box-sizing: border-box;">`)
+  );
+
+  // 2. Ensure all direct children of body use flex/grid with gap instead of absolute positioning for text
+  // Add a wrapper if body has multiple direct children that aren't properly contained
+  const bodyContentMatch = result.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  if (bodyContentMatch) {
+    const bodyContent = bodyContentMatch[1];
+    // Check if content has proper container
+    const hasContainer = /<div[^>]*class="[^"]*(?:container|wrapper|content|main)[^"]*"[^>]*>/i.test(bodyContent) || 
+                         /<main[^>]*>/i.test(bodyContent) ||
+                         /<section[^>]*>/i.test(bodyContent);
+    
+    if (!hasContainer) {
+      // Wrap loose content in a proper container
+      const wrappedContent = `<div class="w-full h-full flex flex-col justify-center items-center p-6 overflow-hidden" style="width: ${width}px; height: ${height}px; box-sizing: border-box;">${bodyContent}</div>`;
+      result = result.replace(/<body[^>]*>[\s\S]*?<\/body>/i, `<body${bodyContentMatch[0].match(/<body[^>]*>/i)?.[0].replace('<body', '').replace('>', '')}>${wrappedContent}</body>`);
+    }
+  }
+
+  // 3. Fix text elements that might overflow - add truncate and max-width
+  result = result.replace(
+    /<p([^>]*)>/gi,
+    (match, attrs) => `<p${attrs} class="${(attrs.match(/class="([^"]*)"/i)?.[1] || '')} text-wrap leading-relaxed max-w-full".replace(/\s+/g, ' ').trim()}>`
+  );
+
+  result = result.replace(
+    /<h([1-6])([^>]*)>/gi,
+    (match, level, attrs) => `<h${level}${attrs} class="${(attrs.match(/class="([^"]*)"/i)?.[1] || '')} leading-tight max-w-full".replace(/\s+/g, ' ').trim()}>`
+  );
+
+  // 4. Ensure images have proper sizing constraints
+  result = result.replace(
+    /<img([^>]*)>/gi,
+    (match, attrs) => {
+      if (!attrs.includes('class=')) {
+        return `<img${attrs} class="max-w-full h-auto object-cover">`;
+      }
+      return match;
+    }
+  );
+
+  // 5. Add text-ellipsis utility for long text in constrained containers
+  // This is a conservative fix - adds line-clamp to elements that might overflow
+  result = result.replace(
+    /class="([^"]*)"/g,
+    (match, className) => {
+      // If element has text content classes but no line-clamp, add it for safety
+      if (className.includes('text-') && !className.includes('line-clamp') && !className.includes('truncate')) {
+        // Only add to likely text containers (p, span, div with text classes)
+        return `class="${className} overflow-hidden"`;
+      }
+      return match;
+    }
+  );
+
+  // 6. Ensure no absolute positioning on text elements unless explicitly needed
+  result = result.replace(
+    /class="([^"]*)absolute([^"]*)"/g,
+    (match, before, after) => {
+      // Keep absolute for images and decorative elements, but warn for text
+      if (before.includes('text-') || after.includes('text-')) {
+        return `class="${before}relative${after}"`; // Convert to relative for text
+      }
+      return match;
+    }
+  );
+
+  return result;
 }

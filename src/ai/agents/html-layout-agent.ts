@@ -85,7 +85,7 @@ ${args.settings.brand.logo_url ? `- Brand Logo: AVAILABLE - You MUST include the
 ${args.settings.campaign?.cta ? `- Default CTA: "${args.settings.campaign.cta}" - Use this or a contextually appropriate variation` : ''}
 ${args.settings.campaign?.framework ? `- Copywriting Framework: ${args.settings.campaign.framework}` : ''}
 ${args.settings.campaign?.goal ? `- Campaign Goal: ${args.settings.campaign.goal}` : ''}
-${args.settings.campaign?.hashtags?.style ? `- Hashtag Style: ${args.settings.campaign.hashtags.style}${args.settings.campaign.hashtags.count ? ` (max ${args.settings.campaign.hashtags.count})` : ''}` : ''}
+${args.settings.campaign?.hashtags?.style && args.settings.campaign.hashtags.style !== "none" && (args.settings.campaign.hashtags.count || 0) > 0 ? `- Hashtag Style: ${args.settings.campaign.hashtags.style} (max ${args.settings.campaign.hashtags.count})` : ''}
 ` : ""}
 
   ${args.generatedImage ? `GENERATED IMAGE AVAILABLE:
@@ -140,6 +140,79 @@ ${args.generatedImage ? "- Incorporate the generated image effectively in the de
 Return only one complete HTML document as raw text.`;
 }
 
+function extractSlotsFromResponse(text: string): Record<string, string> {
+  // Strategy 1: Look for ```json ... ``` code block
+  const jsonBlockMatch = text.match(/```json\s*(\{[\s\S]*?\})\s*```/i);
+  if (jsonBlockMatch) {
+    try { return JSON.parse(jsonBlockMatch[1]); } catch {}
+  }
+  
+  // Strategy 2: Look for ``` ... ``` code block with JSON-like content
+  const codeBlockMatch = text.match(/```\s*(\{[\s\S]*?\})\s*```/);
+  if (codeBlockMatch) {
+    try { return JSON.parse(codeBlockMatch[1]); } catch {}
+  }
+  
+  // Strategy 3: Find the last complete JSON object in the text
+  const bracePositions: number[] = [];
+  let depth = 0;
+  let start = -1;
+  
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (text[i] === '}') {
+      if (depth > 0) {
+        depth--;
+        if (depth === 0 && start >= 0) {
+          bracePositions.push(start);
+          start = -1;
+        }
+      }
+    }
+  }
+  
+  // Try from the last complete JSON object backwards
+  for (let i = bracePositions.length - 1; i >= 0; i--) {
+    const startPos = bracePositions[i];
+    // Find matching closing brace
+    let depth2 = 0;
+    for (let j = startPos; j < text.length; j++) {
+      if (text[j] === '{') depth2++;
+      else if (text[j] === '}') {
+        depth2--;
+        if (depth2 === 0) {
+          try {
+            const candidate = text.slice(startPos, j + 1);
+            const parsed = JSON.parse(candidate);
+            // Verify it looks like slot values (string key-value pairs)
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              const allStrings = Object.values(parsed).every(v => typeof v === 'string');
+              if (allStrings || Object.keys(parsed).length === 0) {
+                return parsed;
+              }
+            }
+          } catch {}
+          break;
+        }
+      }
+    }
+  }
+  
+  // Strategy 4: Try to find key-value patterns in the text
+  const slotPattern = /\{\{(\w+)\}\}/g;
+  const slots = new Set<string>();
+  let match;
+  while ((match = slotPattern.exec(text)) !== null) {
+    slots.add(match[1]);
+  }
+  
+  // If we found slot placeholders but no values, return empty object
+  // The caller will fill them with provided values
+  return {};
+}
+
 export async function generateHtmlLayout(
   models: LanguageModel[],
   args: HtmlLayoutArgs,
@@ -169,28 +242,31 @@ export async function generateHtmlLayout(
       const templateHtml = extractHtml(result.text);
       let slots: Record<string, string> = {};
       
-      const jsonMatch = result.text.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-      if (jsonMatch) {
-         try { slots = JSON.parse(jsonMatch[1]); } catch(e) {}
-      } else {
-         const firstBrace = result.text.lastIndexOf('{');
-         const lastBrace = result.text.lastIndexOf('}');
-         if (firstBrace > 0 && lastBrace > firstBrace) {
-            try { slots = JSON.parse(result.text.slice(firstBrace, lastBrace + 1)); } catch(e) {}
-         }
-      }
+      slots = extractSlotsFromResponse(result.text);
 
       if (args.generatedImage?.dataUrl) {
          slots['image_url'] = args.generatedImage.dataUrl;
-      }
-      if (args.settings?.brand?.logo_url) {
+       }
+       if (args.settings?.brand?.logo_url) {
          slots['brand_logo'] = args.settings.brand.logo_url;
-      }
+       }
 
-      // If slots were successfully extracted, use them, otherwise return raw content as fallback
-      const generatedHtml = Object.keys(slots).length > 0 
-         ? fillTemplateSlots(templateHtml, slots) 
-         : templateHtml;
+       // If slots were successfully extracted, use them, otherwise return raw content as fallback
+       let generatedHtml = Object.keys(slots).length > 0 
+          ? fillTemplateSlots(templateHtml, slots) 
+          : templateHtml;
+
+       // PROGRAMMATIC FIX: Ensure image is embedded even if AI forgot the placeholder
+       if (args.generatedImage?.dataUrl && !generatedHtml.includes('{{image_url}}') && !generatedHtml.includes(args.generatedImage.dataUrl)) {
+         // Inject image based on position spec
+         const position = args.imageSpec?.position || 'background';
+         generatedHtml = injectImageIntoHtml(generatedHtml, args.generatedImage.dataUrl, position, args.width, args.height);
+       }
+
+       // PROGRAMMATIC FIX: Ensure brand logo is embedded if provided
+       if (args.settings?.brand?.logo_url && !generatedHtml.includes('{{brand_logo}}') && !generatedHtml.includes(args.settings.brand.logo_url)) {
+         generatedHtml = injectBrandLogoIntoHtml(generatedHtml, args.settings.brand.logo_url, args.settings.brand.name || 'Brand');
+       }
 
       return { 
          generated_html: generatedHtml,
@@ -245,26 +321,29 @@ export async function* streamHtmlLayout(
 
       const templateHtml = extractHtml(fullText);
       let slots: Record<string, string> = {};
-      const jsonMatch = fullText.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-      if (jsonMatch) {
-         try { slots = JSON.parse(jsonMatch[1]); } catch(e) {}
-      } else {
-         const firstBrace = fullText.lastIndexOf('{');
-         const lastBrace = fullText.lastIndexOf('}');
-         if (firstBrace > 0 && lastBrace > firstBrace) {
-            try { slots = JSON.parse(fullText.slice(firstBrace, lastBrace + 1)); } catch(e) {}
-         }
-      }
+      
+      slots = extractSlotsFromResponse(fullText);
 
       if (args.generatedImage?.dataUrl) {
          slots['image_url'] = args.generatedImage.dataUrl;
-      }
-      if (args.settings?.brand?.logo_url) {
+       }
+       if (args.settings?.brand?.logo_url) {
          slots['brand_logo'] = args.settings.brand.logo_url;
-      }
-      const generatedHtml = Object.keys(slots).length > 0 
-         ? fillTemplateSlots(templateHtml, slots) 
-         : templateHtml;
+       }
+       let generatedHtml = Object.keys(slots).length > 0 
+          ? fillTemplateSlots(templateHtml, slots) 
+          : templateHtml;
+
+       // PROGRAMMATIC FIX: Ensure image is embedded even if AI forgot the placeholder
+       if (args.generatedImage?.dataUrl && !generatedHtml.includes('{{image_url}}') && !generatedHtml.includes(args.generatedImage.dataUrl)) {
+         const position = args.imageSpec?.position || 'background';
+         generatedHtml = injectImageIntoHtml(generatedHtml, args.generatedImage.dataUrl, position, args.width, args.height);
+       }
+
+       // PROGRAMMATIC FIX: Ensure brand logo is embedded if provided
+       if (args.settings?.brand?.logo_url && !generatedHtml.includes('{{brand_logo}}') && !generatedHtml.includes(args.settings.brand.logo_url)) {
+         generatedHtml = injectBrandLogoIntoHtml(generatedHtml, args.settings.brand.logo_url, args.settings.brand.name || 'Brand');
+       }
 
       yield { type: "complete", data: generatedHtml };
       return;
@@ -341,4 +420,51 @@ function extractHtml(text: string): string {
   }
 
   return cleaned;
+}
+
+function injectImageIntoHtml(html: string, imageDataUrl: string, position: string, width: number, height: number): string {
+  const imgTag = `<img src="${imageDataUrl}" class="w-full h-full object-cover" alt="" />`;
+  const bgStyle = `background-image: url('${imageDataUrl}'); background-size: cover; background-position: center;`;
+  
+  let result = html;
+  
+  // Try to find a suitable container to inject the image
+  if (position === 'background' || position === 'overlay') {
+    // Add as background to the main container
+    result = result.replace(
+      /<body[^>]*>/i,
+      (match) => `${match}\n<div style="${bgStyle}" class="absolute inset-0 -z-10"></div>`
+    );
+    // Also add gradient overlay for text readability
+    result = result.replace(
+      /<div style="background-image: url\('[^']+'\); background-size: cover; background-position: center;" class="absolute inset-0 -z-10"><\/div>/i,
+      (match) => `${match}\n<div class="absolute inset-0 -z-10 bg-gradient-to-t from-black/60 via-transparent to-transparent"></div>`
+    );
+  } else if (position === 'hero') {
+    // Insert at the top of the content area
+    result = result.replace(
+      /<body[^>]*>/i,
+      (match) => `${match}\n<div class="w-full h-1/2">${imgTag}</div>`
+    );
+  } else if (position === 'left' || position === 'right') {
+    // Split layout - add to a flex container
+    const isLeft = position === 'left';
+    const flexContainer = `<div class="flex ${isLeft ? '' : 'flex-row-reverse'} h-full">${imgTag}<div class="flex-1 p-8 flex flex-col justify-center"></div></div>`;
+    result = result.replace(
+      /<body[^>]*>/i,
+      (match) => `${match}\n${flexContainer}`
+    );
+  }
+  
+  return result;
+}
+
+function injectBrandLogoIntoHtml(html: string, logoUrl: string, brandName: string): string {
+  const logoTag = `<img src="${logoUrl}" class="w-12 h-12 object-contain" alt="${brandName} Logo" />`;
+  
+  // Try to insert logo at the top of the body
+  return html.replace(
+    /<body[^>]*>/i,
+    (match) => `${match}\n<div class="absolute top-4 left-4 z-10">${logoTag}</div>`
+  );
 }

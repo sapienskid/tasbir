@@ -9,7 +9,7 @@ export interface WorkspaceSettings {
     goal: "awareness" | "engagement" | "conversion" | "education";
     framework: "AIDA" | "PAS" | "FAB" | "none";
     hashtags: {
-      style: "niche" | "broad" | "branded";
+      style: "none" | "niche" | "broad" | "branded";
       count: number;
     };
     cta: string;
@@ -60,7 +60,7 @@ const DEFAULT_SETTINGS: WorkspaceSettings = {
   campaign: {
     goal: "awareness",
     framework: "none",
-    hashtags: { style: "niche", count: 5 },
+    hashtags: { style: "none", count: 0 },
     cta: ""
   },
   formats: {
@@ -80,7 +80,7 @@ const DEFAULT_SETTINGS: WorkspaceSettings = {
     contentCreation: "",
     contentClassification: "",
     imageGeneration: "",
-    templateSelection: "", 
+    templateSelection: "",
     designTokens: "",
     customInstructions: ""
   },
