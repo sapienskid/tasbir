@@ -424,6 +424,10 @@ function extractHtml(text: string): string {
     html = html.replace(/<\/html>[\s\S]*$/i, '</html>');
     // Strip any leading JSON object before <html>
     html = html.replace(/^[\s\S]*?(?=<html)/i, '');
+    // Strip any remaining JSON objects anywhere in the HTML
+    html = html.replace(/\{[\s\S]*?"(?:slot|image|brand|headline|body|title|excerpt|cta|author|quote|metric|metric_label|brand|subtitle|subheadline)"[\s\S]*?\}/g, '');
+    // Strip any lines that look like JSON key-value pairs
+    html = html.replace(/^\s*"[\w_]+"\s*:\s*"[^"]*"\s*,?\s*$/gm, '');
     return html.trim();
   }
 

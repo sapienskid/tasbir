@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import JSZip from 'jszip'
 import { api, getApiKey, setApiKey } from '@/lib/api'
 import { tokensToCSS, type DesignTokens } from '@/lib/tokens'
@@ -1405,6 +1405,43 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
   const [previewHtml, setPreviewHtml] = useState<string>('')
   const [editorGenerating, setEditorGenerating] = useState(false)
   const [editorError, setEditorError] = useState<string | null>(null)
+  const [previewZoom, setPreviewZoom] = useState(1)
+  const [previewOffset, setPreviewOffset] = useState({ x: 0, y: 0 })
+  const [isPanning, setIsPanning] = useState(false)
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 })
+
+  // Live preview with debouncing
+  const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  useEffect(() => {
+    if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current)
+    previewTimeoutRef.current = setTimeout(() => {
+      if (!editorHtml.trim() || !tokens || !editingFormat) return
+      const fonts = [
+        tokens.typography?.fontSans,
+        tokens.typography?.fontSerif,
+        tokens.typography?.fontMono
+      ].filter(Boolean).map(f => f?.replace(/\s+/g, '+'))
+      
+      const fontImport = fonts.length > 0 
+        ? `<link href="https://fonts.googleapis.com/css2?${fonts.map(f => `family=${f}:wght@300;400;500;600;700;900`).join('&')}&display=swap" rel="stylesheet">`
+        : ''
+      
+      const cssVars = tokensToCSS(tokens)
+      
+      let finalHtml = editorHtml
+      finalHtml = finalHtml.replace('</head>', `${fontImport}\n</head>`)
+      finalHtml = finalHtml.replace('<style id="token-styles"></style>', `<style id="token-styles">${cssVars}</style>`)
+      if (!finalHtml.includes('id="token-styles"')) {
+        finalHtml = finalHtml.replace('</head>', `<style id="token-styles">${cssVars}</style>\n</head>`)
+      }
+      if (!finalHtml.includes('cdn.tailwindcss.com')) {
+        finalHtml = finalHtml.replace('</head>', `<script src="https://cdn.tailwindcss.com"></script>\n</head>`)
+      }
+
+      setPreviewHtml(finalHtml)
+    }, 500)
+    return () => { if (previewTimeoutRef.current) clearTimeout(previewTimeoutRef.current) }
+  }, [editorHtml, tokens, editingFormat])
 
   const handleDownloadAll = async () => {
     const zip = new JSZip();
@@ -1443,41 +1480,6 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
     }
     setPreviewHtml('')
     setEditorError(null)
-  }
-
-  const handleRender = async () => {
-    if (!editorHtml.trim() || !tokens || !editingFormat) return
-    setEditorGenerating(true)
-    setEditorError(null)
-    try {
-      const fonts = [
-        tokens.typography?.fontSans,
-        tokens.typography?.fontSerif,
-        tokens.typography?.fontMono
-      ].filter(Boolean).map(f => f?.replace(/\s+/g, '+'))
-      
-      const fontImport = fonts.length > 0 
-        ? `<link href="https://fonts.googleapis.com/css2?${fonts.map(f => `family=${f}:wght@300;400;500;600;700;900`).join('&')}&display=swap" rel="stylesheet">`
-        : ''
-      
-      const cssVars = tokensToCSS(tokens)
-      
-      let finalHtml = editorHtml
-      finalHtml = finalHtml.replace('</head>', `${fontImport}\n</head>`)
-      finalHtml = finalHtml.replace('<style id="token-styles"></style>', `<style id="token-styles">${cssVars}</style>`)
-      if (!finalHtml.includes('id="token-styles"')) {
-        finalHtml = finalHtml.replace('</head>', `<style id="token-styles">${cssVars}</style>\n</head>`)
-      }
-      if (!finalHtml.includes('cdn.tailwindcss.com')) {
-        finalHtml = finalHtml.replace('</head>', `<script src="https://cdn.tailwindcss.com"></script>\n</head>`)
-      }
-
-      setPreviewHtml(finalHtml)
-    } catch (e: any) {
-      setEditorError(e.message || 'Render failed')
-    } finally {
-      setEditorGenerating(false)
-    }
   }
 
   const handleSave = async () => {
@@ -1601,13 +1603,6 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
             </div>
             <div className="flex items-center gap-2">
               <button 
-                onClick={handleRender} 
-                disabled={editorGenerating || !editorHtml.trim() || !tokens}
-                className="px-3 py-1.5 rounded font-bold text-[10px] uppercase tracking-wider bg-white text-black hover:opacity-90 disabled:opacity-25"
-              >
-                {editorGenerating ? 'Rendering…' : 'Render Preview'}
-              </button>
-              <button 
                 onClick={handleSave} 
                 disabled={editorGenerating || !editorHtml.trim()}
                 className="px-3 py-1.5 rounded font-bold text-[10px] uppercase tracking-wider border border-[#3b82f6] text-[#3b82f6] hover:bg-[#3b82f615] disabled:opacity-25"
@@ -1634,20 +1629,61 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
             </div>
 
             {/* Live Preview */}
-            <div className="flex-1 flex flex-col overflow-auto" style={{ background: '#fff', minWidth: 300 }}>
-              <div className="px-2 py-1 border-b" style={{ borderColor: '#252525' }}>
+            <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#fff', minWidth: 300 }}>
+              <div className="flex items-center justify-between px-2 py-1 border-b" style={{ borderColor: '#252525' }}>
                 <span className="text-[9px] font-medium" style={{ color: '#888' }}>Live Preview</span>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPreviewZoom(Math.max(0.25, previewZoom - 0.25))} className="p-1 rounded hover:bg-[#252525]" style={{ color: '#888', fontSize: 14 }} title="Zoom out">−</button>
+                  <span className="text-[9px] font-mono min-w-[40px] text-center" style={{ color: '#888' }}>{Math.round(previewZoom * 100)}%</span>
+                  <button onClick={() => setPreviewZoom(Math.min(3, previewZoom + 0.25))} className="p-1 rounded hover:bg-[#252525]" style={{ color: '#888', fontSize: 14 }} title="Zoom in">+</button>
+                  <button onClick={() => { setPreviewZoom(1); setPreviewOffset({ x: 0, y: 0 }); }} className="px-1.5 py-1 rounded hover:bg-[#252525]" style={{ color: '#888', fontSize: 10 }} title="Reset zoom">Fit</button>
+                </div>
               </div>
-              <div className="flex-1 relative p-4">
+              <div className="flex-1 relative p-4 overflow-hidden">
                 {previewHtml ? (
-                  <iframe
-                    srcDoc={previewHtml}
-                    className="w-full h-full border-0"
-                    style={{ background: '#fff' }}
-                  />
+                  <div 
+                    className="relative"
+                    style={{ 
+                      transformOrigin: 'top left',
+                      transform: `translate(${previewOffset.x}px, ${previewOffset.y}px) scale(${previewZoom})`,
+                      background: '#fff'
+                    }}
+                    onMouseDown={(e) => {
+                      if (e.button === 1 || (e.button === 0 && e.altKey)) {
+                        setIsPanning(true)
+                        setPanStart({ x: e.clientX - previewOffset.x, y: e.clientY - previewOffset.y })
+                        e.preventDefault()
+                      }
+                    }}
+                    onMouseMove={(e) => {
+                      if (isPanning) {
+                        setPreviewOffset({ x: e.clientX - panStart.x, y: e.clientY - panStart.y })
+                      }
+                    }}
+                    onMouseUp={() => setIsPanning(false)}
+                    onMouseLeave={() => setIsPanning(false)}
+                    onWheel={(e) => {
+                      if (e.ctrlKey || e.metaKey) {
+                        e.preventDefault()
+                        const delta = e.deltaY > 0 ? -0.1 : 0.1
+                        setPreviewZoom(prev => Math.max(0.25, Math.min(3, prev + delta)))
+                      }
+                    }}
+                  >
+                    <iframe
+                      srcDoc={previewHtml}
+                      className="w-full h-full border-0"
+                      style={{ 
+                        background: '#fff',
+                        width: `${100 / previewZoom}%`,
+                        height: `${100 / previewZoom}%`,
+                        transformOrigin: 'top left'
+                      }}
+                    />
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full text-[11px]" style={{ color: '#888' }}>
-                    Click "Render Preview" to see the result
+                    Live preview updates as you type...
                   </div>
                 )}
                 {editorError && (
