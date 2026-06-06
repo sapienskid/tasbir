@@ -140,7 +140,7 @@ ${args.generatedImage ? "- Incorporate the generated image effectively in the de
 Return only one complete HTML document as raw text.`;
 }
 
-function extractSlotsFromResponse(text: string): Record<string, string> {
+function extractSlotsFromResponse(text: string, templateHtml?: string): Record<string, string> {
   // Strategy 1: Look for ```json ... ``` code block
   const jsonBlockMatch = text.match(/```json\s*(\{[\s\S]*?\})\s*```/i);
   if (jsonBlockMatch) {
@@ -208,6 +208,13 @@ function extractSlotsFromResponse(text: string): Record<string, string> {
     slots.add(match[1]);
   }
   
+  // Strategy 5: If templateHtml provided, extract slots from it as fallback
+  if (templateHtml) {
+    while ((match = slotPattern.exec(templateHtml)) !== null) {
+      slots.add(match[1]);
+    }
+  }
+  
   // If we found slot placeholders but no values, return empty object
   // The caller will fill them with provided values
   return {};
@@ -242,7 +249,7 @@ export async function generateHtmlLayout(
       const templateHtml = extractHtml(result.text);
       let slots: Record<string, string> = {};
       
-      slots = extractSlotsFromResponse(result.text);
+      slots = extractSlotsFromResponse(result.text, templateHtml);
 
       if (args.generatedImage?.dataUrl) {
          slots['image_url'] = args.generatedImage.dataUrl;
@@ -322,7 +329,7 @@ export async function* streamHtmlLayout(
       const templateHtml = extractHtml(fullText);
       let slots: Record<string, string> = {};
       
-      slots = extractSlotsFromResponse(fullText);
+      slots = extractSlotsFromResponse(fullText, templateHtml);
 
       if (args.generatedImage?.dataUrl) {
          slots['image_url'] = args.generatedImage.dataUrl;

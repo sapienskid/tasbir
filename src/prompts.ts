@@ -71,19 +71,38 @@ Rules:
 - Avoid generic template aesthetics; composition should feel authored and distinct.
 - Never include text in generated images — all text is HTML/CSS.
 - No external libraries except Tailwind CDN.
-- You are building REUSABLE TEMPLATES. DO NOT output the specific content directly into the HTML text nodes.
-- Instead, use Handlebars-style variables (e.g., {{headline}}, {{subheadline}}, {{body}}, {{brand}}, {{cta}}, {{author}}) inside the HTML.
-- After the </html> tag, you MUST output a markdown JSON block mapping these exact variables to the actual text content from the user's post.
-Example Output Format:
+- CRITICAL: You are building REUSABLE TEMPLATES. You MUST use Handlebars-style variables for ALL dynamic content.
+- MANDATORY: Use these exact Handlebars-style variables in your HTML:
+  - {{headline}} - main title/headline
+  - {{subheadline}} - supporting subtitle
+  - {{body}} - main body content
+  - {{excerpt}} - short excerpt/summary
+  - {{brand}} - brand name
+  - {{cta}} - call to action text
+  - {{author}} - author name
+  - {{quote}} - quote text
+  - {{image_url}} - AI generated image (if provided)
+  - {{brand_logo}} - brand logo (if provided)
+  - {{quote_author}} - quote author
+  - {{metric}} - metric number
+  - {{metric_label}} - metric label
+  - {{subtitle}} - subtitle
+  - {{subheadline}} - subheadline
+- DO NOT output specific content directly in HTML text nodes. Use the variables above.
+- After the </html> tag, you MUST output a markdown JSON block mapping these exact variables to the actual text content.
+- Example Output Format:
 \`\`\`html
-<!DOCTYPE html><html>...<h1>{{headline}}</h1>...</html>
+<!DOCTYPE html><html>...<h1>{{headline}}</h1><p>{{body}}</p>...</html>
 \`\`\`
 \`\`\`json
 {
   "headline": "The actual title of the post here",
-  "body": "The actual excerpt..."
+  "body": "The actual excerpt...",
+  "brand": "Brand Name",
+  "cta": "Learn More →"
 }
-\`\`\``;
+\`\`\`
+- FAILURE TO USE PLACEHOLDERS WILL CAUSE THE OUTPUT TO BE REJECTED.`;
 
 
 // ============================================================================
