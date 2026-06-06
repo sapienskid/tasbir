@@ -1017,6 +1017,48 @@ app.post("/save-to-r2", async (c) => {
   return c.json({ ok: true, url: buildPublicUrl(c.env, body.key) });
 });
 
+app.post("/render-html", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+
+  const body = await readJsonBody<{ 
+    html: string; 
+    width: number; 
+    height: number; 
+    format: string; 
+    slug: string;
+  }>(c.req.raw, security.request_limits.max_json_body_bytes * 10);
+
+  if (!body.html || !body.width || !body.height || !body.format || !body.slug) {
+    throw new HttpError(400, "Missing required fields: html, width, height, format, slug");
+  }
+
+  try {
+    const browser = await launchRenderingBrowser(c.env);
+    try {
+      const assetKey = `social-assets/${body.slug}/${body.format}.png`;
+      const asset = await withTimeout(
+        renderStoreSingleAssetWithPage(c.env, browser, {
+          key: assetKey,
+          format: body.format,
+          rawHtml: body.html,
+          formatLabel: body.format,
+          width: body.width,
+          height: body.height,
+        }),
+        RENDER_TIMEOUT_MS,
+        `Render ${body.format}`
+      );
+
+      return c.json({ ok: true, asset });
+    } finally {
+      try { await browser.close(); } catch { /* ignore */ }
+    }
+  } catch (e: any) {
+    throw new HttpError(500, `Render failed: ${e.message}`);
+  }
+});
+
 app.post("/webhook/ghost", async (c) => {
   const security = resolveSecurityConfig(c.env);
   enforceApiAuth(c.req.raw, security, "webhook");

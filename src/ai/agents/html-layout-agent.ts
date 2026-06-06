@@ -420,6 +420,10 @@ function extractHtml(text: string): string {
     // Strip any JSON code blocks that might have been included in the HTML
     html = html.replace(/```json\s*\{[\s\S]*?\}\s*```/gi, '');
     html = html.replace(/```\s*\{[\s\S]*?\}\s*```/g, '');
+    // Strip any trailing JSON object after </html>
+    html = html.replace(/<\/html>[\s\S]*$/i, '</html>');
+    // Strip any leading JSON object before <html>
+    html = html.replace(/^[\s\S]*?(?=<html)/i, '');
     return html.trim();
   }
 

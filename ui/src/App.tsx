@@ -825,7 +825,7 @@ export default function App() {
               </div>
               <div className="flex-1 overflow-auto relative min-h-0" style={{ background: '#1c1c1c' }}>
                 {activeTab === 'studio' ? (
-                  <StudioScreenshotPanel result={studioResult} generating={studioGenerating} tokens={tokens} />
+                  <StudioScreenshotPanel result={studioResult} generating={studioGenerating} tokens={tokens} availableFormats={availableFormats} setStudioResult={setStudioResult} />
                 ) : activeTab === 'templates' ? (
                   <TemplatePreview html={templatePreviewHtml} />
                 ) : tokens ? (
@@ -1398,7 +1398,7 @@ function SettingsPreview({ settings }: any) {
 
 /* ── Studio Screenshot Panel ── */
 
-function StudioScreenshotPanel({ result, generating, tokens }: { result: any; generating: boolean; tokens: DesignTokens | null }) {
+function StudioScreenshotPanel({ result, generating, tokens, availableFormats, setStudioResult }: { result: any; generating: boolean; tokens: DesignTokens | null; availableFormats: any[]; setStudioResult: (result: any) => void }) {
   const entries = Object.entries(result?.assets || {}).filter(([, asset]: [string, any]) => Boolean(asset?.key || asset?.url)) as Array<[string, any]>
   const [editingFormat, setEditingFormat] = useState<string | null>(null)
   const [editorHtml, setEditorHtml] = useState<string>('')
@@ -1432,7 +1432,8 @@ function StudioScreenshotPanel({ result, generating, tokens }: { result: any; ge
   const handleEdit = (format: string, asset: any, _resolvedSrc: string) => {
     setEditingFormat(format)
     // Use stored HTML if available, otherwise show placeholder
-    const storedHtml = result?.htmlByFormat?.[format]
+    // Backend returns snake_case: html_by_format
+    const storedHtml = result?.html_by_format?.[format] || result?.htmlByFormat?.[format]
     if (storedHtml) {
       setEditorHtml(storedHtml)
     } else if (asset?.url && asset.url.startsWith('data:')) {
@@ -1480,38 +1481,48 @@ function StudioScreenshotPanel({ result, generating, tokens }: { result: any; ge
   }
 
   const handleSave = async () => {
-    if (!editorHtml.trim() || !editingFormat || !result) return
+    if (!editorHtml.trim() || !editingFormat || !result || !tokens) return
     setEditorGenerating(true)
     try {
-      // Call the API to re-render and save
       const apiKey = (import.meta.env.VITE_API_KEY || "").trim() || window.localStorage.getItem("tasbir:api-key")?.trim() || ""
       const headers: Record<string, string> = { "Content-Type": "application/json" }
       if (apiKey) headers["x-api-key"] = apiKey
       
-      const response = await fetch(`/save-to-r2`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ 
-          key: `${result.slug}/${editingFormat}.html`,
-          dataUri: `data:text/html;base64,${btoa(editorHtml)}`
-        })
-      })
+      // Find the format config for width/height
+      const formatConfig = availableFormats.find((f: any) => f.id === editingFormat)
+      if (!formatConfig) throw new Error('Format not found')
       
-      if (!response.ok) throw new Error('Failed to save')
-      
-      // Also trigger re-render via generate endpoint
-      const renderResponse = await fetch(`/generate-from-content`, {
+      // Use the new render-html endpoint to re-render the edited HTML
+      const response = await fetch(`/render-html`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          title: result.slug,
-          content: 'Regenerated from edited HTML',
-          output: { formats: [editingFormat], postCount: 1 },
-          designTokens: tokens
+          html: editorHtml,
+          width: formatConfig.width,
+          height: formatConfig.height,
+          format: editingFormat,
+          slug: result.slug
         })
       })
       
-      if (!renderResponse.ok) throw new Error('Failed to re-render')
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Render failed' }))
+        throw new Error(err.error || 'Failed to re-render')
+      }
+      
+      const data = await response.json()
+      
+      // Update the asset in the result to show the new render
+      setStudioResult((prev: any) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          assets: {
+            ...prev.assets,
+            [editingFormat]: data.asset
+          }
+        }
+      })
       
       setEditingFormat(null)
       setEditorHtml('')
