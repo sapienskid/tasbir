@@ -1027,10 +1027,39 @@ app.post("/render-html", async (c) => {
     height: number; 
     format: string; 
     slug: string;
+    designTokens?: Record<string, unknown>;
   }>(c.req.raw, security.request_limits.max_json_body_bytes * 10);
 
   if (!body.html || !body.width || !body.height || !body.format || !body.slug) {
     throw new HttpError(400, "Missing required fields: html, width, height, format, slug");
+  }
+
+  // Strip Tailwind CDN and inject compiled CSS if design tokens provided
+  let finalHtml = body.html;
+  if (body.designTokens) {
+    const normalizedTokens = normalizeDesignTokensForRendering(body.designTokens);
+    const cssVars = tokensToCSSFromRaw(normalizedTokens);
+    const fontLinks = fontImportFromTokens(normalizedTokens);
+    const tailwindConfig = JSON.stringify(buildTailwindConfigFromTokens(normalizedTokens));
+    const tailwindConfigScript = `<script id="tasbir-tailwind-config">window.tailwind = window.tailwind || {}; window.tailwind.config = ${tailwindConfig};</script>`;
+    
+    // Remove Tailwind CDN script
+    finalHtml = finalHtml.replace(/<script[^>]+src=["'][^"']*cdn\.tailwindcss\.com[^"']*["'][^>]*><\/script>/gi, '');
+    // Remove existing tailwind config script
+    finalHtml = finalHtml.replace(/<script[^>]*id=["']tasbir-tailwind-config["'][^>]*>[\s\S]*?<\/script>/gi, '');
+    // Remove existing token styles
+    finalHtml = finalHtml.replace(/<style[^>]*id=["']token-styles["'][^>]*>[\s\S]*?<\/style>/gi, '');
+    finalHtml = finalHtml.replace(/<style[^>]*id=["']tasbir-design-tokens["'][^>]*>[\s\S]*?<\/style>/gi, '');
+    
+    const injectedBlock = `${fontLinks}\n${tailwindConfigScript}\n<style id="tasbir-design-tokens">\n${cssVars}\n\n${generateSemanticUtilityCSS()}\n</style>`;
+    
+    if (/<\/head>/i.test(finalHtml)) {
+      finalHtml = finalHtml.replace(/<\/head>/i, `${injectedBlock}\n</head>`);
+    } else if (/<head[^>]*>/i.test(finalHtml)) {
+      finalHtml = finalHtml.replace(/<head[^>]*>/i, (m) => `${m}\n${injectedBlock}`);
+    } else {
+      finalHtml = `<!DOCTYPE html>\n<html>\n<head>\n${injectedBlock}\n</head>\n<body>${finalHtml}</body>\n</html>`;
+    }
   }
 
   try {
@@ -1041,7 +1070,7 @@ app.post("/render-html", async (c) => {
         renderStoreSingleAssetWithPage(c.env, browser, {
           key: assetKey,
           format: body.format,
-          rawHtml: body.html,
+          rawHtml: finalHtml,
           formatLabel: body.format,
           width: body.width,
           height: body.height,

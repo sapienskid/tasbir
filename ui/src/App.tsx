@@ -1503,7 +1503,8 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
           width: formatConfig.width,
           height: formatConfig.height,
           format: editingFormat,
-          slug: result.slug
+          slug: result.slug,
+          designTokens: tokens
         })
       })
       
@@ -1646,7 +1647,9 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
                     style={{ 
                       transformOrigin: 'top left',
                       transform: `translate(${previewOffset.x}px, ${previewOffset.y}px) scale(${previewZoom})`,
-                      background: '#fff'
+                      background: '#fff',
+                      width: '100%',
+                      height: '100%',
                     }}
                     onMouseDown={(e) => {
                       if (e.button === 1 || (e.button === 0 && e.altKey)) {
@@ -1675,10 +1678,11 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
                       className="w-full h-full border-0"
                       style={{ 
                         background: '#fff',
-                        width: `${100 / previewZoom}%`,
-                        height: `${100 / previewZoom}%`,
-                        transformOrigin: 'top left'
+                        width: '100%',
+                        height: '100%',
+                        border: 'none',
                       }}
+                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                     />
                   </div>
                 ) : (
