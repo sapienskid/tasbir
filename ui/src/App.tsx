@@ -372,7 +372,23 @@ export default function App() {
             ...shared,
           })
 
-      setStudioResult(res)
+      // Store HTML for each format for editing
+      const htmlByFormat: Record<string, string> = {}
+      if (res.llm_output?.generated_html) {
+        // Primary format (first requested format)
+        const primaryFormat = res.requested_formats[0]
+        if (primaryFormat) htmlByFormat[primaryFormat] = res.llm_output.generated_html
+      }
+      if (res.variants) {
+        res.variants.forEach((variant, idx) => {
+          if (variant.llm_output?.generated_html) {
+            const format = res.requested_formats[idx] || `variant-${idx + 1}`
+            htmlByFormat[format] = variant.llm_output.generated_html
+          }
+        })
+      }
+      
+      setStudioResult({ ...res, htmlByFormat })
     } catch (e: any) {
       setError(e.message || 'Generation failed')
     } finally {
@@ -1415,7 +1431,11 @@ function StudioScreenshotPanel({ result, generating, tokens }: { result: any; ge
 
   const handleEdit = (format: string, asset: any, _resolvedSrc: string) => {
     setEditingFormat(format)
-    if (asset?.url && asset.url.startsWith('data:')) {
+    // Use stored HTML if available, otherwise show placeholder
+    const storedHtml = result?.htmlByFormat?.[format]
+    if (storedHtml) {
+      setEditorHtml(storedHtml)
+    } else if (asset?.url && asset.url.startsWith('data:')) {
       setEditorHtml(`// HTML for ${format}\n// Edit the HTML below and click Render to preview\n// Note: The actual HTML is embedded in the data URL`)
     } else {
       setEditorHtml(`// HTML for ${format}\n// Edit and click Render to preview`)
