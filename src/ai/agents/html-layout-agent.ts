@@ -76,26 +76,36 @@ ${args.content}
 
 ${designInfo}
 
-${args.settings?.brand?.logo_url ? `BRAND LOGO AVAILABLE:
-- You can use the brand logo in the layout using EXACTLY this variable: {{brand_logo}}
-- Example: <img src="{{brand_logo}}" class="w-12 h-12 object-contain" alt="${args.settings.brand.name || 'Brand'} Logo">` : ""}
+  ${args.settings?.brand ? `BRAND GUIDELINES (MANDATORY - FOLLOW THESE CLOSELY):
+- Brand Name: ${args.settings.brand.name || 'Not specified'}
+- Brand Tone: ${args.settings.brand.tone || 'Not specified'}
+- Target Audience: ${args.settings.brand.audience || 'Not specified'}
+${args.settings.brand.logo_url ? `- Brand Logo: AVAILABLE - You MUST include the logo using exactly this variable: {{brand_logo}}
+- Example: <img src="{{brand_logo}}" class="w-12 h-12 object-contain" alt="${args.settings.brand.name || 'Brand'} Logo">` : '- Brand Logo: Not provided'}
+${args.settings.campaign?.cta ? `- Default CTA: "${args.settings.campaign.cta}" - Use this or a contextually appropriate variation` : ''}
+${args.settings.campaign?.framework ? `- Copywriting Framework: ${args.settings.campaign.framework}` : ''}
+${args.settings.campaign?.goal ? `- Campaign Goal: ${args.settings.campaign.goal}` : ''}
+${args.settings.campaign?.hashtags?.style ? `- Hashtag Style: ${args.settings.campaign.hashtags.style}${args.settings.campaign.hashtags.count ? ` (max ${args.settings.campaign.hashtags.count})` : ''}` : ''}
+` : ""}
 
-${args.generatedImage ? `GENERATED IMAGE AVAILABLE:
+  ${args.generatedImage ? `GENERATED IMAGE AVAILABLE:
 - Image Type: ${args.generatedImage.imageType}
 - Position: ${args.imageSpec?.position || 'background'}
 - Count: ${args.imageSpec?.count || 1}
 
-IMAGE USAGE RULES:
+IMAGE USAGE RULES (MANDATORY - YOU MUST INCLUDE THE IMAGE):
+- You MUST include the generated image in your HTML design. Do NOT omit it.
 - Embed the generated image using exactly this variable for the src/url: {{image_url}}
 - Example (img tag): <img src="{{image_url}}" class="w-full h-full object-cover">
 - Example (css bg): <div style="background-image: url('{{image_url}}');" class="bg-cover bg-center"></div>
 - Position: ${args.imageSpec?.position || 'background'} (background | hero | left | right | overlay)
-- For background: use as full-bleed background with text overlay on top
+- For background: use as full-bleed background with text overlay on top (add gradient overlay for text readability)
 - For hero: place image at top, text below in content area
 - For left/right: split layout with image on one side, text on other
 - For overlay: place image behind text with gradient overlay for readability
 - NEVER put text INSIDE the image - text goes in HTML elements on top
 - Never use placeholder domains or fake urls. Use EXACTLY {{image_url}}
+- The image will be provided at render time - your HTML MUST contain {{image_url}} placeholder
 ` : ""}
 
 ${args.userPrompt ? `User specifically asked for: ${args.userPrompt}` : ""}
@@ -110,6 +120,12 @@ CRITICAL LAYOUT RULES:
 - Use proper spacing (p-4, p-6, p-8) to create breathing room
 - Text should be readable without being too small or too large
 - For multi-line text, use line-clamp or truncate if needed
+- PREVENT TEXT OVERLAPPING: Always use adequate line-height (leading-relaxed/leading-loose), proper margins between text elements (mb-2, mb-4, mb-6), and padding
+- Use flex/grid layouts with gap (gap-4, gap-6) instead of absolute positioning for text elements
+- Ensure text containers have max-width (max-w-xs, max-w-md, max-w-lg) to prevent overly wide lines
+- Use truncate or line-clamp-2/line-clamp-3 for long text that might overflow
+- Minimum font size for body text: 14px (text-base). Headlines: 24px+ (text-2xl+)
+- Never stack text elements directly without margin/padding between them
 
 Instructions:
 - Create a high-impact social post visual using the source content.
