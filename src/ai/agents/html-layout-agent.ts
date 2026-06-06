@@ -416,7 +416,11 @@ function extractHtml(text: string): string {
   const htmlStart = cleaned.search(/<html[\s>]/i);
   const htmlEnd = cleaned.search(/<\/html>/i);
   if (htmlStart >= 0 && htmlEnd > htmlStart) {
-    return `<!DOCTYPE html>\n${cleaned.slice(htmlStart, htmlEnd + 7).trim()}`;
+    let html = `<!DOCTYPE html>\n${cleaned.slice(htmlStart, htmlEnd + 7).trim()}`;
+    // Strip any JSON code blocks that might have been included in the HTML
+    html = html.replace(/```json\s*\{[\s\S]*?\}\s*```/gi, '');
+    html = html.replace(/```\s*\{[\s\S]*?\}\s*```/g, '');
+    return html.trim();
   }
 
   return cleaned;
