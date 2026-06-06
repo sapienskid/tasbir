@@ -1603,12 +1603,24 @@ export async function runPipelineFromPost(
     agentContexts.push(agentContext);
 
     const formatsArray = [...outputPlan.formats];
-    const formatConfigs = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter(f => f.config);
+    const formatConfigs = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter((f): f is { format: string; config: FormatConfig } => f.config !== null);
+    
+    // For carousel format, expand into multiple slides
+    const expandedFormatConfigs = formatConfigs.flatMap(({ format, config }) => {
+      if (format === 'carousel-post' && outputPlan.carouselSlides > 1) {
+        return Array.from({ length: outputPlan.carouselSlides }, (_, slideIndex) => ({
+          format: `carousel-post-slide-${slideIndex + 1}`,
+          config: { ...config, name: `${config.name} (Slide ${slideIndex + 1})` } as FormatConfig,
+          slideIndex,
+          totalSlides: outputPlan.carouselSlides,
+        }));
+      }
+      return [{ format, config, slideIndex: 0, totalSlides: 1 }];
+    });
     
     // Generate all HTML outputs in parallel (with timeout guards)
     const htmlResults = await Promise.all(
-      formatConfigs.map(async ({ format, config }) => {
-        if (!config) return null;
+      expandedFormatConfigs.map(async ({ format, config, slideIndex, totalSlides }) => {
         
         try {
           // SMART TEMPLATE: Check if we should use a saved HTML template for this format
@@ -1639,19 +1651,34 @@ export async function runPipelineFromPost(
             if (!slotValues.brand) slotValues.brand = brandName;
             const filledHtml = fillTemplateSlots(matchedTemplate.html, slotValues);
             llmOutput = { generated_html: filledHtml };
-          } else {
-            // Use orchestrator's per-post brief if available
-            const plannedPost = orchestratorPlan?.plannedPosts?.find(p => 
-              p.format.toLowerCase() === format.toLowerCase()
-            );
-            
-            const baseInstructions = designInstructions ? [designInstructions] : [];
-            if (plannedPost?.visualDirection) baseInstructions.push(`VISUAL DIRECTION: ${plannedPost.visualDirection}`);
-            if (plannedPost?.copyFocus) baseInstructions.push(`COPY FOCUS: ${plannedPost.copyFocus}`);
-            if (plannedPost?.cta && plannedPost.cta !== 'none') baseInstructions.push(`CTA: ${plannedPost.cta}`);
-            const instructionsWithDesignGuidance = baseInstructions.length > 0 
-              ? baseInstructions.join('\n')
-              : undefined;
+           } else {
+             // Use orchestrator's per-post brief if available
+             const plannedPost = orchestratorPlan?.plannedPosts?.find(p => 
+               p.format.toLowerCase() === format.replace(/^carousel-post-slide-\d+-/, '').toLowerCase()
+             );
+             
+             const baseInstructions = designInstructions ? [designInstructions] : [];
+             if (plannedPost?.visualDirection) baseInstructions.push(`VISUAL DIRECTION: ${plannedPost.visualDirection}`);
+             if (plannedPost?.copyFocus) baseInstructions.push(`COPY FOCUS: ${plannedPost.copyFocus}`);
+             if (plannedPost?.cta && plannedPost.cta !== 'none') baseInstructions.push(`CTA: ${plannedPost.cta}`);
+             
+             // Add carousel slide-specific instructions
+             if (totalSlides > 1 && slideIndex >= 0) {
+               const slideNumber = slideIndex + 1;
+               let carouselInstruction = '';
+               if (slideNumber === 1) {
+                 carouselInstruction = 'CAROUSEL SLIDE 1 (COVER/INTRO): Create an attention-grabbing cover slide with the main headline, hook, and visual that makes people want to swipe. Include a subtle "Swipe →" indicator.';
+               } else if (slideNumber === totalSlides) {
+                 carouselInstruction = `CAROUSEL SLIDE ${slideNumber} OF ${totalSlides} (FINAL/CTA): Create a strong closing slide with key takeaway, summary, and clear call-to-action. This is the last slide - make it actionable.`;
+               } else {
+                 carouselInstruction = `CAROUSEL SLIDE ${slideNumber} OF ${totalSlides} (CONTENT): Create an educational/content slide that builds on the previous slides. Focus on one key insight, tip, or data point. Keep it scannable and visually consistent with other slides.`;
+               }
+               baseInstructions.push(carouselInstruction);
+             }
+             
+             const instructionsWithDesignGuidance = baseInstructions.length > 0 
+               ? baseInstructions.join('\n')
+               : undefined;
 
             const generatedImage = generatedImages.get(format);
 
@@ -1680,22 +1707,6 @@ export async function runPipelineFromPost(
               settings,
             );
             _log.info("html-gen-complete", { format });
-            
-            if (llmOutput.template_html && llmOutput.slot_values && env.TEMPLATES_KV && env.OUTPUT_BUCKET) {
-              const templateId = `auto-${format}-${Date.now()}`;
-              try {
-                await saveTemplate(
-                  env.TEMPLATES_KV,
-                  env.OUTPUT_BUCKET,
-                  templateId,
-                  llmOutput.template_html,
-                  { name: `${format} Auto (${classification?.type || 'layout'})`, description: 'Auto-generated by AI', category: format }
-                );
-                _log.info("auto-saved-template", { templateId, format });
-              } catch (err) {
-                _log.warn("auto-save-template-failed", { error: String(err), templateId, format });
-              }
-            }
           }
 
           const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
@@ -2152,23 +2163,6 @@ export async function runPipelineFromPostWithProgress(
                 } : undefined,
                 settings,
               );
-
-              if (llmOutput.template_html && llmOutput.slot_values && env.TEMPLATES_KV && env.OUTPUT_BUCKET) {
-                const templateId = `auto-${format}-${Date.now()}`;
-                try {
-                  await saveTemplate(
-                    env.TEMPLATES_KV,
-                    env.OUTPUT_BUCKET,
-                    templateId,
-                    llmOutput.template_html,
-                    { name: `${format} Auto (${classification?.type || 'layout'})`, description: 'Auto-generated by AI', category: format }
-                  );
-                  _log.info("auto-saved-template", { templateId, format });
-                } catch (err) {
-                  _log.warn("auto-save-template-failed", { error: String(err), templateId, format });
-                }
-              }
-
             }
           }
 
@@ -2299,20 +2293,29 @@ function buildEffectivePrompt(bodyPrompt: string | undefined, settings: Workspac
 
   const parts: string[] = [];
 
+  if (settings.brand.name) {
+    parts.push(`Brand: ${settings.brand.name}.`);
+  }
   if (settings.brand.tone) {
     parts.push(`Tone: ${settings.brand.tone}.`);
   }
   if (settings.brand.audience) {
-    parts.push(`Audience: ${settings.brand.audience}.`);
+    parts.push(`Target audience: ${settings.brand.audience}.`);
+  }
+  if (settings.brand.logo_url) {
+    parts.push(`Brand logo available - include in designs.`);
   }
   if (settings.campaign.goal && settings.campaign.goal !== "awareness") {
     parts.push(`Campaign goal: ${settings.campaign.goal}.`);
   }
   if (settings.campaign.framework && settings.campaign.framework !== "none") {
-    parts.push(`Use ${settings.campaign.framework} copywriting framework.`);
+    parts.push(`Copywriting framework: ${settings.campaign.framework}.`);
   }
   if (settings.campaign.cta) {
-    parts.push(`Include CTA: ${settings.campaign.cta}`);
+    parts.push(`Default CTA: ${settings.campaign.cta}`);
+  }
+  if (settings.campaign.hashtags?.style) {
+    parts.push(`Hashtag style: ${settings.campaign.hashtags.style}${settings.campaign.hashtags.count ? ` (max ${settings.campaign.hashtags.count})` : ''}.`);
   }
   if (classification) {
     parts.push(`Content type: ${classification.type}.`);
