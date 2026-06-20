@@ -1,0 +1,25 @@
+{
+  "name": "tasbir-figma-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"vite build --watch\" \"tsc -p tsconfig.code.json --watch\"",
+    "build": "vite build && tsc -p tsconfig.code.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.100.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^4.6.0",
+    "concurrently": "^9.2.1",
+    "typescript": "~5.6.3",
+    "vite": "^7.2.0",
+    "vite-plugin-singlefile": "^2.2.1"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

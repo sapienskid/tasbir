@@ -1,0 +1,17 @@
+{
+  "name": "Tasbir — Social Post Generator",
+  "id": "tasbir-social-post-generator",
+  "api": "1.0.0",
+  "editorType": ["figma"],
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["none"],
+    "devAllowedDomains": ["http://localhost:8787"],
+    "reasoning": "Tasbir API generates social media post images from content. API domain is configured by the user in plugin settings."
+  },
+  "menu": [
+    { "name": "Generate Social Posts", "command": "generate" }
+  ]
+}
