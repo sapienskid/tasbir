@@ -43,12 +43,12 @@ import {
   fontImportFromTokens,
   buildTailwindConfigFromTokens,
   stripInjectedDesignTokens,
-  formatDesignTokensForPromptFromObject,
   formatSemanticBriefForPrompt,
   generateSemanticUtilityCSS,
   getDefaultDesignTokens,
   normalizeDesignTokensForRendering,
 } from "../shared/tokens";
+import { CAROUSEL_COVER_INSTRUCTION, CAROUSEL_FINAL_INSTRUCTION, CAROUSEL_CONTENT_INSTRUCTION, CAROUSEL_RULES, getImageFallbackPrompt } from "./prompts";
 import { generateTokensAI } from "./lib/tokens";
 import { loadSettings, saveSettings, patchSettings, getDefaultSettings, type WorkspaceSettings } from "./lib/settings";
 import {
@@ -277,34 +277,6 @@ interface AgentExecutionContext {
 
 const DEFAULT_IMAGE_MODEL = (PIPELINE_CONFIG.generation?.image?.default_model as string) || "@cf/black-forest-labs/flux-1-schnell";
 const DEFAULT_CAROUSEL_SLIDES = (PIPELINE_CONFIG.generation?.carousel_required_slides as number) || 5;
-
-function buildFallbackImagePrompt(title: string, excerpt?: string, contentType?: string, brandTone?: string): string {
-  const topic = title.slice(0, 100).replace(/[^a-zA-Z0-9\s]/g, ' ').trim();
-  const context = excerpt?.slice(0, 120)?.replace(/[^a-zA-Z0-9\s]/g, ' ').trim() || '';
-  const type = contentType || 'general';
-  const tone = brandTone || 'editorial';
-  
-  // Choose visual style based on content type
-  const styleMap: Record<string, string> = {
-    quote: 'minimal abstract with generous negative space, typography-first composition',
-    data: 'clean geometric with subtle grid or chart-like patterns',
-    story: 'cinematic narrative with depth and atmosphere',
-    tutorial: 'structured clean layout with subtle instructional cues',
-    insight: 'bold conceptual with strong focal point',
-  };
-  const visualStyle = styleMap[type] || `${tone} aesthetic with balanced composition`;
-  
-  // Build prompt with context
-  const parts = [
-    `Abstract ${visualStyle}`,
-    context ? `inspired by the theme: "${context}"` : `inspired by: "${topic}"`,
-    `Tone: ${tone}`,
-    'No text, no letters, no typography, no faces, no photorealism.',
-    'Clean composition suitable for text overlay.',
-  ];
-  
-  return parts.filter(Boolean).join('. ');
-}
 
 const DEFAULT_AGENT_PROFILE: ResolvedAgentPromptProfile = {
   name: "default",
@@ -1751,7 +1723,7 @@ export async function runPipelineFromPost(
           )) {
             const prompt = plannedPost.imageSpec?.prompt || (
               effectiveImageMode === 'ai'
-                ? buildFallbackImagePrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone)
+                ? getImageFallbackPrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone)
                 : null
             );
             if (prompt) {
@@ -1769,7 +1741,7 @@ export async function runPipelineFromPost(
         // Fallback: orchestrator unavailable — generate directly for each requested format
         _log.info("image-gen-fallback", { reason: "orchestrator-unavailable", formats: [...outputPlan.formats] });
         const formatList = [...outputPlan.formats];
-        const fallbackPrompt = buildFallbackImagePrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone);
+        const fallbackPrompt = getImageFallbackPrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone);
         for (const format of formatList) {
           const config = getFormatConfig(format);
           if (!config) continue;
@@ -1914,19 +1886,19 @@ export async function runPipelineFromPost(
              if (plannedPost?.copyFocus) baseInstructions.push(`COPY FOCUS: ${plannedPost.copyFocus}`);
              if (plannedPost?.cta && plannedPost.cta !== 'none') baseInstructions.push(`CTA: ${plannedPost.cta}`);
              
-             // Add carousel slide-specific instructions
-             if (totalSlides > 1 && slideIndex >= 0) {
-               const slideNumber = slideIndex + 1;
-               let carouselInstruction = '';
-               if (slideNumber === 1) {
-                 carouselInstruction = 'CAROUSEL SLIDE 1 (COVER/INTRO): Create an attention-grabbing cover slide with the main headline, hook, and visual that makes people want to swipe. Include a subtle "Swipe →" indicator.';
-               } else if (slideNumber === totalSlides) {
-                 carouselInstruction = `CAROUSEL SLIDE ${slideNumber} OF ${totalSlides} (FINAL/CTA): Create a strong closing slide with key takeaway, summary, and clear call-to-action. This is the last slide - make it actionable.`;
-               } else {
-                 carouselInstruction = `CAROUSEL SLIDE ${slideNumber} OF ${totalSlides} (CONTENT): Create an educational/content slide that builds on the previous slides. Focus on one key insight, tip, or data point. Keep it scannable and visually consistent with other slides.`;
-               }
-               baseInstructions.push(carouselInstruction);
-             }
+              // Add carousel slide-specific instructions
+              if (totalSlides > 1 && slideIndex >= 0) {
+                const slideNumber = slideIndex + 1;
+                let carouselInstruction = '';
+                if (slideNumber === 1) {
+                  carouselInstruction = CAROUSEL_COVER_INSTRUCTION;
+                } else if (slideNumber === totalSlides) {
+                  carouselInstruction = CAROUSEL_FINAL_INSTRUCTION(slideNumber, totalSlides);
+                } else {
+                  carouselInstruction = CAROUSEL_CONTENT_INSTRUCTION(slideNumber, totalSlides);
+                }
+                baseInstructions.push(CAROUSEL_RULES, carouselInstruction);
+              }
              
              const instructionsWithDesignGuidance = baseInstructions.length > 0 
                ? baseInstructions.join('\n')
@@ -2225,7 +2197,7 @@ export async function runPipelineFromPostWithProgress(
   const designTokensForRun = resolveDesignTokensForRequest(body.designTokens, defaultTokens);
   
   const precomputedTokens = precomputeDesignTokenAssets(designTokensForRun);
-   const designTokensPrompt = formatDesignTokensForPromptFromObject(designTokensForRun);
+   const designTokensPrompt = precomputedTokens.semanticBrief;
    const designInstructions = extractDesignInstructions(designTokensForRun);
    // Cache removed per user request
    const useCache = false;
@@ -2326,7 +2298,7 @@ export async function runPipelineFromPostWithProgress(
           )) {
             const prompt = plannedPost.imageSpec?.prompt || (
               effectiveImageMode === 'ai'
-                ? buildFallbackImagePrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone)
+                ? getImageFallbackPrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone)
                 : null
             );
             if (prompt) {
@@ -2347,7 +2319,7 @@ export async function runPipelineFromPostWithProgress(
         for (const format of fallbackFormats) {
           const config = getFormatConfig(format);
           if (!config) continue;
-          const prompt = buildFallbackImagePrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone);
+          const prompt = getImageFallbackPrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone);
           targets.push({ format, prompt, width: config.width, height: config.height, style: 'minimal' });
         }
       }
@@ -2465,20 +2437,14 @@ export async function runPipelineFromPostWithProgress(
               if (totalSlides > 1 && slideIndex >= 0) {
                 const slideNumber = slideIndex + 1;
                 let carouselInstruction = '';
-                // CAROUSEL RULES: 
-                // - Do NOT output visible slide numbers, pagination dots, "N/N", "Slide N", or progress indicators in the HTML.
-                //   The carousel is a series of separate images; pagination is handled by the platform viewer.
-                // - All slides must share a consistent visual identity: same color palette, font hierarchy, and spacing system.
-                // - Every slide must have breathing room: minimum 32px padding on all sides (p-8). Use generous gaps between elements.
-                // - This is a social media image — no web links, no URLs, no "Read more", no hashtags in rendered content.
                 if (slideNumber === 1) {
-                  carouselInstruction = `CAROUSEL SLIDE 1 (COVER/INTRO): Create a bold, attention-grabbing cover slide. This is the hook that stops the scroll. Include the main headline prominently. Use strong visual presence — large headline, minimal body copy, maximum visual impact. The cover must feel like the start of a story — create curiosity and anticipation. Include a subtle visual indicator (like a small arrow or "→" icon) to suggest more content follows. Do NOT render "Slide 1", "1/5", pagination dots, or progress bars in the HTML.`;
+                  carouselInstruction = CAROUSEL_COVER_INSTRUCTION;
                 } else if (slideNumber === totalSlides) {
-                  carouselInstruction = `CAROUSEL SLIDE ${slideNumber} OF ${totalSlides} (FINAL/CTA): Create the closing slide that wraps up the carousel narrative. Summarize the key takeaway or reinforce the main message. Include a strong call-to-action. The slide should feel conclusive — like the natural end of a story arc. Use slightly more visual weight or a subtle variation (e.g. accent color emphasis) to signal finality. Do NOT render "Slide ${slideNumber}", "${slideNumber}/${totalSlides}", pagination dots, or progress bars in the HTML.`;
+                  carouselInstruction = CAROUSEL_FINAL_INSTRUCTION(slideNumber, totalSlides);
                 } else {
-                  carouselInstruction = `CAROUSEL SLIDE ${slideNumber} OF ${totalSlides} (CONTENT): Create a content slide focusing on ONE key insight, data point, or tip. This slide must stand alone as a meaningful post while being visually consistent with the carousel series. Keep copy focused and scannable. Use the same visual framework as other slides — matching color palette, typography scale, spacing. Do NOT render "Slide ${slideNumber}", "${slideNumber}/${totalSlides}", pagination dots, or progress bars in the HTML.`;
+                  carouselInstruction = CAROUSEL_CONTENT_INSTRUCTION(slideNumber, totalSlides);
                 }
-                baseInstructions.push(carouselInstruction);
+                baseInstructions.push(CAROUSEL_RULES, carouselInstruction);
               }
 
               const instructionsWithDesignGuidance = baseInstructions.length > 0

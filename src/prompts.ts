@@ -203,3 +203,90 @@ Decision criteria:
 
 export const SOCIAL_COPYWRITER_PROMPT = `You are a social media copywriter. Generate engaging, punchy content for social media posts.
 Keep headlines SHORT and impactful (max 80 chars). Make it scroll-stopping.`;
+
+// ============================================================================
+// CAROUSEL SLIDE INSTRUCTIONS
+// ============================================================================
+export const CAROUSEL_COVER_INSTRUCTION = `CAROUSEL SLIDE 1 (COVER/INTRO): Create a bold, attention-grabbing cover slide. This is the hook that stops the scroll. Include the main headline prominently. Use strong visual presence — large headline, minimal body copy, maximum visual impact. The cover must feel like the start of a story — create curiosity and anticipation. Include a subtle visual indicator (like a small arrow or "→" icon) to suggest more content follows. Do NOT render "Slide 1", "1/5", pagination dots, or progress bars in the HTML.`;
+
+export const CAROUSEL_FINAL_INSTRUCTION = (slide: number, total: number) =>
+  `CAROUSEL SLIDE ${slide} OF ${total} (FINAL/CTA): Create the closing slide that wraps up the carousel narrative. Summarize the key takeaway or reinforce the main message. Include a strong call-to-action. The slide should feel conclusive — like the natural end of a story arc. Use slightly more visual weight or a subtle variation (e.g. accent color emphasis) to signal finality. Do NOT render "Slide ${slide}", "${slide}/${total}", pagination dots, or progress bars in the HTML.`;
+
+export const CAROUSEL_CONTENT_INSTRUCTION = (slide: number, total: number) =>
+  `CAROUSEL SLIDE ${slide} OF ${total} (CONTENT): Create a content slide focusing on ONE key insight, data point, or tip. This slide must stand alone as a meaningful post while being visually consistent with the carousel series. Keep copy focused and scannable. Use the same visual framework as other slides — matching color palette, typography scale, spacing. Do NOT render "Slide ${slide}", "${slide}/${total}", pagination dots, or progress bars in the HTML.`;
+
+export const CAROUSEL_RULES = `CAROUSEL RULES:
+- Do NOT output visible slide numbers, pagination dots, "N/N", "Slide N", or progress indicators in the HTML.
+  The carousel is a series of separate images; pagination is handled by the platform viewer.
+- All slides must share a consistent visual identity: same color palette, font hierarchy, and spacing system.
+- Every slide must have breathing room: minimum 32px padding on all sides (p-8). Use generous gaps between elements.
+- This is a social media image — no web links, no URLs, no "Read more", no hashtags in rendered content.`;
+
+// ============================================================================
+// IMAGE GENERATION CONSTRAINTS (single source of truth)
+// ============================================================================
+export const IMAGE_QUALITY_MODIFIERS = [
+  "cinematic lighting",
+  "high resolution",
+  "professional photography",
+  "sharp focus",
+  "clean composition",
+];
+
+export const IMAGE_NEGATIVE_CONSTRAINTS = [
+  "No text", "no words", "no typography", "no lettering", "no captions",
+  "no watermarks", "no logos", "no text overlay",
+  "no faces", "no photorealism",
+  "avoid muddy shadows", "avoid overly dark visuals", "avoid cluttered composition",
+];
+
+export const getImageFallbackPrompt = (title: string, excerpt?: string, contentType?: string, brandTone?: string): string => {
+  const topic = title.slice(0, 100).replace(/[^a-zA-Z0-9\s]/g, ' ').trim();
+  const context = excerpt?.slice(0, 120)?.replace(/[^a-zA-Z0-9\s]/g, ' ').trim() || '';
+  const type = contentType || 'general';
+  const tone = brandTone || 'editorial';
+  
+  const styleMap: Record<string, string> = {
+    quote: 'minimal abstract with generous negative space, typography-first composition',
+    data: 'clean geometric with subtle grid or chart-like patterns',
+    story: 'cinematic narrative with depth and atmosphere',
+    tutorial: 'structured clean layout with subtle instructional cues',
+    insight: 'bold conceptual with strong focal point',
+  };
+  const visualStyle = styleMap[type] || `${tone} aesthetic with balanced composition`;
+  
+  return [
+    `Abstract ${visualStyle}`,
+    context ? `inspired by the theme: "${context}"` : `inspired by: "${topic}"`,
+    `Tone: ${tone}`,
+    'No text, no letters, no typography, no faces, no photorealism.',
+    'Clean composition suitable for text overlay.',
+  ].filter(Boolean).join('. ');
+};
+
+// ============================================================================
+// BRAND/CAMPAIGN PROMPT FRAGMENT BUILDER (shared utility)
+// ============================================================================
+export function buildBrandGuidelinesPrompt(
+  brand?: { name?: string; tone?: string; audience?: string; logo_url?: string } | null,
+  campaign?: { cta?: string; framework?: string; goal?: string; hashtags?: { style?: string; count?: number } } | null
+): string {
+  if (!brand) return '';
+  const parts: string[] = [];
+  parts.push('BRAND GUIDELINES (MANDATORY - FOLLOW THESE CLOSELY):');
+  if (brand.name) parts.push(`- Brand Name: ${brand.name}`);
+  if (brand.tone) parts.push(`- Brand Tone: ${brand.tone}`);
+  if (brand.audience) parts.push(`- Target Audience: ${brand.audience}`);
+  if (brand.logo_url) {
+    parts.push(`- Brand Logo: AVAILABLE — include with {{brand_logo}}`);
+  } else {
+    parts.push('- Brand Logo: Not provided');
+  }
+  if (campaign?.cta) parts.push(`- Default CTA: "${campaign.cta}" — Use this or a contextually appropriate variation`);
+  if (campaign?.framework) parts.push(`- Copywriting Framework: ${campaign.framework}`);
+  if (campaign?.goal) parts.push(`- Campaign Goal: ${campaign.goal}`);
+  if (campaign?.hashtags?.style && campaign.hashtags.style !== 'none' && (campaign.hashtags.count || 0) > 0) {
+    parts.push(`- Hashtag Style: ${campaign.hashtags.style} (max ${campaign.hashtags.count})`);
+  }
+  return parts.join('\n');
+}
