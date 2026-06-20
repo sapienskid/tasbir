@@ -112,10 +112,10 @@ interface GhostPost {
 const ORCHESTRATOR_TIMEOUT_MS = 12_000;
 /** Max time for a single AI image generation call (Workers AI) */
 const IMAGE_GEN_TIMEOUT_MS = 10_000;
-/** Max time for browser launch/reconnect */
-const BROWSER_LAUNCH_TIMEOUT_MS = 8_000;
+/** Max time for browser launch/reconnect — Cloudflare Browser Rendering can take 15-25s cold */
+const BROWSER_LAUNCH_TIMEOUT_MS = 30_000;
 /** Max time for a single page render (screenshot) */
-const RENDER_TIMEOUT_MS = 15_000;
+const RENDER_TIMEOUT_MS = 30_000;
 /** Max time for content classification */
 const CLASSIFY_TIMEOUT_MS = 8_000;
 /** Max time for template decision */
@@ -277,6 +277,34 @@ interface AgentExecutionContext {
 
 const DEFAULT_IMAGE_MODEL = (PIPELINE_CONFIG.generation?.image?.default_model as string) || "@cf/black-forest-labs/flux-1-schnell";
 const DEFAULT_CAROUSEL_SLIDES = (PIPELINE_CONFIG.generation?.carousel_required_slides as number) || 5;
+
+function buildFallbackImagePrompt(title: string, excerpt?: string, contentType?: string, brandTone?: string): string {
+  const topic = title.slice(0, 100).replace(/[^a-zA-Z0-9\s]/g, ' ').trim();
+  const context = excerpt?.slice(0, 120)?.replace(/[^a-zA-Z0-9\s]/g, ' ').trim() || '';
+  const type = contentType || 'general';
+  const tone = brandTone || 'editorial';
+  
+  // Choose visual style based on content type
+  const styleMap: Record<string, string> = {
+    quote: 'minimal abstract with generous negative space, typography-first composition',
+    data: 'clean geometric with subtle grid or chart-like patterns',
+    story: 'cinematic narrative with depth and atmosphere',
+    tutorial: 'structured clean layout with subtle instructional cues',
+    insight: 'bold conceptual with strong focal point',
+  };
+  const visualStyle = styleMap[type] || `${tone} aesthetic with balanced composition`;
+  
+  // Build prompt with context
+  const parts = [
+    `Abstract ${visualStyle}`,
+    context ? `inspired by the theme: "${context}"` : `inspired by: "${topic}"`,
+    `Tone: ${tone}`,
+    'No text, no letters, no typography, no faces, no photorealism.',
+    'Clean composition suitable for text overlay.',
+  ];
+  
+  return parts.filter(Boolean).join('. ');
+}
 
 const DEFAULT_AGENT_PROFILE: ResolvedAgentPromptProfile = {
   name: "default",
@@ -1028,6 +1056,7 @@ app.post("/render-html", async (c) => {
     format: string; 
     slug: string;
     designTokens?: Record<string, unknown>;
+    slot_values?: Record<string, string>;
   }>(c.req.raw, security.request_limits.max_json_body_bytes * 10);
 
   if (!body.html || !body.width || !body.height || !body.format || !body.slug) {
@@ -1079,6 +1108,19 @@ app.post("/render-html", async (c) => {
         `Render ${body.format}`
       );
 
+      // Persist edited content to KV for future retrieval
+      if (c.env.SETTINGS_KV) {
+        const editKey = `edited:${body.slug}:${body.format}`;
+        const editData = {
+          html: finalHtml,
+          slot_values: body.slot_values || {},
+          updatedAt: new Date().toISOString(),
+        };
+        try {
+          await c.env.SETTINGS_KV.put(editKey, JSON.stringify(editData));
+        } catch { /* non-critical */ }
+      }
+
       return c.json({ ok: true, asset });
     } finally {
       try { await browser.close(); } catch { /* ignore */ }
@@ -1086,6 +1128,61 @@ app.post("/render-html", async (c) => {
   } catch (e: any) {
     throw new HttpError(500, `Render failed: ${e.message}`);
   }
+});
+
+app.get("/edited-content", async (c) => {
+  const slug = c.req.query("slug");
+  const format = c.req.query("format");
+
+  if (!slug || !format) {
+    throw new HttpError(400, "Missing query params: slug, format");
+  }
+
+  if (!c.env.SETTINGS_KV) {
+    throw new HttpError(404, "No KV storage available for edited content");
+  }
+
+  const editKey = `edited:${slug}:${format}`;
+  const raw = await c.env.SETTINGS_KV.get(editKey);
+  if (!raw) {
+    throw new HttpError(404, "No edited content found for this slug/format");
+  }
+
+  try {
+    const data = JSON.parse(raw);
+    return c.json({ ok: true, html: data.html, slot_values: data.slot_values, updatedAt: data.updatedAt });
+  } catch {
+    throw new HttpError(500, "Corrupted edit data");
+  }
+});
+
+app.delete("/edited-content", async (c) => {
+  const security = resolveSecurityConfig(c.env);
+  enforceApiAuth(c.req.raw, security, "generate");
+
+  const slug = c.req.query("slug");
+  const format = c.req.query("format");
+
+  if (!slug) {
+    throw new HttpError(400, "Missing query param: slug");
+  }
+
+  if (!c.env.SETTINGS_KV) {
+    throw new HttpError(404, "No KV storage available");
+  }
+
+  if (format) {
+    await c.env.SETTINGS_KV.delete(`edited:${slug}:${format}`);
+  } else {
+    // Delete all edited content for this slug
+    const prefix = `edited:${slug}:`;
+    const list = await c.env.SETTINGS_KV.list({ prefix });
+    for (const key of list.keys) {
+      await c.env.SETTINGS_KV.delete(key.name);
+    }
+  }
+
+  return c.json({ ok: true });
 });
 
 app.post("/webhook/ghost", async (c) => {
@@ -1134,6 +1231,46 @@ app.onError((err, c) => {
   return c.json({ error: safeMessage }, status as any);
 });
 
+// ==================== OPENAPI ====================
+
+app.get("/openapi.json", async (c) => {
+  const baseUrl = new URL(c.req.url).origin;
+  const spec = {
+    openapi: "3.1.0",
+    info: {
+      title: "Tasbir API",
+      version: "0.3.0",
+      description: "Social media asset pipeline — generate platform-optimized visual content from text using AI",
+    },
+    servers: [{ url: baseUrl }],
+    paths: {} as Record<string, any>,
+  };
+
+  // Collect route definitions from registered routes
+  const routes = (app as any).routes || [];
+  for (const route of routes) {
+    const method = route.method?.toLowerCase();
+    const path = route.path;
+    if (!method || !path || method === 'options' || path === '*') continue;
+
+    if (!spec.paths[path]) spec.paths[path] = {};
+    const params: any[] = [];
+    const paramMatches = path.matchAll(/:(\w+)/g);
+    for (const m of paramMatches) {
+      params.push({ name: m[1], in: 'path', required: true, schema: { type: 'string' } });
+    }
+
+    spec.paths[path][method] = {
+      operationId: `${method}_${path.replace(/[^\w]/g, '_')}`,
+      parameters: params,
+      responses: { '200': { description: 'OK' } },
+    };
+  }
+
+  return c.json(spec);
+});
+
+// Catch-all: serve static assets or fall back to SPA index.html for client-side routing
 const API_ROUTE_PATTERNS = [
   /^\/health$/,
   /^\/config(?:\/|$)/,
@@ -1147,7 +1284,11 @@ const API_ROUTE_PATTERNS = [
   /^\/decide-template$/,
   /^\/generate(?:\/|$)/,
   /^\/generate-from-content(?:\/|$)/,
+  /^\/render-html$/,
+  /^\/edited-content(?:\/|$)/,
+  /^\/save-to-r2$/,
   /^\/webhook\/ghost$/,
+  /^\/openapi\.json$/,
 ];
 
 function isApiRoute(pathname: string): boolean {
@@ -1593,44 +1734,73 @@ export async function runPipelineFromPost(
   // Get effective image mode: body overrides settings
   const effectiveImageMode = body.image?.mode || settings.image?.mode || 'auto';
   
-  // Generate images based on orchestrator's planned posts
-  if (orchestratorPlan?.plannedPosts && env.AI) {
+  if (effectiveImageMode !== 'none' && env.AI) {
     try {
-      // Filter posts that need AI-generated images based on effective image mode
-      const postsNeedingImages = orchestratorPlan.plannedPosts.filter(plannedPost => {
-        if (effectiveImageMode === 'none') return false;
-        if (effectiveImageMode === 'ai') return true;
-        if (effectiveImageMode === 'auto' || effectiveImageMode === 'feature') {
-          return plannedPost.imageSpec && 
-            plannedPost.imageSpec.type !== 'none' && 
-            plannedPost.imageSpec.type !== 'feature' &&
-            plannedPost.imageMode !== 'none';
-        }
-        return false;
-      });
+      // Collect formats that need images
+      type ImageTarget = { format: string; prompt: string; width: number; height: number; style?: string };
+      const targets: ImageTarget[] = [];
       
-      if (postsNeedingImages.length > 0) {
-        _log.info("image-gen-start", { count: postsNeedingImages.length, mode: effectiveImageMode });
-        
-        // Generate images in parallel with per-image timeout
-        const imagePromises = postsNeedingImages.map(async (plannedPost) => {
-          const imageSpec = plannedPost.imageSpec!;
-          if (!imageSpec.prompt) return { format: plannedPost.format, image: null };
-          
-          try {
-            const image = await withTimeout(
-              generateImage(env.AI, imageSpec.prompt, {
+      if (orchestratorPlan?.plannedPosts) {
+        // Use orchestrator's image decisions when available
+        for (const plannedPost of orchestratorPlan.plannedPosts) {
+          if (effectiveImageMode === 'ai' || (
+            plannedPost.imageSpec &&
+            plannedPost.imageSpec.type !== 'none' &&
+            plannedPost.imageSpec.type !== 'feature' &&
+            plannedPost.imageMode !== 'none'
+          )) {
+            const prompt = plannedPost.imageSpec?.prompt || (
+              effectiveImageMode === 'ai'
+                ? buildFallbackImagePrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone)
+                : null
+            );
+            if (prompt) {
+              targets.push({
+                format: plannedPost.format,
+                prompt,
                 width: plannedPost.width || 1200,
                 height: plannedPost.height || 630,
-                style: imageSpec.style,
+                style: plannedPost.imageSpec?.style,
+              });
+            }
+          }
+        }
+      } else {
+        // Fallback: orchestrator unavailable — generate directly for each requested format
+        _log.info("image-gen-fallback", { reason: "orchestrator-unavailable", formats: [...outputPlan.formats] });
+        const formatList = [...outputPlan.formats];
+        const fallbackPrompt = buildFallbackImagePrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone);
+        for (const format of formatList) {
+          const config = getFormatConfig(format);
+          if (!config) continue;
+          targets.push({
+            format,
+            prompt: fallbackPrompt,
+            width: config.width,
+            height: config.height,
+            style: 'minimal',
+          });
+        }
+      }
+
+      if (targets.length > 0) {
+        _log.info("image-gen-start", { count: targets.length, mode: effectiveImageMode });
+        
+        const imagePromises = targets.map(async (target) => {
+          try {
+            const image = await withTimeout(
+              generateImage(env.AI, target.prompt, {
+                width: target.width,
+                height: target.height,
+                style: target.style,
               }),
               IMAGE_GEN_TIMEOUT_MS,
-              `Image generation for ${plannedPost.format}`
+              `Image generation for ${target.format}`
             );
-            return { format: plannedPost.format, image };
+            return { format: target.format, image };
           } catch (e) {
-            _log.warn("image-gen-failed", { format: plannedPost.format, error: e instanceof Error ? e.message : String(e) });
-            return { format: plannedPost.format, image: null };
+            _log.warn("image-gen-failed", { format: target.format, error: e instanceof Error ? e.message : String(e) });
+            return { format: target.format, image: null };
           }
         });
         
@@ -1654,6 +1824,7 @@ export async function runPipelineFromPost(
       format: string;
       html: string;
       template_html: string;
+      slot_values: Record<string, string>;
       config: FormatConfig;
       usedSavedTemplate?: boolean;
       templateDecision?: TemplateDecision;
@@ -1702,11 +1873,19 @@ export async function runPipelineFromPost(
           if (savedTemplate && templateDecision?.action === "use_template") {
             _log.info("using-saved-template", { format, templateName: savedTemplate.name });
             const finalHtml = injectDesignTokensIntoHtmlFast(savedTemplate.html, precomputedTokens);
+            // Extract slot values from saved template
+            const slotPattern = /\{\{(\w+)\}\}/g;
+            const slotValues: Record<string, string> = {};
+            let match;
+            while ((match = slotPattern.exec(savedTemplate.html)) !== null) {
+              slotValues[match[1]] = '';
+            }
             return {
               index,
               format,
               html: finalHtml,
               template_html: savedTemplate.html,
+              slot_values: slotValues,
               config,
               cacheHit: false,
               usedSavedTemplate: true,
@@ -1723,12 +1902,12 @@ export async function runPipelineFromPost(
             if (!slotValues.headline) slotValues.headline = post.title;
             if (!slotValues.brand) slotValues.brand = brandName;
             const filledHtml = fillTemplateSlots(matchedTemplate.html, slotValues);
-            llmOutput = { generated_html: filledHtml, template_html: matchedTemplate.html };
+            llmOutput = { generated_html: filledHtml, template_html: matchedTemplate.html, slot_values: slotValues };
            } else {
              // Use orchestrator's per-post brief if available
-             const plannedPost = orchestratorPlan?.plannedPosts?.find(p => 
-               p.format.toLowerCase() === format.replace(/^carousel-post-slide-\d+-/, '').toLowerCase()
-             );
+              const plannedPost = orchestratorPlan?.plannedPosts?.find(p => 
+               p.format.toLowerCase() === (format.startsWith('carousel-post-slide-') ? 'carousel-post' : format).toLowerCase()
+              );
              
              const baseInstructions = designInstructions ? [designInstructions] : [];
              if (plannedPost?.visualDirection) baseInstructions.push(`VISUAL DIRECTION: ${plannedPost.visualDirection}`);
@@ -1790,6 +1969,7 @@ export async function runPipelineFromPost(
             format,
             html: finalHtml,
             template_html: llmOutput.template_html || finalHtml,
+            slot_values: llmOutput.slot_values || {},
             config,
             cacheHit: false,
             templateDecision: templateDecisions.get(format),
@@ -1819,7 +1999,7 @@ export async function runPipelineFromPost(
   _log.info("render-phase-start", { totalFormats: allHtmlOutputs.length });
   let browser = await launchRenderingBrowser(env);
   
-   const renderedAssets: Map<string, { index: number; asset: StoredAsset; html: string; template_html: string; format: string; usedSavedTemplate?: boolean; templateDecision?: TemplateDecision; suggestSaveAsTemplate?: boolean }> = new Map();
+   const renderedAssets: Map<string, { index: number; asset: StoredAsset; html: string; template_html: string; slot_values: Record<string, string>; format: string; usedSavedTemplate?: boolean; templateDecision?: TemplateDecision; suggestSaveAsTemplate?: boolean }> = new Map();
 
   try {
     for (const htmlOutput of allHtmlOutputs) {
@@ -1854,6 +2034,7 @@ export async function runPipelineFromPost(
             asset,
             html: htmlOutput.html,
             template_html: htmlOutput.template_html || htmlOutput.html,
+            slot_values: htmlOutput.slot_values || {},
             format: htmlOutput.format,
             usedSavedTemplate: htmlOutput.usedSavedTemplate,
             templateDecision: htmlOutput.templateDecision,
@@ -1887,6 +2068,7 @@ export async function runPipelineFromPost(
               asset,
               html: htmlOutput.html,
               template_html: htmlOutput.template_html || htmlOutput.html,
+              slot_values: htmlOutput.slot_values || {},
               format: htmlOutput.format,
               usedSavedTemplate: htmlOutput.usedSavedTemplate,
               templateDecision: htmlOutput.templateDecision,
@@ -1907,10 +2089,11 @@ export async function runPipelineFromPost(
     try { await browser.close(); } catch { /* ignore close errors */ }
   }
 
-  // ===== PHASE 3: Assemble response =====
+// ===== PHASE 3: Assemble response =====
   
   // Build HTML map for all formats
   const htmlByFormat: Record<string, string> = {};
+  const slotValuesByFormat: Record<string, Record<string, string>> = {};
   
   for (let index = 0; index < outputPlan.postCount; index += 1) {
     const formatAssets: Record<string, StoredAsset | null> = {};
@@ -1920,22 +2103,24 @@ export async function runPipelineFromPost(
 
     const variantTemplateHtmlByFormat: Record<string, string> = {};
 
-    for (const format of outputPlan.formats) {
-      const mapKey = `${index}:${format}`;
-      const rendered = renderedAssets.get(mapKey);
-      if (rendered) {
-        formatAssets[format] = rendered.asset;
-        variantHtmlByFormat[format] = rendered.html;
-        variantTemplateHtmlByFormat[format] = rendered.template_html || rendered.html;
-        // Also add to global map (use format with index suffix for uniqueness)
-        const globalKey = outputPlan.postCount > 1 ? `${format}-v${index + 1}` : format;
-        htmlByFormat[globalKey] = rendered.html;
-        smartTemplateInfo[format] = {
-          used: rendered.usedSavedTemplate ?? false,
-          templateId: rendered.templateDecision?.templateId,
-          suggestSave: rendered.suggestSaveAsTemplate,
-        };
-      }
+    for (const [mapKey, rendered] of renderedAssets) {
+      const colonIndex = mapKey.indexOf(':');
+      if (colonIndex === -1) continue;
+      const keyIndex = parseInt(mapKey.slice(0, colonIndex), 10);
+      if (keyIndex !== index) continue;
+      const format = mapKey.slice(colonIndex + 1);
+      formatAssets[format] = rendered.asset;
+      variantHtmlByFormat[format] = rendered.html;
+      variantTemplateHtmlByFormat[format] = rendered.template_html || rendered.html;
+      // Also add to global map (use format with index suffix for uniqueness)
+      const globalKey = outputPlan.postCount > 1 ? `${format}-v${index + 1}` : format;
+      htmlByFormat[globalKey] = rendered.html;
+      slotValuesByFormat[globalKey] = rendered.slot_values || {};
+      smartTemplateInfo[format] = {
+        used: rendered.usedSavedTemplate ?? false,
+        templateId: rendered.templateDecision?.templateId,
+        suggestSave: rendered.suggestSaveAsTemplate,
+      };
     }
 
     if (index === 0) {
@@ -2000,6 +2185,7 @@ export async function runPipelineFromPost(
     llm_output: primaryVariant.llm_output,
     html_by_format: htmlByFormat,
     template_html_by_format: templateHtmlByFormat,
+    slot_values_by_format: slotValuesByFormat,
     agentic: summarizeAgentExecution(agentContexts),
     assets: primaryVariant.assets,
     variants: outputPlan.postCount > 1 ? variants : undefined,
@@ -2008,7 +2194,7 @@ export async function runPipelineFromPost(
       templateUsed: classification.templateMatch,
       reasoning: classification.reasoning,
     } : undefined,
-    smartTemplates: smartTemplateSummary,
+    smartTemplates: smartTemplateSummary
   };
 }
 
@@ -2045,7 +2231,7 @@ export async function runPipelineFromPostWithProgress(
    const useCache = false;
   
   const brandName = body.brandName ?? settings.brand.name ?? env.BRAND_NAME ?? "Tasbir Blog";
-  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; html_by_format: Record<string, string>; template_html_by_format: Record<string, string>; assets: Record<string, StoredAsset | null> }> = [];
+  const variants: Array<{ index: number; image_source: SelectedImage; llm_output: LlmOutput; html_by_format: Record<string, string>; template_html_by_format: Record<string, string>; slot_values_by_format: Record<string, Record<string, string>>; assets: Record<string, StoredAsset | null> }> = [];
   const baseAgentContext = resolveAgentExecutionContext(body.agent);
   const agentContexts: AgentExecutionContext[] = [];
   const sharedStorage = resolveBatchStorageOptions(body.storage);
@@ -2125,44 +2311,62 @@ export async function runPipelineFromPostWithProgress(
   // Get effective image mode: body overrides settings
   const effectiveImageMode = body.image?.mode || settings.image?.mode || 'auto';
   
-  // Generate images based on orchestrator's planned posts
-  if (orchestratorPlan?.plannedPosts && env.AI) {
+  if (effectiveImageMode !== 'none' && env.AI) {
     try {
-      // Filter posts that need AI-generated images based on effective image mode
-      const postsNeedingImages = orchestratorPlan.plannedPosts.filter(post => {
-        // If user set 'none', skip all
-        if (effectiveImageMode === 'none') return false;
-        // If user set 'ai', always generate
-        if (effectiveImageMode === 'ai') return true;
-        // If 'auto' or 'feature', use orchestrator's decision
-        if (effectiveImageMode === 'auto' || effectiveImageMode === 'feature') {
-          return post.imageSpec && 
-            post.imageSpec.type !== 'none' && 
-            post.imageSpec.type !== 'feature' &&
-            post.imageMode !== 'none';
-        }
-        return false;
-      });
+      type ImageTarget = { format: string; prompt: string; width: number; height: number; style?: string };
+      const targets: ImageTarget[] = [];
       
-      if (postsNeedingImages.length > 0) {
-        onProgress({ type: "generating", message: `Generating ${postsNeedingImages.length} illustrations...` });
-        console.log(`[ai-image] Generating images for ${postsNeedingImages.length} posts based on orchestrator decisions`);
+      if (orchestratorPlan?.plannedPosts) {
+        for (const plannedPost of orchestratorPlan.plannedPosts) {
+          if (effectiveImageMode === 'ai' || (
+            plannedPost.imageSpec &&
+            plannedPost.imageSpec.type !== 'none' &&
+            plannedPost.imageSpec.type !== 'feature' &&
+            plannedPost.imageMode !== 'none'
+          )) {
+            const prompt = plannedPost.imageSpec?.prompt || (
+              effectiveImageMode === 'ai'
+                ? buildFallbackImagePrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone)
+                : null
+            );
+            if (prompt) {
+              targets.push({
+                format: plannedPost.format,
+                prompt,
+                width: plannedPost.width || 1200,
+                height: plannedPost.height || 630,
+                style: plannedPost.imageSpec?.style,
+              });
+            }
+          }
+        }
+      } else {
+        // Fallback: orchestrator unavailable — generate directly for each requested format
+        const fallbackFormats = [...outputPlan.formats];
+        console.log(`[ai-image] Orchestrator unavailable, generating fallback images for formats: ${fallbackFormats.join(', ')}`);
+        for (const format of fallbackFormats) {
+          const config = getFormatConfig(format);
+          if (!config) continue;
+          const prompt = buildFallbackImagePrompt(post.title, post.excerpt || post.custom_excerpt, classification?.type, settings?.brand?.tone);
+          targets.push({ format, prompt, width: config.width, height: config.height, style: 'minimal' });
+        }
+      }
+
+      if (targets.length > 0) {
+        onProgress({ type: "generating", message: `Generating ${targets.length} illustrations...` });
+        console.log(`[ai-image] Generating images for ${targets.length} target(s)`);
         
-        // Generate images in parallel for each post that needs them
-        const imagePromises = postsNeedingImages.map(async (post) => {
-          const imageSpec = post.imageSpec!;
-          if (!imageSpec.prompt) return { format: post.format, image: null };
-          
+        const imagePromises = targets.map(async (target) => {
           try {
-            const image = await generateImage(env.AI, imageSpec.prompt, {
-              width: post.width || 1200,
-              height: post.height || 630,
-              style: imageSpec.style,
+            const image = await generateImage(env.AI, target.prompt, {
+              width: target.width,
+              height: target.height,
+              style: target.style,
             });
-            return { format: post.format, image };
+            return { format: target.format, image };
           } catch (e) {
-            console.warn(`[ai-image] Failed to generate for ${post.format}:`, e);
-            return { format: post.format, image: null };
+            console.warn(`[ai-image] Failed to generate for ${target.format}:`, e);
+            return { format: target.format, image: null };
           }
         });
         
@@ -2172,8 +2376,6 @@ export async function runPipelineFromPostWithProgress(
         }
         
         console.log(`[ai-image] Generated ${generatedImages.size} images: ${Array.from(generatedImages.keys()).join(', ')}`);
-      } else {
-        console.log(`[ai-image] No posts require AI-generated images based on orchestrator (mode: ${effectiveImageMode})`);
       }
     } catch (error) {
       console.warn(`[ai-image] Image generation failed:`, error);
@@ -2183,7 +2385,21 @@ export async function runPipelineFromPostWithProgress(
   const effectivePrompt = buildEffectivePrompt(body.prompt, settings, classification);
   const keyPrefix = buildR2KeyPrefix(env, post.slug, sharedStorage);
   const formatsArray = [...outputPlan.formats];
-  const totalFormats = formatsArray.length;
+  const formatConfigsBase = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter((f): f is { format: string; config: FormatConfig } => f.config !== null);
+  
+  // For carousel format, expand into multiple slides
+  const expandedFormatConfigs = formatConfigsBase.flatMap(({ format, config }) => {
+    if (format === 'carousel-post' && outputPlan.carouselSlides > 1) {
+      return Array.from({ length: outputPlan.carouselSlides }, (_, slideIndex) => ({
+        format: `carousel-post-slide-${slideIndex + 1}`,
+        config: { ...config, name: `${config.name} (Slide ${slideIndex + 1})` } as FormatConfig,
+        slideIndex,
+        totalSlides: outputPlan.carouselSlides,
+      }));
+    }
+    return [{ format, config, slideIndex: 0, totalSlides: 1 }];
+  });
+  const totalFormats = expandedFormatConfigs.length;
 
   let browser = await launchRenderingBrowser(env);
   
@@ -2202,16 +2418,17 @@ export async function runPipelineFromPostWithProgress(
       });
       agentContexts.push(agentContext);
 
-      const formatConfigs = formatsArray.map(format => ({ format, config: getFormatConfig(format) })).filter(f => f.config);
+      const formatConfigs = expandedFormatConfigs;
       const formatAssets: Record<string, StoredAsset | null> = {};
       const variantHtmlByFormat: Record<string, string> = {};
       const variantTemplateHtmlByFormat: Record<string, string> = {};
+      const variantSlotValuesByFormat: Record<string, Record<string, string>> = {};
       let variantLlmOutput: LlmOutput | null = null;
       let imageSource: SelectedImage = { source: "none", imageUrl: "" };
 
       // Generate and render each format with progress updates
       for (let i = 0; i < formatConfigs.length; i++) {
-        const { format, config } = formatConfigs[i];
+        const { format, config, slideIndex, totalSlides } = formatConfigs[i];
         if (!config) continue;
 
         onProgress({ 
@@ -2226,23 +2443,49 @@ export async function runPipelineFromPostWithProgress(
 
          try {
            // Cache removed per user request
-          
+         
           // If not cached, generate
           if (!llmOutput) {
             if (matchedTemplate && classification) {
               const slotValues = { ...classification.slotValues };
               if (!slotValues.headline) slotValues.headline = post.title;
               if (!slotValues.brand) slotValues.brand = brandName;
-              llmOutput = { generated_html: fillTemplateSlots(matchedTemplate.html, slotValues) };
+              llmOutput = { generated_html: fillTemplateSlots(matchedTemplate.html, slotValues), template_html: matchedTemplate.html, slot_values: slotValues };
             } else {
-              const instructionsWithDesignGuidance = designInstructions
-                ? [`DESIGN SYSTEM INSTRUCTIONS (follow these closely):`, designInstructions].join('\n')
+              const plannedPost = orchestratorPlan?.plannedPosts?.find((p: any) => 
+                p.format.toLowerCase() === (format.startsWith('carousel-post-slide-') ? 'carousel-post' : format).toLowerCase()
+              ) || null;
+
+              const baseInstructions = designInstructions ? [designInstructions] : [];
+              if (plannedPost?.visualDirection) baseInstructions.push(`VISUAL DIRECTION: ${plannedPost.visualDirection}`);
+              if (plannedPost?.copyFocus) baseInstructions.push(`COPY FOCUS: ${plannedPost.copyFocus}`);
+              if (plannedPost?.cta && plannedPost.cta !== 'none') baseInstructions.push(`CTA: ${plannedPost.cta}`);
+
+              // Add carousel slide-specific instructions
+              if (totalSlides > 1 && slideIndex >= 0) {
+                const slideNumber = slideIndex + 1;
+                let carouselInstruction = '';
+                // CAROUSEL RULES: 
+                // - Do NOT output visible slide numbers, pagination dots, "N/N", "Slide N", or progress indicators in the HTML.
+                //   The carousel is a series of separate images; pagination is handled by the platform viewer.
+                // - All slides must share a consistent visual identity: same color palette, font hierarchy, and spacing system.
+                // - Every slide must have breathing room: minimum 32px padding on all sides (p-8). Use generous gaps between elements.
+                // - This is a social media image — no web links, no URLs, no "Read more", no hashtags in rendered content.
+                if (slideNumber === 1) {
+                  carouselInstruction = `CAROUSEL SLIDE 1 (COVER/INTRO): Create a bold, attention-grabbing cover slide. This is the hook that stops the scroll. Include the main headline prominently. Use strong visual presence — large headline, minimal body copy, maximum visual impact. The cover must feel like the start of a story — create curiosity and anticipation. Include a subtle visual indicator (like a small arrow or "→" icon) to suggest more content follows. Do NOT render "Slide 1", "1/5", pagination dots, or progress bars in the HTML.`;
+                } else if (slideNumber === totalSlides) {
+                  carouselInstruction = `CAROUSEL SLIDE ${slideNumber} OF ${totalSlides} (FINAL/CTA): Create the closing slide that wraps up the carousel narrative. Summarize the key takeaway or reinforce the main message. Include a strong call-to-action. The slide should feel conclusive — like the natural end of a story arc. Use slightly more visual weight or a subtle variation (e.g. accent color emphasis) to signal finality. Do NOT render "Slide ${slideNumber}", "${slideNumber}/${totalSlides}", pagination dots, or progress bars in the HTML.`;
+                } else {
+                  carouselInstruction = `CAROUSEL SLIDE ${slideNumber} OF ${totalSlides} (CONTENT): Create a content slide focusing on ONE key insight, data point, or tip. This slide must stand alone as a meaningful post while being visually consistent with the carousel series. Keep copy focused and scannable. Use the same visual framework as other slides — matching color palette, typography scale, spacing. Do NOT render "Slide ${slideNumber}", "${slideNumber}/${totalSlides}", pagination dots, or progress bars in the HTML.`;
+                }
+                baseInstructions.push(carouselInstruction);
+              }
+
+              const instructionsWithDesignGuidance = baseInstructions.length > 0
+                ? baseInstructions.join('\n')
                 : undefined;
 
-              const generatedImage = generatedImages.get(format);
-              const plannedPost = orchestratorPlan?.plannedPosts?.find((p: any) => 
-                p.format.toLowerCase() === format.toLowerCase()
-              ) || null;
+            const generatedImage = generatedImages.get(format) || (format.startsWith('carousel-post-slide-') ? generatedImages.get('carousel-post') : undefined);
 
               // No timeout on HTML generation — Gemini can legitimately take 30–60s.
               llmOutput = await runHtmlLayoutAgent(
@@ -2271,6 +2514,7 @@ export async function runPipelineFromPostWithProgress(
           const finalHtml = injectDesignTokensIntoHtmlFast(llmOutput.generated_html, precomputedTokens);
           variantHtmlByFormat[format] = finalHtml;
           variantTemplateHtmlByFormat[format] = llmOutput.template_html || llmOutput.generated_html;
+          variantSlotValuesByFormat[format] = llmOutput.slot_values || {};
 
           onProgress({ 
             type: "rendering", 
@@ -2351,6 +2595,7 @@ export async function runPipelineFromPostWithProgress(
         llm_output: variantLlmOutput || { generated_html: "" },
         html_by_format: variantHtmlByFormat,
         template_html_by_format: variantTemplateHtmlByFormat,
+        slot_values_by_format: variantSlotValuesByFormat,
         assets: formatAssets
       });
     }
@@ -2364,6 +2609,7 @@ export async function runPipelineFromPostWithProgress(
   // Build global HTML map
   const htmlByFormat: Record<string, string> = {};
   const templateHtmlByFormat: Record<string, string> = {};
+  const slotValuesByFormat: Record<string, Record<string, string>> = {};
   for (const variant of variants) {
     for (const [format, html] of Object.entries(variant.html_by_format || {})) {
       const globalKey = outputPlan.postCount > 1 ? `${format}-v${variant.index}` : format;
@@ -2372,6 +2618,10 @@ export async function runPipelineFromPostWithProgress(
     for (const [format, html] of Object.entries(variant.template_html_by_format || {})) {
       const globalKey = outputPlan.postCount > 1 ? `${format}-v${variant.index}` : format;
       templateHtmlByFormat[globalKey] = html;
+    }
+    for (const [format, slotValues] of Object.entries(variant.slot_values_by_format || {})) {
+      const globalKey = outputPlan.postCount > 1 ? `${format}-v${variant.index}` : format;
+      slotValuesByFormat[globalKey] = slotValues;
     }
   }
 
@@ -2384,6 +2634,7 @@ export async function runPipelineFromPostWithProgress(
     llm_output: primaryVariant.llm_output,
     html_by_format: htmlByFormat,
     template_html_by_format: templateHtmlByFormat,
+    slot_values_by_format: slotValuesByFormat,
     agentic: summarizeAgentExecution(agentContexts),
     assets: primaryVariant.assets,
     variants: outputPlan.postCount > 1 ? variants : undefined,

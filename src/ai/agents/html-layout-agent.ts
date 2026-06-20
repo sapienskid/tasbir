@@ -220,6 +220,52 @@ function extractSlotsFromResponse(text: string, templateHtml?: string): Record<s
   return {};
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function extractHardcodedTextAsSlots(generatedHtml: string, templateHtml: string, existingSlots: Record<string, string>): { templateHtml: string; newSlots: Record<string, string> } {
+  const newSlots: Record<string, string> = {};
+  const existingValues = new Set(Object.values(existingSlots).filter(v => v.length > 0));
+  
+  // Find text content between HTML tags that is NOT a {{placeholder}}
+  const textPattern = />([^<{}]+)</g;
+  let match;
+  
+  // Collect candidates with their original text
+  const candidates: Array<{ original: string; trimmed: string }> = [];
+  while ((match = textPattern.exec(generatedHtml)) !== null) {
+    const original = match[1];
+    const trimmed = original.trim();
+    if (!trimmed) continue;
+    if (trimmed.length < 3) continue;
+    if (/^\d+$/.test(trimmed)) continue;
+    if (/^[0-9.,%+#*\-–—:;/|\\@&!?()[\]{}'"\s]+$/.test(trimmed)) continue;
+    if (existingValues.has(trimmed)) continue;
+    if (trimmed.startsWith('var(') || trimmed.startsWith('http')) continue;
+    if (/^[A-Za-z0-9.#_-]+$/.test(trimmed) && trimmed.length < 5) continue;
+    if (/^(?:[a-z]+-[a-z]+(?:\s+[a-z]+-[a-z]+)*)$/.test(trimmed)) continue;
+    const words = trimmed.split(/\s+/);
+    if (words.length === 1 && /^(the|and|for|with|from|this|that|your|our|a|an|is|it|in|on|to|of|be|by|at|or|as|we|us|no|so|if|go|up)$/i.test(trimmed)) continue;
+    // Skip text that is already in a slot (the slot values from AI)
+    if (candidates.some(c => c.trimmed === trimmed)) continue;
+    candidates.push({ original, trimmed });
+  }
+  
+  // Build template by replacing hardcoded text with placeholders
+  let modifiedTemplate = templateHtml;
+  let counter = 0;
+  for (const { original, trimmed } of candidates) {
+    const slotName = `custom_${counter}`;
+    newSlots[slotName] = trimmed;
+    // Replace in the template only (keep generated HTML intact for rendering)
+    modifiedTemplate = modifiedTemplate.replace(new RegExp(escapeRegex(original), 'g'), `{{${slotName}}}`);
+    counter++;
+  }
+  
+  return { templateHtml: modifiedTemplate, newSlots };
+}
+
 export async function generateHtmlLayout(
   models: LanguageModel[],
   args: HtmlLayoutArgs,
@@ -263,6 +309,16 @@ export async function generateHtmlLayout(
           ? fillTemplateSlots(templateHtml, slots) 
           : templateHtml;
 
+       // PROGRAMMATIC FIX: Extract any remaining hardcoded text into editable slots.
+       // The generated HTML keeps actual text (for correct rendering).
+       // The template HTML gets placeholders (for the editor).
+       // Only slot_values are populated with the discovered text.
+       const hardcodedResult = extractHardcodedTextAsSlots(generatedHtml, templateHtml, slots);
+       const updatedTemplateHtml = hardcodedResult.templateHtml;
+       
+       // Merge discovered hardcoded texts into slot_values so editor can show them
+       const allSlotValues = { ...slots, ...hardcodedResult.newSlots };
+
        // PROGRAMMATIC FIX: Ensure image is embedded even if AI forgot the placeholder
        if (args.generatedImage?.dataUrl && !generatedHtml.includes('{{image_url}}') && !generatedHtml.includes(args.generatedImage.dataUrl)) {
          // Inject image based on position spec
@@ -277,8 +333,8 @@ export async function generateHtmlLayout(
 
       return { 
          generated_html: generatedHtml,
-         template_html: templateHtml,
-         slot_values: slots
+         template_html: updatedTemplateHtml,
+         slot_values: allSlotValues
       };
     } catch (error) {
       console.warn("[html-layout-agent] Attempt failed:", error);
@@ -417,8 +473,21 @@ function toLines(value: string | string[] | undefined): string[] {
 }
 
 function extractHtml(text: string): string {
-  const cleaned = text.trim().replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/i, "").trim();
-  if (/<!doctype html>/i.test(cleaned)) return cleaned;
+  let cleaned = text.trim();
+  // Strip leading markdown code fence
+  cleaned = cleaned.replace(/^```(?:html)?\s*\n?/i, "");
+  // Strip trailing markdown code fences
+  cleaned = cleaned.replace(/```\s*$/i, "");
+  cleaned = cleaned.trim();
+
+  if (/<!doctype html>/i.test(cleaned)) {
+    // Still strip any trailing junk after </html> (JSON blocks, markdown, etc.)
+    const htmlEnd = cleaned.lastIndexOf('</html>');
+    if (htmlEnd >= 0) {
+      cleaned = cleaned.slice(0, htmlEnd + 7).trim();
+    }
+    return cleaned;
+  }
 
   const htmlStart = cleaned.search(/<html[\s>]/i);
   const htmlEnd = cleaned.search(/<\/html>/i);
@@ -431,11 +500,29 @@ function extractHtml(text: string): string {
     html = html.replace(/<\/html>[\s\S]*$/i, '</html>');
     // Strip any leading JSON object before <html>
     html = html.replace(/^[\s\S]*?(?=<html)/i, '');
-    // Strip any remaining JSON objects anywhere in the HTML
-    html = html.replace(/\{[\s\S]*?"(?:slot|image|brand|headline|body|title|excerpt|cta|author|quote|metric|metric_label|brand|subtitle|subheadline)"[\s\S]*?\}/g, '');
+    // Strip any remaining JSON objects anywhere in the HTML (more comprehensive)
+    // Match JSON objects that contain common slot/field names
+    html = html.replace(/\{[\s\S]*?"(?:slot|image|brand|headline|body|title|excerpt|cta|author|quote|metric|metric_label|subtitle|subheadline|image_url|brand_logo)"[\s\S]*?\}/gi, '');
     // Strip any lines that look like JSON key-value pairs
     html = html.replace(/^\s*"[\w_]+"\s*:\s*"[^"]*"\s*,?\s*$/gm, '');
+    // Strip standalone JSON objects on their own lines
+    html = html.replace(/^\s*\{[\s\S]*?\}\s*$/gm, '');
+    // Additional: Strip any JSON-like patterns that might be embedded in HTML attributes or text nodes
+    html = html.replace(/\{\s*"[^"]+"\s*:\s*"[^"]*"\s*(?:,\s*"[^"]+"\s*:\s*"[^"]*"\s*)*\}/g, '');
     return html.trim();
+  }
+
+  // If no proper HTML tags found, try to extract HTML from code blocks
+  const htmlBlockMatch = cleaned.match(/```html\s*([\s\S]*?)\s*```/i);
+  if (htmlBlockMatch) {
+    return htmlBlockMatch[1].trim();
+  }
+
+  // Last resort: if the response looks like it contains HTML mixed with JSON,
+  // try to find the HTML portion
+  const doctypeMatch = cleaned.match(/(<!doctype html>[\s\S]*?<\/html>)/i);
+  if (doctypeMatch) {
+    return doctypeMatch[1].trim();
   }
 
   return cleaned;

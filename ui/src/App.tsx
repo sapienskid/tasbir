@@ -1410,6 +1410,8 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
   const [previewOffset, setPreviewOffset] = useState({ x: 0, y: 0 })
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
+  const [previewWidth, setPreviewWidth] = useState(1080)
+  const [previewHeight, setPreviewHeight] = useState(1350)
 
   // Extract slots from HTML
   function extractSlots(html: string): string[] {
@@ -1488,26 +1490,41 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
     link.click();
   };
 
-  const handleEdit = (format: string, asset: any, _resolvedSrc: string) => {
+  const handleEdit = (format: string, _asset: any, _resolvedSrc: string) => {
     setEditingFormat(format)
-    // Use stored HTML if available
-    const storedHtml = result?.html_by_format?.[format] || result?.htmlByFormat?.[format]
-    if (storedHtml) {
-      setTemplateHtml(storedHtml)
-      const slots = extractSlots(storedHtml)
+    // Set preview dimensions from format config
+    const fmt = availableFormats.find((f: any) => f.id === format)
+    if (fmt) {
+      setPreviewWidth(fmt.width || 1080)
+      setPreviewHeight(fmt.height || 1350)
+    }
+    // Use template HTML (with placeholders) for editing, not the filled HTML
+    const templateHtml = result?.template_html_by_format?.[format] || result?.templateHtmlByFormat?.[format]
+    const slotValues = result?.slot_values_by_format?.[format] || result?.slotValuesByFormat?.[format]
+    
+    if (templateHtml) {
+      // Use template HTML which has {{slot}} placeholders
+      setTemplateHtml(templateHtml)
+      const slots = extractSlots(templateHtml)
       const initialValues: Record<string, string> = {}
-      slots.forEach(slot => initialValues[slot] = '')
+      
+      // Use slot values directly from the response if available
+      if (slotValues && Object.keys(slotValues).length > 0) {
+        for (const slot of slots) {
+          initialValues[slot] = slotValues[slot] || ''
+        }
+      } else {
+        // Fallback: leave empty for user to fill
+        slots.forEach(slot => initialValues[slot] = '')
+      }
       setSlotValues(initialValues)
-    } else if (asset?.url && asset.url.startsWith('data:')) {
-      setTemplateHtml(`// HTML for ${format}\n// Edit the content below and preview updates automatically`)
-      setSlotValues({})
     } else {
       setTemplateHtml(`// HTML for ${format}\n// Edit the content below and preview updates automatically`)
       setSlotValues({})
     }
-  setPreviewHtml('')
-  setEditorError(null)
-}
+    setPreviewHtml('')
+    setEditorError(null)
+  }
 
   const handleSave = async () => {
     if (!templateHtml || !editingFormat || !result || !tokens) return
@@ -1538,7 +1555,8 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
           height: formatConfig.height,
           format: editingFormat,
           slug: result.slug,
-          designTokens: tokens
+          designTokens: tokens,
+          slot_values: slotValues,
         })
       })
       
@@ -1550,6 +1568,7 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
       const data = await response.json()
       
       // Update the asset in the result to show the new render
+      // Also update the html_by_format and template_html_by_format with the new HTML
       setStudioResult((prev: any) => {
         if (!prev) return prev
         return {
@@ -1557,6 +1576,14 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
           assets: {
             ...prev.assets,
             [editingFormat]: data.asset
+          },
+          html_by_format: {
+            ...prev.html_by_format,
+            [editingFormat]: filledHtml
+          },
+          template_html_by_format: {
+            ...prev.template_html_by_format,
+            [editingFormat]: templateHtml
           }
         }
       })
@@ -1678,72 +1705,77 @@ function StudioScreenshotPanel({ result, generating, tokens, availableFormats, s
             </div>
 
             {/* Live Preview */}
-            <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#fff', minWidth: 300 }}>
+            <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#1a1a1a', minWidth: 300 }}>
               <div className="flex items-center justify-between px-2 py-1 border-b" style={{ borderColor: '#252525' }}>
                 <span className="text-[9px] font-medium" style={{ color: '#888' }}>Live Preview</span>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setPreviewZoom(Math.max(0.25, previewZoom - 0.25))} className="p-1 rounded hover:bg-[#252525]" style={{ color: '#888', fontSize: 14 }} title="Zoom out">−</button>
-                  <span className="text-[9px] font-mono min-w-[40px] text-center" style={{ color: '#888' }}>{Math.round(previewZoom * 100)}%</span>
-                  <button onClick={() => setPreviewZoom(Math.min(3, previewZoom + 0.25))} className="p-1 rounded hover:bg-[#252525]" style={{ color: '#888', fontSize: 14 }} title="Zoom in">+</button>
-                  <button onClick={() => { setPreviewZoom(1); setPreviewOffset({ x: 0, y: 0 }); }} className="px-1.5 py-1 rounded hover:bg-[#252525]" style={{ color: '#888', fontSize: 10 }} title="Reset zoom">Fit</button>
+                  <button onClick={() => setPreviewZoom(Math.max(0.1, previewZoom - 0.1))} className="p-1 rounded hover:bg-[#333]" style={{ color: '#aaa', fontSize: 14, lineHeight: 1 }} title="Zoom out">−</button>
+                  <span className="text-[9px] font-mono min-w-[36px] text-center" style={{ color: '#aaa' }}>{Math.round(previewZoom * 100)}%</span>
+                  <button onClick={() => setPreviewZoom(Math.min(3, previewZoom + 0.1))} className="p-1 rounded hover:bg-[#333]" style={{ color: '#aaa', fontSize: 14, lineHeight: 1 }} title="Zoom in">+</button>
+                  <button onClick={() => { setPreviewZoom(1); setPreviewOffset({ x: 0, y: 0 }); }} className="px-1.5 py-1 rounded hover:bg-[#333]" style={{ color: '#aaa', fontSize: 10 }} title="Reset zoom">Fit</button>
                 </div>
               </div>
-              <div className="flex-1 relative p-4 overflow-hidden">
+              <div 
+                className="flex-1 overflow-auto"
+                style={{ background: '#1a1a1a', cursor: isPanning ? 'grabbing' : 'grab' }}
+                onMouseDown={(e) => {
+                  if (e.button === 0) {
+                    setIsPanning(true)
+                    setPanStart({ x: e.clientX - previewOffset.x, y: e.clientY - previewOffset.y })
+                    e.preventDefault()
+                  }
+                }}
+                onMouseMove={(e) => {
+                  if (isPanning) {
+                    setPreviewOffset({ x: e.clientX - panStart.x, y: e.clientY - panStart.y })
+                  }
+                }}
+                onMouseUp={() => setIsPanning(false)}
+                onMouseLeave={() => setIsPanning(false)}
+                onWheel={(e) => {
+                  if (e.ctrlKey || e.metaKey) {
+                    e.preventDefault()
+                    const delta = e.deltaY > 0 ? -0.1 : 0.1
+                    setPreviewZoom(prev => Math.max(0.1, Math.min(3, prev + delta)))
+                  }
+                }}
+              >
+                <div className="flex items-start justify-start p-6" style={{ minWidth: 'max-content', minHeight: 'max-content' }}>
                 {previewHtml ? (
                   <div 
-                    className="relative"
                     style={{ 
                       transformOrigin: 'top left',
                       transform: `translate(${previewOffset.x}px, ${previewOffset.y}px) scale(${previewZoom})`,
                       background: '#fff',
-                      width: '100%',
-                      height: '100%',
-                    }}
-                    onMouseDown={(e) => {
-                      if (e.button === 1 || (e.button === 0 && e.altKey)) {
-                        setIsPanning(true)
-                        setPanStart({ x: e.clientX - previewOffset.x, y: e.clientY - previewOffset.y })
-                        e.preventDefault()
-                      }
-                    }}
-                    onMouseMove={(e) => {
-                      if (isPanning) {
-                        setPreviewOffset({ x: e.clientX - panStart.x, y: e.clientY - panStart.y })
-                      }
-                    }}
-                    onMouseUp={() => setIsPanning(false)}
-                    onMouseLeave={() => setIsPanning(false)}
-                    onWheel={(e) => {
-                      if (e.ctrlKey || e.metaKey) {
-                        e.preventDefault()
-                        const delta = e.deltaY > 0 ? -0.1 : 0.1
-                        setPreviewZoom(prev => Math.max(0.25, Math.min(3, prev + delta)))
-                      }
+                      flexShrink: 0,
+                      boxShadow: '0 0 40px rgba(0,0,0,0.5)',
                     }}
                   >
                     <iframe
                       srcDoc={previewHtml}
-                      className="w-full h-full border-0"
+                      className="border-0 block"
                       style={{ 
                         background: '#fff',
-                        width: '100%',
-                        height: '100%',
+                        width: previewWidth,
+                        height: previewHeight,
                         border: 'none',
+                        pointerEvents: 'none',
                       }}
-                      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                      sandbox="allow-scripts allow-same-origin"
                     />
                   </div>
                 ) : (
-                  <div className="flex items-center justify-center h-full text-[11px]" style={{ color: '#888' }}>
+                  <div className="flex items-center justify-center text-[11px]" style={{ color: '#888', minHeight: 200, minWidth: 300 }}>
                     Live preview updates as you type...
                   </div>
                 )}
-                {editorError && (
-                  <div className="absolute bottom-4 left-4 right-4 p-2 rounded text-[10px]" style={{ background: '#f43f5e', color: 'white' }}>
-                    {editorError}
-                  </div>
-                )}
+                </div>
               </div>
+              {editorError && (
+                <div className="absolute bottom-4 left-4 right-4 p-2 rounded text-[10px]" style={{ background: '#f43f5e', color: 'white' }}>
+                  {editorError}
+                </div>
+              )}
             </div>
           </div>
         </div>

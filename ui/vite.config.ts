@@ -18,6 +18,10 @@ export default defineConfig({
       "/webhook": "http://127.0.0.1:8787",
       "/settings": "http://127.0.0.1:8787",
       "/templates": "http://127.0.0.1:8787",
+      "/render-html": "http://127.0.0.1:8787",
+      "/edited-content": "http://127.0.0.1:8787",
+      "/save-to-r2": "http://127.0.0.1:8787",
+      "/openapi.json": "http://127.0.0.1:8787",
     },
   },
   resolve: {

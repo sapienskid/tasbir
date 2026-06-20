@@ -165,6 +165,29 @@ export const api = {
     body: JSON.stringify({ key, dataUri }),
   }),
 
+  renderHtml: (body: {
+    html: string;
+    width: number;
+    height: number;
+    format: string;
+    slug: string;
+    designTokens?: any;
+    slot_values?: Record<string, string>;
+  }) => request<{ ok: boolean; asset: { format: string; key: string; url: string } }>("/render-html", {
+    method: "POST",
+    body: JSON.stringify(body),
+  }),
+
+  getEditedContent: (slug: string, format: string) => request<{ ok: boolean; html: string; slot_values: Record<string, string>; updatedAt: string }>(`/edited-content?slug=${encodeURIComponent(slug)}&format=${encodeURIComponent(format)}`),
+
+  deleteEditedContent: (slug: string, format?: string) => {
+    const params = new URLSearchParams({ slug });
+    if (format) params.set('format', format);
+    return request<{ ok: boolean }>(`/edited-content?${params.toString()}`, {
+      method: "DELETE",
+    });
+  },
+
   getSettings: () => request<any>("/settings"),
   saveSettings: (settings: any) => request<{ ok: boolean }>("/settings", {
     method: "PUT",

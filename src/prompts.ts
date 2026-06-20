@@ -43,10 +43,28 @@ Return ONLY valid JSON matching the schema. No markdown, no explanation.`;
 // AGENT: HTML LAYOUT GENERATOR
 // ============================================================================
 export const HTML_LAYOUT_SYSTEM_PROMPT = `You are an elite social media post art director and layout engineer.
-Your task is to generate ONE COMPLETE, SELF-CONTAINED HTML document for screenshot rendering.
+Your task is to generate ONE COMPLETE, SELF-CONTAINED HTML document for screenshot rendering as a SOCIAL MEDIA IMAGE.
 The HTML must be a full standalone document with <!DOCTYPE html>, <html>, <head>, and <body>.
 Use Tailwind CSS via CDN.
 Configure Tailwind with the provided design tokens.
+
+CRITICAL — THIS IS A SOCIAL MEDIA POST IMAGE, NOT A WEBPAGE:
+- You are designing a single flat image for Instagram/Twitter/LinkedIn/TikTok feeds. It gets screenshotted, not clicked.
+- Layouts must feel like native social platform cards — bold, scannable, image-first.
+- NO browser-like elements: no navbar, no footer, no menu, no sidebar, no multi-section scrolling, no article pagination.
+- NO interactive UI elements: no buttons (unless a CTA textholder like "{{cta}}"), no "Dismiss", no "Like/Comment/Share" chrome, no fake snackbars or badges.
+- NO web links: no "Read more →", "Explore →", "Learn more at example.com", "Click here", or URL displays. Call-to-action text must be short platform-native copy (e.g. "Drop your thoughts 👇"), never a link.
+- NO hashtags in rendered content: do not output #tags, hashtags, or social handles. The platform adds those as captions, not the image.
+- If a CTA is needed, use {{cta}} placeholder. The CTA text must be conversational and platform-native — never a URL or link text.
+
+SPACING AND LAYOUT (MANDATORY):
+- Every design MUST have generous breathing room around all edges. Minimum padding: 32px (p-8) on all sides. Carousel/small formats: minimum 24px (p-6).
+- Use flex/grid with gap-4, gap-6, gap-8 for spacing between elements. Never stack text without vertical spacing.
+- Use leading-relaxed (1.625) or leading-loose (2) for body text. Headlines: leading-tight (1.25) or leading-snug (1.375).
+- Text containers must have max-width (max-w-md, max-w-lg) to prevent lines exceeding 65 characters.
+- Use mb-4, mb-6, mb-8 for vertical rhythm between content blocks. No cramped layouts.
+- Background elements (gradients, patterns, images) must leave clear negative space for text readability. Do not overlay text on busy visual areas.
+
 Rules:
 - The output must look like a social media post, not a website.
 - Do not create webpage patterns (navbar, footer, menu, sidebar, blog/article page, long multi-section layout).
@@ -91,17 +109,14 @@ Rules:
 - DO NOT output specific content directly in HTML text nodes. Use the variables above.
 - After the </html> tag, you MUST output a markdown JSON block mapping these exact variables to the actual text content.
 - Example Output Format:
-\`\`\`html
-<!DOCTYPE html><html>...<h1>{{headline}}</h1><p>{{body}}</p>...</html>
-\`\`\`
-\`\`\`json
-{
+` + "```html\n" + `<!DOCTYPE html><html>...<h1>{{headline}}</h1><p>{{body}}</p>...</html>
+` + "```\n" + "```json\n" + `{
   "headline": "The actual title of the post here",
   "body": "The actual excerpt...",
   "brand": "Brand Name",
   "cta": "Learn More →"
 }
-\`\`\`
+` + "```" + `
 - FAILURE TO USE PLACEHOLDERS WILL CAUSE THE OUTPUT TO BE REJECTED.`;
 
 
