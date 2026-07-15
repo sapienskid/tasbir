@@ -1,0 +1,190 @@
+name: tasbir
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  tasbir:
+    driver: bridge
+
+x-shared: &shared-env
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  DATABASE_URL: postgresql+asyncpg://tasbir:tasbir@postgres:5432/tasbir
+  REDIS_URL: redis://redis:6379/0
+  MINIO_ENDPOINT: minio:9000
+  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-tasbir}
+  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-tasbir_secret}
+  MINIO_BUCKET: ${MINIO_BUCKET:-tasbir-assets}
+  GHOST_URL: ${GHOST_URL:-}
+  GHOST_ADMIN_API_KEY: ${GHOST_ADMIN_API_KEY:-}
+  GHOST_WEBHOOK_SECRET: ${GHOST_WEBHOOK_SECRET:-}
+  PENPOT_URL: ${PENPOT_URL:-http://penpot:9001}
+  PENPOT_ACCESS_TOKEN: ${PENPOT_ACCESS_TOKEN:-}
+  UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - tasbir
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tasbir"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    environment:
+      POSTGRES_DB: tasbir
+      POSTGRES_USER: tasbir
+      POSTGRES_PASSWORD: tasbir
+    mem_limit: 512m
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks:
+      - tasbir
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    mem_limit: 128m
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    volumes:
+      - minio_data:/data
+    networks:
+      - tasbir
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-tasbir}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-tasbir_secret}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 256m
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - tasbir
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      <<: *shared-env
+      SERVICE: api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    mem_limit: 256m
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - tasbir
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      <<: *shared-env
+      SERVICE: worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    mem_limit: 512m
+
+  playwright:
+    image: mcr.microsoft.com/playwright/python:v1.52
+    restart: unless-stopped
+    networks:
+      - tasbir
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+    working_dir: /app
+    command: >
+      sh -c "pip install fastapi uvicorn && 
+             playwright install chromium && 
+             uvicorn render_server:app --host 0.0.0.0 --port 4000"
+    mem_limit: 1.5g
+
+  penpot:
+    image: penpotapp/penpot:latest
+    restart: unless-stopped
+    profiles:
+      - design
+    ports:
+      - "9001:9001"
+    networks:
+      - tasbir
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PENPOT_FLAGS: enable-registration enable-login-with-password enable-mcp
+      PENPOT_PUBLIC_URI: http://localhost:9001
+      PENPOT_DATABASE_URI: postgresql://penpot:penpot@postgres:5432/penpot
+      PENPOT_REDIS_URI: redis://redis:6379/0
+      PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:-change-this-insecure-key}
+      PENPOT_TELEMETRY_ENABLED: "false"
+    mem_limit: 1g
+
+  ui:
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    networks:
+      - tasbir
+    depends_on:
+      - api
+    environment:
+      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
+    mem_limit: 128m
+
+  caddy:
+    image: caddy:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - tasbir
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      API_URL: api:8000
+      UI_URL: ui:5173
+    mem_limit: 64m
