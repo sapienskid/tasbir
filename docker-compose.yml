@@ -130,6 +130,8 @@ services:
     environment:
       PORT: 4000
     working_dir: /app
+    volumes:
+      - ./backend/app/services/render_server.py:/app/render_server.py
     command: >
       sh -c "pip install fastapi uvicorn && 
              playwright install chromium && 
