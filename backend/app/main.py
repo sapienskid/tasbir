@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.api import health, settings as settings_router
+from app.api import templates, tokens, formats, generate, tasks, assets, prompts
+from app.api.webhooks import ghost as ghost_webhook, penpot as penpot_webhook
+from app.core.dependencies import get_db
+from app.core.security import verify_api_key
 from app.db.session import create_pool
 
 
@@ -33,10 +37,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Public routes (no auth required)
 app.include_router(health.router, tags=["health"])
-app.include_router(settings_router.router, prefix="/settings", tags=["settings"])
 
-
-@app.get("/openapi.json", include_in_schema=False)
-async def openapi():
-    return app.openapi()
+# Protected routes (API key required if configured)
+app.include_router(settings_router.router, prefix="/settings", tags=["settings"], dependencies=[Depends(verify_api_key)])
+app.include_router(templates.router, prefix="/templates", tags=["templates"], dependencies=[Depends(verify_api_key)])
+app.include_router(tokens.router, prefix="/tokens", tags=["tokens"], dependencies=[Depends(verify_api_key)])
+app.include_router(formats.router, prefix="/formats", tags=["formats"], dependencies=[Depends(verify_api_key)])
+app.include_router(generate.router, prefix="/generate", tags=["generate"], dependencies=[Depends(verify_api_key)])
+app.include_router(tasks.router, prefix="/tasks", tags=["tasks"], dependencies=[Depends(verify_api_key)])
+app.include_router(assets.router, prefix="/assets", tags=["assets"], dependencies=[Depends(verify_api_key)])
+app.include_router(prompts.router, prefix="/prompts", tags=["prompts"], dependencies=[Depends(verify_api_key)])
+app.include_router(ghost_webhook.router, prefix="/webhooks", tags=["webhooks"], dependencies=[Depends(verify_api_key)])
+app.include_router(penpot_webhook.router, prefix="/webhooks", tags=["webhooks"], dependencies=[Depends(verify_api_key)])
