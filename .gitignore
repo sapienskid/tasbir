@@ -9,7 +9,7 @@ venv/
 
 # Node
 node_modules/
-.ui/
+.svelte-kit/
 
 # Environment
 .env
@@ -35,7 +35,7 @@ build/
 caddy_data/
 
 # Generated
-backend/alembic/versions/*.py
+backend/app/db/migrations/versions/*.py
 backend/tests/coverage/
 
 # Secrets
