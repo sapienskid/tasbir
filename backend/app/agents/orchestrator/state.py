@@ -3,7 +3,7 @@
 Each agent node reads from and writes to this state dict.
 """
 
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any, Optional, TypedDict
 
 from langgraph.graph import add_messages
 
@@ -23,6 +23,7 @@ class GenerationState(TypedDict):
     requested_formats: list[str]
     design_tokens: dict[str, Any]
     settings: dict[str, Any]
+    _task_id: str
 
     # ── Agent Outputs ──────────────────────────────────────────────────
     strategic_brief: str
@@ -62,6 +63,7 @@ def initial_state(
         "requested_formats": requested_formats,
         "design_tokens": kwargs.get("design_tokens", {}),
         "settings": kwargs.get("settings", {}),
+        "_task_id": kwargs.get("_task_id", ""),
         "strategic_brief": "",
         "copy_by_format": {},
         "background_by_format": {},

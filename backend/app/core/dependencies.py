@@ -1,6 +1,6 @@
 from fastapi import Request
 
-from app.db.session import async_sessionmaker, AsyncSession
+from app.db.session import AsyncSession, async_sessionmaker
 
 
 async def get_db(request: Request) -> AsyncSession:
