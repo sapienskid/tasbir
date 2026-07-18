@@ -5,8 +5,8 @@ Output: strategic_brief (stored in state)
 """
 
 from app.agents.orchestrator.state import GenerationState
-from app.services.llm import call_llm
 from app.agents.prompts.registry import get_prompt
+from app.services.llm import call_llm
 
 
 async def strategist_node(state: GenerationState) -> dict:
