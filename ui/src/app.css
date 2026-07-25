@@ -1,18 +1,50 @@
 @import "tailwindcss";
 
 @theme {
-  --color-black: #000000;
-  --color-surface: #080808;
-  --color-elevated: #111111;
-  --color-border: #1c1c1c;
-  --color-border-focus: #333333;
-  --color-white: #ffffff;
-  --color-gray-400: #8a8a8a;
-  --color-gray-500: #666666;
-  --color-gray-600: #555555;
+  /* Design system palette */
+  --color-bg: #0A0A0C;
+  --color-surface: #141418;
+  --color-elevated: #202026;
+  --color-border: #2C2C30;
+  --color-border-focus: #3C3C44;
+  --color-text: #EEE9E4;
+  --color-text-secondary: #9B9BA0;
+  --color-accent: #CD5B7D;
+  --color-accent-subtle: #CD5B7D20;
+  --color-secondary: #5B7D7C;
+  --color-destructive: #B05E5E;
 
-  --font-display: "DM Sans", sans-serif;
-  --font-body: "DM Sans", sans-serif;
+  /* shadcn-svelte compatibility */
+  --color-background: #0A0A0C;
+  --color-foreground: #EEE9E4;
+  --color-card: #141418;
+  --color-card-foreground: #EEE9E4;
+  --color-popover: #141418;
+  --color-popover-foreground: #EEE9E4;
+  --color-primary: #CD5B7D;
+  --color-primary-foreground: #0A0A0C;
+  --color-secondary: #5B7D7C;
+  --color-secondary-foreground: #EEE9E4;
+  --color-muted: #202026;
+  --color-muted-foreground: #9B9BA0;
+  --color-accent: #CD5B7D;
+  --color-accent-foreground: #0A0A0C;
+  --color-destructive: #B05E5E;
+  --color-destructive-foreground: #EEE9E4;
+  --color-border: #2C2C30;
+  --color-input: #2C2C30;
+  --color-ring: #CD5B7D;
+  --color-sidebar-background: #141418;
+  --color-sidebar-foreground: #EEE9E4;
+  --color-sidebar-primary: #CD5B7D;
+  --color-sidebar-primary-foreground: #0A0A0C;
+  --color-sidebar-accent: #202026;
+  --color-sidebar-accent-foreground: #EEE9E4;
+  --color-sidebar-border: #2C2C30;
+  --color-sidebar-ring: #CD5B7D;
+
+  --font-display: "Instrument Serif", Georgia, serif;
+  --font-body: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 }
 
@@ -21,31 +53,24 @@
 }
 
 html {
-  background: #000000;
-  color: #ffffff;
+  background: var(--color-bg);
+  color: var(--color-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   margin: 0;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-body);
 }
 
 ::selection {
-  background: #ffffff;
-  color: #000000;
+  background: var(--color-accent);
+  color: var(--color-bg);
 }
 
 ::placeholder {
-  color: #555555;
-}
-
-/* Darkroom scan line — the signature animation */
-@keyframes scan-line {
-  0% { background-position: 0% 0%; }
-  50% { background-position: 100% 100%; }
-  100% { background-position: 0% 0%; }
+  color: #555;
 }
 
 .scan-border {
@@ -60,9 +85,9 @@ body {
   padding: 1px;
   background: conic-gradient(
     transparent 0deg,
-    rgba(255, 255, 255, 0.15) 90deg,
+    var(--color-accent) 90deg,
     transparent 180deg,
-    rgba(255, 255, 255, 0.05) 270deg,
+    var(--color-secondary) 270deg,
     transparent 360deg
   );
   background-size: 200% 200%;
@@ -78,6 +103,12 @@ body {
 
 .scan-border.is-active::before {
   opacity: 1;
+}
+
+@keyframes scan-line {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
