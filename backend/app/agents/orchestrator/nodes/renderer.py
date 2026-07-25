@@ -7,6 +7,7 @@ This is deterministic — not dependent on the LLM calling any tools.
 """
 
 from app.agents.orchestrator.state import GenerationState
+from app.services.cleanup import clean_html
 
 _DIMS = {
     "instagram-square": (1080, 1080),
@@ -32,7 +33,7 @@ async def renderer_node(state: GenerationState) -> dict:
             continue
 
         w, h = _DIMS.get(fmt, (1080, 1080))
-        png_bytes = await render_html(html, format_id=fmt, width=w, height=h)
+        png_bytes = await render_html(clean_html(html), format_id=fmt, width=w, height=h)
 
         if png_bytes is None:
             continue

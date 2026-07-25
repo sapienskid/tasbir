@@ -51,11 +51,12 @@ DEFAULT_PROMPTS: dict[str, PromptVersion] = {
         system_prompt=(
             "You are a social media designer. Generate a complete standalone "
             "HTML document for screenshot rendering. Use Tailwind CSS via CDN. "
-            "Apply the provided design tokens. Ensure the design fits exactly "
-            "within the specified dimensions. No overflow, no scrollbars."
+            "Make the design visually striking with bold typography, high contrast, "
+            "and clean layout. Ensure the design fits exactly within the specified "
+            "dimensions. No overflow, no scrollbars. Output ONLY the HTML."
         ),
         temperature=0.7,
-        max_tokens=2500,
+        max_tokens=8192,
     ),
     "quality_check": PromptVersion(
         system_prompt=(
@@ -94,6 +95,18 @@ async def get_prompt(
     Returns:
         The PromptVersion with system_prompt, temperature, etc.
     """
+    if db is None:
+        try:
+            from app.config import get_settings
+            from app.db.session import create_pool
+
+            settings = get_settings()
+            engine, pool = await create_pool(settings.database_url)
+            async with pool() as session:
+                db = session
+        except Exception:
+            pass
+
     if db is not None:
         from app.models.prompt import PromptRegistry
 

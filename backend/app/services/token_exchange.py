@@ -1,132 +1,129 @@
 """DTCG token format conversion — internal ↔ W3C standard format.
-
-Design Tokens Community Group (DTCG) format is the W3C standard for
-representing design tokens. This module converts between the internal
-flat format and the hierarchical DTCG format.
+Converts design tokens to Tailwind CSS config for runtime injection.
 """
 
+import json
 
 
-def flatten_tokens(dtcg_tokens: dict, prefix: str = "") -> dict[str, str]:
-    """Flatten hierarchical DTCG tokens into a flat key-value map.
+def _get_value(v: dict) -> str | None:
+    for k in ("value", "$value"):
+        if k in v:
+            return str(v[k])
+    return None
 
-    Example:
-        {"tasbir": {"color": {"primary": {"$value": "#0066cc"}}}}
-        → {"tasbir/color/primary": "#0066cc"}
 
-    Args:
-        dtcg_tokens: Hierarchical DTCG token dictionary.
-        prefix: Key prefix for recursion.
-
-    Returns:
-        Flat dictionary of token paths to values.
-    """
+def _flatten(obj: dict, data: dict, prefix: str = "") -> dict[str, str]:
+    """Walk nested token structure, collect leaf value entries."""
     result: dict[str, str] = {}
-
-    for key, value in dtcg_tokens.items():
-        full_path = f"{prefix}/{key}" if prefix else key
-
-        if isinstance(value, dict):
-            if "$value" in value:
-                result[full_path] = str(value["$value"])
-            elif "$type" in value:
-                # Skip type declarations, continue recursion on siblings
-                for sub_key, sub_value in value.items():
-                    if sub_key.startswith("$"):
-                        continue
-                    sub_path = f"{full_path}/{sub_key}" if full_path else sub_key
-                    if isinstance(sub_value, dict) and "$value" in sub_value:
-                        result[sub_path] = str(sub_value["$value"])
-                    elif isinstance(sub_value, dict):
-                        result.update(flatten_tokens({sub_key: sub_value}, full_path))
+    for key, val in obj.items():
+        path = f"{prefix}/{key}" if prefix else key
+        if isinstance(val, dict):
+            leaf = _get_value(val)
+            if leaf is not None:
+                result[path] = leaf
             else:
-                result.update(flatten_tokens(value, full_path))
+                result.update(_flatten(val, data, path))
+    return result
 
+
+# Keep old public API names
+def flatten_tokens(tokens: dict, prefix: str = "") -> dict[str, str]:
+    result: dict[str, str] = {}
+    for key, val in tokens.items():
+        path = f"{prefix}/{key}" if prefix else key
+        if isinstance(val, dict):
+            leaf = _get_value(val)
+            if leaf is not None:
+                result[path] = leaf
+            else:
+                result.update(_flatten(val, tokens, path))
     return result
 
 
 def build_dtcg(flat_tokens: dict[str, str], group_name: str = "tasbir") -> dict:
-    """Build hierarchical DTCG tokens from a flat key-value map.
-
-    Example:
-        {"tasbir/color/primary": "#0066cc"}
-        → {"tasbir": {"color": {"$type": "color",
-            "primary": {"$value": "#0066cc"}}}}
-
-    Args:
-        flat_tokens: Flat dictionary of token paths to values.
-        group_name: Root group name.
-
-    Returns:
-        Hierarchical DTCG token dictionary.
-    """
-
-    def _type_from_name(name: str) -> str:
-        if "color" in name.lower():
-            return "color"
-        if "font" in name.lower() or "typography" in name.lower() or "family" in name.lower():
-            return "fontFamily"
-        if "size" in name.lower() or "spacing" in name.lower() or "padding" in name.lower():
-            return "dimension"
-        if "radius" in name.lower() or "rounded" in name.lower():
-            return "dimension"
-        if "shadow" in name.lower():
-            return "shadow"
-        return "string"
-
-    def _set_nested(d: dict, path_parts: list[str], value: str):
-        current = d
-        for i, part in enumerate(path_parts):
-            if i == len(path_parts) - 1:
-                current[part] = {"$value": value}
-            else:
-                if part not in current:
-                    current[part] = {}
-                current = current[part]
-                if "$type" not in current:
-                    current["$type"] = _type_from_name(part)
-
     result: dict = {}
     for path, value in flat_tokens.items():
         parts = path.split("/")
         if parts[0] == group_name:
             parts = parts[1:]
-        _set_nested(result, parts, value)
-
+        cur = result
+        for i, part in enumerate(parts):
+            if i == len(parts) - 1:
+                cur[part] = {"$value": value}
+            else:
+                if part not in cur:
+                    cur[part] = {}
+                cur = cur[part]
     return {group_name: result}
 
 
+
 def tokens_to_tailwind_config(tokens: dict) -> dict:
-    """Convert DTCG tokens to a Tailwind CSS config extension.
-
-    Args:
-        tokens: DTCG token dictionary.
-
-    Returns:
-        Tailwind-compatible theme extension.
-    """
-    flat = flatten_tokens(tokens)
-    tailwind: dict = {
+    """Convert design tokens → Tailwind CSS v4 theme extension."""
+    flat = _flatten(tokens, tokens)
+    tw: dict = {
         "colors": {},
         "fontFamily": {},
+        "fontSize": {},
+        "fontWeight": {},
+        "lineHeight": {},
+        "letterSpacing": {},
         "spacing": {},
         "borderRadius": {},
+        "boxShadow": {},
+        "opacity": {},
     }
 
     for path, value in flat.items():
         parts = path.lower().split("/")
 
-        if "color" in parts:
+        if any(r in parts for r in ("shadow", "boxshadow")):
             name = parts[-1]
-            tailwind["colors"][name] = value
-        elif any(f in parts for f in ("fontfamily", "typography", "family")):
+            tw["boxShadow"][name] = value
+        elif "opacity" in parts:
             name = parts[-1]
-            tailwind["fontFamily"][name] = value
-        elif any(s in parts for s in ("spacing", "padding", "gap")):
-            name = parts[-1]
-            tailwind["spacing"][name] = value
+            tw["opacity"][name] = value
         elif any(r in parts for r in ("radius", "rounded", "borderradius")):
             name = parts[-1]
-            tailwind["borderRadius"][name] = value
+            tw["borderRadius"][name] = value
+        elif "color" in parts:
+            name = parts[-1]
+            tw["colors"][name] = value
+        elif any(f in parts for f in ("fontfamily", "family")):
+            name = parts[-1]
+            tw["fontFamily"][name] = value
+        elif "fontsize" in parts or (parts[-2] if len(parts) > 1 else "") == "fontsize":
+            name = parts[-1]
+            tw["fontSize"][name] = value
+        elif "fontweight" in parts:
+            name = parts[-1]
+            tw["fontWeight"][name] = int(value) if value.isdigit() else value
+        elif "lineheight" in parts:
+            name = parts[-1]
+            tw["lineHeight"][name] = float(value)
+        elif "letterspacing" in parts:
+            name = parts[-1]
+            tw["letterSpacing"][name] = value
+        elif any(s in parts for s in ("spacing", "padding", "gap", "scale")):
+            name = parts[-1]
+            tw["spacing"][name] = value
 
-    return {k: v for k, v in tailwind.items() if v}
+    return {k: v for k, v in tw.items() if v}
+
+
+def tailwind_config_html(tokens: dict) -> str:
+    """Generate a <script> tag that sets Tailwind CSS v4 theme config.
+    
+    The LLM designer can just use standard Tailwind utility classes.
+    This script maps the design token values into the Tailwind theme
+    so classes like `bg-primary`, `font-sans`, `rounded-md` resolve
+    to the token-defined values.
+    """
+    config = tokens_to_tailwind_config(tokens)
+    return f"""<script>
+tailwind.config = {{
+  theme: {{
+    extend: {json.dumps(config)}
+  }}
+}}
+</script>"""

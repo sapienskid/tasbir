@@ -126,7 +126,7 @@ async def seed():
 
         await session.commit()
 
-    await pool.close()
+    await pool.sync_engine.dispose()
     print("Done.")
 
 

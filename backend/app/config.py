@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     ghost_webhook_secret: str = ""
 
     # Penpot
-    penpot_url: str = "http://localhost:9001"
+    penpot_url: str = "http://localhost:9002"
     penpot_access_token: str = ""
 
     # Unsplash

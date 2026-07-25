@@ -27,6 +27,24 @@ async def get_settings_route(settings: Settings = Depends(get_settings)):
     return {"ok": True, "data": settings.model_dump(exclude=excluded)}
 
 
+@router.get("/brand")
+async def get_brand(db: AsyncSession = Depends(get_db)):
+    repo = SettingsRepository(db)
+    row = await repo.get()
+    brand = (row.data or {}).get("brand", {}) if row else {}
+    return brand
+
+
+@router.put("/brand")
+async def update_brand(
+    body: SettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    repo = SettingsRepository(db)
+    row = await repo.upsert({"brand": body.data})
+    return (row.data or {}).get("brand", {})
+
+
 @router.put("")
 async def update_settings_route(
     body: SettingsUpdate,

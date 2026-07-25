@@ -9,12 +9,12 @@ from collections.abc import AsyncIterator
 from app.config import get_settings
 
 MODEL_ROUTES = {
-    "strategist": "gemini-2.0-flash",
-    "copywriter": "gemini-2.0-flash",
-    "visual_director": "gemini-2.0-flash",
-    "designer": "gemini-2.0-flash",
-    "quality_check": "gemini-2.0-flash",
-    "token_generator": "gemini-2.5-flash",
+    "strategist": "gemma-4-26b-a4b-it",
+    "copywriter": "gemma-4-26b-a4b-it",
+    "visual_director": "gemma-4-26b-a4b-it",
+    "designer": "gemma-4-26b-a4b-it",
+    "quality_check": "gemma-4-31b-it",
+    "token_generator": "gemma-4-26b-a4b-it",
 }
 
 
@@ -56,7 +56,12 @@ async def call_llm(
 
     try:
         response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)])
-        return response.content if isinstance(response.content, str) else str(response.content)
+        if isinstance(response.content, str):
+            return response.content
+        if isinstance(response.content, list):
+            texts = [b.get("text", "") for b in response.content if b.get("type") == "text"]
+            return "".join(texts)
+        return str(response.content)
     except Exception as gemini_error:
         settings = get_settings()
         if settings.openrouter_api_key:
@@ -85,8 +90,14 @@ async def call_llm_stream(
 
     try:
         async for chunk in llm.astream([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]):
-            if content := chunk.content:
-                yield content if isinstance(content, str) else str(content)
+            if not chunk.content:
+                continue
+            if isinstance(chunk.content, str):
+                yield chunk.content
+            elif isinstance(chunk.content, list):
+                for block in chunk.content:
+                    if block.get("type") == "text":
+                        yield block.get("text", "")
     except Exception as gemini_error:
         settings = get_settings()
         if settings.openrouter_api_key:

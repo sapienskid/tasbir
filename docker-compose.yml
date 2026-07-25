@@ -20,7 +20,7 @@ x-shared: &shared-env
   GHOST_URL: ${GHOST_URL:-}
   GHOST_ADMIN_API_KEY: ${GHOST_ADMIN_API_KEY:-}
   GHOST_WEBHOOK_SECRET: ${GHOST_WEBHOOK_SECRET:-}
-  PENPOT_URL: ${PENPOT_URL:-http://penpot:9001}
+  PENPOT_URL: ${PENPOT_URL:-http://penpot:9002}
   PENPOT_ACCESS_TOKEN: ${PENPOT_ACCESS_TOKEN:-}
   UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
   LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -42,6 +42,8 @@ services:
       POSTGRES_DB: tasbir
       POSTGRES_USER: tasbir
       POSTGRES_PASSWORD: tasbir
+    ports:
+      - "5432:5432"
     mem_limit: 512m
 
   redis:
@@ -121,7 +123,7 @@ services:
     mem_limit: 512m
 
   playwright:
-    image: mcr.microsoft.com/playwright/python:v1.52
+    image: mcr.microsoft.com/playwright/python:v1.61.0-noble-amd64
     restart: unless-stopped
     networks:
       - tasbir
@@ -133,18 +135,16 @@ services:
     volumes:
       - ./backend/app/services/render_server.py:/app/render_server.py
     command: >
-      sh -c "pip install fastapi uvicorn && 
-             playwright install chromium && 
+      sh -c "pip install fastapi uvicorn playwright && 
+             python -m playwright install chromium && 
              uvicorn render_server:app --host 0.0.0.0 --port 4000"
     mem_limit: 1.5g
 
   penpot:
     image: penpotapp/penpot:latest
     restart: unless-stopped
-    profiles:
-      - design
     ports:
-      - "9001:9001"
+      - "9002:9002"
     networks:
       - tasbir
     depends_on:
@@ -152,7 +152,7 @@ services:
         condition: service_healthy
     environment:
       PENPOT_FLAGS: enable-registration enable-login-with-password enable-mcp
-      PENPOT_PUBLIC_URI: http://localhost:9001
+      PENPOT_PUBLIC_URI: http://localhost:9002
       PENPOT_DATABASE_URI: postgresql://penpot:penpot@postgres:5432/penpot
       PENPOT_REDIS_URI: redis://redis:6379/0
       PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:-change-this-insecure-key}
@@ -174,19 +174,4 @@ services:
       PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
     mem_limit: 128m
 
-  caddy:
-    image: caddy:alpine
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    networks:
-      - tasbir
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-    environment:
-      DOMAIN: ${DOMAIN:-localhost}
-      API_URL: api:8000
-      UI_URL: ui:5173
-    mem_limit: 64m
+

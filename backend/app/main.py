@@ -15,9 +15,11 @@ from app.db.session import create_pool
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    app.state.pool = await create_pool(settings.database_url)
+    engine, pool = await create_pool(settings.database_url)
+    app.state.pool = pool
+    app.state.engine = engine
     yield
-    await app.state.pool.close()
+    await engine.dispose()
 
 
 settings = get_settings()

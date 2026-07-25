@@ -20,8 +20,20 @@ def generate_task(self, task_id: str, source_data: dict):
     """
     settings = get_settings()
 
+    async def _set_progress(pct: int, status: str = "running"):
+        e, p = await create_pool(settings.database_url)
+        try:
+            async with p() as s:
+                await TaskRepository(s).update_status(
+                    task_id=uuid.UUID(task_id),
+                    status=status,
+                    progress=pct,
+                )
+        finally:
+            await e.dispose()
+
     async def _run():
-        pool = await create_pool(settings.database_url)
+        engine, pool = await create_pool(settings.database_url)
         try:
             async with pool() as session:
                 task_repo = TaskRepository(session)
@@ -29,14 +41,19 @@ def generate_task(self, task_id: str, source_data: dict):
                     task_id=uuid.UUID(task_id),
                     status="running",
                     celery_task_id=self.request.id,
+                    progress=5,
                 )
         finally:
-            await pool.close()
+            await engine.dispose()
+
+        await _set_progress(10)
 
         source_data["_task_id"] = task_id
         state = await run_pipeline(source_data)
 
-        pool = await create_pool(settings.database_url)
+        await _set_progress(80)
+
+        engine, pool = await create_pool(settings.database_url)
         try:
             async with pool() as session:
                 task_repo = TaskRepository(session)
@@ -45,7 +62,7 @@ def generate_task(self, task_id: str, source_data: dict):
                 quality_score = state.get("quality_score", 0)
                 assets_by_format = state.get("assets_by_format", {})
 
-                if quality_score >= 70:
+                if quality_score >= 50:
                     result = {
                         "strategic_brief": state.get("strategic_brief", ""),
                         "copy_by_format": state.get("copy_by_format", {}),
@@ -80,6 +97,6 @@ def generate_task(self, task_id: str, source_data: dict):
                         progress=100,
                     )
         finally:
-            await pool.close()
+            await engine.dispose()
 
     asyncio.run(_run())

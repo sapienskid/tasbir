@@ -27,11 +27,11 @@ from app.agents.orchestrator.state import GenerationState, initial_state
 def after_quality(state: GenerationState) -> str:
     """Decide next step after quality check.
 
-    - If quality passes (>= 70): render assets, then finish
+    - If quality passes (>= 50): render assets, then finish
     - If quality fails but refinements remain: loop to designer
     - If quality fails and no refinements left: finish without rendering
     """
-    if state["quality_score"] >= 70:
+    if state["quality_score"] >= 50:
         return "renderer"
     if state["refinement_count"] < state["max_refinements"]:
         return "designer"
@@ -64,8 +64,14 @@ def build_pipeline() -> StateGraph:
 pipeline = build_pipeline()
 
 
+import asyncio
+
+
 async def run_pipeline(input_data: dict) -> dict:
     state = initial_state(**input_data)
     config = {"configurable": {"thread_id": input_data.get("_task_id", "default")}}
-    result = await pipeline.ainvoke(state, config)
+    result = await asyncio.wait_for(
+        pipeline.ainvoke(state, config),
+        timeout=300,
+    )
     return result
