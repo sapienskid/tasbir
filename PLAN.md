@@ -74,15 +74,21 @@ token management and human-in-the-loop refinement.
 
 ### Phase 7: Frontend — SvelteKit + shadcn-svelte (Week 5-7)
 
-- [ ] SvelteKit project with TypeScript
-- [ ] shadcn-svelte component library setup
-- [ ] Dashboard page (recent tasks, quick generate)
-- [ ] Generate page (content input, format selection, progress)
-- [ ] Settings page (brand, campaign, formats)
-- [ ] Templates page (browse, create, edit templates)
-- [ ] Tokens page (view/sync design tokens from Penpot)
-- [ ] Tasks page (history, status, results)
-- [ ] SSE streaming for real-time generation progress
+- [x] SvelteKit project with TypeScript
+- [x] shadcn-svelte component library setup (bits-ui + shadcn-svelte CLI)
+- [x] Dashboard page — pipeline hero, stat cards, inline recent tasks
+- [x] Create page — two-column form, format grid, stage progress, SSE streaming
+- [x] Configure page — tabbed: General, Brand & Tokens, Formats, Prompts
+- [x] Templates page — grid with iframe previews
+- [x] Assets page — responsive generation card grid with thumbnails
+- [x] Tasks page — filterable list with inline cancel/retry
+- [x] Ghost webhook setup guide page
+- [x] Task detail page — SSE live progress, asset display
+- [x] Confirmation dialogs for all destructive actions
+- [x] Custom dropdown component (bits-ui Select, no native `<select>`)
+- [x] Darkroom design system — Instrument Serif, Inter, dusty rose accent
+- [x] Responsive grids (1 col mobile → 3 col desktop)
+- [x] Full-height sidebar with hamburger on mobile
 
 ### Phase 8: Deployment + Polish (Week 7-8)
 

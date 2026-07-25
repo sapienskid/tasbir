@@ -167,40 +167,49 @@ tasbir/
 │   │   ├── app.css
 │   │   │
 │   │   ├── routes/              ← SvelteKit pages
-│   │   │   ├── +page.svelte     ← Dashboard
-│   │   │   ├── +layout.svelte   ← App layout with nav
-│   │   │   ├── settings/
-│   │   │   │   └── +page.svelte
+│   │   │   ├── +page.svelte     ← Dashboard (pipeline hero, stats, tasks)
+│   │   │   ├── +layout.svelte   ← Sidebar (5 items: Dashboard, Create, Assets, Templates, Configure)
+│   │   │   ├── create/
+│   │   │   │   └── +page.svelte ← Create assets (two-column form, result grid)
+│   │   │   ├── assets/
+│   │   │   │   └── +page.svelte ← Asset gallery grouped by generation
 │   │   │   ├── templates/
-│   │   │   │   └── +page.svelte
-│   │   │   ├── tokens/
-│   │   │   │   └── +page.svelte
-│   │   │   ├── generate/
-│   │   │   │   └── +page.svelte
-│   │   │   └── tasks/
-│   │   │       └── [id]/
-│   │   │           └── +page.svelte
+│   │   │   │   └── +page.svelte ← HTML template CRUD
+│   │   │   ├── configure/
+│   │   │   │   ├── +page.svelte ← Tabbed: General, Brand, Formats, Prompts
+│   │   │   │   └── ghost-webhook/
+│   │   │   │       └── +page.svelte ← Ghost webhook setup guide
+│   │   │   ├── tasks/
+│   │   │   │   ├── +page.svelte ← Task list with cancel/retry
+│   │   │   │   └── [id]/
+│   │   │   │       └── +page.svelte ← Task detail with SSE
+│   │   │   ├── generate/        ← Redirects to /create
+│   │   │   ├── settings/        ← Redirects to /configure
+│   │   │   ├── tokens/          ← Redirects to /configure
+│   │   │   ├── formats/         ← Redirects to /configure
+│   │   │   ├── prompts/         ← Redirects to /configure
+│   │   │   └── brand/           ← Redirects to /configure
 │   │   │
 │   │   └── lib/
+│   │       ├── actions/         ← Svelte actions
+│   │       │   └── clickOutside.svelte.ts
 │   │       ├── api/             ← Typed API client
 │   │       │   ├── client.ts
 │   │       │   ├── settings.ts
 │   │       │   ├── templates.ts
 │   │       │   ├── tokens.ts
+│   │       │   ├── formats.ts
 │   │       │   └── generate.ts
 │   │       ├── components/      ← Svelte components
-│   │       │   ├── Navbar.svelte
-│   │       │   ├── TaskStatus.svelte
-│   │       │   ├── FormatSelector.svelte
-│   │       │   └── AssetPreview.svelte
-│   │       ├── components/ui/   ← shadcn-svelte components
-│   │       │   ├── button.svelte
-│   │       │   ├── card.svelte
-│   │       │   ├── input.svelte
-│   │       │   ├── select.svelte
-│   │       │   ├── tabs.svelte
-│   │       │   ├── toast.svelte
-│   │       │   └── ...
+│   │       │   ├── TokenPreview.svelte  ← Visual token renderer
+│   │       │   └── ui/          ← shadcn-svelte components (CLI-installed)
+│   │       │       ├── button/          ← Button + variants
+│   │       │       ├── card/            ← Card + CardHeader/Title/Description/Footer
+│   │       │       ├── input/           ← Input
+│   │       │       ├── select/          ← Select (bits-ui based, fully custom dropdown)
+│   │       │       ├── dialog/          ← Dialog + DialogContent/Header/Title/Description
+│   │       │       ├── separator/       ← Separator
+│   │       │       └── confirm.svelte   ← Thin wrapper around Dialog for confirmations
 │   │       └── stores/          ← Svelte stores
 │   │           ├── auth.ts
 │   │           ├── tasks.ts
@@ -243,10 +252,27 @@ tasbir/
 | Technology | Purpose | Package |
 |---|---|---|
 | SvelteKit | Meta-framework | `create-svelte` |
-| shadcn-svelte | UI components | `shadcn-svelte` |
+| shadcn-svelte | UI components (CLI) | `shadcn-svelte` |
 | Tailwind CSS v4 | Utility CSS | `tailwindcss` |
 | bits-ui | Headless UI primitives | `bits-ui` |
-| lucide-svelte | Icons | `lucide-svelte` |
+| lucide-svelte | Icons (sidebar) | `lucide-svelte` |
+| @lucide/svelte | Icons (shadcn components) | `@lucide/svelte` |
+
+### Design System
+
+| Token | Value |
+|---|---|
+| Background | `#0A0A0C` |
+| Surface | `#141418` |
+| Elevated | `#202026` |
+| Border | `#2C2C30` |
+| Text | `#EEE9E4` |
+| Accent | `#CD5B7D` (dusty rose) |
+| Secondary | `#5B7D7C` |
+| Destructive | `#B05E5E` |
+| Display font | Instrument Serif |
+| Body font | Inter |
+| Mono font | JetBrains Mono |
 
 ## Coding Standards
 
@@ -330,7 +356,8 @@ Required vars have no default and will fail at startup if missing.
 1. Create route in `ui/src/routes/`
 2. Add API methods in `ui/src/lib/api/`
 3. Create page component
-4. Add navigation link in `Navbar.svelte`
+4. Add navigation link in `+layout.svelte` sidebar
+5. If the old route path is changing, add a redirect page
 
 ## Testing
 
