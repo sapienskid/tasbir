@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { page } from "$app/stores";
-  import Button from "$lib/components/ui/button.svelte";
+  import { Card } from "$lib/components/ui/card/index.js";
   import { getTask, streamTask, type TaskResult } from "$lib/api/generate";
 
   let task = $state<TaskResult | null>(null);
@@ -10,6 +10,21 @@
   let error = $state("");
 
   let cleanup: (() => void) | null = null;
+
+  const API_BASE = "http://localhost:8000";
+
+  function assetUrl(url: string): string {
+    if (url.startsWith("/")) return `${API_BASE}${url}`;
+    return url;
+  }
+
+  function statusColor(s: string) {
+    if (s === "completed") return "text-[#22C55E]";
+    if (s === "running") return "text-[#3B82F6]";
+    if (s === "failed") return "text-[#EF4444]";
+    if (s === "cancelled") return "text-[#F59E0B]";
+    return "text-text-secondary";
+  }
 
   onMount(async () => {
     const taskId = $page.params.id;
@@ -28,13 +43,19 @@
               task.status = "completed";
               task.result = data.result;
               task.progress = 100;
-              if (data.result?.assets_by_format) assets = data.result.assets_by_format as Record<string, string>;
+              if (data.result?.assets_by_format) {
+                const raw = data.result.assets_by_format as Record<string, string>;
+                for (const [k, v] of Object.entries(raw)) raw[k] = assetUrl(v);
+                assets = raw;
+              }
             }
           },
           (err) => { error = err; }
         );
       } else if (task.status === "completed" && task.result?.assets_by_format) {
-        assets = task.result.assets_by_format as Record<string, string>;
+        const raw = task.result.assets_by_format as Record<string, string>;
+        for (const [k, v] of Object.entries(raw)) raw[k] = assetUrl(v);
+        assets = raw;
       }
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load task";
@@ -45,49 +66,48 @@
   onDestroy(() => cleanup?.());
 </script>
 
-<div class="p-8 max-w-2xl">
-  <a href="/" class="inline-block text-xs text-gray-600 hover:text-white transition-colors mb-5">&larr; Dashboard</a>
+<div class="max-w-4xl space-y-6">
+  <a href="/assets" class="inline-flex items-center text-xs text-text-secondary hover:text-text transition-colors">&larr; Assets</a>
 
   {#if loading}
-    <p class="text-sm text-gray-600">Loading…</p>
+    <p class="text-sm text-text-secondary">Loading…</p>
   {:else if error}
-    <div class="rounded-lg border border-[#1c1c1c] bg-[#080808] p-5">
-      <p class="text-sm text-gray-600">{error}</p>
-    </div>
+    <Card class="p-5">
+      <p class="text-sm text-text-secondary">{error}</p>
+    </Card>
   {:else if task}
-    <div class="rounded-lg border border-[#1c1c1c] bg-[#080808] p-5 mb-6">
-      <div class="flex items-center justify-between mb-3">
+    <Card class="p-5">
+      <div class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-3">
-          <span class="text-xs font-mono text-gray-600">{task.id.slice(0, 12)}</span>
-          <span class="text-xs text-gray-600">{new Date(task.created_at).toLocaleString()}</span>
+          <span class="text-xs font-mono text-text-secondary">{task.id.slice(0, 12)}</span>
+          <span class="text-xs text-text-secondary">{new Date(task.created_at).toLocaleString()}</span>
         </div>
-        <span class="text-xs {task.status === 'completed' ? 'text-white' : task.status === 'failed' ? 'text-gray-600' : 'text-gray-500'}">{task.status}</span>
+        <span class="text-xs {statusColor(task.status)}">{task.status}</span>
       </div>
 
       {#if task.status === "running"}
-        <div class="w-full h-1 bg-[#1c1c1c] rounded-full overflow-hidden">
-          <div class="h-full bg-white rounded-full transition-all duration-500" style="width: {task.progress}%"></div>
+        <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+          <div class="h-full bg-[#3B82F6] rounded-full transition-all duration-500" style="width: {task.progress}%"></div>
         </div>
       {/if}
 
       {#if task.status === "failed" && task.error}
-        <p class="text-xs text-gray-600 mt-3">{task.error}</p>
+        <p class="text-xs text-destructive mt-3">{task.error}</p>
       {/if}
-    </div>
+    </Card>
 
     {#if task.status === "completed" && Object.keys(assets).length > 0}
-      <p class="text-xs text-gray-600 mb-3">Assets</p>
-      <div class="space-y-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {#each Object.entries(assets) as [fmt, url]}
-          <div class="rounded-lg border border-[#1c1c1c] bg-[#080808] overflow-hidden">
-            <div class="px-4 py-2 border-b border-[#1c1c1c] flex items-center justify-between">
-              <span class="text-xs font-mono text-gray-500">{fmt}</span>
-              <a href={url} target="_blank" class="text-xs text-gray-600 hover:text-white transition-colors">open</a>
+          <Card class="overflow-hidden">
+            <div class="px-4 py-2.5 border-b border-border flex items-center justify-between">
+              <span class="text-xs font-mono text-text-secondary">{fmt}</span>
+              <a href={assetUrl(url)} target="_blank" class="text-xs text-text-secondary hover:text-accent transition-colors">open</a>
             </div>
-            <div class="bg-black flex items-center justify-center min-h-[200px]">
-              <img src={url} alt={fmt} class="max-w-full h-auto" loading="lazy" />
+            <div class="bg-bg flex items-center justify-center min-h-[240px]">
+              <img src={assetUrl(url)} alt={fmt} class="max-w-full h-auto" loading="lazy" />
             </div>
-          </div>
+          </Card>
         {/each}
       </div>
     {/if}

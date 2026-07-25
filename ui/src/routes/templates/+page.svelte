@@ -1,145 +1,167 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import Button from "$lib/components/ui/button.svelte";
-  import { listTemplates, createTemplate, updateTemplate, deleteTemplate, type Template } from "$lib/api/templates";
+  import Confirm from "$lib/components/ui/confirm.svelte";
+  import { Button } from "$lib/components/ui/button/index.js";
+  import { Card } from "$lib/components/ui/card/index.js";
+  import { api } from "$lib/api/client";
 
-  let templates = $state<Template[]>([]);
+  const API_BASE = "http://localhost:8000";
+
+  let templates = $state<any[]>([]);
   let loading = $state(true);
   let error = $state("");
 
-  let editing: Template | null = $state(null);
-  let editName = $state("");
-  let editHtml = $state("");
-  let editDesc = $state("");
+  let creating = $state(false);
+  let editing = $state<string | null>(null);
+  let formName = $state("");
+  let formDescription = $state("");
+  let formHtml = $state("");
   let saving = $state(false);
+  let confirmDelete = $state<string | null>(null);
 
   onMount(async () => {
-    try { templates = await listTemplates(false); }
-    catch (e) { error = "Failed to load templates"; }
+    try {
+      const res = await fetch(`${API_BASE}/templates?enabled_only=false`);
+      templates = await res.json();
+    } catch { error = "Failed to load templates"; }
     finally { loading = false; }
   });
 
-  function startNew() {
-    editing = { id: "", name: "", description: "", html: "", slots: {}, enabled: true };
-    editName = "";
-    editHtml = "";
-    editDesc = "";
-  }
-
-  function startEdit(t: Template) {
-    editing = t;
-    editName = t.name;
-    editHtml = t.html;
-    editDesc = t.description;
-  }
-
-  function cancelEdit() {
+  function startCreate() {
+    creating = true;
     editing = null;
-    editName = "";
-    editHtml = "";
-    editDesc = "";
+    formName = "";
+    formDescription = "";
+    formHtml = '<!DOCTYPE html>\n<html>\n<head>\n  <script src="https://cdn.tailwindcss.com"><\/script>\n</head>\n<body>\n  <div class="w-full h-full flex items-center justify-center bg-black text-white">\n    <h1 class="text-4xl font-bold">{{HEADLINE}}</h1>\n  </div>\n</body>\n</html>';
+    error = "";
   }
 
-  async function handleSave() {
-    if (!editName.trim() || !editHtml.trim()) return;
+  function startEdit(id: string) {
+    const t = templates.find(t => t.id === id);
+    if (!t) return;
+    creating = false;
+    editing = id;
+    formName = t.name;
+    formDescription = t.description;
+    formHtml = t.html;
+    error = "";
+  }
+
+  function cancelForm() {
+    creating = false;
+    editing = null;
+  }
+
+  async function saveTemplate() {
+    if (!formName.trim() || !formHtml.trim()) return;
     saving = true;
     error = "";
     try {
-      if (editing && editing.id) {
-        const updated = await updateTemplate(editing.id, { name: editName, html: editHtml, description: editDesc });
-        templates = templates.map((t) => (t.id === editing!.id ? updated : t));
+      if (editing) {
+        await api.put(`/templates/${editing}`, { name: formName, description: formDescription, html: formHtml });
       } else {
-        const created = await createTemplate({ name: editName, html: editHtml, description: editDesc });
-        templates = [created, ...templates];
+        await api.post("/templates", { name: formName, description: formDescription, html: formHtml, slots: {} });
       }
-      cancelEdit();
+      const res = await fetch(`${API_BASE}/templates?enabled_only=false`);
+      templates = await res.json();
+      cancelForm();
     } catch (e) {
       error = e instanceof Error ? e.message : "Save failed";
     } finally { saving = false; }
   }
 
-  async function handleDelete(id: string) {
+  async function deleteTemplate(id: string) {
     try {
-      await deleteTemplate(id);
-      templates = templates.filter((t) => t.id !== id);
-    } catch {}
-  }
-
-  async function handleToggle(t: Template) {
-    try {
-      const updated = await updateTemplate(t.id, { enabled: !t.enabled });
-      templates = templates.map((x) => (x.id === t.id ? updated : x));
-    } catch {}
+      await api.delete(`/templates/${id}`);
+      templates = templates.filter(t => t.id !== id);
+    } catch { /* ignore */ }
   }
 </script>
 
-<div class="p-8 max-w-2xl">
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-lg font-medium text-white">Templates</h1>
-    {#if !editing}
-      <Button variant="secondary" size="sm" onclick={startNew}>New</Button>
-    {/if}
+<div class="max-w-6xl space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-lg font-medium text-text" style="font-family: var(--font-display)">Templates</h1>
+      <p class="text-sm text-text-secondary mt-0.5">HTML templates the designer agent can use as starting points for asset generation.</p>
+    </div>
+    <Button variant="default" size="sm" onclick={startCreate}>New template</Button>
   </div>
 
-  {#if error}
-    <p class="text-xs text-gray-600 mb-4">{error}</p>
-  {/if}
-
-  {#if editing}
-    <div class="rounded-lg border border-[#1c1c1c] bg-[#080808] p-4 mb-6 space-y-3">
-      <input
-        bind:value={editName}
-        class="w-full h-9 bg-black text-white text-sm rounded-lg border border-[#1c1c1c] px-3 focus:border-[#333] focus:outline-none"
-        placeholder="Template name"
-      />
-      <input
-        bind:value={editDesc}
-        class="w-full h-9 bg-black text-white text-sm rounded-lg border border-[#1c1c1c] px-3 focus:border-[#333] focus:outline-none"
-        placeholder="Description (optional)"
-      />
-      <p class="text-xs text-gray-600">HTML</p>
-      <textarea
-        bind:value={editHtml}
-        rows={8}
-        class="w-full bg-black text-white text-xs rounded-lg border border-[#1c1c1c] px-3 py-2 font-mono leading-relaxed focus:border-[#333] focus:outline-none resize-y"
-        placeholder="<div>...</div>"
-      ></textarea>
-      <div class="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onclick={cancelEdit}>Cancel</Button>
-        <Button variant="primary" size="sm" disabled={saving || !editName.trim() || !editHtml.trim()} onclick={handleSave}>
-          {saving ? "Saving…" : "Save"}
-        </Button>
+  {#if creating || editing}
+    <Card class="p-5">
+      <h2 class="text-sm font-medium text-text mb-4">{editing ? "Edit template" : "New template"}</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs text-text-secondary block mb-1">Name</label>
+          <input bind:value={formName} class="w-full h-9 bg-bg text-text text-sm rounded-xl border border-border px-3 focus:border-border-focus focus:outline-none" placeholder="Dark minimalist" />
+        </div>
+        <div>
+          <label class="text-xs text-text-secondary block mb-1">Description</label>
+          <input bind:value={formDescription} class="w-full h-9 bg-bg text-text text-sm rounded-xl border border-border px-3 focus:border-border-focus focus:outline-none" placeholder="A dark, minimal template for Instagram" />
+        </div>
+        <div>
+          <label class="text-xs text-text-secondary block mb-1">HTML (use <code class="text-text-secondary">&#123;&#123;HEADLINE&#125;&#125;</code>, <code class="text-text-secondary">&#123;&#123;BODY&#125;&#125;</code>, <code class="text-text-secondary">&#123;&#123;CTA&#125;&#125;</code> as placeholders)</label>
+          <textarea bind:value={formHtml} rows={10} class="w-full bg-bg text-text text-xs leading-relaxed rounded-xl border border-border px-3 py-2 focus:border-border-focus focus:outline-none resize-none font-mono"></textarea>
+        </div>
+        {#if formHtml}
+          <div>
+            <p class="text-xs text-text-secondary block mb-1.5">Preview</p>
+            <div class="rounded-xl border border-border overflow-hidden" style="width:360px;height:360px;">
+              <iframe title="Template preview" srcdoc={formHtml.replace(/\{\{HEADLINE\}\}/g, "Headline").replace(/\{\{BODY\}\}/g, "Body text here").replace(/\{\{CTA\}\}/g, "Learn more")} class="w-full h-full border-0"></iframe>
+            </div>
+          </div>
+        {/if}
+        {#if error}
+          <p class="text-xs text-destructive">{error}</p>
+        {/if}
+        <div class="flex gap-2">
+          <Button variant="default" size="sm" disabled={saving} onclick={saveTemplate}>{saving ? "Saving…" : "Save"}</Button>
+          <Button variant="ghost" size="sm" onclick={cancelForm}>Cancel</Button>
+        </div>
       </div>
-    </div>
+    </Card>
   {/if}
 
   {#if loading}
-    <p class="text-sm text-gray-600">Loading…</p>
-  {:else if templates.length === 0 && !editing}
-    <div class="rounded-lg border border-[#1c1c1c] bg-[#080808] p-8 text-center">
-      <p class="text-sm text-gray-600">No templates yet.</p>
-    </div>
-  {:else if !editing}
-    <div class="space-y-1.5">
-      {#each templates as tmpl}
-        <div class="rounded-lg border border-[#1c1c1c] bg-[#080808] px-4 py-3 transition-colors hover:border-[#333]">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2 min-w-0">
-              <span class="text-sm text-white truncate">{tmpl.name}</span>
-              <button class="text-xs text-gray-600 hover:text-gray-400 transition-colors" onclick={() => handleToggle(tmpl)}>
-                {tmpl.enabled ? "enabled" : "disabled"}
-              </button>
+    <p class="text-sm text-text-secondary">Loading…</p>
+  {:else if templates.length === 0 && !creating}
+    <Card class="p-8 text-center">
+      <p class="text-sm text-text-secondary">No templates yet. Create one to give the designer agent a starting point.</p>
+    </Card>
+  {:else}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {#each templates as t}
+        <Card class="overflow-hidden hover:border-border-focus transition-colors">
+          <div class="aspect-[4/3] bg-bg overflow-hidden">
+            {#if t.html}
+              <iframe title={t.name} srcdoc={t.html.replace(/\{\{HEADLINE\}\}/g, "Headline").replace(/\{\{BODY\}\}/g, "Body text").replace(/\{\{CTA\}\}/g, "CTA")} class="w-full h-full border-0" loading="lazy" style="pointer-events:none"></iframe>
+            {/if}
+          </div>
+          <div class="p-4">
+            <div class="flex items-center justify-between mb-1">
+              <h3 class="text-sm text-text font-medium">{t.name}</h3>
+              <span class="text-[10px] text-text-secondary">{t.enabled ? "active" : "disabled"}</span>
             </div>
-            <div class="flex gap-1 shrink-0">
-              <Button variant="ghost" size="sm" onclick={() => startEdit(tmpl)}>edit</Button>
-              <Button variant="ghost" size="sm" onclick={() => handleDelete(tmpl.id)}>delete</Button>
+            {#if t.description}
+              <p class="text-xs text-text-secondary mb-3">{t.description}</p>
+            {/if}
+            <div class="flex gap-2">
+              <button onclick={() => startEdit(t.id)} class="text-xs text-text-secondary hover:text-text transition-colors">Edit</button>
+              <button onclick={() => confirmDelete = t.id} class="text-xs text-text-secondary hover:text-destructive transition-colors">Delete</button>
             </div>
           </div>
-          {#if tmpl.description}
-            <p class="text-xs text-gray-600 mt-1 truncate">{tmpl.description}</p>
-          {/if}
-        </div>
+        </Card>
       {/each}
     </div>
   {/if}
 </div>
+
+<Confirm
+  open={confirmDelete !== null}
+  title="Delete template"
+  message="Delete this template? This cannot be undone."
+  confirmLabel="Delete"
+  variant="destructive"
+  onconfirm={() => { const id = confirmDelete; confirmDelete = null; if (id) deleteTemplate(id); }}
+  oncancel={() => confirmDelete = null}
+/>
