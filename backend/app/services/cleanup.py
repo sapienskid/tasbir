@@ -1,22 +1,62 @@
 """Post-processing cleanup for generated HTML assets.
 
-Strips unwanted content like hashtags, excessive whitespace,
-and ensures design token compliance.
+Strips unwanted content:
+- Emojis (must be purely professional typography and design accents)
+- Website UI artifacts (buttons, navbars, URL headers)
+- Trailing hashtags and excessive whitespace
+- Enforces strict canvas viewport container styling (overflow: hidden, full canvas fit)
 """
 
 import re
 
+# Comprehensive regex matching all Unicode emoji ranges
+EMOJI_PATTERN = re.compile(
+    "["
+    "\U0001F600-\U0001F64F"  # emoticons
+    "\U0001F300-\U0001F5FF"  # symbols & pictographs
+    "\U0001F680-\U0001F6FF"  # transport & map symbols
+    "\U0001F1E0-\U0001F1FF"  # flags (iOS)
+    "\U00002600-\U000026FF"  # miscellaneous symbols
+    "\U00002700-\U000027BF"  # dingbats
+    "\U0001F900-\U0001F9FF"  # supplemental symbols & pictographs
+    "\U0001FA70-\U0001FAFF"  # symbols and pictographs extended-a
+    "\U00002300-\U000023FF"  # technical symbols
+    "]+",
+    flags=re.UNICODE,
+)
+
+
+def remove_emojis(text: str) -> str:
+    """Strip all raw emoji characters from text or HTML."""
+    return EMOJI_PATTERN.sub("", text)
+
 
 def clean_html(html: str) -> str:
-    """Clean generated HTML before rendering.
+    """Clean generated HTML before rendering to PNG.
 
     Removes:
-    - Trailing hashtag blocks
-    - Excessive blank lines
+    - Raw Unicode emojis
+    - Website UI artifacts (interactive <button> elements transformed to styled <span> callouts)
+    - Website navigation headers (<nav>, search bars)
+    - Trailing hashtag blocks and markdown code block wrappers
     - Empty HTML elements
-    - Unwanted markdown artifacts
     """
-    lines = html.split("\n")
+    # 1. Strip raw emojis
+    result = remove_emojis(html)
+
+    # 2. Transform interactive website <button> tags to styled visual callouts
+    result = re.sub(
+        r'<button([^>]*)>(.*?)</button>',
+        r'<span\1 style="display:inline-block; pointer-events:none;">\2</span>',
+        result,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+
+    # 3. Strip website navigation bars if generated accidentally
+    result = re.sub(r'<nav[^>]*>.*?</nav>', '', result, flags=re.DOTALL | re.IGNORECASE)
+
+    # 4. Clean line-by-line formatting
+    lines = result.split("\n")
     cleaned = []
     in_body = False
     hashtag_block = 0
@@ -45,8 +85,10 @@ def clean_html(html: str) -> str:
 
     result = "\n".join(cleaned)
 
+    # Remove excessive blank lines
     result = re.sub(r'\n{3,}', '\n\n', result)
 
+    # Clean empty divs or spans
     result = re.sub(r'<div[^>]*>\s*</div>', '', result)
     result = re.sub(r'<span[^>]*>\s*</span>', '', result)
 
