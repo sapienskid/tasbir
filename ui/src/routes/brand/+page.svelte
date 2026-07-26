@@ -75,8 +75,8 @@
 
   {#if loading}
     <div class="animate-pulse space-y-4">
-      <div class="h-9 bg-[#111] rounded-lg" />
-      <div class="h-24 bg-[#111] rounded-lg" />
+      <div class="h-9 bg-[#111] rounded-lg"></div>
+      <div class="h-24 bg-[#111] rounded-lg"></div>
     </div>
   {:else}
     <div class="space-y-4">

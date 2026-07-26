@@ -100,7 +100,7 @@
       {#each filtered as task}
         <div class="flex items-center gap-4 px-5 py-3 hover:bg-elevated transition-colors">
           <a href="/tasks/{task.id}" class="flex items-center gap-4 flex-1 min-w-0">
-            <span class="w-2 h-2 rounded-full shrink-0 {statusDot(task.status)}" />
+            <span class="w-2 h-2 rounded-full shrink-0 {statusDot(task.status)}"></span>
             <span class="font-mono text-xs text-text-secondary w-16 shrink-0">{task.id.slice(0, 8)}</span>
             <span class="text-xs text-text flex-1 min-w-0 truncate">{task.title || task.id.slice(0, 10)}</span>
             <span class="text-xs text-text-secondary w-16 shrink-0">{task.status}</span>
@@ -134,7 +134,7 @@
   title={confirm?.action === "cancel" ? "Cancel task" : "Retry task"}
   message={confirm?.action === "cancel" ? `Cancel generation ${confirm?.title}?` : `Retry generation for task ${confirm?.title}?`}
   confirmLabel={confirm?.action === "cancel" ? "Cancel" : "Retry"}
-  variant={confirm?.action === "cancel" ? "destructive" : "primary"}
+  variant={confirm?.action === "cancel" ? "destructive" : "default"}
   onconfirm={handleConfirm}
   oncancel={() => confirm = null}
 />

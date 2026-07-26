@@ -374,7 +374,7 @@
           <label class="text-xs text-text-secondary block mb-1">Brand story (AI context)</label>
           <input bind:value={brandStory} class="w-full h-9 bg-bg text-text text-xs rounded-xl border border-border px-3 focus:border-border-focus focus:outline-none" placeholder="Your brand's mission, values, and voice…" />
         </div>
-        <Button variant="default" size="md" disabled={generating || !brandName.trim()} onclick={handleGenerateTokens}>
+        <Button variant="default" size="sm" disabled={generating || !brandName.trim()} onclick={handleGenerateTokens}>
           {generating ? "Setting up…" : "Setup brand"}
         </Button>
       </div>

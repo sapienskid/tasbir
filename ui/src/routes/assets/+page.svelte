@@ -98,7 +98,7 @@
   {#if loading}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {#each [1,2,3] as _}
-        <div class="h-48 bg-surface rounded-xl animate-pulse" />
+        <div class="h-48 bg-surface rounded-xl animate-pulse"></div>
       {/each}
     </div>
   {:else if filtered.length === 0}
