@@ -5,6 +5,8 @@ export interface GenerateRequest {
   title?: string;
   excerpt?: string;
   tags?: string[];
+  badge_tag?: string;
+  image_embeds?: string[];
   source_url?: string;
   feature_image?: string;
   requested_formats?: string[];

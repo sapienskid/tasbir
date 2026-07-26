@@ -8,7 +8,7 @@ async def fetch_design_tokens(
     state: Annotated[dict, InjectedState],
     brand_name: str = "",
 ) -> str:
-    """Fetch design tokens (colors, fonts, spacing) for a brand.
+    """Fetch design tokens (colors, typography, radii, spacing, logo) for a brand.
 
     Design tokens are stored in DTCG format and synchronized with Penpot.
     Use these tokens to ensure brand consistency in generated designs.
@@ -20,24 +20,36 @@ async def fetch_design_tokens(
         Design token data formatted for use in HTML/Tailwind generation.
     """
     tokens = state.get("design_tokens", {})
-
-    if not tokens:
-        return "No design tokens configured. Use default Tailwind classes."
-
-    if brand_name and brand_name in tokens:
-        tokens = {brand_name: tokens[brand_name]}
+    brand = state.get("brand", {})
 
     flat = {}
-    for group, group_data in tokens.items():
-        if isinstance(group_data, dict):
-            for category, values in group_data.items():
-                if isinstance(values, dict):
-                    for name, token in values.items():
-                        if isinstance(token, dict) and "$value" in token:
-                            flat[f"{group}/{category}/{name}"] = token["$value"]
+    if tokens:
+        for group, group_data in tokens.items():
+            if isinstance(group_data, dict):
+                for category, values in group_data.items():
+                    if isinstance(values, dict):
+                        for name, token in values.items():
+                            if isinstance(token, dict) and "$value" in token:
+                                flat[f"{group}/{category}/{name}"] = token["$value"]
+                            elif isinstance(token, (str, int, float)):
+                                flat[f"{group}/{category}/{name}"] = str(token)
 
-    if not flat:
-        return "No design tokens found."
+    lines = []
+    if brand.get("name"):
+        lines.append(f"Brand: {brand.get('name')}")
+    if brand.get("primary_color"):
+        lines.append(f"  Primary Color: {brand.get('primary_color')}")
+    if brand.get("secondary_color"):
+        lines.append(f"  Secondary Color: {brand.get('secondary_color')}")
+    if brand.get("logo_url"):
+        lines.append(f"  Brand Logo URL: {brand.get('logo_url')}")
 
-    lines = [f"  {path}: {value}" for path, value in sorted(flat.items())]
-    return "Design Tokens:\n" + "\n".join(lines)
+    if flat:
+        lines.append("Design Tokens (DTCG):")
+        for path, value in sorted(flat.items()):
+            lines.append(f"  {path}: {value}")
+
+    if not lines:
+        return "No explicit design tokens configured. Use standard brand colors and clean Tailwind styling."
+
+    return "\n".join(lines)

@@ -40,6 +40,8 @@
   }
 
   let titleInput = $state(loadDraft().titleInput || "");
+  let badgeInput = $state(loadDraft().badgeInput || "");
+  let featureImageInput = $state(loadDraft().featureImageInput || "");
   let content = $state(loadDraft().content || "");
   let formats = $state<{ id: string; label: string; dim: string; w: number; h: number }[]>([]);
   let selectedFormats = $state<string[]>(loadDraft().selectedFormats || []);
@@ -55,7 +57,7 @@
   let qualityScore = $state(0);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-  let brands = $state<{ id: string; name: string; description: string; data: { tone: string; primary_color: string; secondary_color: string; tokens: Record<string, unknown> } }[]>([]);
+  let brands = $state<{ id: string; name: string; description: string; data: { tone: string; primary_color: string; secondary_color: string; logo_url?: string; tokens: Record<string, unknown> } }[]>([]);
   let selectedBrandId = $state(loadDraft().selectedBrandId || "");
 
   let selectedBrand = $derived(brands.find(b => b.id === selectedBrandId));
@@ -114,6 +116,8 @@
   function clearDraft() {
     localStorage.removeItem(STORAGE_KEY);
     titleInput = "";
+    badgeInput = "";
+    featureImageInput = "";
     content = "";
     selectedFormats = formats.length > 0 ? [formats[0].id] : [];
     selectedBrandId = brands.length > 0 ? brands[0].id : "";
@@ -130,7 +134,14 @@
 
     try {
       const brandPayload = selectedBrand
-        ? { name: selectedBrand.name, tone: selectedBrand.data.tone, description: selectedBrand.description, primary_color: selectedBrand.data.primary_color }
+        ? {
+            name: selectedBrand.name,
+            tone: selectedBrand.data.tone,
+            description: selectedBrand.description,
+            primary_color: selectedBrand.data.primary_color,
+            secondary_color: selectedBrand.data.secondary_color,
+            logo_url: selectedBrand.data.logo_url,
+          }
         : {};
       const designTokens = selectedBrand?.data?.tokens || {};
 
@@ -139,6 +150,8 @@
       const res = await startGeneration({
         content,
         title: taskTitle,
+        badge_tag: badgeInput.trim() || undefined,
+        feature_image: featureImageInput.trim() || undefined,
         requested_formats: selectedFormats,
         brand: brandPayload,
         ...(Object.keys(designTokens).length > 0 ? { design_tokens: designTokens } : {}),
@@ -204,9 +217,32 @@
             ></textarea>
           </div>
 
-                {#if brands.length > 0}
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <div>
+              <label class="text-xs text-text-secondary block mb-1">
+                Badge / Tag <span class="opacity-60">(Optional — leave blank for no badge)</span>
+              </label>
+              <input
+                bind:value={badgeInput}
+                class="w-full bg-bg text-text text-sm rounded-xl border border-border px-3.5 py-2 placeholder:text-text-secondary/40 focus:outline-none focus:border-border-focus transition-colors"
+                placeholder="e.g. PRO TIP, CASE STUDY"
+              />
+            </div>
+            <div>
+              <label class="text-xs text-text-secondary block mb-1">
+                Image Embedding URL <span class="opacity-60">(Optional photo/graphic)</span>
+              </label>
+              <input
+                bind:value={featureImageInput}
+                class="w-full bg-bg text-text text-sm rounded-xl border border-border px-3.5 py-2 placeholder:text-text-secondary/40 focus:outline-none focus:border-border-focus transition-colors"
+                placeholder="https://example.com/photo.jpg"
+              />
+            </div>
+          </div>
+
+          {#if brands.length > 0}
             <div class="mt-4">
-              <label class="text-xs text-text-secondary block mb-1.5">Brand</label>
+              <label class="text-xs text-text-secondary block mb-1.5">Brand & Logo</label>
               <div class="flex items-center gap-3">
                 <Select type="single" bind:value={selectedBrandId}>
                   <SelectTrigger class="w-48">
@@ -219,12 +255,17 @@
                   </SelectContent>
                 </Select>
                 {#if selectedBrand}
-                  <span class="text-xs text-text-secondary">
-                    {selectedBrand.name}
+                  <div class="flex items-center gap-2 text-xs text-text-secondary">
+                    <span>{selectedBrand.name}</span>
                     {#if selectedBrand.data.tone}
-                      <span class="text-text-secondary">· {selectedBrand.data.tone}</span>
+                      <span>· {selectedBrand.data.tone}</span>
                     {/if}
-                  </span>
+                    {#if selectedBrand.data.logo_url}
+                      <span class="inline-flex items-center gap-1 text-[11px] text-accent bg-accent/10 px-2 py-0.5 rounded-md">
+                        ✓ Logo attached
+                      </span>
+                    {/if}
+                  </div>
                 {/if}
               </div>
             </div>

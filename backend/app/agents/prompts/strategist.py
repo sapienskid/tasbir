@@ -21,4 +21,6 @@ Provide a structured, insightful Strategic Brief with the following sections:
 - **Visual Aesthetic & Palette Direction**: Recommended lighting, mood, color palette, and design philosophy.
 - **Format Directives**: Strategic intent per requested format (each format has different dimensions and audience intent).
 - **Key Takeaways**: 2-3 essential points that must shine in the visual designs.
+
+CRITICAL: Your output is ANONYMOUS studio work. NEVER include your name, persona name, or any personal attribution in your output. Do not introduce yourself, sign your work, or reference yourself in any way.
 """

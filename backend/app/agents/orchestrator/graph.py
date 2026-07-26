@@ -33,6 +33,16 @@ NODE_PROGRESS: dict[str, int] = {
     "renderer": 95,
 }
 
+# Human-readable stage labels — no agent names, no persona references
+NODE_LABELS: dict[str, str] = {
+    "strategist": "Analyzing content...",
+    "copywriter": "Writing copy...",
+    "visual_director": "Directing visual style...",
+    "designer": "Designing layout...",
+    "quality_check": "Checking design quality...",
+    "renderer": "Rendering final assets...",
+}
+
 
 def after_quality(state: GenerationState) -> str:
     if state["quality_score"] >= 50:
@@ -70,7 +80,7 @@ pipeline = build_pipeline()
 
 async def run_pipeline(
     input_data: dict,
-    progress_callback: Callable[[int], Awaitable[None]] | None = None,
+    progress_callback: Callable[[int, str], Awaitable[None]] | None = None,
 ) -> dict:
     state = initial_state(**input_data)
     config = {"configurable": {"thread_id": input_data.get("_task_id", "default")}}
@@ -83,7 +93,8 @@ async def run_pipeline(
             if pct and pct > seen_progress:
                 seen_progress = pct
                 if progress_callback:
-                    await progress_callback(pct)
+                    label = NODE_LABELS.get(node, "Processing...")
+                    await progress_callback(pct, label)
 
     result = pipeline.get_state(config).values
     return result

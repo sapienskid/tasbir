@@ -1,7 +1,7 @@
 import json
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,6 +24,20 @@ class BrandResponse(BaseModel):
 class BrandCreate(BaseModel):
     name: str
     description: str
+    logo_url: str | None = None
+    tone: str | None = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
+
+
+class BrandUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    logo_url: str | None = None
+    tone: str | None = None
+    primary_color: str | None = None
+    secondary_color: str | None = None
+    tokens: dict | None = None
 
 
 @router.post("", response_model=BrandResponse, status_code=201)
@@ -54,7 +68,6 @@ async def create_brand(data: BrandCreate, db: AsyncSession = Depends(get_db)):
     try:
         llm_output = json.loads(cleaned)
     except json.JSONDecodeError:
-        from fastapi import HTTPException
         raise HTTPException(status_code=502, detail="LLM returned invalid JSON — try again")
 
     brand_meta = llm_output.get("brand", {})
@@ -66,9 +79,10 @@ async def create_brand(data: BrandCreate, db: AsyncSession = Depends(get_db)):
         name=data.name,
         description=data.description,
         data={
-            "tone": brand_meta.get("tone", "professional"),
-            "primary_color": brand_meta.get("primary_color", "#000000"),
-            "secondary_color": brand_meta.get("secondary_color", "#ffffff"),
+            "tone": data.tone or brand_meta.get("tone", "professional"),
+            "primary_color": data.primary_color or brand_meta.get("primary_color", "#000000"),
+            "secondary_color": data.secondary_color or brand_meta.get("secondary_color", "#ffffff"),
+            "logo_url": data.logo_url or brand_meta.get("logo_url", ""),
             "style_notes": brand_meta.get("style_notes", ""),
             "tokens": tokens,
         },
@@ -98,6 +112,73 @@ async def get_brand(brand_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     brand = result.scalar_one_or_none()
     if not brand:
         raise NotFoundError(f"Brand {brand_id} not found")
+    return brand
+
+
+@router.put("/{brand_id}", response_model=BrandResponse)
+async def update_brand(
+    brand_id: uuid.UUID, data: BrandUpdate, db: AsyncSession = Depends(get_db)
+):
+    from sqlalchemy import select
+    from app.models.brand import Brand
+
+    result = await db.execute(select(Brand).where(Brand.id == brand_id))
+    brand = result.scalar_one_or_none()
+    if not brand:
+        raise NotFoundError(f"Brand {brand_id} not found")
+
+    if data.name is not None:
+        brand.name = data.name
+    if data.description is not None:
+        brand.description = data.description
+
+    brand_data = dict(brand.data or {})
+    if data.logo_url is not None:
+        brand_data["logo_url"] = data.logo_url
+    if data.tone is not None:
+        brand_data["tone"] = data.tone
+    if data.primary_color is not None:
+        brand_data["primary_color"] = data.primary_color
+    if data.secondary_color is not None:
+        brand_data["secondary_color"] = data.secondary_color
+    if data.tokens is not None:
+        brand_data["tokens"] = data.tokens
+
+    brand.data = brand_data
+    brand.version += 1
+    await db.commit()
+    await db.refresh(brand)
+    return brand
+
+
+@router.post("/{brand_id}/logo", response_model=BrandResponse)
+async def upload_brand_logo(
+    brand_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a brand logo image file, save to MinIO, and update brand.data['logo_url']."""
+    from sqlalchemy import select
+    from app.models.brand import Brand
+    from app.services.storage import upload_asset
+
+    result = await db.execute(select(Brand).where(Brand.id == brand_id))
+    brand = result.scalar_one_or_none()
+    if not brand:
+        raise NotFoundError(f"Brand {brand_id} not found")
+
+    ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "png"
+    key = f"brands/{brand_id}/logo.{ext}"
+    content = await file.read()
+    logo_url = await upload_asset(key, content, content_type=file.content_type or "image/png")
+
+    brand_data = dict(brand.data or {})
+    brand_data["logo_url"] = logo_url
+    brand.data = brand_data
+    brand.version += 1
+
+    await db.commit()
+    await db.refresh(brand)
     return brand
 
 

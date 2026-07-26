@@ -2,6 +2,7 @@
 
 Strips unwanted content:
 - Emojis (must be purely professional typography and design accents)
+- Agent/persona names that bleed into graphic output
 - Website UI artifacts (buttons, navbars, URL headers)
 - Trailing hashtags and excessive whitespace
 - Enforces strict canvas viewport container styling (overflow: hidden, full canvas fit)
@@ -26,9 +27,36 @@ EMOJI_PATTERN = re.compile(
 )
 
 
+# All internal agent persona names that must never appear in generated output
+AGENT_NAMES: list[str] = [
+    "Aura Vance",
+    "Julian Sterling",
+    "Elena Rostova",
+    "Marcus Chen",
+    "Victoria Thorne",
+    "Dr. Soren Lindqvist",
+    "Soren Lindqvist",
+]
+
+# Compiled regex to match any agent name (case-insensitive, whole-phrase)
+_AGENT_NAME_PATTERN = re.compile(
+    r"|".join(re.escape(name) for name in AGENT_NAMES),
+    flags=re.IGNORECASE,
+)
+
+
 def remove_emojis(text: str) -> str:
     """Strip all raw emoji characters from text or HTML."""
     return EMOJI_PATTERN.sub("", text)
+
+
+def strip_agent_names(text: str) -> str:
+    """Strip all internal agent persona names from text or HTML.
+
+    Prevents internal studio personas (Julian Sterling, Marcus Chen, etc.)
+    from leaking into user-facing graphic output, HTML comments, or copy.
+    """
+    return _AGENT_NAME_PATTERN.sub("", text)
 
 
 def clean_html(html: str) -> str:
@@ -44,7 +72,10 @@ def clean_html(html: str) -> str:
     # 1. Strip raw emojis
     result = remove_emojis(html)
 
-    # 2. Transform interactive website <button> tags to styled visual callouts
+    # 2. Strip internal agent/persona names from graphic output
+    result = strip_agent_names(result)
+
+    # 3. Transform interactive website <button> tags to styled visual callouts
     result = re.sub(
         r'<button([^>]*)>(.*?)</button>',
         r'<span\1 style="display:inline-block; pointer-events:none;">\2</span>',
@@ -52,10 +83,10 @@ def clean_html(html: str) -> str:
         flags=re.DOTALL | re.IGNORECASE,
     )
 
-    # 3. Strip website navigation bars if generated accidentally
+    # 4. Strip website navigation bars if generated accidentally
     result = re.sub(r'<nav[^>]*>.*?</nav>', '', result, flags=re.DOTALL | re.IGNORECASE)
 
-    # 4. Clean line-by-line formatting
+    # 5. Clean line-by-line formatting
     lines = result.split("\n")
     cleaned = []
     in_body = False

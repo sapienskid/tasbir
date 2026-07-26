@@ -20,7 +20,8 @@ async def strategist_node(state: GenerationState) -> dict:
         f"BRAND CONTEXT: {state.get('brand', {})}\n"
         f"CAMPAIGN GOALS: {state.get('campaign', {})}\n"
         f"TARGET FORMATS: {', '.join(state['requested_formats'])}\n\n"
-        f"As Aura Vance, analyze this content and synthesize a master Strategic Brief for our creative studio."
+        f"Analyze this content and synthesize a master Strategic Brief for the creative studio.\n"
+        f"Output ONLY the structured brief sections. No name, no introduction, no attribution."
     )
 
     response = await call_llm(

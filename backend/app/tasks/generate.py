@@ -20,7 +20,7 @@ def generate_task(self, task_id: str, source_data: dict):
     """
     settings = get_settings()
 
-    async def _set_progress(pct: int, status: str = "running"):
+    async def _set_progress(pct: int, label: str = "Running...", status: str = "running"):
         e, p = await create_pool(settings.database_url)
         try:
             async with p() as s:
@@ -28,6 +28,7 @@ def generate_task(self, task_id: str, source_data: dict):
                     task_id=uuid.UUID(task_id),
                     status=status,
                     progress=pct,
+                    label=label,
                 )
         finally:
             await e.dispose()

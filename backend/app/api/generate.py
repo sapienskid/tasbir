@@ -17,6 +17,8 @@ class GenerateRequest(BaseModel):
     tags: list[str] = []
     source_url: str | None = None
     feature_image: str | None = None
+    badge_tag: str | None = None
+    image_embeds: list[str] = []
     requested_formats: list[str] = []
     brand: dict = {}
     campaign: dict = {}

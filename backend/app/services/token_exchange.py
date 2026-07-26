@@ -59,7 +59,7 @@ def build_dtcg(flat_tokens: dict[str, str], group_name: str = "tasbir") -> dict:
 
 
 def tokens_to_tailwind_config(tokens: dict) -> dict:
-    """Convert design tokens → Tailwind CSS v4 theme extension."""
+    """Convert design tokens → Tailwind CSS theme extension."""
     flat = _flatten(tokens, tokens)
     tw: dict = {
         "colors": {},
@@ -86,12 +86,12 @@ def tokens_to_tailwind_config(tokens: dict) -> dict:
         elif any(r in parts for r in ("radius", "rounded", "borderradius")):
             name = parts[-1]
             tw["borderRadius"][name] = value
-        elif "color" in parts:
+        elif "color" in parts or "colors" in parts:
             name = parts[-1]
             tw["colors"][name] = value
         elif any(f in parts for f in ("fontfamily", "family")):
             name = parts[-1]
-            tw["fontFamily"][name] = value
+            tw["fontFamily"][name] = value.split(",") if "," in value else [value]
         elif "fontsize" in parts or (parts[-2] if len(parts) > 1 else "") == "fontsize":
             name = parts[-1]
             tw["fontSize"][name] = value
@@ -100,7 +100,7 @@ def tokens_to_tailwind_config(tokens: dict) -> dict:
             tw["fontWeight"][name] = int(value) if value.isdigit() else value
         elif "lineheight" in parts:
             name = parts[-1]
-            tw["lineHeight"][name] = float(value)
+            tw["lineHeight"][name] = float(value) if value.replace(".", "", 1).isdigit() else value
         elif "letterspacing" in parts:
             name = parts[-1]
             tw["letterSpacing"][name] = value
@@ -111,19 +111,32 @@ def tokens_to_tailwind_config(tokens: dict) -> dict:
     return {k: v for k, v in tw.items() if v}
 
 
+def tokens_to_css_variables(tokens: dict) -> str:
+    """Generate :root CSS variables from design tokens."""
+    flat = _flatten(tokens, tokens)
+    if not flat:
+        return ""
+    lines = [":root {"]
+    for path, value in sorted(flat.items()):
+        var_name = "--" + path.lower().replace("/", "-")
+        lines.append(f"  {var_name}: {value};")
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def tailwind_config_html(tokens: dict) -> str:
-    """Generate a <script> tag that sets Tailwind CSS v4 theme config.
+    """Generate a <script> tag setting Tailwind CSS theme config + CSS custom properties.
     
-    The LLM designer can just use standard Tailwind utility classes.
-    This script maps the design token values into the Tailwind theme
-    so classes like `bg-primary`, `font-sans`, `rounded-md` resolve
-    to the token-defined values.
+    Ensures standard Tailwind classes and CSS variables resolve to design token values.
     """
     config = tokens_to_tailwind_config(tokens)
-    return f"""<script>
+    css_vars = tokens_to_css_variables(tokens)
+    style_block = f"<style>\n{css_vars}\n</style>" if css_vars else ""
+    script_block = f"""<script>
 tailwind.config = {{
   theme: {{
     extend: {json.dumps(config)}
   }}
 }}
 </script>"""
+    return f"{style_block}\n{script_block}" if style_block else script_block

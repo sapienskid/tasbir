@@ -14,6 +14,8 @@ class GenerationState(TypedDict):
     tags: list[str]
     source_url: Optional[str]
     feature_image: Optional[str]
+    badge_tag: Optional[str]
+    image_embeds: Optional[list[str]]
 
     # ── Configuration ──────────────────────────────────────────────────
     brand: dict[str, Any]
@@ -52,6 +54,8 @@ def initial_state(
         "tags": kwargs.get("tags", []),
         "source_url": kwargs.get("source_url"),
         "feature_image": kwargs.get("feature_image"),
+        "badge_tag": kwargs.get("badge_tag") or kwargs.get("badge"),
+        "image_embeds": kwargs.get("image_embeds", []),
         "brand": brand or {},
         "campaign": campaign or {},
         "requested_formats": requested_formats,
