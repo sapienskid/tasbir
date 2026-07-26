@@ -32,3 +32,16 @@ def test_generate_quote_background():
     assert bg.name
     assert bg.css
     assert "background" in bg.css
+
+
+def test_generate_background_follows_user_brand_colors():
+    brand_primary = "#ff1122"
+    brand_secondary = "#334455"
+    bg = generate_background(
+        content_type="article",
+        mood="sunset",
+        brand_primary=brand_primary,
+        brand_secondary=brand_secondary,
+    )
+    assert brand_primary in bg.css
+    assert brand_secondary in bg.css
