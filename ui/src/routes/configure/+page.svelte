@@ -5,11 +5,11 @@
   import Confirm from "$lib/components/ui/confirm.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Card } from "$lib/components/ui/card/index.js";
-  import { Select, SelectTrigger, SelectContent, SelectItem } from "$lib/components/ui/select/index.js";
   import TokenPreview from "$lib/components/TokenPreview.svelte";
   import { apiKey } from "$lib/stores/auth";
   import { api } from "$lib/api/client";
   import { listTokens, generateTokens, deleteToken, type DesignToken } from "$lib/api/tokens";
+  import { listBrands, createBrand, updateBrand, uploadBrandLogo, type Brand } from "$lib/api/brands";
 
   const API_BASE = "http://localhost:8000";
 
@@ -36,6 +36,8 @@
 
   // ── Brand & Tokens tab ──
   let brandLoading = $state(true);
+  let brands = $state<Brand[]>([]);
+  let selectedBrandId = $state("");
   let tokens = $state<DesignToken[]>([]);
   let generating = $state(false);
   let brandError = $state("");
@@ -46,10 +48,53 @@
   let tone = $state("professional");
   let primaryColor = $state("#18181b");
   let secondaryColor = $state("#fafafa");
-  let brandLoaded = $state(false);
+  let logoUrl = $state("");
   let activePreview = $state<string | null>(null);
+  let logoUploading = $state(false);
 
   const TONES = ["professional", "playful", "luxury", "minimal", "energetic", "warm", "serious"];
+
+  let selectedBrand = $derived(brands.find(b => b.id === selectedBrandId));
+
+  async function loadBrands() {
+    brandLoading = true;
+    try {
+      brands = await listBrands();
+      // Auto-select first brand or load its data
+      if (brands.length > 0) {
+        selectedBrandId = brands[0].id;
+        loadBrandData(brands[0]);
+      }
+    } catch {
+      // Fallback to legacy settings brand
+      try {
+        const legacy = await fetch(`${API_BASE}/settings/brand`).then(r => r.json()).catch(() => ({}));
+        if (legacy.name) {
+          brandName = legacy.name;
+          brandStory = legacy.story || "";
+          tone = legacy.tone || "professional";
+          primaryColor = legacy.primary_color || "#18181b";
+          secondaryColor = legacy.secondary_color || "#fafafa";
+        }
+      } catch {}
+    }
+    brandLoading = false;
+  }
+
+  function loadBrandData(brand: Brand) {
+    brandName = brand.name;
+    brandStory = brand.description || "";
+    tone = brand.data?.tone || "professional";
+    primaryColor = brand.data?.primary_color || "#18181b";
+    secondaryColor = brand.data?.secondary_color || "#fafafa";
+    logoUrl = brand.data?.logo_url || "";
+  }
+
+  async function onBrandChange(brandId: string) {
+    selectedBrandId = brandId;
+    const b = brands.find(x => x.id === brandId);
+    if (b) loadBrandData(b);
+  }
 
   // ── Formats tab ──
   let fmtLoading = $state(true);
@@ -103,23 +148,58 @@
 
   // ── Brand ──
   async function loadBrand() {
-    brandLoading = true;
+    // Now uses loadBrands() instead
+    await loadBrands();
+    // Also load tokens
+    try { tokens = await listTokens(); for (const t of tokens) activePreview = t.id; } catch {}
+  }
+
+  async function handleSaveBrand() {
+    if (!brandName.trim()) return;
+    brandError = "";
+    brandSuccess = "";
     try {
-      const [brandRes, tokList] = await Promise.all([
-        fetch(`${API_BASE}/settings/brand`).then(r => r.json()).catch(() => ({})),
-        listTokens().catch(() => []),
-      ]);
-      tokens = tokList;
-      if (brandRes.name) brandName = brandRes.name;
-      if (brandRes.story) brandStory = brandRes.story;
-      if (brandRes.tone) tone = brandRes.tone;
-      if (brandRes.primary_color) primaryColor = brandRes.primary_color;
-      if (brandRes.secondary_color) secondaryColor = brandRes.secondary_color;
-      for (const t of tokens) activePreview = t.id;
-    } catch {} finally {
-      brandLoading = false;
-      brandLoaded = true;
+      if (selectedBrandId) {
+        await updateBrand(selectedBrandId, {
+          name: brandName,
+          description: brandStory,
+          tone,
+          primary_color: primaryColor,
+          secondary_color: secondaryColor,
+        });
+        brandSuccess = "Brand updated";
+      } else {
+        const created = await createBrand({
+          name: brandName,
+          description: brandStory,
+          tone,
+          primary_color: primaryColor,
+          secondary_color: secondaryColor,
+        });
+        // Refresh brands list
+        brands = await listBrands();
+        selectedBrandId = created.id;
+        brandSuccess = "Brand created";
+      }
+    } catch (e: any) {
+      brandError = e.message || "Failed to save brand";
     }
+    setTimeout(() => (brandSuccess = ""), 3000);
+  }
+
+  async function handleLogoUpload(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file || !selectedBrandId) return;
+    logoUploading = true;
+    try {
+      const updated = await uploadBrandLogo(selectedBrandId, file);
+      logoUrl = updated.data?.logo_url || "";
+      brandSuccess = "Logo uploaded";
+    } catch (ex: any) {
+      brandError = ex.message || "Logo upload failed";
+    }
+    logoUploading = false;
+    setTimeout(() => (brandSuccess = ""), 3000);
   }
 
   async function handleGenerateTokens() {
@@ -134,15 +214,19 @@
         secondary_color: secondaryColor || undefined,
       });
 
-      await fetch(`${API_BASE}/settings/brand`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ data: { name: brandName, story: brandStory, tone, primary_color: primaryColor, secondary_color: secondaryColor } }),
-      });
+      // Save generated tokens into the selected brand
+      if (selectedBrandId) {
+        await updateBrand(selectedBrandId, {
+          tokens: token.data as Record<string, unknown>,
+        });
+        brandSuccess = "Tokens generated and saved to brand";
+      } else {
+        // No brand selected — just show the tokens
+        brandSuccess = "Tokens generated";
+      }
 
       tokens = [token, ...tokens];
       activePreview = token.id;
-      brandSuccess = "Tokens generated and brand saved";
       setTimeout(() => brandSuccess = "", 3000);
     } catch (e) {
       brandError = e instanceof Error ? e.message : "Generation failed";
@@ -341,7 +425,28 @@
 
   <!-- ── Brand & Tokens ── -->
   {:else if activeTab === "brand"}
+    <!-- Brand selector + save -->
     <Card class="p-5">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="flex-1">
+          <label class="text-xs text-text-secondary block mb-1">Brand</label>
+          <select
+            bind:value={selectedBrandId}
+            onchange={(e) => onBrandChange(e.currentTarget.value)}
+            class="w-full h-9 bg-bg text-text text-xs rounded-xl border border-border px-3 focus:border-border-focus focus:outline-none appearance-none cursor-pointer"
+          >
+            <option value="">New brand…</option>
+            {#each brands as b}
+              <option value={b.id}>{b.name}</option>
+            {/each}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-text-secondary block mb-1">&nbsp;</label>
+          <Button variant="outline" size="sm" onclick={handleSaveBrand} disabled={!brandName.trim()}>Save brand</Button>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <div>
           <label class="text-xs text-text-secondary block mb-1">Brand name</label>
@@ -349,20 +454,14 @@
         </div>
         <div>
           <label class="text-xs text-text-secondary block mb-1">Tone</label>
-          {#if brandLoaded}
-          <Select bind:value={tone}>
-            <SelectTrigger>
-              <span class="text-text-secondary">Select tone</span>
-            </SelectTrigger>
-            <SelectContent>
-              {#each TONES as t (t)}
-                <SelectItem value={t}>{t}</SelectItem>
-              {/each}
-            </SelectContent>
-          </Select>
-          {:else}
-          <div class="h-9 bg-bg/50 rounded-xl animate-pulse" />
-          {/if}
+          <select
+            bind:value={tone}
+            class="w-full h-9 bg-bg text-text text-xs rounded-xl border border-border px-3 focus:border-border-focus focus:outline-none appearance-none cursor-pointer"
+          >
+            {#each TONES as t}
+              <option value={t}>{t}</option>
+            {/each}
+          </select>
         </div>
         <div>
           <label class="text-xs text-text-secondary block mb-1">Primary</label>
@@ -379,13 +478,28 @@
           </div>
         </div>
       </div>
+
+      <!-- Logo upload -->
+      <div class="mb-4">
+        <label class="text-xs text-text-secondary block mb-1">Logo</label>
+        <div class="flex items-center gap-3">
+          {#if logoUrl}
+            <img src="{API_BASE}{logoUrl}" alt="Logo" class="h-9 max-w-[160px] object-contain rounded border border-border" />
+          {/if}
+          <label class="inline-flex items-center gap-1.5 h-8 px-3 text-xs rounded-lg border border-border cursor-pointer hover:bg-bg transition-colors {logoUploading ? 'opacity-50 pointer-events-none' : ''}">
+            <span>{logoUploading ? 'Uploading…' : logoUrl ? 'Replace' : 'Upload logo'}</span>
+            <input type="file" accept="image/*" class="hidden" onchange={handleLogoUpload} disabled={logoUploading || !selectedBrandId} />
+          </label>
+        </div>
+      </div>
+
       <div class="flex gap-2 items-end">
         <div class="flex-1">
           <label class="text-xs text-text-secondary block mb-1">Brand story (AI context)</label>
           <input bind:value={brandStory} class="w-full h-9 bg-bg text-text text-xs rounded-xl border border-border px-3 focus:border-border-focus focus:outline-none" placeholder="Your brand's mission, values, and voice…" />
         </div>
         <Button variant="default" size="sm" disabled={generating || !brandName.trim()} onclick={handleGenerateTokens}>
-          {generating ? "Setting up…" : "Setup brand"}
+          {generating ? "Generating…" : "Generate tokens"}
         </Button>
       </div>
       {#if brandError}

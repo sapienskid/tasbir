@@ -4,7 +4,7 @@
   import { startGeneration, getTask, type TaskResult } from "$lib/api/generate";
   import { listFormats } from "$lib/api/formats";
   import { Card } from "$lib/components/ui/card/index.js";
-  import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "$lib/components/ui/select/index.js";
+  import { uploadBrandLogo } from "$lib/api/brands";
 
   const API_BASE = "http://localhost:8000";
   const STORAGE_KEY = "tasbir:create";
@@ -61,6 +61,19 @@
   let selectedBrandId = $state(loadDraft().selectedBrandId || "");
 
   let selectedBrand = $derived(brands.find(b => b.id === selectedBrandId));
+  let logoUploading = $state(false);
+
+  async function handleLogoUpload(e: Event) {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file || !selectedBrandId) return;
+    logoUploading = true;
+    try {
+      const updated = await uploadBrandLogo(selectedBrandId, file);
+      // Update the brand in the local list
+      brands = brands.map(b => b.id === updated.id ? updated : b);
+    } catch {}
+    logoUploading = false;
+  }
 
   $effect(() => { saveDraft(); });
 
@@ -244,16 +257,15 @@
             <div class="mt-4">
               <label class="text-xs text-text-secondary block mb-1.5">Brand & Logo</label>
               <div class="flex items-center gap-3">
-                <Select type="single" bind:value={selectedBrandId}>
-                  <SelectTrigger class="w-48">
-                    <SelectValue placeholder="Select brand" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {#each brands as b (b.id)}
-                      <SelectItem value={b.id}>{b.name}</SelectItem>
-                    {/each}
-                  </SelectContent>
-                </Select>
+                <select
+                  bind:value={selectedBrandId}
+                  class="w-48 h-9 bg-bg text-text text-xs rounded-xl border border-border px-3 focus:border-border-focus focus:outline-none appearance-none cursor-pointer"
+                >
+                  <option value="">Select brand</option>
+                  {#each brands as b (b.id)}
+                    <option value={b.id}>{b.name}</option>
+                  {/each}
+                </select>
                 {#if selectedBrand}
                   <div class="flex items-center gap-2 text-xs text-text-secondary">
                     <span>{selectedBrand.name}</span>
@@ -261,10 +273,12 @@
                       <span>· {selectedBrand.data.tone}</span>
                     {/if}
                     {#if selectedBrand.data.logo_url}
-                      <span class="inline-flex items-center gap-1 text-[11px] text-accent bg-accent/10 px-2 py-0.5 rounded-md">
-                        ✓ Logo attached
-                      </span>
+                      <span class="inline-flex items-center gap-1 text-[11px] text-accent bg-accent/10 px-2 py-0.5 rounded-md">✓ Logo</span>
                     {/if}
+                    <label class="inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-text cursor-pointer transition-colors {logoUploading ? 'opacity-50 pointer-events-none' : ''}">
+                      <span>{logoUploading ? '…' : '+ logo'}</span>
+                      <input type="file" accept="image/*" class="hidden" onchange={handleLogoUpload} disabled={logoUploading} />
+                    </label>
                   </div>
                 {/if}
               </div>
