@@ -3,18 +3,46 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { startGeneration, getTask, type TaskResult } from "$lib/api/generate";
   import { listFormats } from "$lib/api/formats";
-  import { listTokens, type DesignToken } from "$lib/api/tokens";
   import { Card } from "$lib/components/ui/card/index.js";
-  import { Select, SelectTrigger, SelectContent, SelectItem } from "$lib/components/ui/select/index.js";
+  import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "$lib/components/ui/select/index.js";
 
   const API_BASE = "http://localhost:8000";
+  const STORAGE_KEY = "tasbir:create";
 
-  const AGENTS = ["Strategist", "Copywriter", "Visual Director", "Designer", "Quality Check", "Renderer"];
-  const STAGES = ["queued", "analyzing", "writing", "designing", "rendering", "complete"];
+  interface AgentDef {
+    name: string;
+    activeAt: number;
+    doneAt: number;
+  }
+  const AGENTS: AgentDef[] = [
+    { name: "Strategist", activeAt: 5, doneAt: 25 },
+    { name: "Copywriter", activeAt: 25, doneAt: 45 },
+    { name: "Visual Director", activeAt: 45, doneAt: 65 },
+    { name: "Designer", activeAt: 65, doneAt: 78 },
+    { name: "Quality Check", activeAt: 78, doneAt: 90 },
+    { name: "Renderer", activeAt: 90, doneAt: 100 },
+  ];
 
-  let content = $state("");
+  function loadDraft() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return {};
+  }
+
+  function saveDraft() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        content, titleInput, selectedFormats, selectedBrandId,
+      }));
+    } catch { /* ignore */ }
+  }
+
+  let titleInput = $state(loadDraft().titleInput || "");
+  let content = $state(loadDraft().content || "");
   let formats = $state<{ id: string; label: string; dim: string; w: number; h: number }[]>([]);
-  let selectedFormats = $state<string[]>([]);
+  let selectedFormats = $state<string[]>(loadDraft().selectedFormats || []);
   let generating = $state(false);
   let error = $state("");
   let focused = $state(false);
@@ -23,23 +51,31 @@
   let taskId = $state("");
   let status = $state("");
   let progress = $state(0);
-  let activeStage = $state(-1);
   let assets = $state<Record<string, string>>({});
   let qualityScore = $state(0);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-  let tokens = $state<DesignToken[]>([]);
-  let selectedTokenId = $state("");
+  let brands = $state<{ id: string; name: string; description: string; data: { tone: string; primary_color: string; secondary_color: string; tokens: Record<string, unknown> } }[]>([]);
+  let selectedBrandId = $state(loadDraft().selectedBrandId || "");
+
+  let selectedBrand = $derived(brands.find(b => b.id === selectedBrandId));
+
+  $effect(() => { saveDraft(); });
 
   onMount(async () => {
     try {
-      const [apiFormats, tok] = await Promise.all([
+      const [apiFormats, brandList] = await Promise.all([
         listFormats(),
-        listTokens().catch(() => []),
+        fetch(`${API_BASE}/brands`).then(r => r.json()).catch(() => []),
       ]);
       formats = apiFormats.map((f: any) => ({ id: f.id, label: f.name, dim: `${f.width}x${f.height}`, w: f.width, h: f.height }));
-      selectedFormats = formats.length > 0 ? [formats[0].id] : [];
-      tokens = tok;
+      if (selectedFormats.length === 0 && formats.length > 0) {
+        selectedFormats = [formats[0].id];
+      }
+      brands = brandList;
+      if (!selectedBrandId && brands.length > 0) {
+        selectedBrandId = brands[0].id;
+      }
     } catch {
       formats = [
         { id: "instagram-square", label: "Instagram Square", dim: "1080x1080", w: 1080, h: 1080 },
@@ -50,7 +86,7 @@
         { id: "facebook-post", label: "Facebook", dim: "1200x630", w: 1200, h: 630 },
         { id: "pinterest-pin", label: "Pinterest", dim: "1000x1500", w: 1000, h: 1500 },
       ];
-      selectedFormats = ["instagram-square"];
+      if (selectedFormats.length === 0) selectedFormats = ["instagram-square"];
     } finally { loading = false; }
   });
 
@@ -67,13 +103,20 @@
     return url;
   }
 
-  function getActiveStage(): number {
-    if (progress < 10) return 0;
-    if (progress < 30) return 1;
-    if (progress < 50) return 2;
-    if (progress < 70) return 3;
-    if (progress < 90) return 4;
-    return 5;
+  function isAgentActive(index: number): boolean {
+    return progress >= AGENTS[index].activeAt;
+  }
+
+  function isAgentDone(index: number): boolean {
+    return progress >= AGENTS[index].doneAt;
+  }
+
+  function clearDraft() {
+    localStorage.removeItem(STORAGE_KEY);
+    titleInput = "";
+    content = "";
+    selectedFormats = formats.length > 0 ? [formats[0].id] : [];
+    selectedBrandId = brands.length > 0 ? brands[0].id : "";
   }
 
   async function handleGenerate() {
@@ -82,20 +125,23 @@
     error = "";
     status = "starting";
     progress = 0;
-    activeStage = 0;
     assets = {};
     qualityScore = 0;
 
     try {
-      const tokenData = selectedTokenId
-        ? (tokens.find(t => t.id === selectedTokenId)?.data || {})
+      const brandPayload = selectedBrand
+        ? { name: selectedBrand.name, tone: selectedBrand.data.tone, description: selectedBrand.description, primary_color: selectedBrand.data.primary_color }
         : {};
+      const designTokens = selectedBrand?.data?.tokens || {};
+
+      const taskTitle = titleInput.trim() || content.split("\n")[0].slice(0, 80).replace(/[^\w\s-]/g, "").trim();
 
       const res = await startGeneration({
         content,
-        title: content.split("\n")[0].slice(0, 100),
+        title: taskTitle,
         requested_formats: selectedFormats,
-        ...(selectedTokenId ? { design_tokens: tokenData } : {}),
+        brand: brandPayload,
+        ...(Object.keys(designTokens).length > 0 ? { design_tokens: designTokens } : {}),
       });
       taskId = res.task_id;
 
@@ -104,7 +150,6 @@
           const data = await getTask(taskId);
           status = data.status;
           progress = data.progress || 0;
-          activeStage = getActiveStage();
 
           if (data.status === "completed") {
             if (pollTimer) clearInterval(pollTimer);
@@ -140,6 +185,14 @@
       <!-- Left: input -->
       <div class="lg:col-span-3 space-y-4">
         <Card class="p-5">
+          <div class="mb-3">
+            <label class="text-xs text-text-secondary block mb-1">Title</label>
+            <input
+              bind:value={titleInput}
+              class="w-full bg-bg text-text text-sm rounded-xl border border-border px-4 py-2.5 placeholder:text-text-secondary/40 focus:outline-none focus:border-border-focus transition-colors"
+              placeholder="Social media campaign title…"
+            />
+          </div>
           <div class="scan-border rounded-xl" class:is-active={focused}>
             <textarea
               bind:value={content}
@@ -151,19 +204,29 @@
             ></textarea>
           </div>
 
-          {#if tokens.length > 0}
+                {#if brands.length > 0}
             <div class="mt-4">
-              <label class="text-xs text-text-secondary block mb-1.5">Design tokens (optional)</label>
-              <Select bind:value={selectedTokenId}>
-                <SelectTrigger class="w-56">
-                  <span class="text-text-secondary">Auto-generate from vibe</span>
-                </SelectTrigger>
-                <SelectContent>
-                  {#each tokens as t}
-                    <SelectItem value={t.id}>{t.name}</SelectItem>
-                  {/each}
-                </SelectContent>
-              </Select>
+              <label class="text-xs text-text-secondary block mb-1.5">Brand</label>
+              <div class="flex items-center gap-3">
+                <Select type="single" bind:value={selectedBrandId}>
+                  <SelectTrigger class="w-48">
+                    <SelectValue placeholder="Select brand" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {#each brands as b}
+                      <SelectItem value={b.id}>{b.name}</SelectItem>
+                    {/each}
+                  </SelectContent>
+                </Select>
+                {#if selectedBrand}
+                  <span class="text-xs text-text-secondary">
+                    {selectedBrand.name}
+                    {#if selectedBrand.data.tone}
+                      <span class="text-text-secondary">· {selectedBrand.data.tone}</span>
+                    {/if}
+                  </span>
+                {/if}
+              </div>
             </div>
           {/if}
 
@@ -175,8 +238,8 @@
             <Button
               disabled={generating || !content.trim() || selectedFormats.length === 0}
               onclick={handleGenerate}
-              variant={content.trim() && selectedFormats.length > 0 ? "accent" : "primary"}
-              size="md"
+              variant={content.trim() && selectedFormats.length > 0 ? "default" : "outline"}
+              size="sm"
             >
               {generating ? `${progress}%` : "Generate"}
             </Button>
@@ -192,17 +255,17 @@
           <Card class="p-5">
             <p class="text-xs text-text-secondary mb-3">Progress</p>
             <div class="w-full h-1.5 bg-border rounded-full overflow-hidden mb-4">
-              <div class="h-full bg-accent rounded-full transition-all duration-500" style="width: {progress}%" />
+              <div class="h-full bg-accent rounded-full transition-all duration-500" style="width: {progress}%"></div>
             </div>
             <div class="flex items-center gap-0 overflow-x-auto">
               {#each AGENTS as agent, i}
                 <div class="flex items-center shrink-0">
-                  <div class="flex flex-col items-center gap-1.5" class:opacity-30={i > activeStage}>
-                    <div class="w-1.5 h-1.5 rounded-full {i <= activeStage ? 'bg-accent' : 'bg-border'}" />
-                    <span class="text-[10px] text-text-secondary whitespace-nowrap">{agent}</span>
+                  <div class="flex flex-col items-center gap-1.5" class:opacity-30={!isAgentActive(i)}>
+                    <div class="w-1.5 h-1.5 rounded-full {isAgentActive(i) ? 'bg-accent' : 'bg-border'}"></div>
+                    <span class="text-[10px] whitespace-nowrap {isAgentActive(i) ? 'text-accent font-medium' : 'text-text-secondary'}">{agent.name}</span>
                   </div>
                   {#if i < AGENTS.length - 1}
-                    <div class="w-8 sm:w-12 h-px bg-border mx-1.5" class:bg-accent={i < activeStage} />
+                    <div class="w-8 sm:w-12 h-px bg-border mx-1.5" class:bg-accent={isAgentDone(i)}></div>
                   {/if}
                 </div>
               {/each}
@@ -218,7 +281,7 @@
           {#if loading}
             <div class="grid grid-cols-2 gap-2">
               {#each [1,2,3,4] as _}
-                <div class="h-16 bg-surface rounded-xl animate-pulse" />
+                <div class="h-16 bg-surface rounded-xl animate-pulse"></div>
               {/each}
             </div>
           {:else}
@@ -247,7 +310,7 @@
           <h2 class="text-sm font-medium text-text">Generated assets</h2>
           <p class="text-xs text-text-secondary mt-0.5">Quality score: {qualityScore}/100</p>
         </div>
-        <Button variant="ghost" size="sm" onclick={() => { status = ""; assets = {}; content = ""; }}>
+        <Button variant="ghost" size="sm" onclick={() => { status = ""; assets = {}; clearDraft(); }}>
           New generation
         </Button>
       </div>
