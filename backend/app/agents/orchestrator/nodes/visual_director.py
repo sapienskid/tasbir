@@ -45,7 +45,7 @@ async def _generate_bg_for_format(
         f"MOOD: {mood}\n"
         f"BRAND PRIMARY COLOR: {brand_primary}\n"
         f"BRAND SECONDARY COLOR: {brand_secondary}\n\n"
-        f"As Elena Rostova, select the perfect background aesthetic for this visual graphic canvas that matches the {brand.get('name', brand.get('tone', 'professional'))} brand identity. "
+        f"Select the perfect background aesthetic for this visual graphic canvas that matches the {brand.get('name', brand.get('tone', 'professional'))} brand identity. "
         f"The background must visually support the article topic described above. "
         f"Call search_unsplash or generate_background_tool."
     )
@@ -79,7 +79,12 @@ async def _generate_bg_for_format(
     else:
         from app.services.backgrounds import generate_background
 
-        bg = generate_background(content_type=mood, mood=mood, brand_primary=brand_primary, brand_secondary=brand_secondary)
+        bg = generate_background(
+            content_type="article",
+            mood=mood,
+            brand_primary=brand_primary,
+            brand_secondary=brand_secondary,
+        )
         bg_dict = {"css": bg.css, "name": bg.name}
 
     return fmt_id, bg_dict
@@ -87,9 +92,19 @@ async def _generate_bg_for_format(
 
 async def visual_director_node(state: GenerationState) -> dict:
     prompt = await get_prompt("visual_director")
+    brand = state.get("brand", {})
     tokens = state.get("design_tokens", {})
-    brand_primary = tokens.get("color", {}).get("primary", {}).get("$value", "#667eea")
-    brand_secondary = tokens.get("color", {}).get("secondary", {}).get("$value", "#764ba2")
+
+    brand_primary = (
+        brand.get("primary_color")
+        or tokens.get("color", {}).get("primary", {}).get("$value")
+        or "#667eea"
+    )
+    brand_secondary = (
+        brand.get("secondary_color")
+        or tokens.get("color", {}).get("secondary", {}).get("$value")
+        or "#764ba2"
+    )
 
     formats = state["requested_formats"]
     tasks = [
