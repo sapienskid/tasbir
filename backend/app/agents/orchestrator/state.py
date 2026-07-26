@@ -3,9 +3,7 @@
 Each agent node reads from and writes to this state dict.
 """
 
-from typing import Annotated, Any, Optional, TypedDict
-
-from langgraph.graph import add_messages
+from typing import Any, Optional, TypedDict
 
 
 class GenerationState(TypedDict):
@@ -38,10 +36,6 @@ class GenerationState(TypedDict):
     refinement_count: int
     max_refinements: int
 
-    # ── Flow Control ───────────────────────────────────────────────────
-    messages: Annotated[list, add_messages]
-    next_node: str
-
 
 def initial_state(
     title: str,
@@ -73,6 +67,4 @@ def initial_state(
         "quality_issues": [],
         "refinement_count": 0,
         "max_refinements": 2,
-        "messages": [],
-        "next_node": "strategist",
     }

@@ -13,11 +13,9 @@ def test_initial_state_defaults():
     assert state["title"] == "Test Title"
     assert state["content"] == "Test content here."
     assert "instagram-square" in state["requested_formats"]
-    assert state["next_node"] == "strategist"
     assert state["quality_score"] == 0
     assert state["refinement_count"] == 0
     assert state["max_refinements"] == 2
-    assert state["messages"] == []
     assert state["_task_id"] == ""
 
 

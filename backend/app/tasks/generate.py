@@ -49,9 +49,24 @@ def generate_task(self, task_id: str, source_data: dict):
         await _set_progress(10)
 
         source_data["_task_id"] = task_id
-        state = await run_pipeline(source_data)
+        try:
+            state = await run_pipeline(source_data, progress_callback=_set_progress)
+        except Exception as e:
+            await _set_progress(100, "failed")
+            engine, pool = await create_pool(settings.database_url)
+            try:
+                async with pool() as session:
+                    await TaskRepository(session).update_status(
+                        task_id=uuid.UUID(task_id),
+                        status="failed",
+                        error=str(e),
+                        progress=100,
+                    )
+            finally:
+                await engine.dispose()
+            return
 
-        await _set_progress(80)
+        await _set_progress(95)
 
         engine, pool = await create_pool(settings.database_url)
         try:
@@ -96,6 +111,19 @@ def generate_task(self, task_id: str, source_data: dict):
                         error=f"Quality check failed: {', '.join(state.get('quality_issues', []))}",
                         progress=100,
                     )
+        except Exception as e:
+            await _set_progress(100, "failed")
+            engine, pool = await create_pool(settings.database_url)
+            try:
+                async with pool() as session:
+                    await TaskRepository(session).update_status(
+                        task_id=uuid.UUID(task_id),
+                        status="failed",
+                        error=str(e),
+                        progress=100,
+                    )
+            finally:
+                await engine.dispose()
         finally:
             await engine.dispose()
 

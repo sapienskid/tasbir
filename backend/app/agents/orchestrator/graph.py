@@ -1,17 +1,18 @@
-"""LangGraph state machine for the generation pipeline with parallel agent execution.
+"""LangGraph state machine for the generation pipeline with sequential agent execution.
 
 Defines the agent workflow as a directed graph:
-                 ┌───> copywriter ────────┐
-   strategist ───┤                        ├───> designer ───> quality_check ───> renderer ───> END
-                 └───> visual_director ───┘                                ↓ (refinement loop)
-                                                                        designer
+  strategist → copywriter → visual_director → designer → quality_check → renderer → END
+                                                                ↓ (refinement loop)
+                                                            designer
 
-`copywriter` and `visual_director` execute in PARALLEL after `strategist`.
-`designer` waits for both to complete before producing visual graphics.
-If quality passes (score >= 50), `renderer` converts HTML to PNG assets.
+Each agent reads from shared state, enabling proper hand-off:
+- copywriter receives strategic_brief from strategist
+- visual_director receives copy_by_format from copywriter
+- designer receives copy + backgrounds from both upstream agents
+Quality check passes/fails; renderer converts HTML to PNG.
 """
 
-import asyncio
+from collections.abc import Awaitable, Callable
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
@@ -23,14 +24,17 @@ from app.agents.orchestrator.nodes.strategist import strategist_node
 from app.agents.orchestrator.nodes.visual_director import visual_director_node
 from app.agents.orchestrator.state import GenerationState, initial_state
 
+NODE_PROGRESS: dict[str, int] = {
+    "strategist": 15,
+    "copywriter": 35,
+    "visual_director": 55,
+    "designer": 70,
+    "quality_check": 85,
+    "renderer": 95,
+}
+
 
 def after_quality(state: GenerationState) -> str:
-    """Decide next step after quality check.
-
-    - If quality passes (>= 50): render assets, then finish
-    - If quality fails but refinements remain: loop to designer
-    - If quality fails and no refinements left: finish without rendering
-    """
     if state["quality_score"] >= 50:
         return "renderer"
     if state["refinement_count"] < state["max_refinements"]:
@@ -50,14 +54,9 @@ def build_pipeline() -> StateGraph:
 
     workflow.set_entry_point("strategist")
 
-    # Parallel execution fan-out: strategist -> [copywriter, visual_director]
     workflow.add_edge("strategist", "copywriter")
-    workflow.add_edge("strategist", "visual_director")
-
-    # Fan-in to designer: designer waits for both copywriter & visual_director
-    workflow.add_edge("copywriter", "designer")
+    workflow.add_edge("copywriter", "visual_director")
     workflow.add_edge("visual_director", "designer")
-
     workflow.add_edge("designer", "quality_check")
     workflow.add_conditional_edges("quality_check", after_quality)
     workflow.add_edge("renderer", END)
@@ -69,11 +68,22 @@ def build_pipeline() -> StateGraph:
 pipeline = build_pipeline()
 
 
-async def run_pipeline(input_data: dict) -> dict:
+async def run_pipeline(
+    input_data: dict,
+    progress_callback: Callable[[int], Awaitable[None]] | None = None,
+) -> dict:
     state = initial_state(**input_data)
     config = {"configurable": {"thread_id": input_data.get("_task_id", "default")}}
-    result = await asyncio.wait_for(
-        pipeline.ainvoke(state, config),
-        timeout=300,
-    )
+    seen_progress = 0
+
+    async for event in pipeline.astream_events(state, config, version="v2"):
+        if event["event"] == "on_chain_start":
+            node = event["name"]
+            pct = NODE_PROGRESS.get(node)
+            if pct and pct > seen_progress:
+                seen_progress = pct
+                if progress_callback:
+                    await progress_callback(pct)
+
+    result = pipeline.get_state(config).values
     return result
