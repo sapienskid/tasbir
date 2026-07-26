@@ -11,8 +11,8 @@
         val = (val as Record<string, unknown>)[key];
       } else return ref;
     }
-    if (val && typeof val === "object" && "value" in (val as Record<string, unknown>)) {
-      return resolveRef(String((val as Record<string, unknown>).value), d);
+    if (val && typeof val === "object" && ("value" in (val as Record<string, unknown>) || "$value" in (val as Record<string, unknown>))) {
+      return resolveRef(String((val as Record<string, unknown>).value || (val as Record<string, unknown>).$value), d);
     }
     return String(val);
   }
@@ -24,8 +24,8 @@
   function collectLeaves(obj: Record<string, unknown>, d: Record<string, unknown>): { name: string; resolved: string }[] {
     const result: { name: string; resolved: string }[] = [];
     for (const [k, v] of Object.entries(obj)) {
-      if (v && typeof v === "object" && "value" in (v as Record<string, unknown>)) {
-        const raw = String((v as Record<string, unknown>).value);
+      if (v && typeof v === "object" && ("value" in (v as Record<string, unknown>) || "$value" in (v as Record<string, unknown>))) {
+        const raw = String((v as Record<string, unknown>).value || (v as Record<string, unknown>).$value);
         result.push({ name: k, resolved: raw.startsWith("{") ? resolveRef(raw, d) : raw });
       } else if (v && typeof v === "object") {
         for (const item of collectLeaves(v as Record<string, unknown>, d)) {
