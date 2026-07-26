@@ -1,12 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
-from fastapi import HTTPException
-
 from app.core.errors import NotFoundError
 
 router = APIRouter()
@@ -107,58 +105,28 @@ async def generate_tokens(
     secondary_color: str = "",
     db: AsyncSession = Depends(get_db)
 ):
-    """Generate design tokens from brand context using LLM."""
-    from app.models.settings import Settings
-    from sqlalchemy import select
-    from app.models.tokens import DesignToken
-    from app.services.llm import call_llm
+    """Generate design tokens from brand context using LLM (async task)."""
+    from app.db.repositories.tasks import TaskRepository
+    from app.tasks.brands import generate_token_task
 
-    brand_context = ""
-    result = await db.execute(select(Settings).where(Settings.id == 1))
-    settings_row = result.scalar_one_or_none()
-    if settings_row and settings_row.data:
-        brand = settings_row.data.get("brand", {})
-        if brand.get("story"):
-            brand_context += f"\nBrand story: {brand['story']}"
-        if brand.get("tagline"):
-            brand_context += f"\nTagline: {brand['tagline']}"
-
-    system_prompt = (
-        "You are a design token generator. Generate DTCG-format design tokens "
-        "for the given brand. Use nested objects with 'value' and 'type'. "
-        "Include: color (neutral palette + semantic colors), "
-        "typography (fontFamily with sans, serif, mono, display variants; "
-        "fontSize scale; fontWeight; lineHeight; letterSpacing), "
-        "spacing (scale + layout gaps), borderRadius, boxShadow, and opacity. "
-        "Return ONLY valid JSON with no markdown fences."
+    task_repo = TaskRepository(db)
+    source_data = {
+        "type": "token_generation",
+        "brand_name": brand_name,
+        "tone": tone,
+        "style": style,
+        "primary_color": primary_color,
+        "secondary_color": secondary_color,
+    }
+    task = await task_repo.create(source_data=source_data)
+    generate_token_task.delay(
+        str(task.id), brand_name, tone, style, primary_color, secondary_color
     )
-    user_prompt = (
-        f"Brand name: {brand_name}\n"
-        f"Tone: {tone}\n"
-        f"Style: {style}\n"
-        f"Primary color: {primary_color or 'auto'}\n"
-        f"Secondary color: {secondary_color or 'auto'}\n"
-        f"{brand_context}\n\n"
-        f"Generate a complete set of design tokens."
+    raise HTTPException(
+        status_code=202,
+        detail={
+            "task_id": str(task.id),
+            "status": "pending",
+            "message": f"Token generation queued for '{brand_name}'",
+        },
     )
-    response = await call_llm(
-        "token_generator", system_prompt, user_prompt, temperature=0.3, max_tokens=8192
-    )
-
-    import json
-
-    if not response.strip():
-        raise HTTPException(status_code=502, detail="LLM returned empty response — check API key or quota")
-    cleaned = response.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[-1] if "\n" in cleaned else cleaned[3:]
-        cleaned = cleaned.rsplit("```", 1)[0].strip()
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=502, detail="LLM returned invalid JSON — try again")
-    token = DesignToken(name=brand_name.lower(), data=data, source="ai-generated")
-    db.add(token)
-    await db.commit()
-    await db.refresh(token)
-    return token
