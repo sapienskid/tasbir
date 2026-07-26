@@ -49,6 +49,41 @@ def generate_task(self, task_id: str, source_data: dict):
         await _set_progress(10)
 
         source_data["_task_id"] = task_id
+
+        # Auto-load design tokens from DB when the caller didn't supply them.
+        # Checks brands.data["tokens"] first, then the design_tokens table.
+        if not source_data.get("design_tokens"):
+            brand_name = (source_data.get("brand") or {}).get("name", "")
+            if brand_name:
+                try:
+                    from app.db.session import get_shared_session_factory
+                    from app.db.repositories.brands import BrandRepository
+                    pool_shared = await get_shared_session_factory()
+                    async with pool_shared() as session:
+                        repo = BrandRepository(session)
+                        db_brand = await repo.get_by_name(brand_name)
+                        if db_brand and db_brand.data:
+                            brand_tokens = db_brand.data.get("tokens") or {}
+                            if brand_tokens:
+                                source_data["design_tokens"] = brand_tokens
+                        if not source_data.get("design_tokens"):
+                            from sqlalchemy import select
+                            from app.models.tokens import DesignToken
+                            result = await session.execute(
+                                select(DesignToken).where(
+                                    DesignToken.name == brand_name.lower()
+                                )
+                            )
+                            dt = result.scalar_one_or_none()
+                            if dt and dt.data:
+                                source_data["design_tokens"] = dt.data
+                except Exception as exc:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "[generate_task] Could not pre-load design tokens for brand '%s': %s",
+                        brand_name, exc,
+                    )
+
         try:
             state = await run_pipeline(source_data, progress_callback=_set_progress)
         except Exception as e:
