@@ -11,11 +11,11 @@ from httpx import HTTPStatusError
 from app.config import get_settings
 
 MODEL_ROUTES = {
-    "strategist": "gemini-3.1-flash-lite",
-    "copywriter": "gemma-4-31b-it",
-    "visual_director": "gemma-4-31b-it",
+    "strategist": "gemini-3.5-flash-lite",
+    "copywriter": "gemini-3.5-flash-lite",
+    "visual_director": "gemini-3.5-flash-lite",
     "designer": "gemma-4-31b-it",
-    "illustrator": "gemini-3.1-flash-lite",
+    "illustrator": "gemini-3.5-flash-lite",
     "quality_check": "gemma-4-31b-it",
     "token_generator": "gemma-4-31b-it",
 }
