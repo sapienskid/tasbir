@@ -40,7 +40,13 @@ export async function deleteToken(id: string): Promise<void> {
 }
 
 export async function generateTokens(
-  brandName: string
+  brandName: string,
+  options?: { tone?: string; style?: string; primary_color?: string; secondary_color?: string }
 ): Promise<DesignToken> {
-  return api.post(`/tokens/generate?brand_name=${brandName}`);
+  const params = new URLSearchParams({ brand_name: brandName });
+  if (options?.tone) params.set("tone", options.tone);
+  if (options?.style) params.set("style", options.style);
+  if (options?.primary_color) params.set("primary_color", options.primary_color);
+  if (options?.secondary_color) params.set("secondary_color", options.secondary_color);
+  return api.post(`/tokens/generate?${params}`);
 }
