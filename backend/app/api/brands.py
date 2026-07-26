@@ -42,7 +42,34 @@ class BrandUpdate(BaseModel):
 
 @router.post("", response_model=BrandResponse, status_code=201)
 async def create_brand(data: BrandCreate, db: AsyncSession = Depends(get_db)):
-    """Create a brand — name + description → LLM generates identity + tokens."""
+    """Create a brand.
+
+    If primary_color is provided (manual setup), saves directly without LLM.
+    Otherwise calls LLM to generate identity + design tokens.
+    """
+    from app.models.brand import Brand
+
+    # If user provided colors manually, skip LLM call (fast path)
+    if data.primary_color:
+        brand = Brand(
+            name=data.name,
+            description=data.description or "",
+            data={
+                "tone": data.tone or "professional",
+                "primary_color": data.primary_color,
+                "secondary_color": data.secondary_color or "#ffffff",
+                "logo_url": data.logo_url or "",
+                "style_notes": "",
+                "tokens": {},
+            },
+            source="manual",
+        )
+        db.add(brand)
+        await db.commit()
+        await db.refresh(brand)
+        return brand
+
+    # AI generation path — call LLM for full brand identity + tokens
     from app.agents.prompts.registry import get_prompt
 
     prompt = await get_prompt("token_generator")
@@ -72,8 +99,6 @@ async def create_brand(data: BrandCreate, db: AsyncSession = Depends(get_db)):
 
     brand_meta = llm_output.get("brand", {})
     tokens = llm_output.get("tokens", {})
-
-    from app.models.brand import Brand
 
     brand = Brand(
         name=data.name,
@@ -172,6 +197,14 @@ async def upload_brand_logo(
     content = await file.read()
     logo_url = await upload_asset(key, content, content_type=file.content_type or "image/png")
 
+    # Create a DB Asset record so GET /assets/{key} can serve it
+    from app.models.asset import Asset
+    existing = await db.execute(select(Asset).where(Asset.key == key))
+    if not existing.scalar_one_or_none():
+        asset = Asset(key=key, task_id=brand_id, content_type=file.content_type or "image/png", url=logo_url)
+        db.add(asset)
+        await db.commit()
+
     brand_data = dict(brand.data or {})
     brand_data["logo_url"] = logo_url
     brand.data = brand_data
@@ -180,6 +213,25 @@ async def upload_brand_logo(
     await db.commit()
     await db.refresh(brand)
     return brand
+
+
+@router.get("/{brand_id}/logo")
+async def get_brand_logo(brand_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Serve a brand logo. Redirects to the stored path (served by GET /assets/{key})."""
+    from sqlalchemy import select
+    from app.models.brand import Brand
+    from fastapi.responses import RedirectResponse
+
+    result = await db.execute(select(Brand).where(Brand.id == brand_id))
+    brand = result.scalar_one_or_none()
+    if not brand or not brand.data:
+        raise NotFoundError(f"Brand {brand_id} or its logo not found")
+
+    logo_url = brand.data.get("logo_url", "")
+    if not logo_url:
+        raise NotFoundError(f"Brand {brand_id} has no logo")
+
+    return RedirectResponse(url=logo_url)
 
 
 @router.delete("/{brand_id}", status_code=204)

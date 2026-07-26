@@ -56,6 +56,19 @@
 
   let selectedBrand = $derived(brands.find(b => b.id === selectedBrandId));
 
+  // Display tokens: brand's own tokens when a brand is selected, otherwise global list
+  let displayTokens = $derived(
+    selectedBrand?.data?.tokens
+      ? [{
+          id: selectedBrand.id,
+          name: selectedBrand.name,
+          data: selectedBrand.data.tokens as Record<string, unknown>,
+          version: selectedBrand.version,
+          source: selectedBrand.source,
+        } as DesignToken]
+      : tokens
+  );
+
   async function loadBrands() {
     brandLoading = true;
     try {
@@ -514,12 +527,12 @@
     <div class="space-y-3">
       {#if brandLoading}
         <p class="text-sm text-text-secondary">Loading…</p>
-      {:else if tokens.length === 0}
+      {:else if displayTokens.length === 0}
         <Card class="p-8 text-center">
           <p class="text-sm text-text-secondary">No brand setup yet. Fill in your brand details above.</p>
         </Card>
       {:else}
-        {#each tokens as token (token.id)}
+        {#each displayTokens as token (token.id)}
           <Card class="overflow-hidden">
             <div class="flex items-center justify-between px-5 py-3.5 border-b border-border">
               <div class="flex items-center gap-3">
