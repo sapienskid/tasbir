@@ -10,6 +10,14 @@ from app.agents.prompts.registry import PromptVersion, get_prompt
 from app.services.formats import get_format_info
 from app.services.llm import call_llm
 
+# Required structured fields in every copywriter output
+_REQUIRED_FIELDS = ["HEADLINE:", "SUBHEAD:", "KEY POINTS:", "BADGE:", "TAGLINE:"]
+
+
+def _validate_copy_fields(copy_text: str) -> bool:
+    """Validate that the LLM copy output contains all required structured fields."""
+    return all(field in copy_text for field in _REQUIRED_FIELDS)
+
 
 async def _generate_copy_for_format(
     fmt_id: str,
@@ -17,8 +25,15 @@ async def _generate_copy_for_format(
     prompt: PromptVersion,
 ) -> tuple[str, str]:
     fmt_info = await get_format_info(fmt_id)
-    fmt_narrative = ""
+    fmt_narrative = f"FORMAT INSTRUCTION: {fmt_info.ai_instruction}" if fmt_info.ai_instruction else ""
     brand = state.get("brand", {})
+    user_badge = state.get("badge_tag") or state.get("badge")
+
+    badge_instruction = (
+        f"USER-SPECIFIED BADGE TAG: \"{user_badge}\" (use this exact text for BADGE)"
+        if user_badge
+        else "USER-SPECIFIED BADGE TAG: NONE (No badge requested by user — output BADGE: None)"
+    )
 
     user_prompt = (
         f"FORMAT: {fmt_info.name} ({fmt_info.id})\n"
@@ -26,10 +41,12 @@ async def _generate_copy_for_format(
         f"{fmt_narrative}\n\n"
         f"BRAND: {brand.get('name', '')} — Tone: {brand.get('tone', 'professional')}\n\n"
         f"TITLE: {state['title']}\n"
-        f"SOURCE CONTENT (derive ALL copy STRICTLY from this — do NOT invent or add external information):\n{state['content'][:2000]}\n\n"
+        f"SOURCE CONTENT (derive ALL copy STRICTLY from this — write like a human, NO AI clichés, NO fantasizing):\n{state['content'][:4000]}\n\n"
         f"STRATEGIC BRIEF:\n{state.get('strategic_brief', '')}\n\n"
-        f"As Julian Sterling, craft visually optimized, layout-ready copy for this canvas format. "
-        f"STRICT CONSTRAINT: Do NOT use any emojis under any circumstances."
+        f"{badge_instruction}\n\n"
+        f"Craft human-written, layout-ready copy for this format. "
+        f"STRICT CONSTRAINTS: NO emojis. Write like a real human. If user badge tag is NONE, output BADGE: None.\n"
+        f"Enforce character limits strictly — rewrite if needed: HEADLINE ≤50 chars, SUBHEAD ≤120 chars, KEY POINT ≤70 chars, TAGLINE ≤40 chars."
     )
 
     response = await call_llm(
@@ -39,6 +56,22 @@ async def _generate_copy_for_format(
         temperature=prompt.temperature,
         max_tokens=prompt.max_tokens,
     )
+
+    # Validate all required structured fields are present; retry once if missing
+    if not _validate_copy_fields(response):
+        reminder = (
+            "Your previous response is missing required fields. "
+            "You MUST output exactly these 5 fields and nothing else:\n"
+            "HEADLINE: ...\nSUBHEAD: ...\nKEY POINTS: ...\nBADGE: ...\nTAGLINE: ..."
+        )
+        response = await call_llm(
+            agent_role="copywriter",
+            system_prompt=prompt.system_prompt,
+            user_prompt=user_prompt + "\n\n" + reminder,
+            temperature=prompt.temperature,
+            max_tokens=prompt.max_tokens,
+        )
+
     return fmt_id, response
 
 
