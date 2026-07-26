@@ -1,7 +1,7 @@
-"""Designer agent (Marcus Chen) — generates HTML per format in parallel using dynamic DB formats.
+"""Designer agent (Marcus Chen) — generates HTML per format in parallel.
 
-Uses LangChain ChatGoogleGenerativeAI with bind_tools() to optionally
-fetch templates and design tokens before generating HTML.
+Uses LangChain ChatGoogleGenerativeAI with bind_tools() and
+injects design tokens as Tailwind config + Google Fonts.
 """
 
 import asyncio
@@ -17,104 +17,55 @@ from app.agents.prompts.registry import PromptVersion, get_prompt
 from app.services.fixer import fix_all
 from app.services.formats import get_format_info
 from app.services.llm import call_llm_with_retry, get_llm
-from app.services.token_exchange import tailwind_config_html
+from app.services.token_exchange import build_config_html, flatten_tokens
 
 _tools = [search_templates, fetch_design_tokens, svg_illustration]
 _tool_node = ToolNode(_tools)
 
-# Default fallback fonts used when brand provides none
-_DEFAULT_HEADING_FONT = "Instrument Serif"
-_DEFAULT_BODY_FONT = "Inter"
-_DEFAULT_MONO_FONT = "JetBrains Mono"
 
+async def _resolve_tokens(state: GenerationState) -> tuple[dict, dict]:
+    """Resolve the full token set + brand with logo_url from DB.
 
-def _extract_brand_fonts(tokens: dict, brand: dict) -> dict[str, str]:
-    """Extract brand font families from design tokens or brand metadata.
-
-    Priority order:
-    1. Design tokens (DTCG fontFamily group)
-    2. Brand metadata font_* fields
-    3. Fallback defaults (Instrument Serif / Inter / JetBrains Mono)
-
-    Returns dict with keys: heading, body, mono
+    Returns (tokens, brand) tuple — brand is enriched with logo_url from DB.
+    Caches the DB lookup result so every format in a generation reuses the same data.
     """
-    fonts: dict[str, str] = {}
+    tokens = dict(state.get("design_tokens", {}) or {})
+    brand = dict(state.get("brand", {}) or {})
 
-    # 1. Try design tokens — look for fontFamily/heading, fontFamily/body, fontFamily/mono
-    font_group = tokens.get("fontFamily", tokens.get("typography", {}).get("fontFamily", {}))
-    if isinstance(font_group, dict):
-        for alias in ("heading", "display", "serif"):
-            entry = font_group.get(alias)
-            if isinstance(entry, dict):
-                fonts["heading"] = entry.get("$value", entry.get("value", ""))
-            elif isinstance(entry, str):
-                fonts["heading"] = entry
-            if fonts.get("heading"):
-                break
-        for alias in ("body", "sans", "base"):
-            entry = font_group.get(alias)
-            if isinstance(entry, dict):
-                fonts["body"] = entry.get("$value", entry.get("value", ""))
-            elif isinstance(entry, str):
-                fonts["body"] = entry
-            if fonts.get("body"):
-                break
-        for alias in ("mono", "code", "monospace"):
-            entry = font_group.get(alias)
-            if isinstance(entry, dict):
-                fonts["mono"] = entry.get("$value", entry.get("value", ""))
-            elif isinstance(entry, str):
-                fonts["mono"] = entry
-            if fonts.get("mono"):
-                break
+    brand_name = brand.get("name") or ""
+    if brand_name:
+        try:
+            from app.config import get_settings
+            from app.db.repositories.brands import BrandRepository
+            from app.db.session import create_pool
 
-    # 2. Fall back to brand metadata fields
-    if not fonts.get("heading") and brand.get("font_heading"):
-        fonts["heading"] = brand["font_heading"]
-    if not fonts.get("body") and brand.get("font_body"):
-        fonts["body"] = brand["font_body"]
-    if not fonts.get("mono") and brand.get("font_mono"):
-        fonts["mono"] = brand["font_mono"]
+            s = get_settings()
+            engine, pool = await create_pool(s.database_url)
+            async with pool() as session:
+                repo = BrandRepository(session)
+                db_brand = await repo.get_by_name(brand_name)
+                if db_brand and db_brand.data:
+                    data = dict(db_brand.data)
+                    # Merge DB tokens
+                    db_tokens = data.get("tokens", {})
+                    if db_tokens:
+                        for category, category_data in db_tokens.items():
+                            if isinstance(category_data, dict):
+                                if category not in tokens:
+                                    tokens[category] = {}
+                                if isinstance(tokens[category], dict):
+                                    for k, v in category_data.items():
+                                        if k not in tokens[category]:
+                                            tokens[category][k] = v
+                    # Merge brand metadata from DB
+                    for key in ("primary_color", "secondary_color", "tone", "logo_url", "style_notes"):
+                        if not brand.get(key) and data.get(key):
+                            brand[key] = data[key]
+            await engine.dispose()
+        except Exception:
+            pass
 
-    # 3. Apply defaults
-    fonts.setdefault("heading", _DEFAULT_HEADING_FONT)
-    fonts.setdefault("body", _DEFAULT_BODY_FONT)
-    fonts.setdefault("mono", _DEFAULT_MONO_FONT)
-
-    return fonts
-
-
-def _build_google_fonts_url(fonts: dict[str, str]) -> str:
-    """Build a Google Fonts CDN URL from brand font names.
-
-    Requests variable weight ranges (300-800) for body/heading.
-    Falls back gracefully for unknown fonts.
-    """
-    families = []
-    heading = fonts.get("heading", _DEFAULT_HEADING_FONT)
-    body = fonts.get("body", _DEFAULT_BODY_FONT)
-    mono = fonts.get("mono", _DEFAULT_MONO_FONT)
-
-    # Encode each unique family name with weight variants
-    seen = set()
-    for name, weights in [
-        (heading, "ital,wght@0,400;0,700;1,400;1,700"),
-        (body, "wght@300;400;500;600;700;800"),
-        (mono, "wght@400;500;600"),
-    ]:
-        if name and name not in seen:
-            seen.add(name)
-            encoded = name.replace(" ", "+")
-            families.append(f"family={encoded}:{weights}")
-
-    if not families:
-        return (
-            "https://fonts.googleapis.com/css2?"
-            "family=Instrument+Serif:ital@0;1"
-            "&family=Inter:wght@300;400;500;600;700;800"
-            "&family=JetBrains+Mono:wght@400;500&display=swap"
-        )
-    return "https://fonts.googleapis.com/css2?" + "&".join(families) + "&display=swap"
+    return tokens, brand
 
 
 async def _generate_html_for_format(
@@ -131,36 +82,11 @@ async def _generate_html_for_format(
 
     copy_text = state["copy_by_format"].get(fmt_id, "")
     bg = state["background_by_format"].get(fmt_id, {})
-    tokens = state.get("design_tokens", {})
-    brand = state.get("brand", {})
+    tokens, brand = await _resolve_tokens(state)
     fmt_context = f"\n**FORMAT INSTRUCTION (follow this layout exactly)**: {fmt_info.ai_instruction}" if fmt_info.ai_instruction else ""
 
     system_prompt = prompt.system_prompt.replace("{WIDTH}", str(fmt_info.width)).replace("{HEIGHT}", str(fmt_info.height))
 
-    # ── Brand fonts: extract from tokens then brand metadata ──────────────
-    brand_fonts = _extract_brand_fonts(tokens, brand)
-    fonts_are_custom = (
-        brand_fonts["heading"] != _DEFAULT_HEADING_FONT
-        or brand_fonts["body"] != _DEFAULT_BODY_FONT
-    )
-    google_fonts_url = _build_google_fonts_url(brand_fonts)
-    brand_fonts_instruction = (
-        f"BRAND FONTS (USE THESE — do NOT use Instrument Serif or Inter):\n"
-        f"  Heading / Display font: {brand_fonts['heading']}\n"
-        f"  Body / Paragraph font:  {brand_fonts['body']}\n"
-        f"  Mono / Accent font:     {brand_fonts['mono']}\n"
-        f"  Google Fonts URL: {google_fonts_url}"
-        if fonts_are_custom
-        else (
-            f"FONTS (fallback defaults — no brand fonts specified):\n"
-            f"  Heading: {brand_fonts['heading']}\n"
-            f"  Body: {brand_fonts['body']}\n"
-            f"  Mono: {brand_fonts['mono']}\n"
-            f"  Google Fonts URL: {google_fonts_url}"
-        )
-    )
-
-    # ── Build brand vibe from description, style notes, and tone ──────────
     brand_vibe_parts = []
     if brand.get("description"):
         brand_vibe_parts.append(brand["description"])
@@ -168,28 +94,113 @@ async def _generate_html_for_format(
         brand_vibe_parts.append(brand["style_notes"])
     brand_vibe = " ".join(brand_vibe_parts) if brand_vibe_parts else f"Tone: {brand.get('tone', 'professional')}"
 
-    logo_url = brand.get("logo_url")
-    logo_instruction = (
-        f"BRAND LOGO URL: {logo_url} (CRITICAL: You MUST include this brand logo in the graphic, e.g. <img src=\"{logo_url}\" class=\"h-8 max-w-[160px] object-contain\" alt=\"{brand.get('name', 'Brand')} Logo\" />)"
-        if logo_url
-        else "BRAND LOGO: None provided"
-    )
+    brand_primary = brand.get("primary_color", "")
+    brand_secondary = brand.get("secondary_color", "")
 
-    feature_img = state.get("feature_image")
-    image_embeds = state.get("image_embeds", [])
-    img_instruction = (
-        f"IMAGE EMBEDDINGS AVAILABLE: Feature Image: {feature_img}, Embeds: {image_embeds}. "
-        f"Integrate imagery into the graphic (e.g. split editorial photo panel, background photo with gradient tint overlay, or framed image card)."
-        if (feature_img or image_embeds)
-        else "IMAGE EMBEDDINGS: None provided"
-    )
+    # Build the token classes block — always includes brand colors + DTCG tokens
+    flat_tokens = flatten_tokens(tokens) if tokens else {}
+    if brand_primary and "color/primary" not in flat_tokens:
+        flat_tokens["color/primary"] = brand_primary
+    if brand_secondary and "color/secondary" not in flat_tokens:
+        flat_tokens["color/secondary"] = brand_secondary
 
-    user_badge = state.get("badge_tag") or state.get("badge")
-    badge_rule = (
-        f"BADGE RULE: Render the user's badge tag '{user_badge}' as a clean capsule accent."
-        if user_badge
-        else "BADGE RULE: No badge specified by user. STRICTLY DO NOT render any badge, tag, or pill element in the HTML."
-    )
+    lines = ["DESIGN TOKEN CLASSES (ONLY use these — standard Tailwind palette FORBIDDEN):", ""]
+
+    # Colors
+    color_keys = sorted([k for k in flat_tokens if "color" in k.lower()])
+    lines.append("Colors:")
+    for k in color_keys[:8]:
+        name = k.split("/")[-1]
+        lines.append(f"  bg-{name}  text-{name}   =  {flat_tokens[k]}")
+    lines.append("")
+
+    # Typography: fontFamily
+    font_keys = sorted([k for k in flat_tokens if any(f in k.lower() for f in ("fontfamily", "family"))])
+    lines.append("Fonts:")
+    for k in font_keys[:5]:
+        name = k.split("/")[-1]
+        lines.append(f"  font-{name}   =  {str(flat_tokens[k])[:60]}")
+    lines.append("  font-sans = body   font-serif = display/headings   font-mono = labels")
+    lines.append("")
+
+    # Typography: sizes, weights, heights, spacing
+    size_keys = sorted([k for k in flat_tokens if "fontsize" in k.lower()])
+    weight_keys = sorted([k for k in flat_tokens if "fontweight" in k.lower()])
+    line_keys = sorted([k for k in flat_tokens if "lineheight" in k.lower()])
+    letter_keys = sorted([k for k in flat_tokens if "letterspacing" in k.lower()])
+
+    type_sections = []
+    if size_keys:
+        names = [k.split("/")[-1] for k in size_keys[:6]]
+        type_sections.append(f"  text-{', text-'.join(names)}  (fontSize)")
+    if weight_keys:
+        names = [k.split("/")[-1] for k in weight_keys[:6]]
+        type_sections.append(f"  font-{', font-'.join(names)}  (fontWeight)")
+    if line_keys:
+        names = [k.split("/")[-1] for k in line_keys[:4]]
+        type_sections.append(f"  leading-{', leading-'.join(names)}  (lineHeight)")
+    if letter_keys:
+        names = [k.split("/")[-1] for k in letter_keys[:4]]
+        type_sections.append(f"  tracking-{', tracking-'.join(names)}  (letterSpacing)")
+    if type_sections:
+        lines.append("Text sizing:")
+        for s in type_sections:
+            lines.append(s)
+        lines.append("")
+
+    # Spacing
+    spacing_keys = sorted([k for k in flat_tokens if any(s in k.lower() for s in ("spacing", "padding", "gap"))])
+    if spacing_keys:
+        names = [k.split("/")[-1] for k in spacing_keys[:8]]
+        lines.append("Spacing:  p-{" + ", ".join(names) + "}   gap-{" + ", ".join(names) + "}")
+        lines.append("")
+
+    # Opacity
+    opacity_keys = sorted([k for k in flat_tokens if "opacity" in k.lower()])
+    if opacity_keys:
+        names = [k.split("/")[-1] for k in opacity_keys[:6]]
+        lines.append("Opacity:  opacity-{" + ", ".join(names) + "}")
+        lines.append("")
+
+    # Border radius
+    radius_keys = sorted([k for k in flat_tokens if any(r in k.lower() for r in ("radius", "rounded"))])
+    if radius_keys:
+        names = [k.split("/")[-1] for k in radius_keys[:5]]
+        lines.append("Radius:  rounded-{" + ", ".join(names) + "}")
+        lines.append("")
+
+    # Shadows
+    shadow_keys = sorted([k for k in flat_tokens if any(s in k.lower() for s in ("shadow", "boxshadow"))])
+    if shadow_keys:
+        names = [k.split("/")[-1] for k in shadow_keys[:5]]
+        lines.append("Shadows:  shadow-{" + ", ".join(names) + "}")
+        lines.append("")
+
+    # Borders
+    border_keys = sorted([k for k in flat_tokens if "border" in k.lower() and "radius" not in k.lower()])
+    if border_keys:
+        for k in border_keys[:4]:
+            name = k.split("/")[-1]
+            lines.append(f"  border-{name}   =  {flat_tokens[k]}")
+        lines.append("")
+
+    token_block = "\n".join(lines)
+
+    # Determine if background is dark or light for contrast hint
+    bg_color = brand_primary or ""
+    bg_hint = ""
+    if bg_color:
+        from app.services.token_exchange import _hex_to_rgb, _luminance
+        try:
+            bg_lum = _luminance(_hex_to_rgb(bg_color))
+            bg_hint = (
+                "  Brand primary is DARK — use bg-primary for canvas background, then use text-white or text-secondary for ALL text."
+                if bg_lum < 0.35 else
+                "  Brand primary is LIGHT — use a dark canvas background (bg-black or bg-primary) with light text."
+                if bg_lum > 0.7 else ""
+            )
+        except Exception:
+            pass
 
     messages = [
         SystemMessage(content=system_prompt),
@@ -197,30 +208,24 @@ async def _generate_html_for_format(
             content=(
                 f"Craft a standalone HTML visual graphic poster for {fmt_info.name} ({fmt_info.id}).\n"
                 f"EXACT CANVAS DIMENSIONS: {fmt_info.width}px width by {fmt_info.height}px height.{fmt_context}\n\n"
-                f"BRAND VIBE (let this guide every visual choice — color mood, typography attitude, spacing, shape language):\n"
-                f"  Brand: {brand.get('name', '')} — {brand_vibe}\n"
-                f"  {logo_instruction}\n\n"
-                f"{brand_fonts_instruction}\n\n"
-                f"ARTICLE TOPIC (the graphic must visually reflect this subject, not be generic):\n"
-                f"  {state.get('title', '')}\n"
-                f"  {state.get('strategic_brief', '')[:800]}\n\n"
-                f"COPY TEXT TO RENDER:\n{copy_text[:1500]}\n\n"
-                f"BACKGROUND STYLE:\n{bg.get('css', '')}\n\n"
-                f"{img_instruction}\n\n"
-                f"{badge_rule}\n\n"
-                f"CRITICAL CANVAS REQUIREMENTS:\n"
-                f"- Create purely a human-designed social media graphic image canvas fitting EXACTLY {fmt_info.width}x{fmt_info.height}\n"
-                f"- DO NOT create website layouts, navigation, headers, search bars, buttons, links, or interactive elements\n"
-                f"- DO NOT include raw Unicode emojis anywhere\n"
-                f"- Apply safe zone padding: minimum 5% margin on all edges (never place text at canvas border)\n"
-                f"- Include Tailwind CDN & Google Fonts link tag using the URL provided in BRAND FONTS above\n"
-                f"- Use standard Tailwind utility classes only\n"
-                f"- Let the brand vibe above guide every visual decision — color choices, typography weight, shape language, spacing\n"
-                f"- Use translucent glass cards, gradient text, dynamic glows, and high-contrast typography\n"
-                f"- If brand logo URL is provided above, render it cleanly in the header or watermark position\n"
-                f"- If badge tag was NOT requested, DO NOT render any badge capsule element\n"
-                f"- ZERO overflow, ZERO scrollbars — all content must fit within {fmt_info.width}x{fmt_info.height}\n"
-                f"- Start with <!DOCTYPE html> and output ONLY the clean HTML"
+                f"BRAND: {brand.get('name', '')}\n"
+                f"Tone: {brand.get('tone', 'professional')}\n"
+                f"Vibe: {brand_vibe}\n"
+                f"Primary: {brand_primary}  |  Secondary: {brand_secondary}\n"
+                f"{bg_hint}\n\n"
+                f"{token_block}\n"
+                f"TOPIC: {state.get('title', '')}\n"
+                f"Context: {state.get('strategic_brief', '')[:400]}\n\n"
+                f"COPY TO RENDER:\n{copy_text[:1200]}\n\n"
+                f"BACKGROUND: {bg.get('css', '')}\n\n"
+                f"RULES:\n"
+                f"- Canvas: {fmt_info.width}x{fmt_info.height}. Body: style=\"width:{fmt_info.width}px;height:{fmt_info.height}px;overflow:hidden;margin:0\"\n"
+                f"- Tailwind classes ONLY. No <style> blocks. No inline style=\"\" attributes.\n"
+                f"- NEVER use Tailwind defaults (text-blue-500, bg-slate-100, text-white, bg-white, text-black, bg-black). ONLY design token classes above.\n"
+                f"- If bg-primary is dark, ALL text must be light. If bg is light, ALL text must be dark. No exceptions.\n"
+                f"- NO nav, buttons, links, forms, interactive elements. NO emojis.\n"
+                f"- Vary the layout — do not repeat patterns. Make it bespoke for this content.\n"
+                f"- Output: <!DOCTYPE html> only. No markdown fences. No explanations."
             )
         ),
     ]
@@ -252,8 +257,7 @@ async def _generate_html_for_format(
 
     content_source = state.get("content", "") + "\n" + copy_text
     html = _extract_html(raw_content)
-    html = _inject_theme(html, tokens)
-    html = _inject_google_fonts(html, google_fonts_url)
+    html = _inject_theme(html, tokens, brand)
     html = _inject_katex(html, content_source)
     html = _inject_mermaid(html, content_source)
     html = fix_all(html, width=fmt_info.width, height=fmt_info.height, brand=state.get("brand"))
@@ -272,40 +276,47 @@ async def designer_node(state: GenerationState) -> dict:
     return {"html_by_format": html_by_format}
 
 
-def _inject_theme(html: str, tokens: dict) -> str:
-    """Inject tailwind.config theme from design tokens."""
-    if not tokens:
-        return html
-    tw_script = tailwind_config_html(tokens)
-    if "</head>" in html:
-        return html.replace("</head>", f"{tw_script}</head>")
-    return tw_script + "\n" + html
+def _inject_theme(html: str, tokens: dict, brand: dict | None = None) -> str:
+    """Inject Tailwind config + Google Fonts + CSS vars from design tokens.
 
-
-def _inject_google_fonts(html: str, url: str) -> str:
-    """Ensure exactly one Google Fonts <link> tag is present and points to the correct URL.
-
-    If the designer already included a Google Fonts link (with different font families),
-    replace it with the brand-correct URL. If none present, inject it.
+    Removes LLM-generated duplicates (CDN, config, fonts) and injects
+    our authoritative config. Preserves LLM's inline styles, style blocks,
+    and element classes — the LLM builds the visual layout, we just
+    ensure the design token system powers the styling.
     """
-    existing_pattern = re.compile(
-        r'<link[^>]+href=["\']https://fonts\.googleapis\.com[^"\']*["\'][^>]*/?>',
-        re.IGNORECASE,
-    )
-    canonical_link = f'<link rel="stylesheet" href="{url}">'
+    import re
 
-    if existing_pattern.search(html):
-        # Replace the first occurrence; remove duplicates
-        html = existing_pattern.sub("", html, count=99)
-        if "</head>" in html:
-            html = html.replace("</head>", f"{canonical_link}\n</head>", 1)
-    elif "</head>" in html:
-        html = html.replace("</head>", f"{canonical_link}\n</head>", 1)
+    # Remove duplicated CDN/config/fonts the LLM may have included
+    html = re.sub(r'<script\s+src="https://cdn\.tailwindcss\.com"[^>]*>\s*</script>', '', html)
+    html = re.sub(r'<script[^>]*>\s*tailwind\.config\s*=\s*\{.*?</script>', '', html, flags=re.DOTALL)
+    html = re.sub(r'<link[^>]*fonts\.googleapis\.com[^>]*/?>', '', html)
+
+    # Inject our config — replaces the last </head> with our block
+    cfg_html = build_config_html(tokens=tokens, brand=brand)
+    if "</head>" in html:
+        html = html.replace("</head>", f"{cfg_html}\n</head>")
+    else:
+        html = cfg_html + "\n" + html
+
+    # Inject brand logo programmatically
+    logo_url = (brand or {}).get("logo_url", "")
+    if logo_url:
+        brand_name = (brand or {}).get("name", "")
+        html = re.sub(
+            r'(<body[^>]*>)',
+            r'\1\n' + (
+                f'<img src="{logo_url}" '
+                f'class="absolute top-4 left-4 h-8 max-w-[160px] object-contain z-50" '
+                f'alt="{brand_name} Logo" />'
+            ),
+            html, count=1,
+        )
+
     return html
 
 
 def _inject_katex(html: str, content: str) -> str:
-    """Inject KaTeX CDN if content or copy contains LaTeX math."""
+    """Inject KaTeX CDN if content contains LaTeX math."""
     has_math = any(marker in content for marker in (r"\(", r"\[", r"$$", r"\frac", r"\sum", r"\int"))
     if not has_math:
         return html
@@ -321,17 +332,10 @@ def _inject_katex(html: str, content: str) -> str:
 
 
 def _inject_mermaid(html: str, content: str) -> str:
-    """Inject Mermaid.js CDN if content or copy contains a mermaid code block.
-
-    Uses startOnLoad: false + mermaid.run() pattern so diagrams are fully
-    rendered before Playwright captures the screenshot. Sets a
-    data-mermaid-ready sentinel attribute on <body> when complete so the
-    renderer can wait for it.
-    """
+    """Inject Mermaid.js CDN if content contains a mermaid code block."""
     has_mermaid = "```mermaid" in content or 'class="mermaid"' in html or "class='mermaid'" in html
     if not has_mermaid:
         return html
-
     mermaid_head = (
         '<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>\n'
         "<script>\n"
@@ -345,6 +349,27 @@ def _inject_mermaid(html: str, content: str) -> str:
     if "</head>" in html:
         return html.replace("</head>", f"{mermaid_head}\n</head>")
     return mermaid_head + "\n" + html
+
+
+def _first_spacing(flat_tokens: dict) -> str:
+    for k in flat_tokens:
+        if any(s in k.lower() for s in ("spacing", "gap", "padding")):
+            return k.split("/")[-1]
+    return "4"
+
+
+def _first_radius(flat_tokens: dict) -> str:
+    for k in flat_tokens:
+        if any(r in k.lower() for r in ("radius", "rounded")):
+            return k.split("/")[-1]
+    return "md"
+
+
+def _first_shadow(flat_tokens: dict) -> str:
+    for k in flat_tokens:
+        if any(s in k.lower() for s in ("shadow", "boxshadow")):
+            return k.split("/")[-1]
+    return "md"
 
 
 def _extract_html(text: str) -> str:
