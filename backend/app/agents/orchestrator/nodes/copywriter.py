@@ -17,14 +17,16 @@ async def _generate_copy_for_format(
     prompt: PromptVersion,
 ) -> tuple[str, str]:
     fmt_info = await get_format_info(fmt_id)
-    fmt_narrative = f"\nFormat narrative: {fmt_info.ai_instruction}" if fmt_info.ai_instruction else ""
+    fmt_narrative = ""
+    brand = state.get("brand", {})
 
     user_prompt = (
         f"FORMAT: {fmt_info.name} ({fmt_info.id})\n"
         f"TARGET DIMENSIONS: {fmt_info.width}x{fmt_info.height}\n"
         f"{fmt_narrative}\n\n"
+        f"BRAND: {brand.get('name', '')} — Tone: {brand.get('tone', 'professional')}\n\n"
         f"TITLE: {state['title']}\n"
-        f"SOURCE CONTENT SUMMARY:\n{state['content'][:2000]}\n\n"
+        f"SOURCE CONTENT (derive ALL copy STRICTLY from this — do NOT invent or add external information):\n{state['content'][:2000]}\n\n"
         f"STRATEGIC BRIEF:\n{state.get('strategic_brief', '')}\n\n"
         f"As Julian Sterling, craft visually optimized, layout-ready copy for this canvas format. "
         f"STRICT CONSTRAINT: Do NOT use any emojis under any circumstances."
@@ -48,4 +50,4 @@ async def copywriter_node(state: GenerationState) -> dict:
     results = await asyncio.gather(*tasks)
 
     copy_by_format = {fmt: copy for fmt, copy in results}
-    return {"copy_by_format": copy_by_format, "next_node": "designer"}
+    return {"copy_by_format": copy_by_format}

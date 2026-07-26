@@ -1,6 +1,6 @@
 from app.services.backgrounds import GRADIENT_PRESETS, PATTERN_PRESETS, generate_background
 from app.services.ghost import fetch_post, fetch_recent_posts
-from app.services.llm import call_llm, call_llm_stream
+from app.services.llm import call_llm, call_llm_stream, call_llm_with_retry
 from app.services.penpot import export_file, fetch_tokens, push_tokens
 from app.services.renderer import render_html
 from app.services.storage import delete_asset, get_asset_url, upload_asset

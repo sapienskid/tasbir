@@ -31,4 +31,4 @@ async def strategist_node(state: GenerationState) -> dict:
         max_tokens=prompt.max_tokens,
     )
 
-    return {"strategic_brief": response, "next_node": "copywriter"}
+    return {"strategic_brief": response}
