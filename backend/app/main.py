@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.api import health, settings as settings_router
-from app.api import templates, tokens, formats, generate, tasks, assets, prompts
+from app.api import brands, templates, tokens, formats, generate, tasks, assets, prompts
 from app.api.webhooks import ghost as ghost_webhook, penpot as penpot_webhook
 from app.core.dependencies import get_db
 from app.core.security import verify_api_key
@@ -46,6 +46,7 @@ app.include_router(health.router, tags=["health"])
 app.include_router(settings_router.router, prefix="/settings", tags=["settings"], dependencies=[Depends(verify_api_key)])
 app.include_router(templates.router, prefix="/templates", tags=["templates"], dependencies=[Depends(verify_api_key)])
 app.include_router(tokens.router, prefix="/tokens", tags=["tokens"], dependencies=[Depends(verify_api_key)])
+app.include_router(brands.router, prefix="/brands", tags=["brands"], dependencies=[Depends(verify_api_key)])
 app.include_router(formats.router, prefix="/formats", tags=["formats"], dependencies=[Depends(verify_api_key)])
 app.include_router(generate.router, prefix="/generate", tags=["generate"], dependencies=[Depends(verify_api_key)])
 app.include_router(tasks.router, prefix="/tasks", tags=["tasks"], dependencies=[Depends(verify_api_key)])
