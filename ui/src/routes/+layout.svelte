@@ -27,11 +27,15 @@
 <div class="min-h-screen bg-bg text-text flex">
   <!-- Mobile overlay -->
   {#if sidebarOpen}
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
     <div
       class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden"
       onclick={() => sidebarOpen = false}
+      onkeydown={(e) => e.key === 'Escape' && (sidebarOpen = false)}
+      role="button"
+      tabindex="-1"
       transition:fly={{ duration: 200, opacity: 0 }}
-    />
+    ></div>
   {/if}
 
   <!-- Sidebar -->
@@ -39,7 +43,7 @@
     class="fixed lg:sticky top-0 left-0 z-50 h-screen w-56 bg-surface border-r border-border flex flex-col transition-transform duration-200 {sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0"
   >
     <div class="h-14 flex items-center gap-2.5 px-5 border-b border-border">
-      <div class="w-2 h-2 rounded-full bg-accent" />
+          <div class="w-2 h-2 rounded-full bg-accent"></div>
       <span class="text-sm font-medium tracking-tight text-text" style="font-family: var(--font-display)">tasbir</span>
       <button
         class="ml-auto lg:hidden text-text-secondary hover:text-text transition-colors"
@@ -79,7 +83,7 @@
           <Menu size={20} />
         </button>
         <div class="flex items-center gap-2">
-          <div class="w-2 h-2 rounded-full bg-accent" />
+      <div class="w-2 h-2 rounded-full bg-accent"></div>
           <span class="text-sm font-medium" style="font-family: var(--font-display)">tasbir</span>
         </div>
       </div>
