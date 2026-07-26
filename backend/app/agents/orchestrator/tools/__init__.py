@@ -3,6 +3,7 @@ from app.agents.orchestrator.tools.generate_background import generate_backgroun
 from app.agents.orchestrator.tools.render_preview import render_preview
 from app.agents.orchestrator.tools.search_templates import search_templates
 from app.agents.orchestrator.tools.search_unsplash import search_unsplash
+from app.agents.orchestrator.tools.svg_illustration import svg_illustration
 
 __all__ = [
     "search_templates",
@@ -10,4 +11,5 @@ __all__ = [
     "generate_background_tool",
     "fetch_design_tokens",
     "render_preview",
+    "svg_illustration",
 ]
