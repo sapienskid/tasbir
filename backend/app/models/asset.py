@@ -12,8 +12,8 @@ class Asset(Base):
     __tablename__ = "assets"
 
     key: Mapped[str] = mapped_column(String(255), primary_key=True)
-    task_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("generation_tasks.id"), nullable=False
+    task_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("generation_tasks.id"), nullable=True
     )
     format_id: Mapped[str] = mapped_column(
         String(50), ForeignKey("formats.id"), nullable=False
