@@ -97,6 +97,7 @@ async def stream_task(task_id: uuid.UUID):
     Polls the database for task status changes and yields events.
     """
     import asyncio
+    import json
 
     from app.config import get_settings
     from app.db.session import create_pool
@@ -115,7 +116,7 @@ async def stream_task(task_id: uuid.UUID):
                     task = await repo.get_by_id(task_id)
 
                     if not task:
-                        yield {"event": "error", "data": "Task not found"}
+                        yield {"event": "error", "data": json.dumps("Task not found")}
                         break
 
                     if task.status != last_status or task.progress != last_progress:
@@ -123,21 +124,21 @@ async def stream_task(task_id: uuid.UUID):
                         last_progress = task.progress
                         yield {
                             "event": "progress",
-                            "data": {
+                            "data": json.dumps({
                                 "status": task.status,
                                 "progress": task.progress,
                                 "error": task.error,
-                            },
+                            }),
                         }
 
                     if task.status in ("completed", "failed"):
                         if task.status == "completed":
                             yield {
                                 "event": "complete",
-                                "data": {
+                                "data": json.dumps({
                                     "status": "completed",
                                     "result": task.result,
-                                },
+                                }),
                             }
                         break
 

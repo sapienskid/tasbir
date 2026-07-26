@@ -249,7 +249,7 @@
                     <SelectValue placeholder="Select brand" />
                   </SelectTrigger>
                   <SelectContent>
-                    {#each brands as b}
+                    {#each brands as b (b.id)}
                       <SelectItem value={b.id}>{b.name}</SelectItem>
                     {/each}
                   </SelectContent>

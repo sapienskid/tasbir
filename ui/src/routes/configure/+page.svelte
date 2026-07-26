@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { replaceState } from "$app/navigation";
+  import { page } from "$app/stores";
   import Confirm from "$lib/components/ui/confirm.svelte";
   import { Button } from "$lib/components/ui/button/index.js";
   import { Card } from "$lib/components/ui/card/index.js";
@@ -18,7 +20,7 @@
   function setTab(t: Tab) {
     const url = new URL(window.location.href);
     url.searchParams.set("tab", t);
-    history.replaceState({}, "", url.toString());
+    replaceState(url.toString(), {});
     activeTab = t;
   }
 
@@ -343,16 +345,18 @@
         </div>
         <div>
           <label class="text-xs text-text-secondary block mb-1">Tone</label>
+          {#key tone}
           <Select bind:value={tone}>
             <SelectTrigger>
               <span class="text-text-secondary">Select tone</span>
             </SelectTrigger>
             <SelectContent>
-              {#each TONES as t}
+              {#each TONES as t (t)}
                 <SelectItem value={t}>{t}</SelectItem>
               {/each}
             </SelectContent>
           </Select>
+          {/key}
         </div>
         <div>
           <label class="text-xs text-text-secondary block mb-1">Primary</label>
