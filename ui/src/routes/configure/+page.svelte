@@ -44,8 +44,9 @@
   let brandName = $state("");
   let brandStory = $state("");
   let tone = $state("professional");
-  let primaryColor = $state("#000000");
-  let secondaryColor = $state("#666666");
+  let primaryColor = $state("#18181b");
+  let secondaryColor = $state("#fafafa");
+  let brandLoaded = $state(false);
   let activePreview = $state<string | null>(null);
 
   const TONES = ["professional", "playful", "luxury", "minimal", "energetic", "warm", "serious"];
@@ -115,7 +116,10 @@
       if (brandRes.primary_color) primaryColor = brandRes.primary_color;
       if (brandRes.secondary_color) secondaryColor = brandRes.secondary_color;
       for (const t of tokens) activePreview = t.id;
-    } catch {} finally { brandLoading = false; }
+    } catch {} finally {
+      brandLoading = false;
+      brandLoaded = true;
+    }
   }
 
   async function handleGenerateTokens() {
@@ -345,7 +349,7 @@
         </div>
         <div>
           <label class="text-xs text-text-secondary block mb-1">Tone</label>
-          {#key tone}
+          {#if brandLoaded}
           <Select bind:value={tone}>
             <SelectTrigger>
               <span class="text-text-secondary">Select tone</span>
@@ -356,7 +360,9 @@
               {/each}
             </SelectContent>
           </Select>
-          {/key}
+          {:else}
+          <div class="h-9 bg-bg/50 rounded-xl animate-pulse" />
+          {/if}
         </div>
         <div>
           <label class="text-xs text-text-secondary block mb-1">Primary</label>
