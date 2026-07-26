@@ -15,10 +15,16 @@ from app.db.session import create_pool
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    engine, pool = await create_pool(settings.database_url)
+    # Warm up the shared process-wide DB engine used by agent nodes and services.
+    from app.db.session import get_shared_session_factory, close_shared_engine, create_pool
+    pool = await get_shared_session_factory()
     app.state.pool = pool
+    # Also create the per-request engine the FastAPI dependency uses.
+    engine, req_pool = await create_pool(settings.database_url)
     app.state.engine = engine
+    app.state.req_pool = req_pool
     yield
+    await close_shared_engine()
     await engine.dispose()
 
 

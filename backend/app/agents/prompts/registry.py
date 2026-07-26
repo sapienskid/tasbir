@@ -71,11 +71,9 @@ async def get_prompt(
     """
     if db is None:
         try:
-            from app.config import get_settings
-            from app.db.session import create_pool
+            from app.db.session import get_shared_session_factory
 
-            settings = get_settings()
-            engine, pool = await create_pool(settings.database_url)
+            pool = await get_shared_session_factory()
             async with pool() as session:
                 from app.models.prompt import PromptRegistry
 
@@ -86,7 +84,6 @@ async def get_prompt(
                     )
                 )
                 record = result.scalar_one_or_none()
-            await engine.dispose()
 
             if record is not None:
                 return PromptVersion(
