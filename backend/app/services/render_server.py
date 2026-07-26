@@ -2,9 +2,13 @@
 
 This runs inside the Playwright Docker container (mcr.microsoft.com/playwright/python).
 Receives HTML over HTTP, renders it in headless Chromium, returns PNG bytes.
+
+All wait parameters are forwarded from the caller so Tailwind CDN, Google Fonts,
+and any JS-driven rendering (Mermaid, KaTeX) complete before the screenshot.
 """
 
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import Response
@@ -16,6 +20,13 @@ class RenderRequest(BaseModel):
     width: int = 1080
     height: int = 1080
     format: str = "png"
+    # Wait strategy — forwarded from the backend renderer client.
+    # "networkidle" ensures Tailwind CDN + Google Fonts have loaded.
+    wait_until: str = "networkidle"
+    # Optional CSS selector to wait for before screenshotting (e.g. Mermaid sentinel).
+    wait_for_selector: Optional[str] = None
+    # Extra milliseconds to wait after content is ready (gives Tailwind time to paint).
+    wait_for_timeout: int = 2000
 
 
 _browser = None
@@ -36,7 +47,7 @@ async def lifespan(app: FastAPI):
     await p.stop()
 
 
-app = FastAPI(title="Tasbir Renderer", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Tasbir Renderer", version="0.2.0", lifespan=lifespan)
 
 
 @app.post("/render")
@@ -49,8 +60,21 @@ async def render(req: RenderRequest):
         device_scale_factor=2,
     )
     try:
-        await page.set_content(req.html, wait_until="networkidle")
-        await page.wait_for_timeout(500)
+        # wait_until controls when set_content resolves — "networkidle" waits for
+        # Tailwind CDN + Google Fonts HTTP requests to complete.
+        await page.set_content(req.html, wait_until=req.wait_until)
+
+        # Wait for a JS-sentinel selector if requested (e.g. Mermaid diagrams).
+        if req.wait_for_selector:
+            try:
+                await page.wait_for_selector(req.wait_for_selector, timeout=5000)
+            except Exception:
+                pass  # selector timeout is non-fatal — screenshot anyway
+
+        # Additional settle time so Tailwind utility classes paint to screen.
+        # Default 2 s; callers can override via wait_for_timeout.
+        await page.wait_for_timeout(req.wait_for_timeout)
+
         buf = await page.screenshot(full_page=False, type=req.format)
         return Response(content=buf, media_type="image/png")
     except Exception as e:
