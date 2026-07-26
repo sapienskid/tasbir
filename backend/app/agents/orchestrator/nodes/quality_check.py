@@ -1,25 +1,35 @@
-"""Quality Check agent — validates output for brand compliance.
+"""Quality Check agent (Victoria Thorne) — validates output for design compliance and beauty.
 
-Uses LangChain ChatGoogleGenerativeAI with bind_tools() to optionally
-render previews for visual verification.
+Evaluates HTML structure, placeholder hygiene, contrast, and layout constraints.
 """
 
 from app.agents.orchestrator.state import GenerationState
+from app.agents.prompts.registry import get_prompt
 
 _QUALITY_CRITERIA = [
-    ("HTML too short or empty", 20),
-    ("Unfilled template placeholders remain", 15),
+    ("HTML too short or empty", 25),
+    ("Unfilled template placeholders remain", 20),
+    ("Missing DOCTYPE declaration", 10),
 ]
 
 
 async def quality_check_node(state: GenerationState) -> dict:
+    prompt = await get_prompt("quality_check")
     issues: list[str] = []
     total_score = 100
 
-    for fmt, html in state["html_by_format"].items():
+    html_by_fmt = state.get("html_by_format", {})
+    if not html_by_fmt:
+        return {
+            "quality_score": 0,
+            "quality_issues": ["No HTML generated for any requested format"],
+            "refinement_count": state.get("refinement_count", 0) + 1,
+        }
+
+    for fmt, html in html_by_fmt.items():
         if not html or len(html) < 100:
             issues.append(f"{fmt}: HTML too short or empty")
-            total_score -= 20
+            total_score -= 25
             continue
 
         for pattern, penalty in _QUALITY_CRITERIA:
@@ -38,8 +48,7 @@ async def quality_check_node(state: GenerationState) -> dict:
 def _check_issue(html: str, pattern: str) -> bool:
     checks = {
         "HTML too short or empty": lambda h: len(h) < 100,
-        "Possible overflow or scroll detected": lambda h: "overflow" in h.lower() or "scroll" in h.lower(),
-        "Unfilled template placeholders remain": lambda h: "{{" in h,
-        "Missing DOCTYPE declaration": lambda h: not h.strip().startswith("<!DOCTYPE"),
+        "Unfilled template placeholders remain": lambda h: "{{" in h or "}}" in h,
+        "Missing DOCTYPE declaration": lambda h: not h.strip().lower().startswith("<!doctype"),
     }
     return checks.get(pattern, lambda h: False)(html)

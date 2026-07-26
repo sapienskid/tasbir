@@ -1,17 +1,17 @@
-"""LangGraph state machine for the generation pipeline.
+"""LangGraph state machine for the generation pipeline with parallel agent execution.
 
-Defines the agent workflow as a directed graph with 6 nodes:
-    strategist → copywriter → visual_director → designer → quality_check
-                                                              ↓
-                                                         renderer (always runs if quality passes)
-                                                              ↓
-                                                             END
+Defines the agent workflow as a directed graph:
+                 ┌───> copywriter ────────┐
+   strategist ───┤                        ├───> designer ───> quality_check ───> renderer ───> END
+                 └───> visual_director ───┘                                ↓ (refinement loop)
+                                                                        designer
 
-The quality_check node can loop back to designer for refinements.
-The renderer node always runs after quality passes — deterministic,
-not dependent on the LLM calling any tools.
+`copywriter` and `visual_director` execute in PARALLEL after `strategist`.
+`designer` waits for both to complete before producing visual graphics.
+If quality passes (score >= 50), `renderer` converts HTML to PNG assets.
 """
 
+import asyncio
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
@@ -50,9 +50,14 @@ def build_pipeline() -> StateGraph:
 
     workflow.set_entry_point("strategist")
 
+    # Parallel execution fan-out: strategist -> [copywriter, visual_director]
     workflow.add_edge("strategist", "copywriter")
-    workflow.add_edge("copywriter", "visual_director")
+    workflow.add_edge("strategist", "visual_director")
+
+    # Fan-in to designer: designer waits for both copywriter & visual_director
+    workflow.add_edge("copywriter", "designer")
     workflow.add_edge("visual_director", "designer")
+
     workflow.add_edge("designer", "quality_check")
     workflow.add_conditional_edges("quality_check", after_quality)
     workflow.add_edge("renderer", END)
@@ -62,9 +67,6 @@ def build_pipeline() -> StateGraph:
 
 
 pipeline = build_pipeline()
-
-
-import asyncio
 
 
 async def run_pipeline(input_data: dict) -> dict:

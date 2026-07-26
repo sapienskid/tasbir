@@ -1,4 +1,4 @@
-"""Strategist agent — analyzes content and plans campaign.
+"""Strategist agent (Aura Vance) — analyzes content and formulates campaign strategy.
 
 Input:  title, content, tags, brand, campaign, requested_formats
 Output: strategic_brief (stored in state)
@@ -13,13 +13,14 @@ async def strategist_node(state: GenerationState) -> dict:
     prompt = await get_prompt("strategist")
 
     user_prompt = (
-        f"Title: {state['title']}\n\n"
-        f"Content: {state['content'][:5000]}\n\n"
-        f"Tags: {', '.join(state['tags'])}\n\n"
-        f"Brand: {state.get('brand', {})}\n"
-        f"Campaign: {state.get('campaign', {})}\n\n"
-        f"Requested formats: {', '.join(state['requested_formats'])}\n\n"
-        f"Analyze this content and produce a strategic brief."
+        f"TITLE: {state['title']}\n\n"
+        f"CONTENT:\n{state['content'][:5000]}\n\n"
+        f"EXCERPT: {state.get('excerpt', '')}\n"
+        f"TAGS: {', '.join(state.get('tags', []))}\n"
+        f"BRAND CONTEXT: {state.get('brand', {})}\n"
+        f"CAMPAIGN GOALS: {state.get('campaign', {})}\n"
+        f"TARGET FORMATS: {', '.join(state['requested_formats'])}\n\n"
+        f"As Aura Vance, analyze this content and synthesize a master Strategic Brief for our creative studio."
     )
 
     response = await call_llm(
