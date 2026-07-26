@@ -14,7 +14,7 @@ MODEL_ROUTES = {
     "strategist": "gemini-3.1-flash-lite",
     "copywriter": "gemma-4-31b-it",
     "visual_director": "gemma-4-31b-it",
-    "designer": "gemini-3.5-flash-lite",
+    "designer": "gemma-4-31b-it",
     "illustrator": "gemini-3.1-flash-lite",
     "quality_check": "gemma-4-31b-it",
     "token_generator": "gemma-4-31b-it",
