@@ -88,15 +88,24 @@
     activeFont = fontFamilies[0].value;
     loadFont(activeFont);
   }
+
+  function normCat(rawCatKey: string): { key: string; data: Record<string, unknown> } {
+    const d = data[rawCatKey] as Record<string, unknown> | undefined;
+    if (!d) return { key: rawCatKey, data: {} };
+    if (rawCatKey === "border") return { key: "borderRadius", data: (d.radius || d) as Record<string, unknown> };
+    if (rawCatKey === "shadow") return { key: "boxShadow", data: d };
+    return { key: rawCatKey, data: d };
+  }
 </script>
 
 <div class="space-y-8">
-  {#each collectCategories(data) as catKey}
-    {@const leaves = collectLeaves(data[catKey] as Record<string, unknown>, data)}
+  {#each collectCategories(data) as rawCatKey}
+    {@const n = normCat(rawCatKey)}
+    {@const leaves = collectLeaves(n.data, data)}
     <div>
-      <p class="text-[11px] uppercase tracking-widest text-gray-600 mb-4">{catKey}</p>
+      <p class="text-[11px] uppercase tracking-widest text-gray-600 mb-4">{n.key}</p>
       <div class="space-y-3">
-        {#if catKey === "color"}
+        {#if n.key === "color"}
           <div class="flex flex-wrap gap-1">
             {#each leaves as leaf (leaf.name)}
               {#if isHex(leaf.resolved)}
@@ -107,7 +116,7 @@
               {/if}
             {/each}
           </div>
-        {:else if catKey === "typography"}
+        {:else if n.key === "typography"}
           {#if fontFamilies.length > 0}
             <div class="mb-4">
               <p class="text-[11px] text-gray-500 mb-2">Font family</p>
@@ -140,7 +149,7 @@
               </div>
             {/if}
           {/each}
-        {:else if catKey === "spacing"}
+        {:else if n.key === "spacing"}
           <div class="space-y-2">
             {#each leaves as leaf (leaf.name)}
               {@const { val, unit } = parseUnit(leaf.resolved)}
@@ -153,7 +162,7 @@
               {/if}
             {/each}
           </div>
-        {:else if catKey === "borderRadius"}
+        {:else if n.key === "borderRadius"}
           <div class="flex flex-wrap gap-3">
             {#each leaves as leaf (leaf.name)}
               <div class="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-black/50 border border-[#1c1c1c] min-w-[70px]">
@@ -162,7 +171,7 @@
               </div>
             {/each}
           </div>
-        {:else if catKey === "boxShadow"}
+        {:else if n.key === "boxShadow"}
           <div class="flex flex-wrap gap-3">
             {#each leaves as leaf (leaf.name)}
               <div class="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-white border min-w-[100px]">
@@ -171,7 +180,7 @@
               </div>
             {/each}
           </div>
-        {:else if catKey === "opacity"}
+        {:else if n.key === "opacity"}
           <div class="flex flex-wrap gap-3">
             {#each leaves as leaf (leaf.name)}
               <div class="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-black/50 border border-[#1c1c1c] min-w-[70px]">

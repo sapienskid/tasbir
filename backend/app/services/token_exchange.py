@@ -93,6 +93,10 @@ def tokens_to_tailwind_config(tokens: dict) -> dict:
     for path, value in flat.items():
         parts = path.lower().split("/")
 
+        # Skip nested color taxonomies (neutral, semantic) — flat keys are already extracted
+        if "color" in parts and len(parts) > 2:
+            continue
+
         if any(r in parts for r in ("shadow", "boxshadow")):
             tw["boxShadow"][parts[-1]] = value
         elif "opacity" in parts:
@@ -173,22 +177,78 @@ def _build_google_fonts_url(font_families: dict[str, list[str]] | dict[str, str]
     return "https://fonts.googleapis.com/css2?" + "&".join(families) + "&display=swap"
 
 
+def _resolve_ref(value: str, tree: dict) -> str:
+    """Resolve DTCG references like {color.neutral.black} to actual values.
+
+    Iterates the tree following the path specified in the reference.
+    """
+    if not value.startswith("{") or not value.endswith("}"):
+        return value
+    path = value.strip("{}").split(".")
+    cur = tree
+    for part in path:
+        if isinstance(cur, dict) and part in cur:
+            cur = cur[part]
+        else:
+            return value  # can't resolve, return as-is
+    if isinstance(cur, dict):
+        val = _get_value(cur)
+        if val:
+            return _resolve_ref(val, tree)
+    return str(cur)
+
+
+def _extract_semantic_colors(color_dict: dict, tree: dict) -> dict[str, str]:
+    """Extract flat primary/secondary/etc from color.semantic if present.
+
+    Returns dict like {"primary": "#000000", "secondary": "#ffffff", ...}
+    """
+    semantic = color_dict.get("semantic", {})
+    if not isinstance(semantic, dict):
+        return {}
+    result = {}
+    for key in ("primary", "secondary", "accent", "background", "surface", "text", "muted", "action"):
+        entry = semantic.get(key, {})
+        if isinstance(entry, dict):
+            val = _get_value(entry)
+            if val:
+                result[key] = _resolve_ref(val, tree)
+    return result
+
+
 def _merge_brand_into_tokens(tokens: dict, brand: dict | None) -> dict:
     """Merge brand colors + default palette into tokens dict so Tailwind config always has colors."""
     merged = dict(tokens) if tokens else {}
 
-    # Always inject a default color palette so bg-primary, text-primary always work
+    # Resolve DTCG references ({color.neutral.black} → #000000) in the full tree
+    merged = _resolve_tree(merged)
+
     if "color" not in merged:
         merged["color"] = {}
-
     color = merged["color"]
 
-    if not _get_value(color.get("primary", {})):
-        primary = (brand or {}).get("primary_color", "") or "#18181b"
-        color["primary"] = {"$value": primary}
-    if not _get_value(color.get("secondary", {})):
-        secondary = (brand or {}).get("secondary_color", "") or "#fafafa"
-        color["secondary"] = {"$value": secondary}
+    # Extract semantic colors (color.semantic.primary) into flat form (color.primary)
+    semantic_flat = _extract_semantic_colors(color, merged)
+    for k, v in semantic_flat.items():
+        if k not in color or not _get_value(color.get(k, {})):
+            color[k] = {"$value": v, "$type": "color"}
+
+    # Brand metadata takes highest priority — overrides any token values
+    brand_primary = (brand or {}).get("primary_color", "")
+    brand_secondary = (brand or {}).get("secondary_color", "")
+    if brand_primary:
+        color["primary"] = {"$value": brand_primary}
+    elif not _get_value(color.get("primary", {})):
+        color["primary"] = {"$value": "#18181b"}
+    if brand_secondary:
+        color["secondary"] = {"$value": brand_secondary}
+    elif not _get_value(color.get("secondary", {})):
+        color["secondary"] = {"$value": "#fafafa"}
+
+    # Inject sensible defaults for ALL token categories when missing
+    merged = _inject_defaults(merged)
+
+    return merged
 
     # Inject sensible defaults for ALL token categories when missing.
     # This ensures the LLM always has a complete design system to work with
@@ -196,6 +256,25 @@ def _merge_brand_into_tokens(tokens: dict, brand: dict | None) -> dict:
     merged = _inject_defaults(merged)
 
     return merged
+
+
+def _resolve_tree(tree: dict) -> dict:
+    """Walk tree and resolve all DTCG references ({path.to.value})."""
+    result = {}
+    for key, val in tree.items():
+        if isinstance(val, dict):
+            result[key] = _resolve_tree(val)
+        elif isinstance(val, str):
+            result[key] = _resolve_ref(val, tree)
+        else:
+            result[key] = val
+    # Also resolve within top-level leaves
+    for key in list(result.keys()):
+        if isinstance(result[key], dict):
+            leaf = _get_value(result[key])
+            if leaf and leaf.startswith("{"):
+                result[key] = {"value": _resolve_ref(leaf, tree), "$type": result[key].get("$type", "")}
+    return result
 
 
 def _inject_defaults(tokens: dict) -> dict:
