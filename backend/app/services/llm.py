@@ -4,17 +4,20 @@ All agents use this service. Provides both a high-level LangChain
 integration (with tool binding support) and a simple call_llm() helper.
 """
 
+import asyncio
 from collections.abc import AsyncIterator
 
+from httpx import HTTPStatusError
 from app.config import get_settings
 
 MODEL_ROUTES = {
-    "strategist": "gemma-4-26b-a4b-it",
-    "copywriter": "gemma-4-26b-a4b-it",
-    "visual_director": "gemma-4-26b-a4b-it",
-    "designer": "gemma-4-26b-a4b-it",
+    "strategist": "gemini-3.1-flash-lite",
+    "copywriter": "gemma-4-31b-it",
+    "visual_director": "gemma-4-31b-it",
+    "designer": "gemini-3.5-flash-lite",
+    "illustrator": "gemini-3.1-flash-lite",
     "quality_check": "gemma-4-31b-it",
-    "token_generator": "gemma-4-26b-a4b-it",
+    "token_generator": "gemma-4-31b-it",
 }
 
 
@@ -38,6 +41,25 @@ def get_llm(agent_role: str = "strategist", temperature: float = 0.7, max_tokens
     )
 
 
+async def call_llm_with_retry(llm, messages, max_retries=4):
+    """Call an LLM with retry on 429 rate limit errors (exponential backoff)."""
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return await llm.ainvoke(messages)
+        except HTTPStatusError as e:
+            if e.response.status_code == 429:
+                wait = 2 ** attempt + 1
+                last_error = e
+                await asyncio.sleep(wait)
+                continue
+            raise
+        except Exception as e:
+            last_error = e
+            break
+    raise last_error or RuntimeError("LLM call failed")
+
+
 async def call_llm(
     agent_role: str,
     system_prompt: str,
@@ -48,18 +70,25 @@ async def call_llm(
     """Simple helper — calls LLM with system + user prompt and returns text.
 
     Uses LangChain's ChatGoogleGenerativeAI under the hood.
+    Retries on 429 (rate limit) with exponential backoff.
     Falls back to OpenRouter if Gemini fails and a key is configured.
     """
     from langchain_core.messages import HumanMessage, SystemMessage
 
     llm = get_llm(agent_role=agent_role, temperature=temperature, max_tokens=max_tokens)
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
 
     try:
-        response = await llm.ainvoke([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)])
+        response = await call_llm_with_retry(llm, messages)
         if isinstance(response.content, str):
             return response.content
         if isinstance(response.content, list):
-            texts = [b.get("text", "") for b in response.content if b.get("type") == "text"]
+            texts = []
+            for b in response.content:
+                if isinstance(b, str):
+                    texts.append(b)
+                elif isinstance(b, dict) and b.get("type") == "text":
+                    texts.append(b.get("text", ""))
             return "".join(texts)
         return str(response.content)
     except Exception as gemini_error:
@@ -96,7 +125,9 @@ async def call_llm_stream(
                 yield chunk.content
             elif isinstance(chunk.content, list):
                 for block in chunk.content:
-                    if block.get("type") == "text":
+                    if isinstance(block, str):
+                        yield block
+                    elif isinstance(block, dict) and block.get("type") == "text":
                         yield block.get("text", "")
     except Exception as gemini_error:
         settings = get_settings()
