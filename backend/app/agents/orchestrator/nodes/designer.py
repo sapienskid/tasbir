@@ -26,27 +26,32 @@ _tool_node = ToolNode(_tools)
 async def _resolve_tokens(state: GenerationState) -> tuple[dict, dict]:
     """Resolve the full token set + brand with logo_url from DB.
 
-    Returns (tokens, brand) tuple — brand is enriched with logo_url from DB.
-    Caches the DB lookup result so every format in a generation reuses the same data.
+    Lookup order:
+    1. Tokens already passed in state (caller-supplied).
+    2. Tokens stored in ``brands.data["tokens"]`` (matched by brand name).
+    3. Tokens stored in the ``design_tokens`` table (matched by brand name).
+
+    Returns (tokens, brand) tuple — brand is enriched with metadata from DB.
     """
+    import logging
+    log = logging.getLogger(__name__)
+
     tokens = dict(state.get("design_tokens", {}) or {})
     brand = dict(state.get("brand", {}) or {})
 
     brand_name = brand.get("name") or ""
     if brand_name:
         try:
-            from app.config import get_settings
             from app.db.repositories.brands import BrandRepository
-            from app.db.session import create_pool
+            from app.db.session import get_shared_session_factory
 
-            s = get_settings()
-            engine, pool = await create_pool(s.database_url)
+            pool = await get_shared_session_factory()
             async with pool() as session:
                 repo = BrandRepository(session)
                 db_brand = await repo.get_by_name(brand_name)
                 if db_brand and db_brand.data:
                     data = dict(db_brand.data)
-                    # Merge DB tokens
+                    # Merge brand.data["tokens"] (primary source)
                     db_tokens = data.get("tokens", {})
                     if db_tokens:
                         for category, category_data in db_tokens.items():
@@ -61,9 +66,24 @@ async def _resolve_tokens(state: GenerationState) -> tuple[dict, dict]:
                     for key in ("primary_color", "secondary_color", "tone", "logo_url", "style_notes"):
                         if not brand.get(key) and data.get(key):
                             brand[key] = data[key]
-            await engine.dispose()
-        except Exception:
-            pass
+
+                # Also load from the standalone design_tokens table (secondary source).
+                # This covers tokens saved via POST /tokens or /tokens/generate.
+                if not tokens:
+                    from sqlalchemy import select
+                    from app.models.tokens import DesignToken
+                    result = await session.execute(
+                        select(DesignToken).where(
+                            DesignToken.name == brand_name.lower()
+                        )
+                    )
+                    dt = result.scalar_one_or_none()
+                    if dt and dt.data:
+                        tokens = dict(dt.data)
+                        log.debug("[designer] Loaded tokens from design_tokens table for brand '%s'", brand_name)
+
+        except Exception as exc:
+            log.warning("[designer] DB token lookup failed for brand '%s': %s", brand_name, exc)
 
     return tokens, brand
 
@@ -97,8 +117,12 @@ async def _generate_html_for_format(
     brand_primary = brand.get("primary_color", "")
     brand_secondary = brand.get("secondary_color", "")
 
-    # Build the token classes block — always includes brand colors + DTCG tokens
-    flat_tokens = flatten_tokens(tokens) if tokens else {}
+    # Build the token classes block — merge brand colors + inject defaults so the LLM
+    # always receives a complete, non-empty design system even when no DTCG tokens exist.
+    from app.services.token_exchange import _merge_brand_into_tokens
+    merged_tokens = _merge_brand_into_tokens(dict(tokens), brand)
+    flat_tokens = flatten_tokens(merged_tokens)
+    # Ensure brand colors are present in flat representation
     if brand_primary and "color/primary" not in flat_tokens:
         flat_tokens["color/primary"] = brand_primary
     if brand_secondary and "color/secondary" not in flat_tokens:
@@ -286,17 +310,35 @@ def _inject_theme(html: str, tokens: dict, brand: dict | None = None) -> str:
     """
     import re
 
-    # Remove duplicated CDN/config/fonts the LLM may have included
+    # Remove duplicated CDN/config/fonts the LLM may have included.
+    # Strip both the old `tailwind.config = {...}` pattern and the new
+    # `window.tailwind = {...}` pattern so we don't end up with two configs.
     html = re.sub(r'<script\s+src="https://cdn\.tailwindcss\.com"[^>]*>\s*</script>', '', html)
-    html = re.sub(r'<script[^>]*>\s*tailwind\.config\s*=\s*\{.*?</script>', '', html, flags=re.DOTALL)
-    html = re.sub(r'<link[^>]*fonts\.googleapis\.com[^>]*/?>', '', html)
+    html = re.sub(r'<script[^>]*>\s*(?:window\.)?tailwind(?:\.config)?\s*=\s*\{.*?</script>', '', html, flags=re.DOTALL)
+    html = re.sub(r'<link[^>]*fonts\.googleapis\.com[^>]*/?>',  '', html)
 
-    # Inject our config — replaces the last </head> with our block
     cfg_html = build_config_html(tokens=tokens, brand=brand)
+
     if "</head>" in html:
-        html = html.replace("</head>", f"{cfg_html}\n</head>")
+        # Happy path — LLM produced a proper HTML document.
+        html = html.replace("</head>", f"{cfg_html}\n</head>", 1)
+    elif "<body" in html:
+        # LLM omitted <head> but included <body> — wrap in a minimal document.
+        html = (
+            "<!DOCTYPE html>\n<html>\n<head>\n"
+            f"{cfg_html}\n"
+            "</head>\n"
+            + html
+        )
     else:
-        html = cfg_html + "\n" + html
+        # Bare fragment — wrap everything in a full document skeleton.
+        html = (
+            "<!DOCTYPE html>\n<html>\n<head>\n"
+            f"{cfg_html}\n"
+            "</head>\n<body>\n"
+            + html
+            + "\n</body>\n</html>"
+        )
 
     # Inject brand logo programmatically
     logo_url = (brand or {}).get("logo_url", "")
