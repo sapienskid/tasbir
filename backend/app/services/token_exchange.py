@@ -374,11 +374,12 @@ def build_config_html(tokens: dict | None = None, brand: dict | None = None) -> 
     Merges brand colors into DTCG tokens so bg-primary, text-primary always work.
     Always generates a complete Tailwind config + Google Fonts + CSS vars.
 
-    Produces:
-    1. Google Fonts <link> tag (brand fonts or fallback Instrument Serif/Inter/JetBrains Mono)
-    2. Tailwind CDN script
-    3. Tailwind config with theme.extend from merged tokens
-    4. :root CSS custom properties
+    Produces (in correct dependency order):
+    1. Pre-config script: sets ``window.tailwind`` BEFORE the CDN loads so the
+       Play CDN picks up the custom theme at startup.
+    2. Tailwind Play CDN <script> — reads window.tailwind.config at load time.
+    3. Google Fonts <link> tag.
+    4. :root CSS custom properties <style> block.
     """
     merged = _merge_brand_into_tokens(tokens or {}, brand)
     config = tokens_to_tailwind_config(merged)
@@ -388,17 +389,25 @@ def build_config_html(tokens: dict | None = None, brand: dict | None = None) -> 
     fonts_url = _build_google_fonts_url(font_families)
 
     parts: list[str] = []
-    # Config MUST be set BEFORE Tailwind CDN loads — CDN reads tailwind.config
-    # at startup and won't see it if set after.
+
+    # Step 1: Pre-configure Tailwind BEFORE the CDN script loads.
+    # The Tailwind Play CDN reads `window.tailwind` at startup — setting it here
+    # guarantees our custom theme.extend is active from the first paint.
     parts.append(f"""<script>
-tailwind.config = {{
+window.tailwind = {{
   theme: {{
     extend: {json.dumps(config)}
   }}
-}}
+}};
 </script>""")
+
+    # Step 2: Tailwind Play CDN — loads and applies styles using window.tailwind config.
     parts.append('<script src="https://cdn.tailwindcss.com"></script>')
+
+    # Step 3: Google Fonts (non-blocking stylesheet).
     parts.append(f'<link rel="stylesheet" href="{fonts_url}">')
+
+    # Step 4: CSS custom properties for any non-Tailwind usage (e.g. inline CSS vars).
     if css_vars:
         parts.append(f"<style>\n{css_vars}\n</style>")
 
