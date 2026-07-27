@@ -23,11 +23,12 @@ class BrandResponse(BaseModel):
 
 class BrandCreate(BaseModel):
     name: str
-    description: str
+    description: str = ""
     logo_url: str | None = None
     tone: str | None = None
     primary_color: str | None = None
     secondary_color: str | None = None
+    tokens: dict | None = None  # DTCG design tokens, stored in brand.data.tokens
 
 
 class BrandUpdate(BaseModel):
@@ -49,7 +50,6 @@ async def create_brand(data: BrandCreate, db: AsyncSession = Depends(get_db)):
     """
     from app.models.brand import Brand
 
-    # If user provided colors manually, skip LLM call (fast path)
     if data.primary_color:
         brand = Brand(
             name=data.name,
@@ -60,7 +60,7 @@ async def create_brand(data: BrandCreate, db: AsyncSession = Depends(get_db)):
                 "secondary_color": data.secondary_color or "#ffffff",
                 "logo_url": data.logo_url or "",
                 "style_notes": "",
-                "tokens": {},
+                "tokens": data.tokens or {},
             },
             source="manual",
         )
