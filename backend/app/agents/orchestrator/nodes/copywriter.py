@@ -79,7 +79,7 @@ async def copywriter_node(state: GenerationState) -> dict:
     prompt = await get_prompt("copywriter")
     formats = state["requested_formats"]
 
-    semaphore = asyncio.Semaphore(3)
+    semaphore = asyncio.Semaphore(1)
 
     async def _with_semaphore(fmt: str):
         async with semaphore:
