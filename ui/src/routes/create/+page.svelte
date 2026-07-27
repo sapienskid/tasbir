@@ -4,7 +4,7 @@
   import { startGeneration, getTask, type TaskResult } from "$lib/api/generate";
   import { listFormats } from "$lib/api/formats";
   import { Card } from "$lib/components/ui/card/index.js";
-  import { uploadBrandLogo } from "$lib/api/brands";
+  import { listBrands, uploadBrandLogo } from "$lib/api/brands";
   import { activeTask } from "$lib/stores/activeTask";
   import LangGraphVisualizer from "$lib/components/LangGraphVisualizer.svelte";
 
@@ -80,7 +80,7 @@
     try {
       const [apiFormats, brandList] = await Promise.all([
         listFormats(),
-        fetch(`${API_BASE}/brands`).then(r => r.json()).catch(() => []),
+        listBrands().catch(() => []),
       ]);
       formats = apiFormats.map((f: any) => ({ id: f.id, label: f.name, dim: `${f.width}x${f.height}`, w: f.width, h: f.height }));
       if (selectedFormats.length === 0 && formats.length > 0) {
@@ -266,6 +266,11 @@
                   </div>
                 {/if}
               </div>
+            </div>
+          {:else}
+            <div class="mt-4">
+              <label class="text-xs text-text-secondary block mb-1.5">Brand</label>
+              <p class="text-xs text-text-secondary/60">No brands configured. <a href="/configure?tab=brand" class="text-accent hover:underline">Create one →</a></p>
             </div>
           {/if}
 
