@@ -1,115 +1,201 @@
 <script lang="ts">
+  import {
+    SvelteFlow,
+    Background,
+    type Node,
+    type Edge,
+  } from "@xyflow/svelte";
+  import PipelineNode from "./PipelineNode.svelte";
+  import "@xyflow/svelte/dist/base.css";
+
   interface Props {
     activeNode?: string;
     progress?: number;
     qualityScore?: number;
     compact?: boolean;
+    formatProgress?: Record<string, { stage: string; status: string; url?: string }>;
   }
 
-  let { activeNode = "", progress = 0, qualityScore = 0, compact = false }: Props = $props();
+  let {
+    activeNode = "",
+    progress = 0,
+    qualityScore = 0,
+    compact = false,
+    formatProgress = {},
+  }: Props = $props();
 
-  interface GraphNode {
-    id: string;
-    label: string;
-    role: string;
-    minProgress: number;
-  }
-
-  const NODES: GraphNode[] = [
-    { id: "strategist", label: "Strategist", role: "Aura Vance", minProgress: 10 },
-    { id: "copywriter", label: "Copywriter", role: "Julian Sterling", minProgress: 30 },
-    { id: "visual_director", label: "Visual Director", role: "Elena Rostova", minProgress: 50 },
-    { id: "designer", label: "Designer", role: "Marcus Chen", minProgress: 70 },
-    { id: "quality_check", label: "Quality Check", role: "Victoria Thorne", minProgress: 85 },
-    { id: "renderer", label: "Renderer", role: "Playwright", minProgress: 95 },
-  ];
-
-  function getNodeState(nodeId: string, nodeMinProgress: number): "completed" | "active" | "pending" | "failed" {
+  function nodeStatus(nodeId: string): string {
     if (activeNode === "failed") return "failed";
     if (activeNode === "END" || progress >= 100) return "completed";
     if (activeNode === nodeId) return "active";
-    if (progress >= nodeMinProgress) return "completed";
-    return "pending";
+    const thresholds: Record<string, number> = {
+      strategist: 10,
+      copywriter: 25,
+      visual_director: 40,
+      designer: 55,
+      quality_check: 72,
+      renderer: 90,
+    };
+    return progress >= (thresholds[nodeId] ?? 100) ? "completed" : "pending";
   }
+
+  const STATUS_COLORS: Record<string, string> = {
+    pending: "#6b7280",
+    active: "#a78bfa",
+    completed: "#22c55e",
+    failed: "#ef4444",
+  };
+
+  const NODE_LABELS: Record<string, { label: string; role: string }> = {
+    strategist: { label: "Strategist", role: "Aura Vance" },
+    copywriter: { label: "Copywriter", role: "Julian Sterling" },
+    visual_director: { label: "Visual Director", role: "Elena Rostova" },
+    designer: { label: "Designer", role: "Marcus Chen" },
+    quality_check: { label: "Quality Check", role: "Victoria Thorne" },
+    renderer: { label: "Renderer", role: "Playwright" },
+  };
+
+  const nodeTypes = {
+    pipeline: PipelineNode,
+  };
+
+  function buildNodes(): Node[] {
+    const ids = ["strategist", "copywriter", "visual_director", "designer", "quality_check", "renderer"];
+    const gap = compact ? 180 : 220;
+    const startX = 60;
+    const y = 120;
+
+    return ids.map((id, i) => {
+      const status = nodeStatus(id);
+      const info = NODE_LABELS[id];
+      const color = STATUS_COLORS[status];
+
+      const formatCount = Object.keys(formatProgress).length;
+      const doneFormats = Object.values(formatProgress).filter((fp) => fp.status === "completed").length;
+      const progressLabel = formatCount > 0 ? `${doneFormats}/${formatCount}` : "";
+
+      return {
+        id,
+        type: "pipeline",
+        position: { x: startX + i * gap, y },
+        data: {
+          status,
+          color,
+          nodeId: id,
+          info,
+          progressLabel,
+          compact,
+        },
+        style: {
+          background: status === "active"
+            ? "rgba(167, 139, 250, 0.15)"
+            : "var(--color-surface, #1e1e2e)",
+          border: `2px solid ${color}`,
+          borderRadius: "12px",
+          padding: compact ? "8px 12px" : "12px 20px",
+          width: compact ? "140px" : "170px",
+          boxShadow: status === "active" ? `0 0 20px ${color}44` : "none",
+          transition: "all 0.3s ease",
+          opacity: status === "pending" ? 0.5 : 1,
+        },
+      };
+    });
+  }
+
+  function buildEdges(): Edge[] {
+    const ids = ["strategist", "copywriter", "visual_director", "designer", "quality_check", "renderer"];
+    const edges: Edge[] = [];
+
+    for (let i = 0; i < ids.length - 1; i++) {
+      const srcStatus = nodeStatus(ids[i]);
+      edges.push({
+        id: `e-${ids[i]}-${ids[i + 1]}`,
+        source: ids[i],
+        target: ids[i + 1],
+        type: "smoothstep",
+        animated: srcStatus === "completed" || srcStatus === "active",
+        style: {
+          stroke: srcStatus === "completed" ? "#22c55e" : srcStatus === "active" ? "#a78bfa" : "#6b7280",
+          strokeWidth: srcStatus === "completed" ? 2.5 : 1.5,
+        },
+      });
+    }
+
+    edges.push({
+      id: "e-quality_check-designer-retry",
+      source: "quality_check",
+      target: "designer",
+      type: "smoothstep",
+      animated: true,
+      style: {
+        stroke: "#f59e0b",
+        strokeWidth: 1.5,
+        strokeDasharray: "5,5",
+      },
+      label: "↺ retry ≤2",
+      labelStyle: { fill: "#f59e0b", fontSize: 10 },
+    });
+
+    return edges;
+  }
+
+  let nodes = $derived(buildNodes());
+  let edges = $derived(buildEdges());
 </script>
 
 <div class="w-full bg-bg/50 rounded-xl border border-border p-4 transition-all">
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
-      <div class="w-2 h-2 rounded-full bg-accent animate-ping"></div>
-      <span class="text-xs font-mono font-medium text-text uppercase tracking-wider">LangGraph Execution Pipeline</span>
+      {#if activeNode && activeNode !== "END" && activeNode !== "failed"}
+        <div class="w-2 h-2 rounded-full bg-accent animate-ping"></div>
+      {:else}
+        <div class="w-2 h-2 rounded-full bg-accent/30"></div>
+      {/if}
+      <span class="text-xs font-mono font-medium text-text uppercase tracking-wider">Pipeline</span>
     </div>
     {#if qualityScore > 0}
       <span class="text-xs text-text-secondary bg-accent/10 text-accent px-2 py-0.5 rounded-full font-mono">
-        Audit Score: {qualityScore}/100
+        Score: {qualityScore}/100
       </span>
     {/if}
   </div>
 
-  <!-- Graph Nodes and Edges -->
-  <div class="flex items-center justify-between gap-1 overflow-x-auto py-2">
-    <!-- Entry Point -->
-    <div class="flex items-center gap-1 shrink-0">
-      <div class="px-2 py-1 rounded bg-surface border border-border text-[10px] font-mono text-text-secondary">
-        START
-      </div>
-      <div class="w-4 h-px bg-border"></div>
-    </div>
-
-    {#each NODES as node, index}
-      {@const state = getNodeState(node.id, node.minProgress)}
-      <div class="flex items-center gap-1 shrink-0">
-        <!-- Node Box -->
-        <div
-          class="relative flex flex-col items-center justify-center rounded-lg border px-3 py-2 transition-all duration-300 min-w-[90px]
-          {state === 'active' ? 'border-accent bg-accent/15 shadow-sm shadow-accent/20 ring-2 ring-accent/30 scale-105' : ''}
-          {state === 'completed' ? 'border-border bg-surface text-text' : ''}
-          {state === 'pending' ? 'border-border/40 bg-surface/30 opacity-50' : ''}
-          {state === 'failed' ? 'border-destructive bg-destructive/10 text-destructive' : ''}"
-        >
-          {#if state === 'active'}
-            <span class="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent"></span>
-            </span>
-          {/if}
-
-          <span class="text-[11px] font-medium text-text leading-tight text-center">{node.label}</span>
-          {#if !compact}
-            <span class="text-[9px] text-text-secondary/70 mt-0.5 text-center truncate max-w-[85px]">{node.role}</span>
-          {/if}
-
-          {#if state === 'completed'}
-            <span class="text-[9px] text-accent font-mono mt-0.5">✓ done</span>
-          {:else if state === 'active'}
-            <span class="text-[9px] text-accent font-mono mt-0.5 animate-pulse">executing...</span>
-          {/if}
-        </div>
-
-        <!-- Edge connector with feedback loop branch on Quality Check -->
-        {#if index < NODES.length - 1}
-          <div class="relative flex items-center px-1">
-            <div class="w-6 h-px {state === 'completed' ? 'bg-accent' : 'bg-border'}"></div>
-            {#if node.id === 'quality_check'}
-              <!-- Conditional Refinement Loop indicator -->
-              <div class="absolute -bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1 text-[8px] text-text-secondary/60">
-                <span>↺ retry &le;2</span>
-              </div>
-            {/if}
-          </div>
-        {/if}
-      </div>
-    {/each}
-
-    <!-- END Node -->
-    <div class="flex items-center gap-1 shrink-0">
-      <div class="w-4 h-px {progress >= 100 ? 'bg-accent' : 'bg-border'}"></div>
-      <div
-        class="px-2 py-1 rounded border text-[10px] font-mono transition-colors
-        {progress >= 100 ? 'bg-accent text-white border-accent' : 'bg-surface border-border text-text-secondary'}"
-      >
-        END
-      </div>
-    </div>
+  <div class="h-[300px]" class:compact-h={compact}>
+    <SvelteFlow
+      {nodes}
+      {edges}
+      {nodeTypes}
+      fitView
+      nodesDraggable={false}
+      nodesConnectable={false}
+      elementsSelectable={false}
+      panOnDrag={false}
+      zoomOnScroll={false}
+      zoomOnPinch={false}
+      zoomOnDoubleClick={false}
+      preventScrolling={false}
+    >
+      <Background variant="dots" gap={20} size={1} />
+    </SvelteFlow>
   </div>
 </div>
+
+<style>
+  .compact-h {
+    height: 220px;
+  }
+
+  :global(.svelte-flow__node) {
+    font-family: inherit;
+  }
+
+  :global(.svelte-flow__edge-path) {
+    transition: stroke 0.3s ease;
+  }
+
+  :global(.svelte-flow__node.selected),
+  :global(.svelte-flow__node:focus) {
+    outline: none;
+    box-shadow: none;
+  }
+</style>
