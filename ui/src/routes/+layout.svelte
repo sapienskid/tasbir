@@ -3,7 +3,7 @@
   import { page } from "$app/stores";
   import { fly } from "svelte/transition";
   import {
-    LayoutDashboard, Sparkles, Image, FileCode, Cog, Menu, X
+    LayoutDashboard, Sparkles, Image, FileCode, Cog, Bug, Menu, X
   } from "lucide-svelte";
 
   let { children } = $props();
