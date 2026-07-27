@@ -38,25 +38,59 @@ def get_llm(agent_role: str = "strategist", temperature: float = 0.7, max_tokens
         api_key=api_key,
         temperature=temperature,
         max_tokens=max_tokens,
+        max_retries=0,
     )
 
 
-async def call_llm_with_retry(llm, messages, max_retries=4):
-    """Call an LLM with retry on 429 rate limit errors (exponential backoff)."""
+async def call_llm_with_retry(llm, messages, max_retries=5, agent_role: str = ""):
+    """Call an LLM with retry on 429 rate limit errors (exponential backoff & retry delay parsing).
+
+    Falls back to OpenRouter if Gemini fails and a key is configured.
+    """
+    import re
+    import logging
+    log = logging.getLogger(__name__)
+
     last_error = None
     for attempt in range(max_retries):
         try:
             return await llm.ainvoke(messages)
-        except HTTPStatusError as e:
-            if e.response.status_code == 429:
-                wait = 2 ** attempt + 1
+        except Exception as e:
+            err_str = str(e)
+            is_429 = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Quota exceeded" in err_str
+            if is_429 and attempt < max_retries - 1:
+                match = re.search(r'(?:retry(?:Delay)?\s*[:in]\s*)(\d+)(?:\.\d+)?s', err_str, re.IGNORECASE)
+                if match:
+                    wait = int(match.group(1)) + 2
+                else:
+                    wait = (2 ** (attempt + 2)) + 5
+                log.warning(f"[LLM RateLimit] Received 429 / RESOURCE_EXHAUSTED. Retrying attempt {attempt+1}/{max_retries} in {wait}s...")
                 last_error = e
                 await asyncio.sleep(wait)
                 continue
-            raise
-        except Exception as e:
             last_error = e
             break
+
+    # Fallback to OpenRouter when Gemini fails and OpenRouter key is configured
+    settings = get_settings()
+    if settings.openrouter_api_key:
+        log.warning("[LLM] Gemini failed, falling back to OpenRouter")
+        last_msg = messages[-1].content if hasattr(messages[-1], "content") else str(messages[-1])
+        sys_msg = messages[0].content if len(messages) > 0 and hasattr(messages[0], "content") else ""
+        try:
+            text = await _call_openrouter(
+                api_key=settings.openrouter_api_key,
+                model=MODEL_ROUTES.get(agent_role, "gemini-2.0-flash"),
+                system_prompt=sys_msg,
+                user_prompt=last_msg,
+                temperature=0.7,
+                max_tokens=4096,
+            )
+            from langchain_core.messages import AIMessage
+            return AIMessage(content=text)
+        except Exception as or_err:
+            log.error("[LLM] OpenRouter fallback also failed: %s", or_err)
+
     raise last_error or RuntimeError("LLM call failed")
 
 
