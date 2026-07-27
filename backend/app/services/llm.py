@@ -13,11 +13,8 @@ from app.config import get_settings
 MODEL_ROUTES = {
     "strategist": "gemini-3.5-flash-lite",
     "copywriter": "gemini-3.5-flash-lite",
-    "visual_director": "gemini-3.5-flash-lite",
-    "designer": "gemma-4-31b-it",
-    "illustrator": "gemini-3.5-flash-lite",
-    "quality_check": "gemma-4-31b-it",
-    "token_generator": "gemma-4-31b-it",
+    "designer": "gemini-3.5-flash-lite",
+    "verifier": "gemini-3.5-flash-lite",
 }
 
 

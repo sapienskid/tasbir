@@ -1,146 +1,98 @@
-# Tasbir v2 — Project Plan
+# Tasbir v3 — Project Plan
 
-A fully agentic, Python-based social media asset pipeline. Zero API costs.
-Self-hosted via Docker, no SaaS dependencies.
+AI-powered social media asset pipeline. Zero API costs.
+Self-hosted via Docker, Penpot-native output.
 
 ## Mission
 
-Convert blog content into platform-optimized social media images using a
-multi-agent AI pipeline — completely free to run, with Penpot for design
-token management and human-in-the-loop refinement.
+Convert blog content into platform-optimized social media designs using a
+multi-agent AI pipeline. Outputs native `.penpot` files — editable in Penpot,
+with no separate storage or UI needed.
 
 ## Core Principles
 
-1. **Zero API costs** — Gemini free tier, CSS gradients, Unsplash free tier
-2. **Self-hosted** — Everything in Docker, no SaaS dependencies
-3. **Design token driven** — Penpot & DTCG standard as source of truth for visual tokens
-4. **Parallel Agentic Studio** — LangGraph state machine with fan-out parallel agent execution
-5. **Async by default** — Celery tasks, SSE streaming, webhook triggers
+1. **Penpot-native output** — Generated designs are valid `.penpot` files, fully editable
+2. **Zero API costs** — Gemini free tier, CSS backgrounds, free embeddings
+3. **Self-hosted** — Docker, no SaaS dependencies
+4. **Design token driven** — Penpot Design System file is the single source of truth
+5. **Human-editable** — User opens generated file in Penpot, tweaks, promotes to template
+6. **Minimal infrastructure** — SQLite for task tracking, no MinIO, no separate UI
+7. **Multi-agent pipeline** — LangGraph with 5 agents (Strategist → Copywriter → Designer → HTML→Penpot → Verifier)
+
+## Architecture Summary
+
+```
+n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → .penpot file
+    │                                                           │
+    └────────── polls GET /tasks/{id} for status ──────────────┘
+                                                    User opens in Penpot
+                                                    (edit, review, promote)
+```
 
 ## Phase Progress
 
-### Phase 1: Foundation — Docker + Basic API (Completed)
-- [x] `docker-compose.yml` with all core services
+### Phase 1: Foundation — Docker + API (v2, reworked for v3)
+- [x] `docker-compose.yml` with core services (reduced for v3)
 - [x] FastAPI app skeleton with health check
-- [x] PostgreSQL schema + Alembic migrations
-- [x] Redis + Celery configuration
-- [x] MinIO for object storage
-- [x] Caddy reverse proxy configuration
+- [x] SQLite for task tracking (replaces PostgreSQL for app data)
+- [x] Celery + Redis for background task processing
+- [x] Caddy reverse proxy (optional, depends on deployment)
 
-### Phase 2: Data Layer — Models + API Routes (Completed)
-- [x] SQLAlchemy models (settings, templates, tasks, assets, prompts, formats, tokens)
-- [x] CRUD API for settings
-- [x] CRUD API for templates
-- [x] CRUD API for design tokens
-- [x] CRUD API for output formats
-- [x] CRUD API for prompts (prompt registry + version history)
-- [x] Task tracking (status, results, error handling)
+### Phase 2: Data Layer — Minimal Models
+- [x] `generation_tasks` table (SQLite) — id, status, source_data, result, error
+- [x] `audit_logs` table (SQLite) — per-agent decisions, verifier critiques
+- [x] API: `POST /generate`, `GET /tasks/{id}`, `GET /health`
+- [x] YakYAML prompt configs (`backend/config/prompts/*.yaml`)
 
-### Phase 3: AI Layer — LLM Service + Backgrounds (Completed)
-- [x] Google Gemini client (free tier via AI Studio)
-- [x] LiteLLM integration (fallback provider support)
-- [x] Background service: CSS gradients + SVG patterns (zero cost)
-- [x] Background service: Unsplash API (free stock photos)
-- [x] Background service: Solid colors + geometric patterns
+### Phase 3: .penpot I/O Layer
+- [ ] `penpot_io.py` — Read/write `.penpot` files (ZIP + JSON)
+- [ ] Python library for `.penpot` schema (generate valid shapes, pages, tokens)
+- [ ] Design System file: `data/design_system/Tasbir Design System.penpot`
+  - Contains: design tokens (`tokens.json`) + template boards per platform
+  - Pages organized by format (instagram-square, linkedin-post, etc.)
+  - Template boards have named text layers (`{{headline}}`, `{{body}}`, etc.)
 
-### Phase 4: Agent Engine — LangGraph Parallel Pipeline (Completed)
-- [x] `prompt_registry` table — all prompts stored in DB with versioning
-- [x] **Strategist agent (Aura Vance)**: content analysis, campaign brief
-- [x] **Copywriter agent (Julian Sterling)**: visually structured copy, strict no-emoji rule
-- [x] **Visual Director agent (Elena Rostova)**: art direction, CSS backgrounds & Unsplash tools
-- [x] **Designer agent (Marcus Chen)**: standalone HTML graphic canvas with Tailwind + Google Fonts
-- [x] **Quality agent (Victoria Thorne)**: output validation, refinement loop
-- [x] **Token Generator agent (Dr. Soren Lindqvist)**: DTCG design token architecture
-- [x] **Parallel Execution**: LangGraph fan-out (`strategist` -> `[copywriter, visual_director]` -> `designer`)
-- [x] **Intra-Node Format Concurrency**: `asyncio.gather()` parallel format processing
-- [x] **Dynamic DB Formats**: `app.services.formats.get_format_info()` dynamic injection
-- [x] **Post-Processing Cleanup**: `cleanup.py` emoji stripping & button artifact conversion
+### Phase 4: Agent Pipeline — LangGraph Multi-Agent
+- [ ] **Strategist** (Aura Vance) — content analysis → structured brief
+- [ ] **Copywriter** (Julian Sterling) — brief → structured copy per platform
+- [ ] **Designer** (Marcus Chen) — copy + templates → HTML with CSS variables
+- [ ] **HTML→Penpot Converter** (programmatic) — Playwright DOM extraction → .penpot shapes
+  - Full HTML support via browser DOM computation
+  - CSS variable → token value resolution (from Penpot design system)
+  - Math: KaTeX → SVG → Penpot `svg-raw` shape
+  - Diagrams: Mermaid → SVG → Penpot `svg-raw` shape
+- [ ] **Verifier** (Victoria Thorne) — multimodal audit of rendered image
+  - Reads design system from Penpot file
+  - Sees PNG via Gemini Vision
+  - Specific critique loop: fail → send actionable feedback → Designer retries
 
-### Phase 5: Rendering + Storage (Completed)
-- [x] Playwright HTTP service (HTML → PNG screenshot rendering)
-- [x] MinIO asset storage and retrieval
-- [x] Asset URL generation with task scoping
+### Phase 5: Integration
+- [ ] n8n workflow: Ghost webhook → Tasbir API
+- [ ] User workflow: open .penpot in Penpot → edit → promote good designs to template
+- [ ] Status endpoint for n8n polling
+- [ ] Docker Compose finalization
 
-### Phase 6: Ghost + Penpot Integration (Completed / In Progress)
-- [x] Ghost webhook handler (`post.published` → auto-generate)
-- [x] Ghost Admin API client (JWT auth, content fetching)
-- [x] DTCG token format conversion (internal ↔ W3C standard)
-- [ ] Penpot MCP client bidirectional sync refinements
+### Phase 6: Polish
+- [ ] Comprehensive test suite
+- [ ] Documentation (AGENTS.md, DESIGN.md, this file)
+- [ ] YAML prompt tuning
+- [ ] Rate limit optimization for Gemini free tier
 
-### Phase 7: Frontend — SvelteKit + shadcn-svelte (Completed)
-- [x] SvelteKit project with TypeScript
-- [x] Dashboard page — pipeline hero, stat cards, recent tasks
-- [x] Create page — two-column form, format grid, SSE streaming
-- [x] Configure page — tabbed: General, Brand & Tokens, Formats, Prompts (DB-backed system prompt editing)
-- [x] Templates page — grid with iframe previews
-- [x] Assets page — generation card grid with thumbnails
-- [x] Tasks page — filterable list with cancel/retry
-- [x] Confirmation dialogs for all destructive actions
+## What Was Removed From v2
 
-### Phase 8: Deployment + Polish (Completed / In Progress)
-- [x] Production Docker Compose configuration
-- [x] Seed script (`scripts/seed.py` for default formats, prompts, settings)
-- [x] Full test suite (`pytest` backend test coverage)
-- [x] Comprehensive documentation (`AGENTS.md`, `DESIGN.md`, `PLAN.md`, `README.md`)
-
-### Phase 9: Design System Overhaul (Completed)
-- [x] Removed `cdn.tailwindcss.com` (403 from server) — replaced with server-side CLI compilation
-- [x] `tailwindcss` v4 standalone CLI included in Docker image
-- [x] `_generate_theme_css()` — explicit DTCG path → CSS variable mapping (no more flattening collisions)
-- [x] `color_tools.py` — `check_contrast()`, `generate_palette()` for light/dark themes
-- [x] 11 LangChain `@tool`-decorated tools for design system generation
-- [x] Token Generator agent (Dr. Soren Lindqvist) — LangGraph node with `bind_tools()`, WCAG AA validation
-- [x] `check_contrast_tool` — validate any foreground/background pair
-- [x] Socket.IO real-time progress (replaced polling + SSE)
-- [x] `fix_brand_colors()` fixed — no longer strips `bg-primary` classes
-- [x] `_resolve_tree()` fixed — passes root tree for cross-references
-- [x] `_extract_semantic_colors()` fixed — walks full semantic tree
-- [x] `_inject_defaults()` — color defaults removed (colors come from user tokens only)
-- [x] Token generator prompt rewritten — dark-theme specific, explicit structure
-- [x] Playground/test-suite routes (hidden from UI, accessible manually)
-- [x] Test templates updated — use only Tailwind v4-guaranteed utilities, no fractional widths
-
-### Phase 10: Visual Testing Playground (Completed)
-- [x] `POST /playground/render-preview` — renders any template with any token set, returns HTML or PNG
-- [x] `POST /playground/test-suite` — iterates ALL token sets × ALL templates, saves HTML+PNG per combination
-- [x] `GET /playground/test-suite/{id}` — retrieve saved test suite results
-- [x] 5 professional test templates (hero-quote, article-card, metrics-dashboard, minimal-list, split-layout)
-- [x] 5 LLM-mock edge case templates (mixed styles, no-Tailwind, glass-dark, two-column, bold-minimal, data-viz)
-- [x] 183 backend tests passing, all utility classes verified in compiled CSS
-
-### Phase 11: Per-Format Streaming Pipeline (Completed)
-
-**What changed**: Each format now streams through the pipeline independently via LangGraph `Send` API fan-out.
-
-**Architecture**:
-```
-strategist → copywriter → visual_director → Send(fmt1) → designer → QC → renderer
-                                          → Send(fmt2) → designer → QC → renderer
-                                          → Send(fmtN) → designer → QC → renderer
-```
-
-**Implementation**:
-- [x] `FormatTask` TypedDict with per-format status, copy, background, html, png_url, quality
-- [x] `merge_format_tasks` reducer for `Annotated[dict]` merging in `TypedDict`
-- [x] Subgraph per format via `build_format_subgraph()` (designer → QC → renderer with refinement loop)
-- [x] `fan_out_to_formats()` using `Send("process_format", state)` for each format
-- [x] All nodes updated to use `format_tasks` instead of monolithic dicts
-- [x] `_build_result()` in Celery task transforms `format_tasks` → backward-compatible result shape
-- [x] `format_progress` Socket.IO event per format
-- [x] Frontend per-format progress cards in create page
-- [x] 188 backend tests passing
-
-### Phase 12: Pipeline Graph Visualization Library (Completed)
-
-**What changed**: Replaced hand-crafted SVG pipeline with `@xyflow/svelte` (Svelte Flow).
-
-**Features**:
-- [x] `@xyflow/svelte` v1.6.2 installed
-- [x] Custom `PipelineNode.svelte` component showing label, persona, status, per-format progress badge
-- [x] 6 pipeline nodes with color-coded status (pending=dim, active=purple glow, completed=green, failed=red)
-- [x] Animated smoothstep edges between nodes
-- [x] Quality check retry loop with dashed orange edge + "↺ retry ≤2" label
-- [x] Per-format progress badge on nodes (e.g., "2/3")
-- [x] Compact mode for smaller display areas
-- [x] Non-interactive (no dragging, zooming, connecting) — pure visualization
-- [x] Static build passes
+| Removed | Replaced By |
+|---------|-------------|
+| PostgreSQL (app DB) | SQLite |
+| MinIO | .penpot files (design IS the asset) |
+| SvelteKit UI | n8n triggers + Penpot viewing/editing |
+| Socket.IO | n8n polls REST API for status |
+| Tailwind CLI | Clean CSS in HTML, no Tailwind compilation |
+| Prompt DB tables | YAML files in `config/prompts/` |
+| Templates DB table | Board pages in `.penpot` Design System file |
+| Brands DB table | `.penpot` Design System file |
+| DesignTokens DB table | `tokens.json` in `.penpot` Design System file |
+| Formats DB table | Pages in `.penpot` Design System file |
+| Settings DB table | Removed (not needed) |
+| Ghost SDK | n8n handles Ghost webhooks |
+| Token Generator agent | Penpot-native token management |
+| Visual Director agent | Merged into Designer + Penpot templates |

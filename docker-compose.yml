@@ -1,8 +1,8 @@
 name: tasbir
 
 volumes:
-  postgres_data:
-  minio_data:
+  penpot_postgres:
+  penpot_assets:
 
 networks:
   tasbir:
@@ -11,39 +11,40 @@ networks:
 x-shared: &shared-env
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-  DATABASE_URL: postgresql+asyncpg://tasbir:tasbir@postgres:5432/tasbir
+  DATABASE_URL: sqlite+aiosqlite:///data/tasbir.db
   REDIS_URL: redis://redis:6379/0
-  MINIO_ENDPOINT: minio:9000
-  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-tasbir}
-  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-tasbir_secret}
-  MINIO_BUCKET: ${MINIO_BUCKET:-tasbir-assets}
-  GHOST_URL: ${GHOST_URL:-}
-  GHOST_ADMIN_API_KEY: ${GHOST_ADMIN_API_KEY:-}
-  GHOST_WEBHOOK_SECRET: ${GHOST_WEBHOOK_SECRET:-}
-  PENPOT_URL: ${PENPOT_URL:-http://penpot:9002}
-  PENPOT_ACCESS_TOKEN: ${PENPOT_ACCESS_TOKEN:-}
-  UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
   LOG_LEVEL: ${LOG_LEVEL:-info}
+
+x-penpot-flags: &penpot-flags
+  PENPOT_FLAGS: >
+    disable-email-verification
+    disable-secure-session-cookies
+    enable-prepl-server
+    enable-mcp
+
+x-penpot-uri: &penpot-public-uri
+  PENPOT_PUBLIC_URI: http://localhost:9001
+
+x-penpot-secret: &penpot-secret-key
+  PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:-change-this-insecure-key}
 
 services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - penpot_postgres:/var/lib/postgresql/data
     networks:
       - tasbir
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U tasbir"]
+      test: ["CMD-SHELL", "pg_isready -U penpot"]
       interval: 5s
       timeout: 5s
       retries: 10
     environment:
-      POSTGRES_DB: tasbir
-      POSTGRES_USER: tasbir
-      POSTGRES_PASSWORD: tasbir
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: penpot
+      POSTGRES_USER: penpot
+      POSTGRES_PASSWORD: penpot
     mem_limit: 512m
 
   redis:
@@ -59,53 +60,23 @@ services:
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     mem_limit: 128m
 
-  minio:
-    image: minio/minio:latest
+  penpot-frontend:
+    image: penpotapp/frontend:2.16
     restart: unless-stopped
+    ports:
+      - "9001:8080"
+    networks:
+      - tasbir
+    depends_on:
+      - penpot-backend
+      - penpot-exporter
     volumes:
-      - minio_data:/data
-    networks:
-      - tasbir
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    command: server /data --console-address ":9001"
+      - penpot_assets:/opt/data/assets
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-tasbir}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-tasbir_secret}
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    mem_limit: 256m
+      <<: [*penpot-flags, *penpot-public-uri]
 
-  api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-    networks:
-      - tasbir
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    environment:
-      <<: *shared-env
-      SERVICE: api
-    command: uvicorn app.main:asgi_app --host 0.0.0.0 --port 8000 --reload
-    mem_limit: 256m
-
-  worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+  penpot-backend:
+    image: penpotapp/backend:2.16
     restart: unless-stopped
     networks:
       - tasbir
@@ -114,13 +85,45 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+    volumes:
+      - penpot_assets:/opt/data/assets
+    environment:
+      <<: [*penpot-flags, *penpot-public-uri, *penpot-secret-key]
+      PENPOT_DATABASE_URI: postgresql://postgres/penpot
+      PENPOT_DATABASE_USERNAME: penpot
+      PENPOT_DATABASE_PASSWORD: penpot
+      PENPOT_REDIS_URI: redis://redis:6379/0
+      PENPOT_OBJECTS_STORAGE_BACKEND: fs
+      PENPOT_OBJECTS_STORAGE_FS_DIRECTORY: /opt/data/assets
+      PENPOT_TELEMETRY_ENABLED: "false"
+      PENPOT_SMTP_DEFAULT_FROM: no-reply@example.com
+      PENPOT_SMTP_DEFAULT_REPLY_TO: no-reply@example.com
+      PENPOT_SMTP_HOST: localhost
+      PENPOT_SMTP_PORT: 1025
+      PENPOT_SMTP_TLS: "false"
+      PENPOT_SMTP_SSL: "false"
+    # JVM needs heap for startup — no mem_limit
+
+  penpot-exporter:
+    image: penpotapp/exporter:2.16
+    restart: unless-stopped
+    networks:
+      - tasbir
+    depends_on:
+      redis:
         condition: service_healthy
     environment:
-      <<: *shared-env
-      SERVICE: worker
-    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+      <<: [*penpot-secret-key, *penpot-public-uri]
+      PENPOT_INTERNAL_URI: http://penpot-frontend:8080
+      PENPOT_REDIS_URI: redis://redis:6379/0
     mem_limit: 512m
+
+  penpot-mcp:
+    image: penpotapp/mcp:2.16
+    restart: unless-stopped
+    networks:
+      - tasbir
+    mem_limit: 256m
 
   playwright:
     image: mcr.microsoft.com/playwright/python:v1.61.0-noble-amd64
@@ -135,43 +138,45 @@ services:
     volumes:
       - ./backend/app/services/render_server.py:/app/render_server.py
     command: >
-      sh -c "pip install fastapi uvicorn playwright && 
-             python -m playwright install chromium && 
+      sh -c "pip install fastapi uvicorn playwright &&
+             python -m playwright install chromium &&
              uvicorn render_server:app --host 0.0.0.0 --port 4000"
     mem_limit: 1.5g
 
-  penpot:
-    image: penpotapp/penpot:latest
-    restart: unless-stopped
-    ports:
-      - "9002:9002"
-    networks:
-      - tasbir
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      PENPOT_FLAGS: enable-registration enable-login-with-password enable-mcp
-      PENPOT_PUBLIC_URI: http://localhost:9002
-      PENPOT_DATABASE_URI: postgresql://penpot:penpot@postgres:5432/penpot
-      PENPOT_REDIS_URI: redis://redis:6379/0
-      PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:-change-this-insecure-key}
-      PENPOT_TELEMETRY_ENABLED: "false"
-    mem_limit: 1g
-
-  ui:
+  api:
     build:
-      context: ./ui
+      context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - "5173:5173"
+      - "8000:8000"
     networks:
       - tasbir
     depends_on:
-      - api
+      redis:
+        condition: service_healthy
     environment:
-      PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:8000}
-    mem_limit: 128m
+      <<: *shared-env
+      SERVICE: api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend/data:/app/data
+    mem_limit: 256m
 
-
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks:
+      - tasbir
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *shared-env
+      SERVICE: worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - ./backend/data:/app/data
+    mem_limit: 512m

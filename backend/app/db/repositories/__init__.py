@@ -1,15 +1,7 @@
-from app.db.repositories.assets import AssetRepository
-from app.db.repositories.brands import BrandRepository
-from app.db.repositories.prompts import PromptRepository
-from app.db.repositories.settings import SettingsRepository
 from app.db.repositories.tasks import TaskRepository
-from app.db.repositories.templates import TemplateRepository
+from app.db.repositories.audit_logs import AuditLogRepository
 
 __all__ = [
-    "AssetRepository",
-    "BrandRepository",
-    "PromptRepository",
-    "SettingsRepository",
     "TaskRepository",
-    "TemplateRepository",
+    "AuditLogRepository",
 ]

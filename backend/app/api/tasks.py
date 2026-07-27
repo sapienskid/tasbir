@@ -1,8 +1,5 @@
-import uuid
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sse_starlette.sse import EventSourceResponse
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
@@ -22,128 +19,37 @@ async def list_tasks(
     tasks = await repo.list(limit=limit, offset=offset, status=status)
     return [
         {
-            "id": str(t.id),
+            "id": t.id,
             "title": (t.source_data or {}).get("title", ""),
             "status": t.status,
-            "progress": t.progress,
-            "created_at": t.created_at.isoformat(),
-            "updated_at": t.updated_at.isoformat(),
+            "created_at": t.created_at.isoformat() if t.created_at else None,
         }
         for t in tasks
     ]
 
 
 @router.get("/{task_id}")
-async def get_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
     repo = TaskRepository(db)
     task = await repo.get_by_id(task_id)
     if not task:
         raise NotFoundError(f"Task {task_id} not found")
     return {
-        "id": str(task.id),
-        "celery_task_id": task.celery_task_id,
+        "id": task.id,
         "status": task.status,
         "source_data": task.source_data,
         "result": task.result,
         "error": task.error,
-        "progress": task.progress,
-        "created_at": task.created_at.isoformat(),
-        "updated_at": task.updated_at.isoformat(),
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+        "updated_at": task.updated_at.isoformat() if task.updated_at else None,
     }
 
 
-@router.post("/{task_id}/cancel", status_code=200)
-async def cancel_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    repo = TaskRepository(db)
-    task = await repo.get_by_id(task_id)
-    if not task:
-        raise NotFoundError(f"Task {task_id} not found")
-    await repo.update_status(task_id=task_id, status="cancelled", error="Cancelled by user", progress=100)
-    return {"ok": True, "status": "cancelled"}
-
-
-@router.post("/{task_id}/retry", status_code=200)
-async def retry_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    from app.tasks.generate import generate_task
-    repo = TaskRepository(db)
-    task = await repo.get_by_id(task_id)
-    if not task:
-        raise NotFoundError(f"Task {task_id} not found")
-    if task.status not in ("failed", "completed"):
-        raise HTTPException(status_code=400, detail="Only failed or completed tasks can be retried")
-    new_task = await repo.create(source_data=task.source_data or {})
-    generate_task.delay(str(new_task.id), task.source_data or {})
-    return {"ok": True, "task_id": str(new_task.id)}
-
-
 @router.delete("/{task_id}", status_code=204)
-async def delete_task(task_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
-    from app.db.repositories.assets import AssetRepository
+async def delete_task(task_id: str, db: AsyncSession = Depends(get_db)):
     repo = TaskRepository(db)
     task = await repo.get_by_id(task_id)
     if not task:
         raise NotFoundError(f"Task {task_id} not found")
-    asset_repo = AssetRepository(db)
-    assets = await asset_repo.list_by_task(task_id)
-    for a in assets:
-        await db.delete(a)
     await db.delete(task)
     await db.commit()
-
-
-@router.get("/{task_id}/stream")
-async def stream_task(task_id: uuid.UUID):
-    """SSE stream for task progress updates.
-    Polls the database for task status changes and yields events.
-    """
-    import asyncio
-    import json
-
-    from app.config import get_settings
-    from app.db.session import create_pool
-
-    async def event_generator():
-        settings = get_settings()
-        engine, pool = await create_pool(settings.database_url)
-
-        last_status = None
-        last_progress = -1
-
-        try:
-            while True:
-                async with pool() as session:
-                    repo = TaskRepository(session)
-                    task = await repo.get_by_id(task_id)
-
-                    if not task:
-                        yield {"event": "error", "data": json.dumps("Task not found")}
-                        break
-
-                    if task.status != last_status or task.progress != last_progress:
-                        last_status = task.status
-                        last_progress = task.progress
-                        yield {
-                            "event": "progress",
-                            "data": json.dumps({
-                                "status": task.status,
-                                "progress": task.progress,
-                                "error": task.error,
-                            }),
-                        }
-
-                    if task.status in ("completed", "failed"):
-                        if task.status == "completed":
-                            yield {
-                                "event": "complete",
-                                "data": json.dumps({
-                                    "status": "completed",
-                                    "result": task.result,
-                                }),
-                            }
-                        break
-
-                await asyncio.sleep(1)
-        finally:
-            await engine.dispose()
-
-    return EventSourceResponse(event_generator())

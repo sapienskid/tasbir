@@ -1,4 +1,3 @@
-import uuid
 from typing import Sequence
 
 from sqlalchemy import select, update
@@ -25,17 +24,9 @@ class TaskRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def get_by_id(self, task_id: uuid.UUID) -> GenerationTask | None:
+    async def get_by_id(self, task_id: str) -> GenerationTask | None:
         result = await self.session.execute(
             select(GenerationTask).where(GenerationTask.id == task_id)
-        )
-        return result.scalar_one_or_none()
-
-    async def get_by_celery_id(self, celery_task_id: str) -> GenerationTask | None:
-        result = await self.session.execute(
-            select(GenerationTask).where(
-                GenerationTask.celery_task_id == celery_task_id
-            )
         )
         return result.scalar_one_or_none()
 
@@ -48,22 +39,16 @@ class TaskRepository:
 
     async def update_status(
         self,
-        task_id: uuid.UUID,
+        task_id: str,
         status: str,
         result: dict | None = None,
         error: str | None = None,
-        progress: int | None = None,
-        celery_task_id: str | None = None,
     ) -> GenerationTask | None:
         values: dict = {"status": status}
         if result is not None:
             values["result"] = result
         if error is not None:
             values["error"] = error
-        if progress is not None:
-            values["progress"] = progress
-        if celery_task_id is not None:
-            values["celery_task_id"] = celery_task_id
 
         stmt = (
             update(GenerationTask)
@@ -71,6 +56,6 @@ class TaskRepository:
             .values(**values)
             .returning(GenerationTask)
         )
-        result = await self.session.execute(stmt)
+        res = await self.session.execute(stmt)
         await self.session.commit()
-        return result.scalar_one_or_none()
+        return res.scalar_one_or_none()

@@ -1,11 +1,6 @@
 {$DOMAIN:localhost} {
-    reverse_proxy /api/* {$API_URL:api:8000}
-    reverse_proxy /ws/* {$API_URL:api:8000}
     reverse_proxy /health {$API_URL:api:8000}
-
-    reverse_proxy /assets/* {$API_URL:api:8000}
-
-    reverse_proxy /penpot/* {$PENPOT_URL:penpot:9001}
-
-    reverse_proxy {$UI_URL:ui:5173}
+    reverse_proxy /generate/* {$API_URL:api:8000}
+    reverse_proxy /tasks/* {$API_URL:api:8000}
+    reverse_proxy {$PENPOT_URL:penpot:9001}
 }

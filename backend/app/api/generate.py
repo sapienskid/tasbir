@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,17 +12,8 @@ router = APIRouter()
 class GenerateRequest(BaseModel):
     content: str
     title: str = ""
-    excerpt: str = ""
-    tags: list[str] = []
-    source_url: str | None = None
-    feature_image: str | None = None
-    badge_tag: str | None = None
-    image_embeds: list[str] = []
-    requested_formats: list[str] = []
-    brand: dict = {}
-    campaign: dict = {}
-    design_tokens: dict = {}
-    settings: dict = {}
+    platforms: list[str] = ["instagram-square"]
+    webhook_url: str | None = None
 
 
 class GenerateResponse(BaseModel):
@@ -33,14 +23,6 @@ class GenerateResponse(BaseModel):
 
 @router.post("", response_model=GenerateResponse)
 async def generate(request: GenerateRequest, db: AsyncSession = Depends(get_db)):
-    repo = TaskRepository(db)
-    task = await repo.create(source_data=request.model_dump())
-    generate_task.delay(str(task.id), request.model_dump())
-    return GenerateResponse(task_id=str(task.id))
-
-
-@router.post("/stream", response_model=GenerateResponse)
-async def generate_sse(request: GenerateRequest, db: AsyncSession = Depends(get_db)):
     repo = TaskRepository(db)
     task = await repo.create(source_data=request.model_dump())
     generate_task.delay(str(task.id), request.model_dump())

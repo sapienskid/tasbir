@@ -1,26 +1,12 @@
-"""LangGraph state machine for the generation pipeline with per-format streaming.
+"""LangGraph state machine for the v3 generation pipeline.
 
-Topology:
-  strategist → copywriter → visual_director
-                                        │
-                          (Send fan-out per format)
-                                        │
-                    ┌────────────────────┼────────────────────┐
-                    ▼                    ▼                    ▼
-              process_format(fmt1)  process_format(fmt2)  process_format(fmtN)
-                    │                    │                    │
-              ┌─────┴─────┐        ┌─────┴─────┐        ┌─────┴─────┐
-              │ designer  │        │ designer  │        │ designer  │
-              │ QC        │        │ QC        │        │ QC        │
-              │ renderer  │        │ renderer  │        │ renderer  │
-              └─────┬─────┘        └─────┬─────┘        └─────┬─────┘
-                    │                    │                    │
-                    └────────────────────┼────────────────────┘
-                                         ▼
-                                        END
+Topology (5 nodes):
+  strategist → copywriter → designer → html_to_penpot → verifier
+                                                     ↓
+                                              [fail+retry<2] → designer
 
-Each format streams independently through its own subgraph (designer → QC → renderer).
-QC refinement loops within the subgraph without blocking other formats.
+Copywriter and Designer use Send fan-out per platform.
+HTML→Penpot and Verifier run per-platform (no LLM, fast).
 """
 
 from collections.abc import Awaitable, Callable
@@ -28,39 +14,38 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
+from app.agents.orchestrator.nodes.strategist import strategist_node
 from app.agents.orchestrator.nodes.copywriter import copywriter_node
 from app.agents.orchestrator.nodes.designer import designer_node_single
 from app.agents.orchestrator.nodes.quality_check import quality_check_node_single
 from app.agents.orchestrator.nodes.renderer import renderer_node_single
-from app.agents.orchestrator.nodes.strategist import strategist_node
-from app.agents.orchestrator.nodes.visual_director import visual_director_node
 from app.agents.orchestrator.state import GenerationState, initial_state
 
 NODE_PROGRESS: dict[str, int] = {
     "strategist": 10,
     "copywriter": 25,
-    "visual_director": 40,
-    "process_format:designer": 55,
-    "process_format:quality_check": 72,
-    "process_format:renderer": 90,
+    "process_format:designer": 50,
+    "process_format:html_to_penpot": 75,
+    "process_format:verifier": 90,
 }
 
 NODE_LABELS: dict[str, str] = {
     "strategist": "Analyzing content...",
     "copywriter": "Writing copy...",
-    "visual_director": "Directing visual style...",
     "process_format:designer": "Designing layouts...",
-    "process_format:quality_check": "Checking quality...",
-    "process_format:renderer": "Rendering assets...",
+    "process_format:html_to_penpot": "Converting to Penpot...",
+    "process_format:verifier": "Verifying quality...",
 }
 
 
-def after_quality_single(state: GenerationState) -> str:
+def after_verifier(state: GenerationState) -> str:
     fmt_id = state["_processing_format_id"]
-    task = state["format_tasks"][fmt_id]
-    if task["quality_score"] >= 50:
-        return "renderer"
-    if task["refinement_count"] < state["max_refinements"]:
+    task = state["format_tasks"].get(fmt_id, {})
+    verification = state.get("verification", {}).get(fmt_id, {})
+    if verification.get("pass", True):
+        return END
+    retries = state.get("retry_count", {}).get(fmt_id, 0)
+    if retries < 2:
         return "designer"
     return END
 
@@ -68,20 +53,20 @@ def after_quality_single(state: GenerationState) -> str:
 def fan_out_to_formats(state: GenerationState) -> list[Send]:
     return [
         Send("process_format", {**state, "_processing_format_id": fmt_id})
-        for fmt_id in state["requested_formats"]
+        for fmt_id in state["platforms"]
     ]
 
 
 def build_format_subgraph() -> StateGraph:
     subgraph = StateGraph(GenerationState)
     subgraph.add_node("designer", designer_node_single)
-    subgraph.add_node("quality_check", quality_check_node_single)
-    subgraph.add_node("renderer", renderer_node_single)
+    subgraph.add_node("html_to_penpot", renderer_node_single)
+    subgraph.add_node("verifier", quality_check_node_single)
 
     subgraph.set_entry_point("designer")
-    subgraph.add_edge("designer", "quality_check")
-    subgraph.add_conditional_edges("quality_check", after_quality_single)
-    subgraph.add_edge("renderer", END)
+    subgraph.add_edge("designer", "html_to_penpot")
+    subgraph.add_edge("html_to_penpot", "verifier")
+    subgraph.add_conditional_edges("verifier", after_verifier)
 
     return subgraph.compile()
 
@@ -91,14 +76,11 @@ def build_pipeline() -> StateGraph:
 
     workflow.add_node("strategist", strategist_node)
     workflow.add_node("copywriter", copywriter_node)
-    workflow.add_node("visual_director", visual_director_node)
     workflow.add_node("process_format", build_format_subgraph())
 
     workflow.set_entry_point("strategist")
-
     workflow.add_edge("strategist", "copywriter")
-    workflow.add_edge("copywriter", "visual_director")
-    workflow.add_conditional_edges("visual_director", fan_out_to_formats)
+    workflow.add_conditional_edges("copywriter", fan_out_to_formats)
 
     checkpointer = MemorySaver()
     return workflow.compile(checkpointer=checkpointer)
@@ -118,7 +100,6 @@ async def run_pipeline(
     async for event in pipeline.astream_events(state, config, version="v2"):
         if event["event"] == "on_chain_start":
             event_name = event["name"]
-            # Map subgraph node names (e.g. "designer:1234") back to keys
             pct = NODE_PROGRESS.get(event_name)
             if not pct:
                 for key in NODE_PROGRESS:
