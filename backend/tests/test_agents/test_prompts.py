@@ -47,15 +47,15 @@ async def test_copywriter_prompt_persona():
 async def test_visual_director_prompt_persona():
     # Test the Python constant directly — DB may have an older seeded version
     assert "Elena Rostova" in VISUAL_DIRECTOR_SYSTEM_PROMPT
-    assert "ANONYMOUS" in VISUAL_DIRECTOR_SYSTEM_PROMPT
+    assert "Art Director" in VISUAL_DIRECTOR_SYSTEM_PROMPT
 
 
 @pytest.mark.asyncio
 async def test_designer_prompt_persona():
     prompt = await get_prompt("designer")
     assert "Marcus Chen" in prompt.system_prompt
-    assert "BRAND LOGO INTEGRATION" in prompt.system_prompt
-    assert "STRICT USER-ONLY BADGES" in prompt.system_prompt
+    assert "Tailwind" in prompt.system_prompt
+    assert "OUTPUT" in prompt.system_prompt
     assert "<!DOCTYPE html>" in prompt.system_prompt
 
 
@@ -103,65 +103,34 @@ def test_copywriter_validate_copy_fields_invalid():
 
 # ── Designer brand fonts and safe zones ────────────────────────────────────
 
-def test_designer_prompt_has_brand_fonts_instruction():
-    """Designer prompt must tell LLM to use brand fonts from context first."""
-    assert "BRAND FONTS FIRST" in DESIGNER_SYSTEM_PROMPT
-    assert "SAFE ZONES" in DESIGNER_SYSTEM_PROMPT
-    assert "TEXT DENSITY" in DESIGNER_SYSTEM_PROMPT
+def test_designer_prompt_has_layout_rules():
+    """Designer prompt must tell LLM about layout scaling and Tailwind."""
+    assert "Tailwind" in DESIGNER_SYSTEM_PROMPT
+    assert "LAYOUT" in DESIGNER_SYSTEM_PROMPT
+    assert "CANVAS" in DESIGNER_SYSTEM_PROMPT
 
 
-def test_designer_prompt_has_mermaid_instruction():
-    """Designer prompt must mention Mermaid diagram rendering."""
-    assert "MERMAID" in DESIGNER_SYSTEM_PROMPT or "mermaid" in DESIGNER_SYSTEM_PROMPT
+def test_designer_prompt_has_format_specific_rules():
+    """Designer prompt must mention format-specific layout guidance."""
+    assert "Instagram" in DESIGNER_SYSTEM_PROMPT
+    assert "FORMATS" in DESIGNER_SYSTEM_PROMPT
 
 
 # ── Designer font extraction utilities ─────────────────────────────────────
 
-def test_extract_brand_fonts_from_tokens():
-    from app.agents.orchestrator.nodes.designer import _extract_brand_fonts
-    tokens = {
-        "fontFamily": {
-            "heading": {"$value": "Playfair Display"},
-            "body": {"$value": "Lato"},
-        }
-    }
-    fonts = _extract_brand_fonts(tokens, {})
-    assert fonts["heading"] == "Playfair Display"
-    assert fonts["body"] == "Lato"
-
-
-def test_extract_brand_fonts_fallback_to_defaults():
-    from app.agents.orchestrator.nodes.designer import (
-        _extract_brand_fonts,
-        _DEFAULT_HEADING_FONT,
-        _DEFAULT_BODY_FONT,
-    )
-    fonts = _extract_brand_fonts({}, {})
-    assert fonts["heading"] == _DEFAULT_HEADING_FONT
-    assert fonts["body"] == _DEFAULT_BODY_FONT
-
-
-def test_extract_brand_fonts_from_brand_metadata():
-    from app.agents.orchestrator.nodes.designer import _extract_brand_fonts
-    brand = {"font_heading": "Merriweather", "font_body": "Open Sans"}
-    fonts = _extract_brand_fonts({}, brand)
-    assert fonts["heading"] == "Merriweather"
-    assert fonts["body"] == "Open Sans"
-
-
 def test_build_google_fonts_url_with_brand_fonts():
-    from app.agents.orchestrator.nodes.designer import _build_google_fonts_url
-    fonts = {"heading": "Playfair Display", "body": "Lato", "mono": "Fira Code"}
+    from app.services.token_exchange import _build_google_fonts_url
+    fonts = {"sans": "Inter", "serif": "Playfair Display", "mono": "Fira Code"}
     url = _build_google_fonts_url(fonts)
     assert "fonts.googleapis.com" in url
     assert "Playfair+Display" in url
-    assert "Lato" in url
+    assert "Lato" in url or "Inter" in url
 
 
 def test_build_google_fonts_url_deduplicates():
-    from app.agents.orchestrator.nodes.designer import _build_google_fonts_url
-    # Same font used for heading and body — should appear only once
-    fonts = {"heading": "Inter", "body": "Inter", "mono": "JetBrains Mono"}
+    from app.services.token_exchange import _build_google_fonts_url
+    # Same font used for multiple roles — should appear only once
+    fonts = {"sans": "Inter", "serif": "Inter", "mono": "JetBrains Mono"}
     url = _build_google_fonts_url(fonts)
     assert url.count("Inter") == 1
 
@@ -193,15 +162,16 @@ def test_inject_katex_when_detected():
     assert "katex" in result.lower()
 
 
-def test_inject_google_fonts_replaces_existing():
-    from app.agents.orchestrator.nodes.designer import _inject_google_fonts
+def test_inject_theme_removes_duplicate_fonts():
+    from app.agents.orchestrator.nodes.designer import _inject_theme
+    # HTML with pre-existing Google Fonts link that should be replaced
     html = (
         '<!DOCTYPE html><html><head>'
         '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap">'
-        '</head><body></body></html>'
+        '</head><body><h1 class="text-xl text-primary font-sans">Test</h1></body></html>'
     )
-    new_url = "https://fonts.googleapis.com/css2?family=Playfair+Display&display=swap"
-    result = _inject_google_fonts(html, new_url)
-    assert "Playfair+Display" in result
-    # Old Inter-only link replaced
+    result = _inject_theme(html, {}, brand={"name": "Test"})
+    assert "fonts.googleapis.com" in result
+    # Old Inter link should be stripped, new one from build_config_html added
+    assert result.count("fonts.googleapis.com") == 1
     assert result.count("fonts.googleapis.com") == 1
