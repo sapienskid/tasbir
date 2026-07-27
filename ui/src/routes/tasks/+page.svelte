@@ -2,8 +2,8 @@
   import { onMount } from "svelte";
   import Confirm from "$lib/components/ui/confirm.svelte";
   import { listTasks } from "$lib/api/generate";
-
-  const API_BASE = "http://localhost:8000";
+  import { api } from "$lib/api/client";
+  import { API_BASE } from "$lib/api/config";
 
   let tasks = $state<{ id: string; title: string; status: string; progress?: number; created_at?: string }[]>([]);
   let loading = $state(true);
@@ -41,7 +41,7 @@
   async function cancelTask(id: string) {
     acting = id;
     try {
-      await fetch(`${API_BASE}/tasks/${id}/cancel`, { method: "POST" });
+      await api.post(`/tasks/${id}/cancel`);
       tasks = tasks.map(t => t.id === id ? { ...t, status: "cancelled", progress: 100 } : t);
     } catch { /* ignore */ }
     finally { acting = null; }
@@ -50,8 +50,7 @@
   async function retryTask(id: string) {
     acting = id;
     try {
-      const res = await fetch(`${API_BASE}/tasks/${id}/retry`, { method: "POST" });
-      const data = await res.json();
+      const data = await api.post(`/tasks/${id}/retry`);
       if (data.task_id) {
         tasks = [{ id: data.task_id, title: "Retry", status: "pending", progress: 0, created_at: new Date().toISOString() }, ...tasks];
       }

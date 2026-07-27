@@ -4,51 +4,21 @@
   import { listTasks } from "$lib/api/generate";
   import { Card } from "$lib/components/ui/card/index.js";
   import { Button } from "$lib/components/ui/button/index.js";
+  import LangGraphVisualizer from "$lib/components/LangGraphVisualizer.svelte";
+  import { activeTask } from "$lib/stores/activeTask";
+  import { API_BASE } from "$lib/api/config";
 
-  const API_BASE = "http://localhost:8000";
+  interface AssetGroup {
+    id: string;
+    title: string;
+    created_at: string;
+    assets: Record<string, string>;
+  }
 
-  let groups = $state<{ id: string; title: string; created_at: string; assets: Record<string, string> }[]>([]);
+  let groups = $state<AssetGroup[]>([]);
   let loading = $state(true);
   let deleting = $state<string | null>(null);
   let confirmDelete = $state<string | null>(null);
-
-  onMount(async () => {
-    try {
-      const tasks = await listTasks(100);
-      const completed = tasks.filter((t: any) => t.status === "completed");
-
-      const results = await Promise.all(completed.map(async (t: any) => {
-        try {
-          const res = await fetch(`${API_BASE}/tasks/${t.id}`);
-          const detail = await res.json();
-          const rawAssets = detail?.result?.assets_by_format || {};
-          const assets: Record<string, string> = {};
-          for (const [k, v] of Object.entries(rawAssets)) {
-            assets[k] = v as string;
-          }
-          if (Object.keys(assets).length === 0) return null;
-          return {
-            id: t.id,
-            title: t.title || t.id.slice(0, 10),
-            created_at: t.created_at,
-            assets,
-          };
-        } catch { return null; }
-      }));
-
-      groups = results.filter(Boolean) as typeof groups;
-    } catch { /* empty */ }
-    finally { loading = false; }
-  });
-
-  async function handleDelete(id: string) {
-    deleting = id;
-    try {
-      await fetch(`${API_BASE}/tasks/${id}`, { method: "DELETE" });
-      groups = groups.filter(g => g.id !== id);
-    } catch { /* ignore */ }
-    finally { deleting = null; }
-  }
 
   function assetUrl(url: string): string {
     if (url.startsWith("/")) return `${API_BASE}${url}`;
@@ -63,6 +33,39 @@
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return `${hrs}h ago`;
     return `${Math.floor(hrs / 24)}d ago`;
+  }
+
+  onMount(async () => {
+    try {
+      const tasks = await listTasks(100);
+      const active = tasks.filter((t) => t.status === "completed" || t.status === "running");
+
+      const results = await Promise.all(active.map(async (t) => {
+        try {
+          const res = await fetch(`${API_BASE}/tasks/${t.id}`);
+          const detail = await res.json();
+          const rawAssets = detail?.result?.assets_by_format || {};
+          const assets: Record<string, string> = {};
+          for (const [k, v] of Object.entries(rawAssets)) {
+            assets[k] = v as string;
+          }
+          if (Object.keys(assets).length === 0) return null;
+          return { id: t.id, title: t.title || t.id.slice(0, 10), created_at: t.created_at, assets };
+        } catch { return null; }
+      }));
+
+      groups = results.filter(Boolean) as AssetGroup[];
+    } catch { /* empty */ }
+    finally { loading = false; }
+  });
+
+  async function handleDelete(id: string) {
+    deleting = id;
+    try {
+      await fetch(`${API_BASE}/tasks/${id}`, { method: "DELETE" });
+      groups = groups.filter(g => g.id !== id);
+    } catch { /* ignore */ }
+    finally { deleting = null; }
   }
 
   let allFormats = $derived([...new Set(groups.flatMap(g => Object.keys(g.assets)))]);
@@ -94,6 +97,19 @@
       </div>
     {/if}
   </div>
+
+  {#if $activeTask.taskId && $activeTask.status === "running"}
+    <Card class="p-4">
+      <div class="flex items-center justify-between mb-2">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
+          <span class="text-sm text-text">Active: {$activeTask.title || $activeTask.taskId.slice(0, 8)}</span>
+        </div>
+        <span class="text-xs font-mono text-text-secondary">{$activeTask.progress}%</span>
+      </div>
+      <LangGraphVisualizer activeNode={$activeTask.activeNode} progress={$activeTask.progress} compact />
+    </Card>
+  {/if}
 
   {#if loading}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

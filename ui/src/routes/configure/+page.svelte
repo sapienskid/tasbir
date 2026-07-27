@@ -11,7 +11,7 @@
   import { listTokens, generateTokens, deleteToken, type DesignToken } from "$lib/api/tokens";
   import { listBrands, createBrand, updateBrand, uploadBrandLogo, type Brand } from "$lib/api/brands";
 
-  const API_BASE = "http://localhost:8000";
+  import { API_BASE } from "$lib/api/config";
 
   // Tab state
   type Tab = "general" | "brand" | "formats" | "prompts";
@@ -82,7 +82,7 @@
     } catch {
       // Fallback to legacy settings brand
       try {
-        const legacy = await fetch(`${API_BASE}/settings/brand`).then(r => r.json()).catch(() => ({}));
+        const legacy = await api.get("/settings/brand").catch(() => ({}));
         if (legacy.name) {
           brandName = legacy.name;
           brandStory = legacy.story || "";

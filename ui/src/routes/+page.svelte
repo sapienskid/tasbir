@@ -5,6 +5,9 @@
   import { listTemplates } from "$lib/api/templates";
   import { listTokens } from "$lib/api/tokens";
   import { listFormats } from "$lib/api/formats";
+  import { activeTask } from "$lib/stores/activeTask";
+  import LangGraphVisualizer from "$lib/components/LangGraphVisualizer.svelte";
+  import { API_BASE } from "$lib/api/config";
 
   let templatesCount = $state(0);
   let tokensCount = $state(0);
@@ -66,12 +69,10 @@
     return "Queued";
   }
 
-  const API_BASE = "http://localhost:8000";
-
   async function cancelTask(id: string) {
     acting = id;
     try {
-      await fetch(`${API_BASE}/tasks/${id}/cancel`, { method: "POST" });
+      await api.post(`/tasks/${id}/cancel`);
       recentTasks = recentTasks.map(t => t.id === id ? { ...t, status: "cancelled", progress: 100 } : t);
     } catch { /* ignore */ }
     finally { acting = null; }
@@ -80,7 +81,7 @@
   async function retryTask(id: string) {
     acting = id;
     try {
-      await fetch(`${API_BASE}/tasks/${id}/retry`, { method: "POST" });
+      await api.post(`/tasks/${id}/retry`);
     } catch { /* ignore */ }
     finally { acting = null; }
   }
@@ -113,26 +114,40 @@
       <p class="text-sm text-text-secondary mt-0.5">{templatesCount} templates &middot; {formatsCount} formats &middot; {assetsCount} generations</p>
     </div>
 
-    <!-- Pipeline hero -->
-    <div class="rounded-xl border border-border bg-surface p-6">
-      <div class="flex items-center justify-between mb-5">
-        <h2 class="text-sm font-medium text-text">Pipeline</h2>
-        <a href="/configure?tab=prompts" class="text-xs text-text-secondary hover:text-text transition-colors">Configure</a>
-      </div>
-      <div class="flex items-center gap-0 overflow-x-auto pb-2">
-        {#each AGENTS as agent, i}
-          <div class="flex items-center shrink-0">
-            <div class="flex flex-col items-center gap-2">
-              <div class="w-2 h-2 rounded-full" style="background:{agent.color}"></div>
-              <span class="text-xs text-text-secondary whitespace-nowrap">{agent.name}</span>
-            </div>
-            {#if i < AGENTS.length - 1}
-              <div class="w-10 sm:w-16 h-px bg-border mx-3"></div>
-            {/if}
+    <!-- Active Generation / LangGraph execution -->
+    {#if $activeTask.taskId}
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full {$activeTask.status === 'completed' ? 'bg-accent' : 'bg-blue-500 animate-ping'}"></span>
+            <h2 class="text-sm font-medium text-text">Active Generation: {$activeTask.title || $activeTask.taskId.slice(0, 8)}</h2>
           </div>
-        {/each}
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-mono text-text-secondary">{$activeTask.progress}%</span>
+            <button onclick={() => activeTask.clear()} class="text-xs text-text-secondary hover:text-text">Clear</button>
+          </div>
+        </div>
+
+        <LangGraphVisualizer
+          activeNode={$activeTask.activeNode}
+          progress={$activeTask.progress}
+          qualityScore={$activeTask.qualityScore}
+        />
+
+        {#if Object.keys($activeTask.assets).length > 0}
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {#each Object.entries($activeTask.assets) as [fmt, url]}
+              <a href={url} target="_blank" class="block rounded-lg border border-border bg-bg overflow-hidden hover:border-accent transition-colors">
+                <img src={url} alt={fmt} class="w-full aspect-square object-cover" />
+                <div class="p-1.5 text-[10px] font-mono text-text-secondary truncate text-center">{fmt}</div>
+              </a>
+            {/each}
+          </div>
+        {/if}
       </div>
-    </div>
+    {:else}
+      <LangGraphVisualizer />
+    {/if}
 
     <!-- Stat cards -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">

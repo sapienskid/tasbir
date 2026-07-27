@@ -5,8 +5,10 @@
   import { listFormats } from "$lib/api/formats";
   import { Card } from "$lib/components/ui/card/index.js";
   import { uploadBrandLogo } from "$lib/api/brands";
+  import { activeTask } from "$lib/stores/activeTask";
+  import LangGraphVisualizer from "$lib/components/LangGraphVisualizer.svelte";
 
-  const API_BASE = "http://localhost:8000";
+  import { API_BASE } from "$lib/api/config";
   const STORAGE_KEY = "tasbir:create";
 
   interface AgentDef {
@@ -24,6 +26,7 @@
   ];
 
   function loadDraft() {
+    if (typeof window === "undefined" || !window.localStorage) return {};
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) return JSON.parse(raw);
@@ -32,6 +35,7 @@
   }
 
   function saveDraft() {
+    if (typeof window === "undefined" || !window.localStorage) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         content, titleInput, selectedFormats, selectedBrandId,
@@ -50,12 +54,7 @@
   let focused = $state(false);
   let loading = $state(true);
 
-  let taskId = $state("");
-  let status = $state("");
-  let progress = $state(0);
-  let assets = $state<Record<string, string>>({});
-  let qualityScore = $state(0);
-  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  // activeTask store is consumed reactively via $activeTask in the template
 
   let brands = $state<{ id: string; name: string; description: string; data: { tone: string; primary_color: string; secondary_color: string; logo_url?: string; tokens: Record<string, unknown> } }[]>([]);
   let selectedBrandId = $state(loadDraft().selectedBrandId || "");
@@ -105,7 +104,7 @@
     } finally { loading = false; }
   });
 
-  onDestroy(() => { if (pollTimer) clearInterval(pollTimer); });
+  onDestroy(() => { /* store handles its own cleanup */ });
 
   function toggleFormat(id: string) {
     selectedFormats = selectedFormats.includes(id)
@@ -119,11 +118,11 @@
   }
 
   function isAgentActive(index: number): boolean {
-    return progress >= AGENTS[index].activeAt;
+    return $activeTask.progress >= AGENTS[index].activeAt;
   }
 
   function isAgentDone(index: number): boolean {
-    return progress >= AGENTS[index].doneAt;
+    return $activeTask.progress >= AGENTS[index].doneAt;
   }
 
   function clearDraft() {
@@ -140,10 +139,6 @@
     if (!content.trim() || selectedFormats.length === 0) return;
     generating = true;
     error = "";
-    status = "starting";
-    progress = 0;
-    assets = {};
-    qualityScore = 0;
 
     try {
       const brandPayload = selectedBrand
@@ -157,7 +152,6 @@
           }
         : {};
       const designTokens = selectedBrand?.data?.tokens || {};
-
       const taskTitle = titleInput.trim() || content.split("\n")[0].slice(0, 80).replace(/[^\w\s-]/g, "").trim();
 
       const res = await startGeneration({
@@ -169,30 +163,21 @@
         brand: brandPayload,
         ...(Object.keys(designTokens).length > 0 ? { design_tokens: designTokens } : {}),
       });
-      taskId = res.task_id;
 
-      pollTimer = setInterval(async () => {
-        try {
-          const data = await getTask(taskId);
-          status = data.status;
-          progress = data.progress || 0;
+      // Set in global store — polling + persistence handled by store
+      activeTask.setTaskId(res.task_id, taskTitle);
 
-          if (data.status === "completed") {
-            if (pollTimer) clearInterval(pollTimer);
-            if (data.result?.assets_by_format) {
-              const raw = data.result.assets_by_format as Record<string, string>;
-              for (const [k, v] of Object.entries(raw)) raw[k] = assetUrl(v);
-              assets = raw;
-            }
-            qualityScore = data.result?.quality_score || 0;
-            generating = false;
-          } else if (data.status === "failed") {
-            if (pollTimer) clearInterval(pollTimer);
-            error = data.error || "Generation failed";
-            generating = false;
-          }
-        } catch { /* poll continues */ }
-      }, 2000);
+      // Watch store until done
+      const doneCheck = setInterval(() => {
+        if (activeTask.current.status === "completed") {
+          clearInterval(doneCheck);
+          generating = false;
+        } else if (activeTask.current.status === "failed" || activeTask.current.status === "cancelled") {
+          clearInterval(doneCheck);
+          error = activeTask.current.error || "Generation failed";
+          generating = false;
+        }
+      }, 500);
     } catch (e) {
       error = e instanceof Error ? e.message : "Could not start generation";
       generating = false;
@@ -206,8 +191,7 @@
     <p class="text-sm text-text-secondary mt-0.5">Describe your content, pick formats, and generate social media assets.</p>
   </div>
 
-  {#if status !== "completed"}
-    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
       <!-- Left: input -->
       <div class="lg:col-span-3 space-y-4">
         <Card class="p-5">
@@ -306,26 +290,12 @@
           </div>
         </Card>
 
-        {#if generating}
-          <Card class="p-5">
-            <p class="text-xs text-text-secondary mb-3">Progress</p>
-            <div class="w-full h-1.5 bg-border rounded-full overflow-hidden mb-4">
-              <div class="h-full bg-accent rounded-full transition-all duration-500" style="width: {progress}%"></div>
-            </div>
-            <div class="flex items-center gap-0 overflow-x-auto">
-              {#each AGENTS as agent, i}
-                <div class="flex items-center shrink-0">
-                  <div class="flex flex-col items-center gap-1.5" class:opacity-30={!isAgentActive(i)}>
-                    <div class="w-1.5 h-1.5 rounded-full {isAgentActive(i) ? 'bg-accent' : 'bg-border'}"></div>
-                    <span class="text-[10px] whitespace-nowrap {isAgentActive(i) ? 'text-accent font-medium' : 'text-text-secondary'}">{agent.name}</span>
-                  </div>
-                  {#if i < AGENTS.length - 1}
-                    <div class="w-8 sm:w-12 h-px bg-border mx-1.5" class:bg-accent={isAgentDone(i)}></div>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          </Card>
+        {#if generating || ($activeTask.taskId && $activeTask.status === "running")}
+          <LangGraphVisualizer
+            activeNode={$activeTask.activeNode}
+            progress={$activeTask.progress}
+            qualityScore={$activeTask.qualityScore}
+          />
         {/if}
       </div>
 
@@ -355,22 +325,21 @@
         </Card>
       </div>
     </div>
-  {/if}
 
   <!-- Results -->
-  {#if Object.keys(assets).length > 0}
+  {#if Object.keys($activeTask.assets).length > 0}
     <div class="space-y-4">
       <div class="flex items-center justify-between">
         <div>
           <h2 class="text-sm font-medium text-text">Generated assets</h2>
-          <p class="text-xs text-text-secondary mt-0.5">Quality score: {qualityScore}/100</p>
+          <p class="text-xs text-text-secondary mt-0.5">Quality score: {$activeTask.qualityScore}/100</p>
         </div>
-        <Button variant="ghost" size="sm" onclick={() => { status = ""; assets = {}; clearDraft(); }}>
+        <Button variant="ghost" size="sm" onclick={() => { activeTask.clear(); clearDraft(); }}>
           New generation
         </Button>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {#each Object.entries(assets) as [fmt, url]}
+        {#each Object.entries($activeTask.assets) as [fmt, url]}
           <Card class="overflow-hidden">
             <div class="px-4 py-2.5 border-b border-border flex items-center justify-between">
               <span class="text-xs font-mono text-text-secondary">{fmt}</span>

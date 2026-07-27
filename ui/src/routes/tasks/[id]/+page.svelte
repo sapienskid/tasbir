@@ -2,7 +2,9 @@
   import { onMount, onDestroy } from "svelte";
   import { page } from "$app/stores";
   import { Card } from "$lib/components/ui/card/index.js";
-  import { getTask, streamTask, type TaskResult } from "$lib/api/generate";
+  import { getTask, type TaskResult } from "$lib/api/generate";
+  import { getSocket, connectSocket, joinTaskRoom } from "$lib/stores/socket";
+  import { API_BASE } from "$lib/api/config";
 
   let task = $state<TaskResult | null>(null);
   let assets = $state<Record<string, string>>({});
@@ -10,8 +12,6 @@
   let error = $state("");
 
   let cleanup: (() => void) | null = null;
-
-  const API_BASE = "http://localhost:8000";
 
   function assetUrl(url: string): string {
     if (url.startsWith("/")) return `${API_BASE}${url}`;
@@ -33,25 +33,32 @@
       loading = false;
 
       if (task.status === "running" || task.status === "pending") {
-        cleanup = streamTask(
-          taskId,
-          (data) => {
-            if (task) { task.status = data.status; task.progress = data.progress; }
-          },
-          (data) => {
+        (async () => {
+          await connectSocket();
+          await joinTaskRoom(taskId);
+          const socket = await getSocket();
+          if (!socket) return;
+
+          const onProgress = (data: any) => {
+            if (task) { task.status = data.status; task.progress = data.percent; }
+          };
+
+          const onComplete = (data: any) => {
             if (task) {
               task.status = "completed";
-              task.result = data.result;
               task.progress = 100;
-              if (data.result?.assets_by_format) {
-                const raw = data.result.assets_by_format as Record<string, string>;
-                for (const [k, v] of Object.entries(raw)) raw[k] = assetUrl(v);
-                assets = raw;
-              }
+              task.result = data.result;
+              const raw = data.result?.assets_by_format as Record<string, string> || {};
+              const resolved: Record<string, string> = {};
+              for (const [k, v] of Object.entries(raw)) resolved[k] = assetUrl(v);
+              assets = resolved;
             }
-          },
-          (err) => { error = err; }
-        );
+          };
+
+          socket.on("progress", onProgress);
+          socket.on("complete", onComplete);
+          cleanup = () => { socket.off("progress", onProgress); socket.off("complete", onComplete); };
+        })();
       } else if (task.status === "completed" && task.result?.assets_by_format) {
         const raw = task.result.assets_by_format as Record<string, string>;
         for (const [k, v] of Object.entries(raw)) raw[k] = assetUrl(v);

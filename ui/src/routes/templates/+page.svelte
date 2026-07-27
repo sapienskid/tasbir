@@ -5,8 +5,6 @@
   import { Card } from "$lib/components/ui/card/index.js";
   import { api } from "$lib/api/client";
 
-  const API_BASE = "http://localhost:8000";
-
   let templates = $state<any[]>([]);
   let loading = $state(true);
   let error = $state("");
@@ -21,8 +19,7 @@
 
   onMount(async () => {
     try {
-      const res = await fetch(`${API_BASE}/templates?enabled_only=false`);
-      templates = await res.json();
+      templates = await api.get(`/templates?enabled_only=false`);
     } catch { error = "Failed to load templates"; }
     finally { loading = false; }
   });
@@ -62,8 +59,7 @@
       } else {
         await api.post("/templates", { name: formName, description: formDescription, html: formHtml, slots: {} });
       }
-      const res = await fetch(`${API_BASE}/templates?enabled_only=false`);
-      templates = await res.json();
+      templates = await api.get("/templates?enabled_only=false");
       cancelForm();
     } catch (e) {
       error = e instanceof Error ? e.message : "Save failed";
