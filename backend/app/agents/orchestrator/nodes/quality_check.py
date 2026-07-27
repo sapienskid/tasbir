@@ -57,69 +57,59 @@ def _check_placeholders(html: str) -> bool:
     return "{{" in html or "}}" in html
 
 
-async def quality_check_node(state: GenerationState) -> dict:
+async def quality_check_node_single(state: GenerationState) -> dict:
     prompt = await get_prompt("quality_check")
-    html_by_fmt = state.get("html_by_format", {})
-
-    if not html_by_fmt:
-        return {
-            "quality_score": 0,
-            "quality_issues": ["No HTML generated for any requested format"],
-            "refinement_count": state.get("refinement_count", 0) + 1,
-        }
+    fmt_id = state["_processing_format_id"]
+    task = dict(state["format_tasks"].get(fmt_id, {}))
+    html = task.get("html", "")
 
     programmatic_issues: list[str] = []
-    for fmt, html in html_by_fmt.items():
-        if not html or len(html) < 100:
-            programmatic_issues.append(f"{fmt}: HTML too short or empty")
-        if "{{" in html or "}}" in html:
-            programmatic_issues.append(f"{fmt}: Unfilled template placeholders remain")
-        if not html.strip().lower().startswith("<!doctype"):
-            programmatic_issues.append(f"{fmt}: Missing DOCTYPE declaration")
+
+    if not html or len(html) < 100:
+        programmatic_issues.append(f"{fmt_id}: HTML too short or empty")
+    if "{{" in html or "}}" in html:
+        programmatic_issues.append(f"{fmt_id}: Unfilled template placeholders remain")
+    if not html.strip().lower().startswith("<!doctype"):
+        programmatic_issues.append(f"{fmt_id}: Missing DOCTYPE declaration")
 
     if programmatic_issues:
         score = max(0, 100 - len(programmatic_issues) * 25)
-        return {
-            "quality_score": score,
-            "quality_issues": programmatic_issues,
-            "refinement_count": state.get("refinement_count", 0) + 1,
-        }
+        updated_task = dict(task)
+        updated_task["quality_score"] = score
+        updated_task["quality_issues"] = programmatic_issues
+        updated_task["refinement_count"] = task.get("refinement_count", 0) + 1
+        updated_task["status"] = "qc_failed" if score < 50 else "qc_passed"
+        return {"format_tasks": {fmt_id: updated_task}}
 
-    # Deep LLM-based audit using Victoria Thorne's persona
     try:
-        audit_results = []
-        for fmt, html in html_by_fmt.items():
-            fmt_info = await get_format_info(fmt)
-            brief = state.get("strategic_brief", "")[:300]
+        fmt_info = await get_format_info(fmt_id)
+        brief = state.get("strategic_brief", "")[:300]
 
-            user_content = (
-                f"Audit this HTML visual graphic for {fmt_info.name} ({fmt_info.width}x{fmt_info.height}).\n\n"
-                f"CONTENT BRIEF: {brief}\n\n"
-                f"HTML:\n{html[:3000]}\n\n"
-                f"Score 0-100. List specific issues. Format: SCORE: <number>\nISSUES: <list>"
+        user_content = (
+            f"Audit this HTML visual graphic for {fmt_info.name} ({fmt_info.width}x{fmt_info.height}).\n\n"
+            f"CONTENT BRIEF: {brief}\n\n"
+            f"HTML:\n{html[:3000]}\n\n"
+            f"Score 0-100. List specific issues. Format: SCORE: <number>\nISSUES: <list>"
+        )
+
+        llm = get_llm(agent_role="quality_check", temperature=0.3, max_tokens=800)
+        from langchain_core.messages import HumanMessage, SystemMessage
+        messages = [
+            SystemMessage(content=prompt.system_prompt),
+            HumanMessage(content=user_content),
+        ]
+
+        response = await call_llm_with_retry(llm, messages, agent_role="quality_check")
+        audit_text = response.content
+        if isinstance(audit_text, list):
+            audit_text = " ".join(
+                b.get("text", "") if isinstance(b, dict) else str(b)
+                for b in audit_text
             )
 
-            llm = get_llm(agent_role="quality_check", temperature=0.3, max_tokens=800)
-            from langchain_core.messages import HumanMessage, SystemMessage
-            messages = [
-                SystemMessage(content=prompt.system_prompt),
-                HumanMessage(content=user_content),
-            ]
-
-            response = await call_llm_with_retry(llm, messages, agent_role="quality_check")
-            audit_text = response.content
-            if isinstance(audit_text, list):
-                audit_text = " ".join(
-                    b.get("text", "") if isinstance(b, dict) else str(b)
-                    for b in audit_text
-                )
-
-            audit_results.append(f"[{fmt}] {audit_text}")
-
-        combined = "\n".join(audit_results)
         score = 50
-        issues = []
-        for line in combined.split("\n"):
+        issues: list[str] = []
+        for line in audit_text.split("\n"):
             if line.lower().startswith("score:"):
                 try:
                     score = int("".join(c for c in line.split(":", 1)[1] if c.isdigit()))
@@ -128,15 +118,18 @@ async def quality_check_node(state: GenerationState) -> dict:
             elif line.lower().startswith("issue"):
                 issues.append(line.split(":", 1)[1].strip() if ":" in line else line)
 
-        return {
-            "quality_score": max(0, min(100, score)),
-            "quality_issues": issues[:10],
-            "refinement_count": state.get("refinement_count", 0) + 1,
-        }
+        updated_task = dict(task)
+        updated_task["quality_score"] = max(0, min(100, score))
+        updated_task["quality_issues"] = issues[:10]
+        updated_task["refinement_count"] = task.get("refinement_count", 0) + 1
+        updated_task["status"] = "qc_failed" if score < 50 else "qc_passed"
+
+        return {"format_tasks": {fmt_id: updated_task}}
     except Exception as e:
         log.warning("[quality_check] LLM audit failed, using programmatic fallback: %s", e)
-        return {
-            "quality_score": 80,
-            "quality_issues": [],
-            "refinement_count": state.get("refinement_count", 0) + 1,
-        }
+        updated_task = dict(task)
+        updated_task["quality_score"] = 80
+        updated_task["quality_issues"] = []
+        updated_task["refinement_count"] = task.get("refinement_count", 0) + 1
+        updated_task["status"] = "qc_passed"
+        return {"format_tasks": {fmt_id: updated_task}}

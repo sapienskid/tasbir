@@ -88,11 +88,11 @@ async def _resolve_tokens(state: GenerationState) -> tuple[dict, dict]:
     return tokens, brand
 
 
-async def _generate_html_for_format(
-    fmt_id: str,
-    state: GenerationState,
-    prompt: PromptVersion,
-) -> tuple[str, str]:
+async def designer_node_single(state: GenerationState) -> dict:
+    fmt_id = state["_processing_format_id"]
+    prompt = await get_prompt("designer")
+    task = dict(state["format_tasks"].get(fmt_id, {}))
+
     fmt_info = await get_format_info(fmt_id)
     llm = get_llm(
         agent_role="designer",
@@ -100,8 +100,8 @@ async def _generate_html_for_format(
         max_tokens=prompt.max_tokens,
     ).bind_tools(_tools)
 
-    copy_text = state["copy_by_format"].get(fmt_id, "")
-    bg = state["background_by_format"].get(fmt_id, {})
+    copy_text = task.get("copy", "")
+    bg = task.get("background", {})
     tokens, brand = await _resolve_tokens(state)
     fmt_context = f"\n**FORMAT INSTRUCTION (follow this layout exactly)**: {fmt_info.ai_instruction}" if fmt_info.ai_instruction else ""
 
@@ -128,6 +128,8 @@ async def _generate_html_for_format(
 
     # Background hint for contrast guidance
     bg_hint = bg.get("description", bg.get("css", "")[:80]) or "dark gradient background"
+
+    system_prompt = prompt.system_prompt.replace("{WIDTH}", str(fmt_info.width)).replace("{HEIGHT}", str(fmt_info.height))
 
     messages = [
         SystemMessage(content=system_prompt),
@@ -189,23 +191,11 @@ async def _generate_html_for_format(
     html = _inject_mermaid(html, content_source)
     html = fix_all(html, width=fmt_info.width, height=fmt_info.height, brand=state.get("brand"))
 
-    return fmt_id, html
+    updated_task = dict(task)
+    updated_task["html"] = html
+    updated_task["status"] = "designed"
 
-
-async def designer_node(state: GenerationState) -> dict:
-    prompt = await get_prompt("designer")
-    formats = state["requested_formats"]
-
-    semaphore = asyncio.Semaphore(2)
-
-    async def _with_semaphore(fmt: str):
-        async with semaphore:
-            return await _generate_html_for_format(fmt, state, prompt)
-
-    results = await asyncio.gather(*[_with_semaphore(f) for f in formats])
-
-    html_by_format = {fmt: html for fmt, html in results}
-    return {"html_by_format": html_by_format}
+    return {"format_tasks": {fmt_id: updated_task}}
 
 
 def _inject_theme(html: str, tokens: dict, brand: dict | None = None) -> str:
