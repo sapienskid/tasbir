@@ -9,12 +9,9 @@ import re
 
 def remove_template_placeholders(html: str) -> str:
     """Remove template syntax like {{variable}}, %s, [placeholder]."""
-    orig = html
     html = re.sub(r"\{\{[^}]*\}\}", "", html, flags=re.DOTALL)
     html = re.sub(r"\{\{", "", html)
     html = re.sub(r"\}\}", "", html)
-    html = re.sub(r"\{\s*\{", "", html)
-    html = re.sub(r"\}\s*\}", "", html)
     html = re.sub(r"\[placeholder[^\]]*\]", "", html, flags=re.DOTALL)
     html = re.sub(r"%[sd]", "", html)
     html = re.sub(r"\[\[[^\]]*\]\]|<<[^>]*>>", "", html, flags=re.DOTALL)
@@ -74,10 +71,11 @@ def strip_emojis(html: str) -> str:
 
 
 def fix_brand_colors(html: str, brand: dict | None = None) -> str:
-    """Fill in missing brand color references in class names or CSS.
+    """Resolve CSS variable references to actual brand hex values.
 
-    Replaces generic color utility classes with brand-specific ones
-    when the HTML uses template-like color references.
+    Does NOT strip Tailwind utility classes (bg-primary, text-primary, etc.)
+    — those are resolved by the Tailwind CDN pre-config injected in _inject_theme().
+    Only replaces CSS var() references that might leak from LLM output.
     """
     if not brand:
         return html
@@ -85,21 +83,12 @@ def fix_brand_colors(html: str, brand: dict | None = None) -> str:
     primary = brand.get("primary_color", "#000000")
     secondary = brand.get("secondary_color", "#ffffff")
 
-    color_map = {
-        "primary": primary,
-        "secondary": secondary,
-        "accent": primary,
-        "brand": primary,
-    }
-
-    for name, hex_color in color_map.items():
-        html = re.sub(
-            rf'class\s*=\s*"[^"]*\bbg-{name}\b[^"]*"',
-            lambda m: m.group(0).replace(f"bg-{name}", ""),
-            html,
-        )
-        html = html.replace(f"var(--color-{name})", hex_color)
-        html = html.replace(f"var(--{name})", hex_color)
+    html = html.replace("var(--color-primary)", primary)
+    html = html.replace("var(--color-secondary)", secondary)
+    html = html.replace("var(--color-accent)", primary)
+    html = html.replace("var(--primary)", primary)
+    html = html.replace("var(--secondary)", secondary)
+    html = html.replace("var(--accent)", primary)
 
     return html
 
