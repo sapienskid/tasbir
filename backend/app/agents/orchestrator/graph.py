@@ -1,55 +1,89 @@
-"""LangGraph state machine for the generation pipeline with sequential agent execution.
+"""LangGraph state machine for the generation pipeline with per-format streaming.
 
-Defines the agent workflow as a directed graph:
-  strategist → copywriter → visual_director → designer → quality_check → renderer → END
-                                                                ↓ (refinement loop)
-                                                            designer
+Topology:
+  strategist → copywriter → visual_director
+                                        │
+                          (Send fan-out per format)
+                                        │
+                    ┌────────────────────┼────────────────────┐
+                    ▼                    ▼                    ▼
+              process_format(fmt1)  process_format(fmt2)  process_format(fmtN)
+                    │                    │                    │
+              ┌─────┴─────┐        ┌─────┴─────┐        ┌─────┴─────┐
+              │ designer  │        │ designer  │        │ designer  │
+              │ QC        │        │ QC        │        │ QC        │
+              │ renderer  │        │ renderer  │        │ renderer  │
+              └─────┬─────┘        └─────┬─────┘        └─────┬─────┘
+                    │                    │                    │
+                    └────────────────────┼────────────────────┘
+                                         ▼
+                                        END
 
-Each agent reads from shared state, enabling proper hand-off:
-- copywriter receives strategic_brief from strategist
-- visual_director receives copy_by_format from copywriter
-- designer receives copy + backgrounds from both upstream agents
-Quality check passes/fails; renderer converts HTML to PNG.
+Each format streams independently through its own subgraph (designer → QC → renderer).
+QC refinement loops within the subgraph without blocking other formats.
 """
 
 from collections.abc import Awaitable, Callable
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
+from langgraph.types import Send
 
 from app.agents.orchestrator.nodes.copywriter import copywriter_node
-from app.agents.orchestrator.nodes.designer import designer_node
-from app.agents.orchestrator.nodes.quality_check import quality_check_node
-from app.agents.orchestrator.nodes.renderer import renderer_node
+from app.agents.orchestrator.nodes.designer import designer_node_single
+from app.agents.orchestrator.nodes.quality_check import quality_check_node_single
+from app.agents.orchestrator.nodes.renderer import renderer_node_single
 from app.agents.orchestrator.nodes.strategist import strategist_node
 from app.agents.orchestrator.nodes.visual_director import visual_director_node
 from app.agents.orchestrator.state import GenerationState, initial_state
 
 NODE_PROGRESS: dict[str, int] = {
-    "strategist": 15,
-    "copywriter": 35,
-    "visual_director": 55,
-    "designer": 70,
-    "quality_check": 85,
-    "renderer": 95,
+    "strategist": 10,
+    "copywriter": 25,
+    "visual_director": 40,
+    "process_format:designer": 55,
+    "process_format:quality_check": 72,
+    "process_format:renderer": 90,
 }
 
-# Human-readable stage labels — no agent names, no persona references
 NODE_LABELS: dict[str, str] = {
     "strategist": "Analyzing content...",
     "copywriter": "Writing copy...",
     "visual_director": "Directing visual style...",
-    "designer": "Designing layout...",
-    "quality_check": "Checking design quality...",
-    "renderer": "Rendering final assets...",
+    "process_format:designer": "Designing layouts...",
+    "process_format:quality_check": "Checking quality...",
+    "process_format:renderer": "Rendering assets...",
 }
 
 
-def after_quality(state: GenerationState) -> str:
-    if state["quality_score"] >= 50:
+def after_quality_single(state: GenerationState) -> str:
+    fmt_id = state["_processing_format_id"]
+    task = state["format_tasks"][fmt_id]
+    if task["quality_score"] >= 50:
         return "renderer"
-    if state["refinement_count"] < state["max_refinements"]:
+    if task["refinement_count"] < state["max_refinements"]:
         return "designer"
     return END
+
+
+def fan_out_to_formats(state: GenerationState) -> list[Send]:
+    return [
+        Send("process_format", {**state, "_processing_format_id": fmt_id})
+        for fmt_id in state["requested_formats"]
+    ]
+
+
+def build_format_subgraph() -> StateGraph:
+    subgraph = StateGraph(GenerationState)
+    subgraph.add_node("designer", designer_node_single)
+    subgraph.add_node("quality_check", quality_check_node_single)
+    subgraph.add_node("renderer", renderer_node_single)
+
+    subgraph.set_entry_point("designer")
+    subgraph.add_edge("designer", "quality_check")
+    subgraph.add_conditional_edges("quality_check", after_quality_single)
+    subgraph.add_edge("renderer", END)
+
+    return subgraph.compile()
 
 
 def build_pipeline() -> StateGraph:
@@ -58,18 +92,13 @@ def build_pipeline() -> StateGraph:
     workflow.add_node("strategist", strategist_node)
     workflow.add_node("copywriter", copywriter_node)
     workflow.add_node("visual_director", visual_director_node)
-    workflow.add_node("designer", designer_node)
-    workflow.add_node("quality_check", quality_check_node)
-    workflow.add_node("renderer", renderer_node)
+    workflow.add_node("process_format", build_format_subgraph())
 
     workflow.set_entry_point("strategist")
 
     workflow.add_edge("strategist", "copywriter")
     workflow.add_edge("copywriter", "visual_director")
-    workflow.add_edge("visual_director", "designer")
-    workflow.add_edge("designer", "quality_check")
-    workflow.add_conditional_edges("quality_check", after_quality)
-    workflow.add_edge("renderer", END)
+    workflow.add_conditional_edges("visual_director", fan_out_to_formats)
 
     checkpointer = MemorySaver()
     return workflow.compile(checkpointer=checkpointer)
@@ -88,13 +117,23 @@ async def run_pipeline(
 
     async for event in pipeline.astream_events(state, config, version="v2"):
         if event["event"] == "on_chain_start":
-            node = event["name"]
-            pct = NODE_PROGRESS.get(node)
+            event_name = event["name"]
+            # Map subgraph node names (e.g. "designer:1234") back to keys
+            pct = NODE_PROGRESS.get(event_name)
+            if not pct:
+                for key in NODE_PROGRESS:
+                    if event_name.startswith(key.split(":")[-1]):
+                        pct = NODE_PROGRESS[key]
+                        event_name = key
+                        break
             if pct and pct > seen_progress:
                 seen_progress = pct
                 if progress_callback:
-                    label = NODE_LABELS.get(node, "Processing...")
+                    label = NODE_LABELS.get(event_name, "Processing...")
                     await progress_callback(pct, label)
 
-    result = pipeline.get_state(config).values
-    return result
+    try:
+        state_result = pipeline.get_state(config)
+        return state_result.values if state_result else state
+    except Exception:
+        return state
