@@ -5,7 +5,7 @@
   import { listFormats } from "$lib/api/formats";
   import { Card } from "$lib/components/ui/card/index.js";
   import { listBrands, uploadBrandLogo } from "$lib/api/brands";
-  import { activeTask } from "$lib/stores/activeTask";
+  import { activeTask, STAGE_LABELS } from "$lib/stores/activeTask";
   import LangGraphVisualizer from "$lib/components/LangGraphVisualizer.svelte";
 
   import { API_BASE } from "$lib/api/config";
@@ -300,6 +300,7 @@
             activeNode={$activeTask.activeNode}
             progress={$activeTask.progress}
             qualityScore={$activeTask.qualityScore}
+            formatProgress={$activeTask.formatProgress}
           />
         {/if}
       </div>
@@ -330,6 +331,34 @@
         </Card>
       </div>
     </div>
+
+  <!-- Per-format progress (during generation, before assets appear) -->
+  {#if (generating || $activeTask.status === "running") && Object.keys($activeTask.formatProgress).length > 0}
+    <div class="space-y-3">
+      <h2 class="text-sm font-medium text-text">Format progress</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {#each Object.entries($activeTask.formatProgress) as [fmt, fp]}
+          <Card class="p-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-medium text-text">{fmt}</span>
+              <span
+                class="text-[10px] font-mono px-2 py-0.5 rounded-full
+                {fp.status === 'completed' ? 'bg-accent/10 text-accent' : 'bg-surface text-text-secondary'}"
+              >
+                {STAGE_LABELS[fp.stage] || fp.stage}
+              </span>
+            </div>
+            <div class="w-full bg-surface rounded-full h-1.5">
+              <div
+                class="h-1.5 rounded-full bg-accent transition-all duration-500"
+                style="width: {fp.stage === 'done' ? 100 : fp.stage === 'failed' ? 0 : 60}%"
+              ></div>
+            </div>
+          </Card>
+        {/each}
+      </div>
+    </div>
+  {/if}
 
   <!-- Results -->
   {#if Object.keys($activeTask.assets).length > 0}
