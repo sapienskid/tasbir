@@ -6,19 +6,18 @@ from socketio import RedisManager
 
 from app.agents.orchestrator.graph import run_pipeline
 from app.config import get_settings
-from app.db.repositories.assets import AssetRepository
 from app.db.repositories.tasks import TaskRepository
 from app.db.session import get_shared_session_factory
 from app.tasks.celery_app import celery_app
 
 log = logging.getLogger(__name__)
 NODE_LABELS = {
-    15: "strategist",
-    35: "copywriter",
-    55: "visual_director",
-    70: "designer",
-    85: "quality_check",
-    95: "renderer",
+    10: "strategist",
+    25: "copywriter",
+    40: "visual_director",
+    55: "designer",
+    72: "quality_check",
+    90: "renderer",
 }
 
 
@@ -39,11 +38,61 @@ def _emit_progress(emitter, task_id: str, pct: int, status: str = "running", nod
         log.warning("[generate] Socket.IO emit failed", exc_info=True)
 
 
+def _emit_format_progress(emitter, task_id: str, format_id: str, stage: str, status: str = "running", url: str | None = None):
+    try:
+        payload = {
+            "task_id": task_id,
+            "format_id": format_id,
+            "stage": stage,
+            "status": status,
+        }
+        if url:
+            payload["url"] = url
+        emitter.emit("format_progress", payload, room=task_id)
+    except Exception:
+        log.warning("[generate] format_progress emit failed", exc_info=True)
+
+
 def _node_for_progress(pct: int) -> str:
     for threshold in sorted(NODE_LABELS, reverse=True):
         if pct >= threshold:
             return NODE_LABELS[threshold]
     return "strategist"
+
+
+def _build_result(state: dict) -> dict:
+    """Extract backward-compatible result dict from format_tasks state."""
+    format_tasks = state.get("format_tasks", {})
+    copy_by_format = {}
+    background_by_format = {}
+    html_by_format = {}
+    assets_by_format = {}
+    quality_score = 100
+    quality_issues = []
+
+    for fmt, task in format_tasks.items():
+        if task.get("copy"):
+            copy_by_format[fmt] = task["copy"]
+        if task.get("background"):
+            background_by_format[fmt] = task["background"]
+        if task.get("html"):
+            html_by_format[fmt] = task["html"]
+        if task.get("png_url"):
+            assets_by_format[fmt] = task["png_url"]
+        if task.get("quality_score", 100) < quality_score:
+            quality_score = task["quality_score"]
+        if task.get("quality_issues"):
+            quality_issues.extend(task["quality_issues"])
+
+    return {
+        "strategic_brief": state.get("strategic_brief", ""),
+        "copy_by_format": copy_by_format,
+        "background_by_format": background_by_format,
+        "html_by_format": html_by_format,
+        "assets_by_format": assets_by_format,
+        "quality_score": quality_score,
+        "quality_issues": quality_issues,
+    }
 
 
 @celery_app.task(bind=True, max_retries=3, acks_late=True)
@@ -114,41 +163,15 @@ def generate_task(self, task_id: str, source_data: dict):
                 )
             return
 
-        await _set_progress(95)
-
-        quality_score = state.get("quality_score", 0)
-        assets_by_format = state.get("assets_by_format", {})
+        result = _build_result(state)
 
         async with pool() as session:
             task_repo = TaskRepository(session)
-            asset_repo = AssetRepository(session)
 
-            if quality_score >= 50:
-                result = {
-                    "strategic_brief": state.get("strategic_brief", ""),
-                    "copy_by_format": state.get("copy_by_format", {}),
-                    "background_by_format": state.get("background_by_format", {}),
-                    "html_by_format": state.get("html_by_format", {}),
-                    "assets_by_format": assets_by_format,
-                    "quality_score": quality_score,
-                    "quality_issues": state.get("quality_issues", []),
-                }
-
+            if result["quality_score"] >= 50:
                 await task_repo.update_status(
                     task_id=task_uuid, status="completed", result=result, progress=100,
                 )
-
-                for fmt, url in assets_by_format.items():
-                    key = f"tasks/{task_id}/{fmt}.png"
-                    existing = await asset_repo.get_by_key(key)
-                    if not existing:
-                        await asset_repo.create({
-                            "key": key,
-                            "task_id": task_uuid,
-                            "format_id": fmt,
-                            "content_type": "image/png",
-                            "url": url,
-                        })
 
                 _emit_progress(emitter, task_id, 100, "completed", "renderer")
                 emitter.emit("complete", {
@@ -156,8 +179,11 @@ def generate_task(self, task_id: str, source_data: dict):
                     "status": "completed",
                     "result": result,
                 }, room=task_id)
+
+                for fmt, url in result["assets_by_format"].items():
+                    _emit_format_progress(emitter, task_id, fmt, "done", "completed", url)
             else:
-                error_msg = f"Quality check failed: {', '.join(state.get('quality_issues', []))}"
+                error_msg = f"Quality check failed: {', '.join(result['quality_issues'])}"
                 await task_repo.update_status(
                     task_id=task_uuid, status="failed", error=error_msg, progress=100,
                 )
