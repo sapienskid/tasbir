@@ -1,15 +1,10 @@
 """Tool: Search Unsplash for free stock photos."""
-
-from langgraph.prebuilt import InjectedState
-from typing_extensions import Annotated
-
+from langchain_core.tools import tool
 from app.services.unsplash import search_photo
 
 
-async def search_unsplash(
-    state: Annotated[dict, InjectedState],
-    query: str,
-) -> str:
+@tool
+async def search_unsplash(query: str) -> str:
     """Search for free stock photos on Unsplash.
 
     Use this when a design needs a photographic background. The image

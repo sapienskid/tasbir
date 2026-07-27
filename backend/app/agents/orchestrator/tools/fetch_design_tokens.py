@@ -1,12 +1,13 @@
 """Tool: Fetch design tokens for a brand."""
-
 from langgraph.prebuilt import InjectedState
+from langchain_core.tools import tool
 from typing_extensions import Annotated
 
 
+@tool
 async def fetch_design_tokens(
-    state: Annotated[dict, InjectedState],
     brand_name: str = "",
+    state: Annotated[dict, InjectedState] = {},
 ) -> str:
     """Fetch design tokens (colors, typography, radii, spacing, logo) for a brand.
 

@@ -1,16 +1,17 @@
 """Tool: Generate zero-cost CSS backgrounds."""
-
 from langgraph.prebuilt import InjectedState
+from langchain_core.tools import tool
 from typing_extensions import Annotated
 
 from app.services.backgrounds import generate_background
 
 
+@tool
 async def generate_background_tool(
-    state: Annotated[dict, InjectedState],
     style: str = "gradient",
     mood: str = "professional",
     brand_color: str = "",
+    state: Annotated[dict, InjectedState] = {},
 ) -> str:
     """Generate a CSS background style strictly following user brand guidelines.
 

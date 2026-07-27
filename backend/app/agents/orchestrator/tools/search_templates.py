@@ -1,12 +1,13 @@
 """Tool: Search for existing HTML templates to use as a base for generation."""
-
 from langgraph.prebuilt import InjectedState
+from langchain_core.tools import tool
 from typing_extensions import Annotated
 
 
+@tool
 async def search_templates(
-    state: Annotated[dict, InjectedState],
     query: str,
+    state: Annotated[dict, InjectedState],
 ) -> str:
     """Search for existing templates matching the content type or format.
 
