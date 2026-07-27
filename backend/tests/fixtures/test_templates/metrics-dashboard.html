@@ -1,0 +1,61 @@
+<!-- Metrics dashboard — uses flex/grid with flex-1, no fractional widths -->
+<div class="flex flex-col h-full w-full bg-surface p-8">
+  <div class="flex items-center justify-between mb-6 shrink-0">
+    <div>
+      <p class="text-xs font-medium text-text-secondary font-sans tracking-wider">Performance Overview</p>
+      <h1 class="text-2xl font-bold text-text font-serif mt-1">Q4 Results</h1>
+    </div>
+    <div class="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center shrink-0">
+      <span class="text-lg text-primary font-bold font-sans">↑</span>
+    </div>
+  </div>
+  <div class="flex gap-3 mb-6 shrink-0">
+    <div class="flex-1 p-4 rounded-xl bg-bg border border-border">
+      <p class="text-[11px] text-text-secondary font-mono mb-1">Revenue</p>
+      <p class="text-2xl font-bold text-text font-mono">$2.4M</p>
+      <p class="text-xs text-accent font-medium font-sans mt-1">+24%</p>
+    </div>
+    <div class="flex-1 p-4 rounded-xl bg-bg border border-border">
+      <p class="text-[11px] text-text-secondary font-mono mb-1">Users</p>
+      <p class="text-2xl font-bold text-text font-mono">84.2K</p>
+      <p class="text-xs text-accent font-medium font-sans mt-1">+12%</p>
+    </div>
+    <div class="flex-1 p-4 rounded-xl bg-bg border border-border">
+      <p class="text-[11px] text-text-secondary font-mono mb-1">Growth</p>
+      <p class="text-2xl font-bold text-text font-mono">3.2×</p>
+      <p class="text-xs text-text-secondary font-medium font-sans mt-1">YoY</p>
+    </div>
+  </div>
+  <div class="flex-1 space-y-4">
+    <div>
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="text-text-secondary font-sans font-medium">Q1 Target</span>
+        <span class="text-text font-mono">$420K</span>
+      </div>
+      <div class="h-2 rounded-full bg-elevated overflow-hidden">
+        <div class="h-full rounded-full bg-primary w-3/12"></div>
+      </div>
+    </div>
+    <div>
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="text-text-secondary font-sans font-medium">Q2 Target</span>
+        <span class="text-text font-mono">$680K</span>
+      </div>
+      <div class="h-2 rounded-full bg-elevated overflow-hidden">
+        <div class="h-full rounded-full bg-accent w-5/12"></div>
+      </div>
+    </div>
+    <div>
+      <div class="flex items-center justify-between text-xs mb-1">
+        <span class="text-text-secondary font-sans font-medium">Q3 Target</span>
+        <span class="text-text font-mono">$890K</span>
+      </div>
+      <div class="h-2 rounded-full bg-elevated overflow-hidden">
+        <div class="h-full rounded-full bg-secondary w-7/12"></div>
+      </div>
+    </div>
+  </div>
+  <p class="text-[10px] text-text-secondary font-mono text-center mt-4 pt-4 border-t border-border shrink-0">
+    Updated quarterly · Source: Internal Analytics
+  </p>
+</div>
