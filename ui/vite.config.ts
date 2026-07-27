@@ -5,6 +5,6 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
   ssr: {
-    noExternal: ['@lucide/svelte'],
+    noExternal: ['@lucide/svelte', 'socket.io-client', 'engine.io-client', '@socket.io/component-emitter'],
   },
 });

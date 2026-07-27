@@ -1,3 +1,4 @@
+import { API_BASE } from "$lib/api/config";
 import { api } from "./client";
 
 export interface GenerateRequest {
@@ -46,20 +47,20 @@ export async function listTasks(
   limit = 50,
   offset = 0,
   status?: string
-): Promise<{ id: string; status: string; progress: number }[]> {
+): Promise<{ id: string; title: string; status: string; progress: number; created_at: string }[]> {
   let path = `/tasks?limit=${limit}&offset=${offset}`;
   if (status) path += `&status=${status}`;
   return api.get(path);
 }
 
+/** @deprecated Use Socket.IO store (activeTask) instead of SSE. */
 export function streamTask(
   id: string,
   onProgress: (data: { status: string; progress: number; error?: string }) => void,
   onComplete: (data: { result: Record<string, unknown> }) => void,
   onError: (error: string) => void
 ): () => void {
-  const BASE_URL = import.meta.env.PUBLIC_API_URL || "http://localhost:8000";
-  const eventSource = new EventSource(`${BASE_URL}/tasks/${id}/stream`);
+  const eventSource = new EventSource(`${API_BASE}/tasks/${id}/stream`);
 
   eventSource.addEventListener("progress", (event) => {
     onProgress(JSON.parse(event.data));
