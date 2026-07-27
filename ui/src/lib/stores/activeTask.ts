@@ -1,6 +1,7 @@
 import { browser } from "$app/environment";
 import { writable, get } from "svelte/store";
-import { getSocket, connectSocket, joinTaskRoom } from "$lib/stores/socket";
+import { api } from "$lib/api/client";
+import { getSocket, connectSocket, joinTaskRoom, connectionStatus } from "$lib/stores/socket";
 
 const API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.PUBLIC_API_URL) ||
@@ -59,48 +60,86 @@ function extractAssets(result: any): Record<string, string> {
 }
 
 let cleanupHandlers: (() => void)[] = [];
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+async function pollTask(taskId: string) {
+  try {
+    const data = await api.get(`/tasks/${taskId}`);
+    _store.update((s) => {
+      const done = data.status === "completed" || data.status === "failed" || data.status === "cancelled";
+      if (done && pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      return {
+        ...s,
+        status: data.status || s.status,
+        progress: data.progress ?? s.progress,
+        activeNode: determineNode(data.progress ?? s.progress, data.status || s.status),
+        title: data.source_data?.title || s.title,
+        assets: Object.keys(extractAssets(data.result)).length > 0 ? extractAssets(data.result) : s.assets,
+        qualityScore: data.status === "completed" ? (data.result?.quality_score as number) || 100 : s.qualityScore,
+        error: data.status === "failed" || data.status === "cancelled" ? data.error || "Generation stopped" : s.error,
+      };
+    });
+  } catch { /* poll silently */ }
+}
+
+function startPolling(taskId: string) {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTask(taskId);
+  pollTimer = setInterval(() => pollTask(taskId), 2000);
+}
 
 async function subscribeToTask(taskId: string) {
   cleanupHandlers.forEach((fn) => fn());
   cleanupHandlers = [];
 
-  await connectSocket();
-  await joinTaskRoom(taskId);
+  // Start polling immediately as fallback
+  startPolling(taskId);
 
-  const socket = await getSocket();
-  if (!socket) return;
+  // Try Socket.IO for real-time
+  try {
+    await connectSocket();
+    await joinTaskRoom(taskId);
+    const socket = await getSocket();
+    if (!socket) return;
 
-  const onProgress = (data: any) => {
-    _store.update((s) => ({
-      ...s,
-      status: data.status || s.status,
-      progress: data.percent ?? s.progress,
-      activeNode: determineNode(data.percent ?? s.progress, data.status || s.status),
-      assets: Object.keys(extractAssets(data.result)).length > 0 ? extractAssets(data.result) : s.assets,
-      error: data.status === "failed" ? data.error || "Generation failed" : s.error,
-    }));
-  };
+    const onProgress = (data: any) => {
+      _store.update((s) => ({
+        ...s,
+        status: data.status || s.status,
+        progress: data.percent ?? s.progress,
+        activeNode: determineNode(data.percent ?? s.progress, data.status || s.status),
+        assets: Object.keys(extractAssets(data.result)).length > 0 ? extractAssets(data.result) : s.assets,
+        error: data.status === "failed" ? data.error || "Generation failed" : s.error,
+      }));
+    };
 
-  const onComplete = (data: any) => {
-    _store.update((s) => ({
-      ...s,
-      status: "completed",
-      progress: 100,
-      activeNode: "END",
-      assets: extractAssets(data.result),
-      qualityScore: data.result?.quality_score ?? s.qualityScore,
-      error: null,
-    }));
-    if (browser) localStorage.removeItem(STORAGE_KEY);
-  };
+    const onComplete = (data: any) => {
+      _store.update((s) => ({
+        ...s,
+        status: "completed",
+        progress: 100,
+        activeNode: "END",
+        assets: extractAssets(data.result),
+        qualityScore: data.result?.quality_score ?? s.qualityScore,
+        error: null,
+      }));
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (browser) localStorage.removeItem(STORAGE_KEY);
+    };
 
-  socket.on("progress", onProgress);
-  socket.on("complete", onComplete);
+    socket.on("progress", onProgress);
+    socket.on("complete", onComplete);
 
-  cleanupHandlers = [
-    () => socket.off("progress", onProgress),
-    () => socket.off("complete", onComplete),
-  ];
+    cleanupHandlers.push(
+      () => socket.off("progress", onProgress),
+      () => socket.off("complete", onComplete),
+    );
+  } catch {
+    // Socket.IO failed, polling continues as fallback
+  }
 }
 
 if (browser && initialState.taskId) {
@@ -148,6 +187,7 @@ export const activeTask = {
   },
 
   clear() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     cleanupHandlers.forEach((fn) => fn());
     cleanupHandlers = [];
     _store.set({

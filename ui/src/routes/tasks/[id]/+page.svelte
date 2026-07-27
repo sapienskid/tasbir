@@ -2,8 +2,10 @@
   import { onMount, onDestroy } from "svelte";
   import { page } from "$app/stores";
   import { Card } from "$lib/components/ui/card/index.js";
+  import LangGraphVisualizer from "$lib/components/LangGraphVisualizer.svelte";
   import { getTask, type TaskResult } from "$lib/api/generate";
   import { getSocket, connectSocket, joinTaskRoom } from "$lib/stores/socket";
+  import { activeTask } from "$lib/stores/activeTask";
   import { API_BASE } from "$lib/api/config";
 
   let task = $state<TaskResult | null>(null);
@@ -33,6 +35,8 @@
       loading = false;
 
       if (task.status === "running" || task.status === "pending") {
+        // Update the shared activeTask store so dashboard/create see progress
+        activeTask.setTaskId(taskId, (task.source_data?.title as string) || "");
         (async () => {
           await connectSocket();
           await joinTaskRoom(taskId);
@@ -93,9 +97,14 @@
       </div>
 
       {#if task.status === "running"}
-        <div class="w-full h-1.5 bg-border rounded-full overflow-hidden">
+        <div class="w-full h-1.5 bg-border rounded-full overflow-hidden mb-4">
           <div class="h-full bg-[#3B82F6] rounded-full transition-all duration-500" style="width: {task.progress}%"></div>
         </div>
+        <LangGraphVisualizer
+          activeNode={$activeTask.activeNode}
+          progress={$activeTask.progress}
+          qualityScore={$activeTask.qualityScore}
+        />
       {/if}
 
       {#if task.status === "failed" && task.error}
