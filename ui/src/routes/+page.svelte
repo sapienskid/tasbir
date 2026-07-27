@@ -17,6 +17,7 @@
   let loading = $state(true);
   let acting = $state<string | null>(null);
   let confirm = $state<{ action: "cancel" | "retry"; id: string; title: string } | null>(null);
+  let actionError = $state("");
 
   const AGENTS = [
     { name: "Strategist", color: "#CD5B7D" },
@@ -71,18 +72,24 @@
 
   async function cancelTask(id: string) {
     acting = id;
+    actionError = "";
     try {
       await api.post(`/tasks/${id}/cancel`);
       recentTasks = recentTasks.map(t => t.id === id ? { ...t, status: "cancelled", progress: 100 } : t);
-    } catch { /* ignore */ }
+    } catch (e) {
+      actionError = e instanceof Error ? e.message : "Cancel failed";
+    }
     finally { acting = null; }
   }
 
   async function retryTask(id: string) {
     acting = id;
+    actionError = "";
     try {
       await api.post(`/tasks/${id}/retry`);
-    } catch { /* ignore */ }
+    } catch (e) {
+      actionError = e instanceof Error ? e.message : "Retry failed";
+    }
     finally { acting = null; }
   }
 
@@ -94,6 +101,12 @@
     else retryTask(c.id);
   }
 </script>
+
+{#if actionError}
+  <div class="max-w-6xl rounded-xl border border-destructive/30 bg-destructive/5 p-3 mb-4">
+    <p class="text-xs text-destructive">{actionError}</p>
+  </div>
+{/if}
 
 {#if loading}
   <div class="space-y-6 max-w-6xl">

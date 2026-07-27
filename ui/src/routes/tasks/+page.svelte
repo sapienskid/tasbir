@@ -10,6 +10,7 @@
   let filter = $state("");
   let acting = $state<string | null>(null);
   let confirm = $state<{ action: "cancel" | "retry"; id: string; title: string } | null>(null);
+  let actionError = $state("");
 
   const FILTERS = ["", "pending", "running", "completed", "failed", "cancelled"];
 
@@ -40,21 +41,27 @@
 
   async function cancelTask(id: string) {
     acting = id;
+    actionError = "";
     try {
       await api.post(`/tasks/${id}/cancel`);
       tasks = tasks.map(t => t.id === id ? { ...t, status: "cancelled", progress: 100 } : t);
-    } catch { /* ignore */ }
+    } catch (e) {
+      actionError = e instanceof Error ? e.message : "Cancel failed";
+    }
     finally { acting = null; }
   }
 
   async function retryTask(id: string) {
     acting = id;
+    actionError = "";
     try {
       const data = await api.post(`/tasks/${id}/retry`);
       if (data.task_id) {
         tasks = [{ id: data.task_id, title: "Retry", status: "pending", progress: 0, created_at: new Date().toISOString() }, ...tasks];
       }
-    } catch { /* ignore */ }
+    } catch (e) {
+      actionError = e instanceof Error ? e.message : "Retry failed";
+    }
     finally { acting = null; }
   }
 
@@ -87,6 +94,12 @@
       </button>
     {/each}
   </div>
+
+  {#if actionError}
+    <div class="rounded-xl border border-destructive/30 bg-destructive/5 p-3">
+      <p class="text-xs text-destructive">{actionError}</p>
+    </div>
+  {/if}
 
   {#if loading}
     <p class="text-sm text-text-secondary">Loading…</p>
