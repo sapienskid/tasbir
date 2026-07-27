@@ -7,6 +7,12 @@ const API_BASE =
   (typeof import.meta !== "undefined" && import.meta.env?.PUBLIC_API_URL) ||
   "http://localhost:8000";
 
+export interface FormatProgress {
+  stage: string;
+  status: string;
+  url?: string;
+}
+
 export interface ActiveTaskState {
   taskId: string;
   status: string;
@@ -16,18 +22,33 @@ export interface ActiveTaskState {
   assets: Record<string, string>;
   qualityScore: number;
   error: string | null;
+  formatProgress: Record<string, FormatProgress>;
 }
 
 const STORAGE_KEY = "tasbir:active_task_id";
 
+export const STAGE_LABELS: Record<string, string> = {
+  waiting: "Waiting",
+  copywritten: "Copy ready",
+  directed: "Style directed",
+  designing: "Designing...",
+  designed: "Layout ready",
+  qc: "Auditing...",
+  qc_passed: "Audit passed",
+  qc_failed: "Audit failed",
+  rendering: "Rendering...",
+  done: "Complete ✓",
+  failed: "Failed",
+};
+
 function determineNode(progress: number, status: string): string {
   if (status === "completed") return "END";
   if (status === "failed") return "failed";
-  if (progress < 25) return "strategist";
-  if (progress < 45) return "copywriter";
-  if (progress < 65) return "visual_director";
-  if (progress < 80) return "designer";
-  if (progress < 92) return "quality_check";
+  if (progress < 15) return "strategist";
+  if (progress < 32) return "copywriter";
+  if (progress < 48) return "visual_director";
+  if (progress < 63) return "designer";
+  if (progress < 80) return "quality_check";
   return "renderer";
 }
 
@@ -40,9 +61,14 @@ const initialState: ActiveTaskState = {
   assets: {},
   qualityScore: 0,
   error: null,
+  formatProgress: {},
 };
 
 const _store = writable<ActiveTaskState>(initialState);
+
+if (browser) {
+  localStorage.removeItem(STORAGE_KEY);
+}
 
 function resolveAssetUrl(url: string): string {
   if (url.startsWith("/")) return `${API_BASE}${url}`;
@@ -116,6 +142,18 @@ async function subscribeToTask(taskId: string) {
       }));
     };
 
+    const onFormatProgress = (data: any) => {
+      _store.update((s) => {
+        const fp = { ...s.formatProgress };
+        fp[data.format_id] = {
+          stage: data.stage,
+          status: data.status,
+          url: data.url,
+        };
+        return { ...s, formatProgress: fp };
+      });
+    };
+
     const onComplete = (data: any) => {
       _store.update((s) => ({
         ...s,
@@ -131,19 +169,17 @@ async function subscribeToTask(taskId: string) {
     };
 
     socket.on("progress", onProgress);
+    socket.on("format_progress", onFormatProgress);
     socket.on("complete", onComplete);
 
     cleanupHandlers.push(
       () => socket.off("progress", onProgress),
+      () => socket.off("format_progress", onFormatProgress),
       () => socket.off("complete", onComplete),
     );
   } catch {
     // Socket.IO failed, polling continues as fallback
   }
-}
-
-if (browser && initialState.taskId) {
-  subscribeToTask(initialState.taskId);
 }
 
 if (browser && "BroadcastChannel" in window) {
@@ -173,6 +209,7 @@ export const activeTask = {
       assets: {},
       qualityScore: 0,
       error: null,
+      formatProgress: {},
     });
     if (browser) {
       if (id) localStorage.setItem(STORAGE_KEY, id);
@@ -199,6 +236,7 @@ export const activeTask = {
       assets: {},
       qualityScore: 0,
       error: null,
+      formatProgress: {},
     });
     if (browser) localStorage.removeItem(STORAGE_KEY);
   },
