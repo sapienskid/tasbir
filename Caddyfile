@@ -1,6 +1,0 @@
-{$DOMAIN:localhost} {
-    reverse_proxy /health {$API_URL:api:8000}
-    reverse_proxy /generate/* {$API_URL:api:8000}
-    reverse_proxy /tasks/* {$API_URL:api:8000}
-    reverse_proxy {$PENPOT_URL:penpot:9001}
-}
