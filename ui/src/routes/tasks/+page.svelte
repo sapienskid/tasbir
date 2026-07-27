@@ -21,6 +21,16 @@
     finally { loading = false; }
   });
 
+  // Auto-refresh task list every 5 seconds when there are running tasks
+  $effect(() => {
+    const hasRunning = tasks.some(t => t.status === "running");
+    if (!hasRunning) return;
+    const interval = setInterval(async () => {
+      try { tasks = await listTasks(50) as any; } catch {}
+    }, 5000);
+    return () => clearInterval(interval);
+  });
+
   function statusDot(s: string) {
     if (s === "completed") return "bg-[#22C55E]";
     if (s === "running") return "bg-[#3B82F6]";
