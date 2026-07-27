@@ -108,121 +108,39 @@ token management and human-in-the-loop refinement.
 - [x] 5 LLM-mock edge case templates (mixed styles, no-Tailwind, glass-dark, two-column, bold-minimal, data-viz)
 - [x] 183 backend tests passing, all utility classes verified in compiled CSS
 
-### Phase 11: Per-Format Streaming Pipeline (Planned — DO NOT BUILD YET)
+### Phase 11: Per-Format Streaming Pipeline (Completed)
 
-**Problem**: Current pipeline batches ALL formats through each node sequentially. Format1 must wait for Format2, Format3 to finish designer before any of them enter quality_check. This means 0 results visible until ALL formats finish all nodes.
+**What changed**: Each format now streams through the pipeline independently via LangGraph `Send` API fan-out.
 
-**Goal**: Each format should stream through the full pipeline independently (designer → quality_check → renderer), so rendered assets appear one-by-one as they complete.
-
-#### Architecture Change
-
-**Current** (batch per node):
+**Architecture**:
 ```
-State: { html_by_format: {fmt1, fmt2, fmt3} }
-Graph: designer(all) → quality_check(all) → renderer(all)
+strategist → copywriter → visual_director → Send(fmt1) → designer → QC → renderer
+                                          → Send(fmt2) → designer → QC → renderer
+                                          → Send(fmtN) → designer → QC → renderer
 ```
 
-**Target** (per-format stream):
-```
-State: { format_progress: {fmt1: "designing", fmt2: "waiting", fmt3: "waiting"} }
-Fork per format into sub-graph: designer(fmt1) → QC(fmt1) → renderer(fmt1)
-                                                  ↘ designer(fmt2) → QC(fmt2) → renderer(fmt2)
-```
+**Implementation**:
+- [x] `FormatTask` TypedDict with per-format status, copy, background, html, png_url, quality
+- [x] `merge_format_tasks` reducer for `Annotated[dict]` merging in `TypedDict`
+- [x] Subgraph per format via `build_format_subgraph()` (designer → QC → renderer with refinement loop)
+- [x] `fan_out_to_formats()` using `Send("process_format", state)` for each format
+- [x] All nodes updated to use `format_tasks` instead of monolithic dicts
+- [x] `_build_result()` in Celery task transforms `format_tasks` → backward-compatible result shape
+- [x] `format_progress` Socket.IO event per format
+- [x] Frontend per-format progress cards in create page
+- [x] 188 backend tests passing
 
-#### Implementation Tasks
+### Phase 12: Pipeline Graph Visualization Library (Completed)
 
-1. **Restructure state** — Replace `html_by_format`, `assets_by_format` monolithic dicts with per-format entries that track each format's stage independently:
-   ```python
-   class GenerationState(TypedDict):
-       format_tasks: dict[str, FormatTask]  # key=fmt_id
-   
-   class FormatTask(TypedDict):
-       status: str  # waiting, copywriting, designing, qc, rendering, done, failed
-       copy: str
-       html: str
-       png_url: str | None
-       error: str | None
-   ```
+**What changed**: Replaced hand-crafted SVG pipeline with `@xyflow/svelte` (Svelte Flow).
 
-2. **Change graph topology** — Instead of 6 nodes in a line, use a **dynamic fan-out** with LangGraph's `Send` API:
-   ```python
-   def continue_pipeline(state):
-       """After strategist/copywriter, fan out per format."""
-       tasks = []
-       for fmt in state["requested_formats"]:
-           if fmt not in state["format_tasks"] or state["format_tasks"][fmt]["status"] == "waiting":
-               tasks.append(Send("process_format", {"format_id": fmt, ...}))
-       return tasks
-   ```
-
-3. **Subgraph per format** — Create a mini-pipeline subgraph that processes a single format through designer → quality_check → renderer:
-   ```python
-   format_pipeline = StateGraph(FormatTask)
-   format_pipeline.add_node("designer", designer_node_single)
-   format_pipeline.add_node("quality_check", quality_check_node_single)
-   format_pipeline.add_node("renderer", renderer_node_single)
-   format_pipeline.add_edge("designer", "quality_check")
-   format_pipeline.add_conditional_edges("quality_check", after_quality)
-   format_pipeline.add_edge("renderer", END)
-   ```
-
-4. **Progress reporting** — Emit `progress` events per format, not per node:
-   ```python
-   emitter.emit("format_progress", {
-       "task_id": task_id,
-       "format_id": fmt,
-       "stage": "rendering",
-       "url": png_url,  # present when done
-   }, room=task_id)
-   ```
-
-5. **Frontend updates** — Listen for `format_progress` events and show per-format cards that transition from "Designing..." → "Auditing..." → "Rendering..." → done with thumbnail.
-
-6. **Gemini rate limit management** — Semaphore across the ENTIRE format fan-out (not per-node) to ensure total concurrent LLM calls across all formats stays within free tier limits (e.g., global `Semaphore(2)` for all formats across all pipeline stages).
-
-#### Risks & Considerations
-- LangGraph's `Send()` API requires the subgraph to return results that merge back into parent state. Need to ensure `GenerationState` properly merges per-format results.
-- If one format fails QC repeatedly, it should fail independently without blocking other formats.
-- The fan-out adds complexity to the graph UI visualization — need to track per-format edges.
-
-### Phase 12: Pipeline Graph Visualization Library (Planned — DO NOT BUILD YET)
-
-**Problem**: Current `LangGraphVisualizer.svelte` is a hand-crafted SVG with 6 boxes and lines. It shows the pipeline stages but NOT per-format progress, NOT live state, and NOT edge animations.
-
-**Goal**: Replace with a proper graph visualization that shows:
-- All 6 main nodes (strategist → copywriter → visual_director → designer → quality_check → renderer)
-- Per-format progress through each node (e.g., "Format 1: Rendering", "Format 2: QC", "Format 3: Designing")
-- Live transitions with animated edges
-- Pass/fail/retry indicators on quality_check loop
-
-**Decision: Svelte Flow (`@xyflow/svelte`)** — Same team as React Flow, built for Svelte. Supports custom nodes, animated edges, interactive graphs, zoom/pan, responsive layouts. ~50KB gzipped.
-
-#### Implementation Tasks
-
-1. Add `dagre-d3` and `d3` to dependencies (`npm install dagre-d3 d3`)
-2. Rewrite `LangGraphVisualizer.svelte`:
-   - Define graph nodes (strategist, copywriter, visual_director, designer, quality_check, renderer) with fixed positions
-   - Define edges between them
-   - Color-code nodes by status (pending=dim, active=accent, completed=green, failed=red)
-   - Animate active node with a pulsing highlight
-   - Show per-format progress as labels/tags on nodes (e.g., "2/3 formats rendering")
-   - Animate quality_check retry loop with dashed red edge
-3. Add a "live timeline" view showing which formats completed and their rendering times
-4. Keep responsive — collapse to compact view on mobile
-
-#### Wireframe
-
-```
-[Strategist] ──→ [Copywriter] ──→ [Visual Director]
-                                         │
-                                         ▼
-                                   [Designer] ──→ [Quality Check] ──→ [Renderer]
-                                                       │  ↑                    │
-                                                       │  │ (retry)            │
-                                                       └──┘                    ▼
-                                                                         [Done ✓]
-
-Format 1: ✅ Renderer (2.3s)
-Format 2: 🔄 Designer (1.2s)
-Format 3: ⏳ Waiting
-```
+**Features**:
+- [x] `@xyflow/svelte` v1.6.2 installed
+- [x] Custom `PipelineNode.svelte` component showing label, persona, status, per-format progress badge
+- [x] 6 pipeline nodes with color-coded status (pending=dim, active=purple glow, completed=green, failed=red)
+- [x] Animated smoothstep edges between nodes
+- [x] Quality check retry loop with dashed orange edge + "↺ retry ≤2" label
+- [x] Per-format progress badge on nodes (e.g., "2/3")
+- [x] Compact mode for smaller display areas
+- [x] Non-interactive (no dragging, zooming, connecting) — pure visualization
+- [x] Static build passes
