@@ -39,10 +39,11 @@
   },
   "dependencies": {
     "@sveltejs/adapter-static": "^3.0.10",
+    "@xyflow/svelte": "^1.6.2",
     "clsx": "^2.1.1",
     "lucide-svelte": "^0.475.0",
     "shadcn-svelte": "^1.4.2",
-    "tailwind-merge": "^3.6.0",
-    "socket.io-client": "^4.8.3"
+    "socket.io-client": "^4.8.3",
+    "tailwind-merge": "^3.6.0"
   }
 }
