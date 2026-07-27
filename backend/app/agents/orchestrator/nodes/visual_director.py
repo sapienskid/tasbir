@@ -55,7 +55,7 @@ async def _generate_bg_for_format(
         HumanMessage(content=user_content),
     ]
 
-    response = await call_llm_with_retry(llm, messages)
+    response = await call_llm_with_retry(llm, messages, agent_role="visual_director")
 
     if response.tool_calls:
         tool_result = await _tool_node.ainvoke({"messages": [response]})
@@ -107,11 +107,14 @@ async def visual_director_node(state: GenerationState) -> dict:
     )
 
     formats = state["requested_formats"]
-    tasks = [
-        _generate_bg_for_format(fmt, state, prompt.system_prompt, brand_primary, brand_secondary)
-        for fmt in formats
-    ]
-    results = await asyncio.gather(*tasks)
+
+    semaphore = asyncio.Semaphore(3)
+
+    async def _with_semaphore(fmt: str):
+        async with semaphore:
+            return await _generate_bg_for_format(fmt, state, prompt.system_prompt, brand_primary, brand_secondary)
+
+    results = await asyncio.gather(*[_with_semaphore(f) for f in formats])
 
     backgrounds = {fmt: bg for fmt, bg in results}
     return {"background_by_format": backgrounds}

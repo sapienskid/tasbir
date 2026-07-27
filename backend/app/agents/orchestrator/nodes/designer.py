@@ -117,144 +117,47 @@ async def _generate_html_for_format(
     brand_primary = brand.get("primary_color", "")
     brand_secondary = brand.get("secondary_color", "")
 
-    # Build the token classes block — merge brand colors + inject defaults so the LLM
-    # always receives a complete, non-empty design system even when no DTCG tokens exist.
-    from app.services.token_exchange import _merge_brand_into_tokens
-    merged_tokens = _merge_brand_into_tokens(dict(tokens), brand)
-    flat_tokens = flatten_tokens(merged_tokens)
-    # Ensure brand colors are present in flat representation
-    if brand_primary and "color/primary" not in flat_tokens:
-        flat_tokens["color/primary"] = brand_primary
-    if brand_secondary and "color/secondary" not in flat_tokens:
-        flat_tokens["color/secondary"] = brand_secondary
+    # Dynamically calculate aspect ratio for custom or standard formats
+    ratio = fmt_info.width / fmt_info.height if fmt_info.height > 0 else 1.0
+    if ratio < 0.85:
+        orientation_hint = f"TALL / VERTICAL canvas ({fmt_info.width}x{fmt_info.height}, ratio {ratio:.2f}). Use vertical flex layout (flex flex-col justify-between h-full). Padding p-8 to p-14."
+    elif ratio > 1.15:
+        orientation_hint = f"WIDE / HORIZONTAL canvas ({fmt_info.width}x{fmt_info.height}, ratio {ratio:.2f}). Use 2-column horizontal grid (grid grid-cols-12 gap-8 h-full) or left-aligned flex row."
+    else:
+        orientation_hint = f"SQUARE / BALANCED canvas ({fmt_info.width}x{fmt_info.height}, ratio {ratio:.2f}). Padding p-8 to p-12 max. Max headline font text-4xl."
 
-    lines = ["DESIGN TOKEN CLASSES (ONLY use these — standard Tailwind palette FORBIDDEN):", ""]
-
-    # Colors
-    color_keys = sorted([k for k in flat_tokens if "color" in k.lower()])
-    lines.append("Colors:")
-    for k in color_keys[:8]:
-        name = k.split("/")[-1]
-        lines.append(f"  bg-{name}  text-{name}   =  {flat_tokens[k]}")
-    lines.append("")
-
-    # Typography: fontFamily
-    font_keys = sorted([k for k in flat_tokens if any(f in k.lower() for f in ("fontfamily", "family"))])
-    lines.append("Fonts:")
-    for k in font_keys[:5]:
-        name = k.split("/")[-1]
-        lines.append(f"  font-{name}   =  {str(flat_tokens[k])[:60]}")
-    lines.append("  font-sans = body   font-serif = display/headings   font-mono = labels")
-    lines.append("")
-
-    # Typography: sizes, weights, heights, spacing
-    size_keys = sorted([k for k in flat_tokens if "fontsize" in k.lower()])
-    weight_keys = sorted([k for k in flat_tokens if "fontweight" in k.lower()])
-    line_keys = sorted([k for k in flat_tokens if "lineheight" in k.lower()])
-    letter_keys = sorted([k for k in flat_tokens if "letterspacing" in k.lower()])
-
-    type_sections = []
-    if size_keys:
-        names = [k.split("/")[-1] for k in size_keys[:6]]
-        type_sections.append(f"  text-{', text-'.join(names)}  (fontSize)")
-    if weight_keys:
-        names = [k.split("/")[-1] for k in weight_keys[:6]]
-        type_sections.append(f"  font-{', font-'.join(names)}  (fontWeight)")
-    if line_keys:
-        names = [k.split("/")[-1] for k in line_keys[:4]]
-        type_sections.append(f"  leading-{', leading-'.join(names)}  (lineHeight)")
-    if letter_keys:
-        names = [k.split("/")[-1] for k in letter_keys[:4]]
-        type_sections.append(f"  tracking-{', tracking-'.join(names)}  (letterSpacing)")
-    if type_sections:
-        lines.append("Text sizing:")
-        for s in type_sections:
-            lines.append(s)
-        lines.append("")
-
-    # Spacing
-    spacing_keys = sorted([k for k in flat_tokens if any(s in k.lower() for s in ("spacing", "padding", "gap"))])
-    if spacing_keys:
-        names = [k.split("/")[-1] for k in spacing_keys[:8]]
-        lines.append("Spacing:  p-{" + ", ".join(names) + "}   gap-{" + ", ".join(names) + "}")
-        lines.append("")
-
-    # Opacity
-    opacity_keys = sorted([k for k in flat_tokens if "opacity" in k.lower()])
-    if opacity_keys:
-        names = [k.split("/")[-1] for k in opacity_keys[:6]]
-        lines.append("Opacity:  opacity-{" + ", ".join(names) + "}")
-        lines.append("")
-
-    # Border radius
-    radius_keys = sorted([k for k in flat_tokens if any(r in k.lower() for r in ("radius", "rounded"))])
-    if radius_keys:
-        names = [k.split("/")[-1] for k in radius_keys[:5]]
-        lines.append("Radius:  rounded-{" + ", ".join(names) + "}")
-        lines.append("")
-
-    # Shadows
-    shadow_keys = sorted([k for k in flat_tokens if any(s in k.lower() for s in ("shadow", "boxshadow"))])
-    if shadow_keys:
-        names = [k.split("/")[-1] for k in shadow_keys[:5]]
-        lines.append("Shadows:  shadow-{" + ", ".join(names) + "}")
-        lines.append("")
-
-    # Borders
-    border_keys = sorted([k for k in flat_tokens if "border" in k.lower() and "radius" not in k.lower()])
-    if border_keys:
-        for k in border_keys[:4]:
-            name = k.split("/")[-1]
-            lines.append(f"  border-{name}   =  {flat_tokens[k]}")
-        lines.append("")
-
-    token_block = "\n".join(lines)
-
-    # Determine if background is dark or light for contrast hint
-    bg_color = brand_primary or ""
-    bg_hint = ""
-    if bg_color:
-        from app.services.token_exchange import _hex_to_rgb, _luminance
-        try:
-            bg_lum = _luminance(_hex_to_rgb(bg_color))
-            bg_hint = (
-                "  Brand primary is DARK — use bg-primary for canvas background, then use text-white or text-secondary for ALL text."
-                if bg_lum < 0.35 else
-                "  Brand primary is LIGHT — use a dark canvas background (bg-black or bg-primary) with light text."
-                if bg_lum > 0.7 else ""
-            )
-        except Exception:
-            pass
+    # Background hint for contrast guidance
+    bg_hint = bg.get("description", bg.get("css", "")[:80]) or "dark gradient background"
 
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(
             content=(
                 f"Craft a standalone HTML visual graphic poster for {fmt_info.name} ({fmt_info.id}).\n"
-                f"EXACT CANVAS DIMENSIONS: {fmt_info.width}px width by {fmt_info.height}px height.{fmt_context}\n\n"
-                f"BRAND: {brand.get('name', '')}\n"
+                f"EXACT CANVAS DIMENSIONS: {fmt_info.width}px width by {fmt_info.height}px height.\n"
+                f"CANVAS ORIENTATION: {orientation_hint}{fmt_context}\n\n"
+                f"BRAND: {brand.get('name', 'Tasbir')}\n"
                 f"Tone: {brand.get('tone', 'professional')}\n"
                 f"Vibe: {brand_vibe}\n"
-                f"Primary: {brand_primary}  |  Secondary: {brand_secondary}\n"
-                f"{bg_hint}\n\n"
-                f"{token_block}\n"
+                + (f"Primary color: {brand_primary}\n" if brand_primary else "")
+                + (f"Secondary color: {brand_secondary}\n" if brand_secondary else "")
+                + f"Contrast hint: {bg_hint}\n\n"
                 f"TOPIC: {state.get('title', '')}\n"
                 f"Context: {state.get('strategic_brief', '')[:400]}\n\n"
                 f"COPY TO RENDER:\n{copy_text[:1200]}\n\n"
                 f"BACKGROUND: {bg.get('css', '')}\n\n"
                 f"RULES:\n"
                 f"- Canvas: {fmt_info.width}x{fmt_info.height}. Body: style=\"width:{fmt_info.width}px;height:{fmt_info.height}px;overflow:hidden;margin:0\"\n"
-                f"- Tailwind classes ONLY. No <style> blocks. No inline style=\"\" attributes.\n"
-                f"- NEVER use Tailwind defaults (text-blue-500, bg-slate-100, text-white, bg-white, text-black, bg-black). ONLY design token classes above.\n"
-                f"- If bg-primary is dark, ALL text must be light. If bg is light, ALL text must be dark. No exceptions.\n"
+                f"- Semantic Tailwind classes ONLY (bg-primary, bg-secondary, bg-accent, bg-surface, text-primary, text-secondary, text-white, font-sans, font-serif, font-mono).\n"
+                f"- NO raw CSS, inline styles, or <style> blocks.\n"
                 f"- NO nav, buttons, links, forms, interactive elements. NO emojis.\n"
-                f"- Vary the layout — do not repeat patterns. Make it bespoke for this content.\n"
-                f"- Output: <!DOCTYPE html> only. No markdown fences. No explanations."
+                f"- Vary the layout — make it bespoke for this format and brand.\n"
+                f"- Output: <!DOCTYPE html> only. No markdown code fences. No explanations."
             )
         ),
     ]
 
-    response = await call_llm_with_retry(llm, messages)
+    response = await call_llm_with_retry(llm, messages, agent_role="designer")
 
     if response.tool_calls:
         tool_result = await _tool_node.ainvoke({"messages": [response]})
@@ -265,7 +168,7 @@ async def _generate_html_for_format(
         for m in tool_result["messages"]:
             messages.append(m)
         messages.append(HumanMessage(content=f"Now generate the HTML. Context: {tool_context[:1000]}"))
-        response = await call_llm_with_retry(llm, messages)
+        response = await call_llm_with_retry(llm, messages, agent_role="designer")
 
     raw_content = response.content
     if isinstance(raw_content, list):
@@ -293,8 +196,13 @@ async def designer_node(state: GenerationState) -> dict:
     prompt = await get_prompt("designer")
     formats = state["requested_formats"]
 
-    tasks = [_generate_html_for_format(fmt, state, prompt) for fmt in formats]
-    results = await asyncio.gather(*tasks)
+    semaphore = asyncio.Semaphore(2)
+
+    async def _with_semaphore(fmt: str):
+        async with semaphore:
+            return await _generate_html_for_format(fmt, state, prompt)
+
+    results = await asyncio.gather(*[_with_semaphore(f) for f in formats])
 
     html_by_format = {fmt: html for fmt, html in results}
     return {"html_by_format": html_by_format}

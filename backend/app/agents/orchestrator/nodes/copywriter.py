@@ -79,8 +79,13 @@ async def copywriter_node(state: GenerationState) -> dict:
     prompt = await get_prompt("copywriter")
     formats = state["requested_formats"]
 
-    tasks = [_generate_copy_for_format(fmt, state, prompt) for fmt in formats]
-    results = await asyncio.gather(*tasks)
+    semaphore = asyncio.Semaphore(3)
+
+    async def _with_semaphore(fmt: str):
+        async with semaphore:
+            return await _generate_copy_for_format(fmt, state, prompt)
+
+    results = await asyncio.gather(*[_with_semaphore(f) for f in formats])
 
     copy_by_format = {fmt: copy for fmt, copy in results}
     return {"copy_by_format": copy_by_format}
