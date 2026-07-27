@@ -99,7 +99,7 @@ services:
     environment:
       <<: *shared-env
       SERVICE: api
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:asgi_app --host 0.0.0.0 --port 8000 --reload
     mem_limit: 256m
 
   worker:
