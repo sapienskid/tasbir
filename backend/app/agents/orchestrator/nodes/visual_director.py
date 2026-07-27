@@ -31,7 +31,7 @@ async def _generate_bg_for_format(
     llm = get_llm(agent_role="visual_director", temperature=0.4, max_tokens=800).bind_tools(_tools)
     brand = state.get("brand", {})
     mood = _determine_mood(fmt_info.id, brand)
-    copy_snippet = state.get("copy_by_format", {}).get(fmt_id, "")[:400]
+    copy_snippet = (state.get("format_tasks", {}).get(fmt_id, {}) or {}).get("copy", "")[:400]
 
     user_content = (
         f"FORMAT: {fmt_info.name} ({fmt_info.id})\n"
@@ -116,8 +116,14 @@ async def visual_director_node(state: GenerationState) -> dict:
 
     results = await asyncio.gather(*[_with_semaphore(f) for f in formats])
 
-    backgrounds = {fmt: bg for fmt, bg in results}
-    return {"background_by_format": backgrounds}
+    format_tasks = dict(state.get("format_tasks", {}))
+    for fmt_id, bg_dict in results:
+        existing = dict(format_tasks.get(fmt_id, {}))
+        existing["background"] = bg_dict
+        existing["status"] = "directed"
+        format_tasks[fmt_id] = existing
+
+    return {"format_tasks": format_tasks}
 
 
 def _determine_mood(format_name: str, brand: dict) -> str:

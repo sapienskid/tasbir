@@ -1,21 +1,19 @@
 """Copywriter agent (Julian Sterling) — generates per-format copy in parallel using dynamic DB formats.
 
 Input:  strategic_brief, requested_formats, content
-Output: copy_by_format (dict of format → copy text)
+Output: format_tasks updates (copy written for each format)
 """
 
 import asyncio
-from app.agents.orchestrator.state import GenerationState
+from app.agents.orchestrator.state import FormatTask, GenerationState
 from app.agents.prompts.registry import PromptVersion, get_prompt
 from app.services.formats import get_format_info
 from app.services.llm import call_llm
 
-# Required structured fields in every copywriter output
 _REQUIRED_FIELDS = ["HEADLINE:", "SUBHEAD:", "KEY POINTS:", "BADGE:", "TAGLINE:"]
 
 
 def _validate_copy_fields(copy_text: str) -> bool:
-    """Validate that the LLM copy output contains all required structured fields."""
     return all(field in copy_text for field in _REQUIRED_FIELDS)
 
 
@@ -57,7 +55,6 @@ async def _generate_copy_for_format(
         max_tokens=prompt.max_tokens,
     )
 
-    # Validate all required structured fields are present; retry once if missing
     if not _validate_copy_fields(response):
         reminder = (
             "Your previous response is missing required fields. "
@@ -87,5 +84,11 @@ async def copywriter_node(state: GenerationState) -> dict:
 
     results = await asyncio.gather(*[_with_semaphore(f) for f in formats])
 
-    copy_by_format = {fmt: copy for fmt, copy in results}
-    return {"copy_by_format": copy_by_format}
+    format_tasks = dict(state.get("format_tasks", {}))
+    for fmt_id, copy_text in results:
+        existing = dict(format_tasks.get(fmt_id, {}))
+        existing["copy"] = copy_text
+        existing["status"] = "copywritten"
+        format_tasks[fmt_id] = existing
+
+    return {"format_tasks": format_tasks}
