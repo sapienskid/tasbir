@@ -12,39 +12,51 @@ Read this first before making any changes.
 
 ## Agent Architecture Overview
 
-The Tasbir agent system operates as an elite agency design studio team. After content strategy analysis, copywriting and art direction execute in **PARALLEL** via LangGraph fan-out, followed by creative developer HTML design, design quality audit, and parallel browser rendering:
+The Tasbir agent system operates as an elite agency design studio team. The pipeline runs **SERIALLY** (one node at a time) to respect Gemini free tier rate limits. Within each node, multiple formats are processed **in parallel** via `asyncio.gather()` with semaphores:
 
 ```
 User / Ghost CMS / Webhook → FastAPI API → Celery Task Queue → LangGraph Agent Pipeline
                                                                         │
                                                                ┌────────┴────────┐
-                                                               │   Strategist    │
+                                                               │   Strategist    │  (Serial — 1 call)
                                                                │  (Aura Vance)   │
                                                                └────────┬────────┘
                                                                         │
-                                               ┌────────────────────────┴────────────────────────┐
-                                               ▼                                                 ▼
-                                        Copywriter                                        Visual Director
-                                     (Julian Sterling)                                    (Elena Rostova)
-                                     [Parallel per-format]                                [Parallel per-format]
-                                               │                                                 │
-                                               └────────────────────────┬────────────────────────┘
-                                                                        ▼
-                                                                     Designer
-                                                                  (Marcus Chen)
-                                                              [Parallel per-format]
+                                                               ┌────────┴────────┐
+                                                               │   Copywriter    │  (Serial node, parallel formats via Semaphore(3))
+                                                               │ (Julian Sterling)│
+                                                               └────────┬────────┘
                                                                         │
-                                                                        ▼
-                                                                  Quality Check
-                                                                (Victoria Thorne)
-                                                                 ┌──────┴──────┐
-                                                                 ▼ (Passed)    ▼ (Failed, retry <=2)
-                                                              Renderer      Designer
-                                                          (Playwright PNG)
-                                                                 │
-                                                                 ▼
-                                                           MinIO Storage
+                                                               ┌────────┴────────┐
+                                                               │ Visual Director │  (Serial node, parallel formats via Semaphore(3))
+                                                               │ (Elena Rostova) │
+                                                               └────────┬────────┘
+                                                                        │
+                                                               ┌────────┴────────┐
+                                                               │    Designer     │  (Serial node, parallel formats via Semaphore(2))
+                                                               │  (Marcus Chen)  │
+                                                               └────────┬────────┘
+                                                                        │
+                                                               ┌────────┴────────┐
+                                                               │  Quality Check  │  (LLM-based audit with programmatic fallback)
+                                                               │(Victoria Thorne)│
+                                                               └──────┬──┬───────┘
+                                                                      │  │
+                                                    ┌─────────────────┘  └─────────────────┐
+                                                    ▼ (Passed)                             ▼ (Failed, retry <=2)
+                                             ┌──────────────┐                    ┌──────────────┐
+                                             │   Renderer   │                    │   Designer   │
+                                             │(Playwright)  │                    │  (Refinement)│
+                                             └──────┬───────┘                    └──────────────┘
+                                                    │
+                                                    ▼
+                                              MinIO Storage
 ```
+
+**Rate limiting notes**:
+- Each node uses `asyncio.Semaphore(N)` to limit concurrent LLM calls: copywriter=3, visual_director=3, designer=2, renderer=2
+- Nodes are serial in the graph to avoid hitting Gemini TPM limits on free tier
+- `call_llm_with_retry()` handles 429 rate limit errors with exponential backoff
 
 ## Agent Personas & Studio Roles
 
@@ -52,12 +64,12 @@ All agent prompts are managed in `backend/app/agents/prompts/` and stored in the
 
 | Agent | Persona & Role | Description |
 |---|---|---|
-| **Strategist** | Aura Vance (Chief Brand Strategist) | Analyzes input content, target audience intent, emotional hooks, visual tone, and synthesizes a master Strategic Brief. |
-| **Copywriter** | Julian Sterling (Lead Brand Wordsmith) | Crafts visually structured, punchy copy tailored per format (Headline, Subhead, Highlights, Badge Tag, CTA). Strict no-emoji rule. |
-| **Visual Director** | Elena Rostova (Senior Art Director & Colorist) | Directs background aesthetics, mesh gradients, glassmorphism, or selects editorial photos using tools (`generate_background_tool`, `search_unsplash`). |
-| **Designer** | Marcus Chen (Senior UI/UX Creative Developer) | Generates standalone HTML visual graphic posters using Tailwind CSS, Instrument Serif & Inter fonts, glass cards, and high-contrast typography. |
-| **Quality Check** | Victoria Thorne (Design Quality Director) | Audits generated HTML for canvas constraints, contrast ratios, and placeholder hygiene. |
-| **Token Generator** | Dr. Soren Lindqvist (Design System Architect) | Translates brand descriptions into W3C DTCG-compliant design tokens. |
+| **Strategist** | Aura Vance (Chief Brand Strategist) | Analyzes input content, target audience, emotional hooks, brand tone — produces Strategic Brief. |
+| **Copywriter** | Julian Sterling (Lead Brand Wordsmith) | Per-format structured copy (Headline, Subhead, Key Points, Badge, Tagline). No emojis. |
+| **Visual Director** | Elena Rostova (Senior Art Director) | Background selection: CSS gradients, SVG patterns, Unsplash photos. Uses `generate_background_tool`, `search_unsplash`. |
+| **Designer** | Marcus Chen (Senior UI/UX Creative Developer) | Generates standalone HTML posters with Tailwind CSS. Design tokens injected via server-side CSS compilation. |
+| **Quality Check** | Victoria Thorne (Design Quality Director) | LLM-based design audit with programmatic fallback. Checks contrast, layout, placeholders. |
+| **Token Generator** | Dr. Soren Lindqvist (Design System Architect) | LangGraph agent with 11 tools for full-spectrum DTCG token generation. Uses `check_contrast_tool` for WCAG AA validation. |
 
 ## Core System Directives & Constraints
 

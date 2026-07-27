@@ -41,7 +41,9 @@
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-## Data Flow & Parallel Agent Architecture
+## Data Flow & Serial Agent Architecture
+
+The pipeline runs **serially** (one node at a time) to stay within Gemini free tier TPM limits. Within each node, multiple formats process in parallel via `asyncio.gather()` with semaphores.
 
 ### Generation Pipeline Flow
 
@@ -50,73 +52,117 @@ Ghost Webhook / UI Request
          │
          ▼
   ┌──────────────┐
-  │  FastAPI      │  Validates request, creates Celery task
-  │  POST /generate │  Returns { task_id } immediately
+  │  FastAPI      │  Creates Celery task, returns { task_id }
+  │  POST /generate │
   └──────┬───────┘
-         │ Subscribe to SSE /tasks/{id}/stream
          ▼
   ┌──────────────┐
-  │  Celery Worker │  Runs LangGraph state machine pipeline
-  │  generate_task │
+  │  Celery Worker │  Pre-loads design tokens from DB by brand name
+  │  generate_task │  Injects tokens into state before pipeline runs
   └──────┬───────┘
          │
     ┌────┴────┐
     │ LangGraph │
-    │ Pipeline │
+    │ Pipeline  │  SERIAL graph edges
     └────┬────┘
          │
     ┌────┴────────┐
-    │Strategist   │  Aura Vance (Chief Content Strategist)
-    │Node 1       │  Deconstructs content & formulates Strategic Brief
+    │Strategist   │  Aura Vance — content analysis
+    │Node 1       │  1 LLM call (serial)
     └────┬────────┘
          │
-         ├────────────────────────────────────────┐ (Parallel Fan-out)
-         ▼                                        ▼
-    ┌────┴────────┐                          ┌────┴────────┐
-    │Copywriter   │  Julian Sterling         │Visual Dir.  │  Elena Rostova
-    │Node 2       │  Generates copy          │Node 3       │  Selects background
-    │(Parallel)   │  for all formats         │(Parallel)   │  for all formats
-    └────┬────────┘                          └────┬────────┘
-         │                                        │
-         └────────────────────────────────────────┘ (Fan-in to Designer)
-                               │
-                               ▼
-                        ┌────┴────────┐
-                        │Designer     │  Marcus Chen (UI/UX Developer)
-                        │Node 4       │  Generates standalone HTML visual canvas
-                        └────┬────────┘  using dynamic DB formats & Tailwind
-                             │
-                             ▼
-                        ┌────┴────────┐
-                        │Quality Check│  Victoria Thorne (Quality Director)
-                        │Node 5       │  Validates layout integrity & contrast
-                        └────┬────────┘
-                             │
-            ┌────────────────┴────────────────┐
-            ▼ (Passed score >= 50)             ▼ (Failed score < 50, retry <= 2)
-  ┌──────────────────┐               ┌──────────────────┐
-  │ Playwright Render│               │ Designer Retry   │
-  │ Node 6           │               │ Refinement       │
-  └─────────┬────────┘               └──────────────────┘
-            │
-            ▼
-  ┌──────────────────┐
-  │ MinIO Asset Store│  PNG upload & SSE completion event
-  └──────────────────┘
+    ┌────┴────────┐
+    │Copywriter   │  Julian Sterling — copy per format
+    │Node 2       │  X formats in parallel via Semaphore(3)
+    └────┬────────┘
+         │
+    ┌────┴────────┐
+    │Visual Dir.  │  Elena Rostova — backgrounds per format
+    │Node 3       │  X formats in parallel via Semaphore(3)
+    └────┬────────┘
+         │
+    ┌────┴────────┐
+    │Designer     │  Marcus Chen — HTML per format
+    │Node 4       │  X formats in parallel via Semaphore(2)
+    │             │  Calls build_config_html(tokens) which:
+    │             │    1. Runs tailwindcss CLI to compile @theme → CSS
+    │             │    2. Inlines compiled Tailwind CSS in <style>
+    │             │    3. Adds Google Fonts link
+    └────┬────────┘
+         │
+    ┌────┴────────┐
+    │Quality Check│  Victoria Thorne — LLM audit + programmatic fallback
+    │Node 5       │  If score < 50 and refinements < 2 → back to Designer
+    └────┬────────┘
+         │
+    ┌────┴────────┐
+    │ Playwright  │  HTML → PNG via headless Chromium
+    │ Renderer    │  Parallel per format via Semaphore(2)
+    └────┬────────┘
+         │
+         ▼
+   MinIO Storage
 ```
+
+## Design Token Flow
+
+```
+User creates brand + tokens via API
+         │
+         ▼
+   DesignToken table (PostgreSQL)
+         │
+         ▼
+   Celery generate_task loads tokens by brand name
+         │
+         ▼
+   Pipeline state → Designer node
+         │
+         ▼
+   _inject_theme(html, tokens)
+    ├─ build_config_html(tokens)
+    │   ├─ _generate_theme_css(merged)
+    │   │   Maps known DTCG paths to @theme CSS variables:
+    │   │   - brand.primary.main → --color-primary
+    │   │   - neutral.bg → --color-bg
+    │   │   - semantic.text.primary → --color-text
+    │   │   - typography.fontFamily.sans → --font-sans
+    │   │   - spacing.4 → --spacing-4
+    │   │   - etc.
+    │   ├─ _compile_tailwind(theme_css)
+    │   │   Runs tailwindcss CLI (standalone binary)
+    │   │   Generates full utility CSS (bg-*, text-*, font-*, p-*, etc.)
+    │   └─ Returns <style> block with compiled CSS
+    ├─ Google Fonts <link>
+    └─ Fallback :root CSS variables
+```
+
+## Token Generator Agent (Dr. Soren Lindqvist)
+
+The token generator is a standalone LangGraph agent with 11 tools:
+- `check_contrast_tool` — WCAG AA/AAA contrast validation for any color pair
+- `generate_colors_tool` — Accessible color palette with brand, neutral, semantic colors
+- `generate_typography_tool` — Font families, sizes, weights, line heights
+- `generate_spacing_tool` — Spacing scale (rem/px)
+- `generate_borders_tool` — Border radius + box shadows
+- `search_templates`, `search_unsplash`, `generate_background_tool`, `fetch_design_tokens`, `render_preview`, `svg_illustration`
+
+The agent calls tools to generate each token category, validates contrast, and assembles the final DTCG JSON.
+
+## Real-Time Progress
+
+Replaced SSE polling with Socket.IO (python-socketio v5.16):
+- Celery worker emits progress via `RedisManager(write_only=True)` 
+- FastAPI Socket.IO server delivers to browser clients
+- Auto-reconnection, per-task rooms, cross-tab sync via BroadcastChannel
 
 ## Core Design & Technical Constraints
 
-1. **Pure Standalone Visual Graphic Canvas**:
-   - Assets are visual graphic cards, posters, or artwork image canvases.
-   - Website navigation bars (`<nav>`), landing page layouts, URL chrome, and interactive `<button>` elements are prohibited.
-2. **Strict No-Emoji Rule**:
-   - Raw Unicode emojis are forbidden in visual copy and graphics.
-   - Enforced by system prompts and `remove_emojis()` in `backend/app/services/cleanup.py`.
-3. **Dynamic Database Format Lookup**:
-   - `get_format_info(fmt_id)` fetches user-created format dimensions (`width`, `height`), names, and narrative instructions from the PostgreSQL `Format` table and injects them into user prompts.
-4. **Intra-Node Format Concurrency**:
-   - Multiple requested formats are processed concurrently using `asyncio.gather()` inside agent nodes.
+1. **Pure Standalone Visual Graphic Canvas**: No nav, buttons, forms, or interactive elements.
+2. **Strict No-Emoji Rule**: Enforced by system prompts + `remove_emojis()` in `cleanup.py`.
+3. **Dynamic Database Format Lookup**: Formats loaded from `Format` table.
+4. **Intra-Node Format Concurrency**: `asyncio.gather()` with semaphores inside agent nodes.
+5. **Server-Side Tailwind CSS Compilation**: Uses `tailwindcss` standalone CLI v4 to compile @theme variables into full utility CSS. No CDN dependency, no JavaScript execution in browser.
 
 ## Agent Personas & Prompt Registry
 

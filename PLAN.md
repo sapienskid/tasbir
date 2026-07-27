@@ -82,3 +82,28 @@ token management and human-in-the-loop refinement.
 - [x] Seed script (`scripts/seed.py` for default formats, prompts, settings)
 - [x] Full test suite (`pytest` backend test coverage)
 - [x] Comprehensive documentation (`AGENTS.md`, `DESIGN.md`, `PLAN.md`, `README.md`)
+
+### Phase 9: Design System Overhaul (Completed)
+- [x] Removed `cdn.tailwindcss.com` (403 from server) — replaced with server-side CLI compilation
+- [x] `tailwindcss` v4 standalone CLI included in Docker image
+- [x] `_generate_theme_css()` — explicit DTCG path → CSS variable mapping (no more flattening collisions)
+- [x] `color_tools.py` — `check_contrast()`, `generate_palette()` for light/dark themes
+- [x] 11 LangChain `@tool`-decorated tools for design system generation
+- [x] Token Generator agent (Dr. Soren Lindqvist) — LangGraph node with `bind_tools()`, WCAG AA validation
+- [x] `check_contrast_tool` — validate any foreground/background pair
+- [x] Socket.IO real-time progress (replaced polling + SSE)
+- [x] `fix_brand_colors()` fixed — no longer strips `bg-primary` classes
+- [x] `_resolve_tree()` fixed — passes root tree for cross-references
+- [x] `_extract_semantic_colors()` fixed — walks full semantic tree
+- [x] `_inject_defaults()` — color defaults removed (colors come from user tokens only)
+- [x] Token generator prompt rewritten — dark-theme specific, explicit structure
+- [x] Playground/test-suite routes (hidden from UI, accessible manually)
+- [x] Test templates updated — use only Tailwind v4-guaranteed utilities, no fractional widths
+
+### Phase 10: Visual Testing Playground (Completed)
+- [x] `POST /playground/render-preview` — renders any template with any token set, returns HTML or PNG
+- [x] `POST /playground/test-suite` — iterates ALL token sets × ALL templates, saves HTML+PNG per combination
+- [x] `GET /playground/test-suite/{id}` — retrieve saved test suite results
+- [x] 5 professional test templates (hero-quote, article-card, metrics-dashboard, minimal-list, split-layout)
+- [x] 5 LLM-mock edge case templates (mixed styles, no-Tailwind, glass-dark, two-column, bold-minimal, data-viz)
+- [x] 183 backend tests passing, all utility classes verified in compiled CSS
