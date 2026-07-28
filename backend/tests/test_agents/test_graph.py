@@ -4,7 +4,7 @@ import pytest
 from langgraph.graph import END
 from langgraph.types import Send
 
-from app.agents.orchestrator.graph import after_verifier, build_pipeline, fan_out_to_formats
+from app.agents.orchestrator.graph import build_pipeline, fan_out_to_formats
 from app.agents.orchestrator.state import GenerationState, initial_state
 
 
@@ -15,32 +15,6 @@ def test_graph_has_required_nodes():
     assert "strategist" in nodes
     assert "copywriter" in nodes
     assert "process_format" in nodes
-
-
-def test_after_verifier_pass():
-    """after_verifier returns END when verification passes."""
-    state = initial_state(title="Test", content="Content", platforms=["instagram-square"])
-    state["_processing_format_id"] = "instagram-square"
-    state["verification"] = {"instagram-square": {"pass": True, "score": 90}}
-    assert after_verifier(state) == END
-
-
-def test_after_verifier_fail_retry():
-    """after_verifier returns 'designer' when verification fails and retries < 2."""
-    state = initial_state(title="Test", content="Content", platforms=["instagram-square"])
-    state["_processing_format_id"] = "instagram-square"
-    state["verification"] = {"instagram-square": {"pass": False, "score": 40}}
-    state["retry_count"] = {"instagram-square": 0}
-    assert after_verifier(state) == "designer"
-
-
-def test_after_verifier_fail_max_retries():
-    """after_verifier returns END when retry limit (2) is reached."""
-    state = initial_state(title="Test", content="Content", platforms=["instagram-square"])
-    state["_processing_format_id"] = "instagram-square"
-    state["verification"] = {"instagram-square": {"pass": False, "score": 30}}
-    state["retry_count"] = {"instagram-square": 2}
-    assert after_verifier(state) == END
 
 
 def test_fan_out_to_formats_single_platform():

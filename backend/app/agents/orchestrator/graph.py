@@ -19,35 +19,22 @@ from app.agents.orchestrator.nodes.copywriter import copywriter_node
 from app.agents.orchestrator.nodes.designer import designer_node_single
 from app.agents.orchestrator.nodes.quality_check import quality_check_node_single
 from app.agents.orchestrator.nodes.renderer import renderer_node_single
+from app.agents.orchestrator.nodes.quality_check import quality_check_node_single
 from app.agents.orchestrator.state import GenerationState, initial_state
 
 NODE_PROGRESS: dict[str, int] = {
     "strategist": 10,
     "copywriter": 25,
     "process_format:designer": 50,
-    "process_format:renderer": 75,
-    "process_format:verifier": 90,
+    "process_format:verifier": 75,
 }
 
 NODE_LABELS: dict[str, str] = {
     "strategist": "Analyzing content...",
     "copywriter": "Writing copy...",
     "process_format:designer": "Designing layouts...",
-    "process_format:renderer": "Rendering SVG...",
-    "process_format:verifier": "Verifying quality...",
+    "process_format:verifier": "Rendering & verifying...",
 }
-
-
-def after_verifier(state: GenerationState) -> str:
-    fmt_id = state["_processing_format_id"]
-    task = state["format_tasks"].get(fmt_id, {})
-    verification = state.get("verification", {}).get(fmt_id, {})
-    if verification.get("pass", True):
-        return END
-    retries = state.get("retry_count", {}).get(fmt_id, 0)
-    if retries < 2:
-        return "designer"
-    return END
 
 
 def fan_out_to_formats(state: GenerationState) -> list[Send]:
@@ -60,13 +47,11 @@ def fan_out_to_formats(state: GenerationState) -> list[Send]:
 def build_format_subgraph() -> StateGraph:
     subgraph = StateGraph(GenerationState)
     subgraph.add_node("designer", designer_node_single)
-    subgraph.add_node("renderer", renderer_node_single)
     subgraph.add_node("verifier", quality_check_node_single)
 
     subgraph.set_entry_point("designer")
-    subgraph.add_edge("designer", "renderer")
-    subgraph.add_edge("renderer", "verifier")
-    subgraph.add_conditional_edges("verifier", after_verifier)
+    subgraph.add_edge("designer", "verifier")
+    subgraph.add_edge("verifier", END)
 
     return subgraph.compile()
 

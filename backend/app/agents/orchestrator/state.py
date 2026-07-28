@@ -11,7 +11,7 @@ class FormatTask(TypedDict):
     status: str
     copy: str
     html: str | None
-    svg_path: str | None
+    html_path: str | None
     quality_score: int
     quality_issues: list[str]
     refinement_count: int
@@ -52,7 +52,7 @@ class GenerationState(TypedDict):
     retry_count: dict[str, int]
 
     # Output
-    svg_path: str
+    output_paths: dict[str, str]
 
 
 def initial_state(
@@ -69,7 +69,7 @@ def initial_state(
             status="waiting",
             copy="",
             html=None,
-            svg_path=None,
+            html_path=None,
             quality_score=0,
             quality_issues=[],
             refinement_count=0,
@@ -88,5 +88,5 @@ def initial_state(
         "_processing_format_id": "",
         "verification": {},
         "retry_count": {},
-        "svg_path": "",
+        "output_paths": {},
     }

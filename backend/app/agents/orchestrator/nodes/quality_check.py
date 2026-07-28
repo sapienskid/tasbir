@@ -157,10 +157,9 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         _save_html_preview(task_id, fmt_id, html_with_tokens)
         return _auto_pass(state, fmt_id, task, "PNG render unavailable — auto-passed")
 
-    # Save PNG for debugging/audit
+    # Save PNG and HTML for output
     _save_png(task_id, fmt_id, png_bytes)
-
-    # Step 2: Build vision prompt
+    _save_html_preview(task_id, fmt_id, html_with_tokens)
     ds_context = _build_design_system_context(design_tokens)
     user_prompt = (
         f"TARGET PLATFORM: {fmt_id} ({fmt.width}x{fmt.height}px)\n"

@@ -1,4 +1,4 @@
-"""Celery generate task — runs the LangGraph pipeline, outputs SVG files.
+"""Celery generate task — runs the LangGraph pipeline, outputs HTML + PNG.
 """
 
 import asyncio
@@ -52,7 +52,18 @@ def generate_task(self, task_id: str, source_data: dict):
                 )
             return
 
-        svg_path = state.get("svg_path", "")
+        from app.config import get_settings
+        from pathlib import Path
+
+        settings = get_settings()
+        output_dir = Path(settings.output_dir) / task_id
+
+        output_paths = {}
+        if output_dir.exists():
+            for f in output_dir.iterdir():
+                if f.is_file():
+                    output_paths[f.suffix.lstrip(".")] = str(f)
+
         brief = state.get("strategic_brief", {})
         format_tasks = state.get("format_tasks", {})
 
@@ -61,7 +72,7 @@ def generate_task(self, task_id: str, source_data: dict):
                 "status": ft.get("status", "unknown"),
                 "quality_score": ft.get("quality_score", 0),
                 "quality_issues": ft.get("quality_issues", []),
-                "svg_path": ft.get("svg_path", ""),
+                "html_path": ft.get("html_path", ""),
                 "error": ft.get("error"),
             }
             for fmt_id, ft in format_tasks.items()
@@ -72,12 +83,12 @@ def generate_task(self, task_id: str, source_data: dict):
                 task_id=task_id,
                 status="completed",
                 result={
-                    "svg_path": svg_path,
+                    "output_paths": output_paths,
                     "strategic_brief": brief,
                     "platforms": platform_results,
                 },
             )
 
-        log.info("[generate_task] Task %s completed. SVG: %s", task_id, svg_path)
+        log.info("[generate_task] Task %s completed. Outputs: %s", task_id, output_paths)
 
     asyncio.run(_run())
