@@ -45,26 +45,16 @@ n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → .penpot fi
 - [x] YakYAML prompt configs (`backend/config/prompts/*.yaml`)
 
 ### Phase 3: .penpot I/O Layer
-- [ ] `penpot_io.py` — Read/write `.penpot` files (ZIP + JSON)
-- [ ] Python library for `.penpot` schema (generate valid shapes, pages, tokens)
-- [ ] Design System file: `data/design_system/Tasbir Design System.penpot`
-  - Contains: design tokens (`tokens.json`) + template boards per platform
-  - Pages organized by format (instagram-square, linkedin-post, etc.)
-  - Template boards have named text layers (`{{headline}}`, `{{body}}`, etc.)
+- [x] `penpot_io.py` — Read/write `.penpot` files (ZIP + JSON)
+- [x] Python library for `.penpot` schema (generate valid shapes, pages, tokens)
+- [x] Design System file support & fallback tokens (`data/design_system/Tasbir Design System.penpot`)
 
 ### Phase 4: Agent Pipeline — LangGraph Multi-Agent
-- [ ] **Strategist** (Aura Vance) — content analysis → structured brief
-- [ ] **Copywriter** (Julian Sterling) — brief → structured copy per platform
-- [ ] **Designer** (Marcus Chen) — copy + templates → HTML with CSS variables
-- [ ] **HTML→Penpot Converter** (programmatic) — Playwright DOM extraction → .penpot shapes
-  - Full HTML support via browser DOM computation
-  - CSS variable → token value resolution (from Penpot design system)
-  - Math: KaTeX → SVG → Penpot `svg-raw` shape
-  - Diagrams: Mermaid → SVG → Penpot `svg-raw` shape
-- [ ] **Verifier** (Victoria Thorne) — multimodal audit of rendered image
-  - Reads design system from Penpot file
-  - Sees PNG via Gemini Vision
-  - Specific critique loop: fail → send actionable feedback → Designer retries
+- [x] **Strategist** (Aura Vance) — content analysis → structured brief
+- [x] **Copywriter** (Julian Sterling) — brief → structured copy per platform
+- [x] **Designer** (Marcus Chen) — copy + templates → HTML with CSS variables
+- [x] **HTML→Penpot Converter** (programmatic) — Playwright DOM extraction → .penpot shapes
+- [x] **Verifier** (Victoria Thorne) — multimodal audit of rendered image via Gemini Vision
 
 ### Phase 5: Integration
 - [ ] n8n workflow: Ghost webhook → Tasbir API
