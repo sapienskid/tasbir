@@ -13,21 +13,44 @@ import yaml
 log = logging.getLogger(__name__)
 
 DEFAULT_TOKEN_VALUES: dict[str, str] = {
-    "--color-bg": "#0f172a",
-    "--color-bg-secondary": "#1e293b",
-    "--color-text": "#ffffff",
-    "--color-text-secondary": "#94a3b8",
-    "--color-primary": "#667eea",
-    "--color-secondary": "#764ba2",
-    "--color-accent": "#6366f1",
-    "--color-border": "#334155",
-    "--font-sans": "Inter, sans-serif",
-    "--font-serif": "Instrument Serif, serif",
-    "--font-mono": "JetBrains Mono, monospace",
+    "--color-bg": "#0a0a1a",
+    "--color-bg-secondary": "#141428",
+    "--color-text": "#e8e8f0",
+    "--color-text-secondary": "#9494b8",
+    "--color-primary": "#5b8def",
+    "--color-secondary": "#7c6df0",
+    "--color-accent": "#48c6ef",
+    "--color-border": "#2a2a4a",
+    "--font-sans": "Inter, system-ui, sans-serif",
+    "--font-serif": "Merriweather, Georgia, serif",
+    "--font-mono": "JetBrains Mono, Fira Code, monospace",
     "--radius-sm": "4px",
     "--radius-md": "8px",
-    "--shadow-md": "0 4px 6px rgba(0,0,0,0.3)",
+    "--shadow-md": "0 4px 12px rgba(0,0,0,0.4)",
 }
+
+
+def load_brand(path: str | Path) -> dict:
+    """Load brand profile from a YAML file.
+
+    Returns dict with keys: brand (name, tagline, mission, story, url, social),
+    overrides (badge, tagline). Falls back to minimal defaults.
+    """
+    path = Path(path)
+    if not path.exists():
+        log.info("[tokens] Brand file not found: %s — using minimal defaults", path)
+        return {"brand": {"name": "Brand", "tagline": "", "mission": "", "story": "", "url": "", "social": {}}, "overrides": {}}
+
+    try:
+        with open(path) as f:
+            raw = yaml.safe_load(f)
+        if isinstance(raw, dict):
+            return raw
+        log.warning("[tokens] Invalid brand format — using defaults")
+        return {"brand": {"name": "Brand"}, "overrides": {}}
+    except Exception as e:
+        log.warning("[tokens] Failed to load brand: %s — using defaults", e)
+        return {"brand": {"name": "Brand"}, "overrides": {}}
 
 
 def load_tokens(path: str | Path) -> dict[str, str]:

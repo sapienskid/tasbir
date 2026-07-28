@@ -40,6 +40,9 @@ class GenerationState(TypedDict):
     # Configuration
     _task_id: str
     design_tokens: dict[str, Any]
+    brand_info: dict[str, Any]
+    campaign: dict[str, Any]
+    overrides: dict[str, str]
 
     # Agent Outputs
     strategic_brief: dict[str, Any]
@@ -61,6 +64,9 @@ def initial_state(
     platforms: list[str],
     _task_id: str = "",
     design_tokens: dict[str, Any] | None = None,
+    brand_info: dict[str, Any] | None = None,
+    campaign: dict[str, Any] | None = None,
+    overrides: dict[str, str] | None = None,
     **kwargs,
 ) -> GenerationState:
     format_tasks: dict[str, FormatTask] = {}
@@ -83,6 +89,9 @@ def initial_state(
         "source_url": kwargs.get("source_url"),
         "_task_id": _task_id,
         "design_tokens": design_tokens or {},
+        "brand_info": brand_info or {},
+        "campaign": campaign or {},
+        "overrides": overrides or {},
         "strategic_brief": {},
         "format_tasks": format_tasks,
         "_processing_format_id": "",

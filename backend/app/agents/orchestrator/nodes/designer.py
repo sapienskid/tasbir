@@ -139,6 +139,12 @@ async def designer_node_single(state: GenerationState) -> dict:
     tagline = copy_data.get("tagline", "")
     badge = copy_data.get("badge")
 
+    # Inject brand name + campaign context into designer
+    brand_info = state.get("brand_info", {})
+    campaign = state.get("campaign", {})
+    brand_prefix = f"BRAND: {brand_info.get('name', '')}\n" if brand_info.get("name") else ""
+    campaign_prefix = f"CAMPAIGN: {campaign.get('name', '')}\n" if campaign.get("name") else ""
+
     copy_block = f"""HEADLINE: {headline}
 SUBHEAD: {subhead}
 BODY: {body}
@@ -149,6 +155,7 @@ TAGLINE: {tagline}"""
     fonts_link = _build_google_fonts_link(copy_data)
 
     user_prompt = (
+        f"{brand_prefix}{campaign_prefix}"
         f"PLATFORM: {fmt_id}\n"
         f"CANVAS: {fmt.width}px × {fmt.height}px\n"
         f"VISUAL STYLE: {brief.get('visual_direction', 'editorial')}\n"
@@ -159,6 +166,7 @@ TAGLINE: {tagline}"""
         f"- Canvas must be EXACTLY {fmt.width}px × {fmt.height}px\n"
         f"- Body style: width:{fmt.width}px;height:{fmt.height}px;overflow:hidden;margin:0\n"
         f"- Use ONLY the copy provided above — no additional text\n"
+        f"- Do NOT invent random numbers, version strings, or fake identifiers\n"
         f"- Use CSS variables exclusively for all colors\n"
         f"- Create a visually striking, professional social media graphic\n"
         f"- Typography hierarchy: headline is largest, subhead smaller, body smallest\n"

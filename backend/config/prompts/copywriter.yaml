@@ -24,5 +24,7 @@ system_prompt: |
   - Derive ALL copy STRICTLY from the source content provided
   - Enforce character limits: rewrite if a field exceeds its limit
   - Keep copy visually balanced for static social media graphics
+  - NEVER invent random numbers, version strings, hex codes, or fake identifiers
+  - If you don't know what to put in badge, use the brand name or omit it
 temperature: 0.75
 max_tokens: 2000

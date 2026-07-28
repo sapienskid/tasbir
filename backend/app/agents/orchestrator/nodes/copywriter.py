@@ -107,13 +107,52 @@ async def _write_copy_for_platform(
     content: str,
     title: str,
     prompt_cfg: Any,
+    brand_info: dict | None = None,
+    campaign: dict | None = None,
+    overrides: dict | None = None,
 ) -> tuple[str, PlatformCopy]:
     """Write copy for a single platform with rate-limit semaphore."""
     fmt = get_format_info(platform_id)
     platform_note = brief.get("platform_notes", {}).get(platform_id, "")
 
+    # Apply deterministic overrides first (bypass LLM for these fields)
+    overrides = overrides or {}
+    if overrides.get("headline") or overrides.get("badge") or overrides.get("tagline"):
+        text = overrides.get("headline", "")
+        sub = overrides.get("subhead", "")
+        body = overrides.get("body", "")
+        tag = overrides.get("tagline", "")
+        badge = overrides.get("badge")
+        log.info("[copywriter] Using overrides for %s", platform_id)
+        return platform_id, PlatformCopy(
+            headline=text or title[:50],
+            subhead=sub or "Key insights from the article",
+            body=body or "Discover the key takeaways from this analysis.",
+            tagline=tag or "Read more",
+            badge=badge or None,
+        )
+
+    # Build brand + campaign context
+    brand_block = ""
+    if brand_info and brand_info.get("name"):
+        brand_block = (
+            f"BRAND: {brand_info.get('name', '')}\n"
+            f"TAGLINE: {brand_info.get('tagline', '')}\n"
+        )
+
+    campaign_block = ""
+    if campaign and campaign.get("name"):
+        campaign_block = f"CAMPAIGN: {campaign.get('name', '')}\n"
+        if campaign.get("series_name"):
+            campaign_block += (
+                f"SERIES: {campaign.get('series_name', '')} "
+                f"(Part {campaign.get('series_part', 0)} of {campaign.get('series_total', 0)})\n"
+            )
+
     user_prompt = (
         f"PLATFORM: {platform_id} ({fmt.width}x{fmt.height}px)\n"
+        f"{brand_block}"
+        f"{campaign_block}"
         f"STRATEGIC ANGLE: {brief.get('angle', '')}\n"
         f"AUDIENCE: {brief.get('audience', '')}\n"
         f"TONE: {brief.get('tone', 'professional')}\n"
@@ -156,10 +195,14 @@ async def copywriter_node(state: GenerationState) -> dict:
     content = state.get("content", "")
     title = state.get("title", "")
     platforms = state.get("platforms", [])
+    brand_info = state.get("brand_info")
+    campaign = state.get("campaign")
+    overrides = state.get("overrides")
 
     # Process all platforms in parallel
     tasks = [
-        _write_copy_for_platform(platform_id, brief, content, title, prompt_cfg)
+        _write_copy_for_platform(platform_id, brief, content, title, prompt_cfg,
+                                 brand_info, campaign, overrides)
         for platform_id in platforms
     ]
     results = await asyncio.gather(*tasks, return_exceptions=True)

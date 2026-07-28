@@ -85,11 +85,38 @@ async def strategist_node(state: GenerationState) -> dict:
     title = state.get("title", "")
     platforms = state.get("platforms", [])
 
-    # Build a lean user prompt — only what the agent needs
+    # Build user prompt with brand + campaign context
+    brand_info = state.get("brand_info", {})
+    campaign = state.get("campaign", {})
+
+    brand_block = ""
+    if brand_info.get("name"):
+        brand_block = (
+            f"BRAND: {brand_info.get('name', '')}\n"
+            f"TAGLINE: {brand_info.get('tagline', '')}\n"
+            f"MISSION: {brand_info.get('mission', '')}\n"
+            f"STORY: {brand_info.get('story', '')}\n"
+        )
+
+    campaign_block = ""
+    if campaign.get("name"):
+        campaign_block = (
+            f"CAMPAIGN: {campaign.get('name', '')}\n"
+            f"DESCRIPTION: {campaign.get('description', '')}\n"
+            f"POST TYPE: {campaign.get('post_type', '')}\n"
+        )
+        if campaign.get("series_name"):
+            campaign_block += (
+                f"SERIES: {campaign.get('series_name', '')} "
+                f"(Part {campaign.get('series_part', 0)} of {campaign.get('series_total', 0)})\n"
+            )
+
     user_prompt = (
         f"TITLE: {title}\n\n"
+        f"{brand_block}\n"
+        f"{campaign_block}\n"
         f"TARGET PLATFORMS: {', '.join(platforms)}\n\n"
-        f"CONTENT:\n{content[:3000]}"  # Truncate to avoid token flood
+        f"CONTENT:\n{content[:3000]}"
     )
 
     log.info("[strategist] Analyzing content for %d platform(s)", len(platforms))

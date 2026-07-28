@@ -1,0 +1,27 @@
+# Tasbir Brand Profile
+# Used by the strategist, copywriter, and designer for context-aware generation.
+# Edit these to match your brand identity.
+
+brand:
+  name: "Sabin Pokharel"
+  tagline: "AI & Math Explorer"
+  mission: >
+    Exploring the intersection of artificial intelligence and mathematics,
+    building practical tools for learning and knowledge management.
+  story: >
+    Sabin Pokharel is a computational mathematics student who builds
+    open-source tools like Lemma (FSRS-powered flashcards for Obsidian),
+    Theorem (local-first reading app), and Pebble (offline-first note-taking
+    companion). His work focuses on making learning more effective through
+    spaced repetition, local-first software, and thoughtful design.
+  url: "https://pokharelsabin.com.np"
+  social:
+    github: "sapienskid"
+    twitter: "sapienskid"
+    linkedin: "sapienskid"
+
+# Overrides for generated content — leave empty to let the LLM decide.
+# When set, these values are used instead of LLM generation.
+overrides:
+  badge: ""
+  tagline: ""

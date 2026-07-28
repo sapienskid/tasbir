@@ -8,7 +8,7 @@ from app.services.tokens import load_tokens, DEFAULT_TOKEN_VALUES, inject_tokens
 def test_load_tokens_defaults(tmp_path: Path):
     tokens = load_tokens(tmp_path / "non_existent.yaml")
     assert "--color-bg" in tokens
-    assert tokens["--color-bg"] == "#0f172a"
+    assert tokens["--color-bg"] == "#0a0a1a"
 
 
 def test_load_tokens_from_file(tmp_path: Path):

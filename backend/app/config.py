@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     # Output
     output_dir: str = "data/output"
     tokens_path: str = "data/design_system/tokens.yaml"
+    brand_path: str = "data/design_system/brand.yaml"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

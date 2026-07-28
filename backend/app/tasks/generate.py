@@ -34,9 +34,22 @@ def generate_task(self, task_id: str, source_data: dict):
             repo = TaskRepository(session)
             await repo.update_status(task_id=task_id, status="running")
 
+        from app.config import get_settings
+        settings = get_settings()
+
         pipeline_input = dict(source_data)
         pipeline_input["_task_id"] = task_id
         pipeline_input["design_tokens"] = _load_design_tokens()
+
+        # Load brand profile
+        from app.services.tokens import load_brand
+        brand_data = load_brand(settings.brand_path)
+        pipeline_input["brand_info"] = brand_data.get("brand", {})
+        pipeline_input["overrides"] = {**brand_data.get("overrides", {}), **source_data.get("overrides", {})}
+
+        # Extract campaign context
+        campaign = source_data.get("campaign", {})
+        pipeline_input["campaign"] = campaign if isinstance(campaign, dict) else {}
 
         try:
             state = await run_pipeline(pipeline_input)
@@ -48,10 +61,8 @@ def generate_task(self, task_id: str, source_data: dict):
                 )
             return
 
-        from app.config import get_settings
         from pathlib import Path
 
-        settings = get_settings()
         output_dir = Path(settings.output_dir) / task_id
 
         output_paths = {}
