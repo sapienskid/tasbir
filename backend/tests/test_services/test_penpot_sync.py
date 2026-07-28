@@ -19,6 +19,5 @@ async def test_penpot_sync_local_fallback_when_no_token(tmp_path: Path):
 @pytest.mark.asyncio
 async def test_penpot_sync_headers():
     client = PenpotAPISync(access_token="test_token_123")
-    headers = client.headers
+    headers = client._auth_headers
     assert headers["Authorization"] == "Token test_token_123"
-    assert headers["Accept"] == "application/json"

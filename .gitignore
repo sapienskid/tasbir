@@ -38,5 +38,10 @@ caddy_data/
 backend/app/db/migrations/versions/*.py
 backend/tests/coverage/
 
+# Generated output data
+backend/data/output/
+backend/data/tasbir.db
+
 # Secrets
 **/secrets/
+/data

@@ -13,6 +13,7 @@ This service provides:
 
 from __future__ import annotations
 
+import datetime
 import io
 import json
 import logging
@@ -86,13 +87,17 @@ _PENPOT_FEATURES = [
 class Fill:
     color: str = "#000000"
     opacity: float = 1.0
+    fill_color_gradient: dict | None = None  # Penpot schema:gradient format
     # NOTE: do NOT include fill-type — Penpot's FillAttrs schema rejects it as an extra key
 
     def to_dict(self) -> dict:
-        return {
+        d: dict[str, Any] = {
             "fill-color": self.color,
             "fill-opacity": self.opacity,
         }
+        if self.fill_color_gradient:
+            d["fill-color-gradient"] = dict(self.fill_color_gradient)
+        return d
 
 
 @dataclass
@@ -151,12 +156,31 @@ class PenpotShape:
     rotation: float = 0.0
     opacity: float = 1.0
     blend_mode: str = "normal"
+
+    # Border radius (per-corner, 0 = no rounding)
+    r1: float = 0.0
+    r2: float = 0.0
+    r3: float = 0.0
+    r4: float = 0.0
+
+    # Strokes (borders) — list of dicts matching Penpot schema:stroke
+    strokes: list[dict] = field(default_factory=list)
+
+    # Shadow effects — list of dicts matching Penpot schema:shadow
+    shadow: list[dict] = field(default_factory=list)
+
+    # Layer blur — dict matching Penpot schema:blur, or None
+    blur: dict | None = None
+
     # Text-specific
     text_content: TextContent | None = None
     # SVG-specific
     svg_content: str | None = None
     # Image-specific
     image_object_id: str | None = None
+    image_width: int = 0
+    image_height: int = 0
+    image_mtype: str = "image/png"
     # Frame-specific
     clip_content: bool = True
     frame_type: str = "none"  # none | grid | flex
@@ -176,8 +200,12 @@ class PenpotShape:
             "opacity": self.opacity,
             "blendMode": self.blend_mode,
             "fills": [f.to_dict() for f in self.fills],
-            "strokes": [],
-            "shadow": [],
+            "strokes": list(self.strokes),
+            "shadow": list(self.shadow),
+            "r1": self.r1,
+            "r2": self.r2,
+            "r3": self.r3,
+            "r4": self.r4,
             "selrect": {
                 "x": self.x, "y": self.y,
                 "width": w, "height": h,
@@ -195,6 +223,9 @@ class PenpotShape:
             "hideFillOnExport": False,
         }
 
+        if self.blur:
+            d["blur"] = dict(self.blur)
+
         if self.shape_type == "frame":
             d["clipContent"] = self.clip_content
             d["shapes"] = [c.id for c in self.children]
@@ -208,7 +239,12 @@ class PenpotShape:
             d["shapes"] = []
 
         elif self.shape_type == "image" and self.image_object_id:
-            d["metadata"] = {"id": self.image_object_id}
+            d["metadata"] = {
+                "id": self.image_object_id,
+                "width": self.image_width,
+                "height": self.image_height,
+                "mtype": self.image_mtype,
+            }
             d["shapes"] = []
 
         return d
@@ -219,6 +255,59 @@ class PenpotShape:
         for child in self.children:
             result.extend(child.flatten())
         return result
+
+
+# ---------------------------------------------------------------------------
+# Helper factories for Penpot-compatible stroke, shadow, blur dicts
+# These produce dicts matching the Penpot Clojure schemas exactly.
+# ---------------------------------------------------------------------------
+
+
+def make_stroke(
+    color: str = "#000000",
+    opacity: float = 1.0,
+    width: float = 1.0,
+    style: str = "solid",
+    alignment: str = "inner",
+) -> dict:
+    """Build a stroke dict matching Penpot schema:stroke-attrs."""
+    return {
+        "stroke-color": color,
+        "stroke-opacity": opacity,
+        "stroke-width": width,
+        "stroke-style": style,
+        "stroke-alignment": alignment,
+    }
+
+
+def make_shadow(
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
+    blur: float = 4.0,
+    spread: float = 0.0,
+    color: str = "#000000",
+    opacity: float = 0.3,
+    style: str = "drop-shadow",
+) -> dict:
+    """Build a shadow dict matching Penpot schema:shadow."""
+    return {
+        "style": style,
+        "offset-x": offset_x,
+        "offset-y": offset_y,
+        "blur": blur,
+        "spread": spread,
+        "hidden": False,
+        "color": {"color": color, "opacity": opacity},
+    }
+
+
+def make_blur(value: float = 0.0) -> dict:
+    """Build a blur dict matching Penpot schema:blur."""
+    return {
+        "type": "layer-blur",
+        "value": value,
+        "hidden": False,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +330,8 @@ class PenpotWriter:
         self.file_id = str(uuid.uuid4())
         self.pages: list[dict] = []  # [{id, name, shapes: [PenpotShape]}]
         self._objects: dict[str, bytes] = {}  # object_id → bytes
+        self._object_metas: dict[str, dict] = {}  # object_id → storage metadata
+        self._media_refs: dict[str, dict] = {}  # media_id → media reference
 
     def add_board(
         self,
@@ -266,11 +357,53 @@ class PenpotWriter:
         })
         return page_id
 
-    def add_object(self, data: bytes, media_type: str = "image/png") -> str:
-        """Embed a binary object (image/SVG). Returns the object ID."""
+    def add_image(self, data: bytes, name: str = "image") -> str:
+        """Embed a PNG image as a Penpot media object.
+
+        Creates storage object + media reference.
+        Returns the media ID to use in an image shape's metadata.
+        """
+        import hashlib
+
         obj_id = str(uuid.uuid4())
+        media_id = str(uuid.uuid4())
+
+        # Store binary
         self._objects[obj_id] = data
-        return obj_id
+
+        # Store object metadata
+        mtime = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        obj_meta = {
+            "id": obj_id,
+            "size": len(data),
+            "contentType": "image/png",
+            "bucket": "file-media-object",
+            "hash": f"blake2b:{hashlib.blake2b(data).hexdigest()}",
+            "createdAt": mtime,
+        }
+        self._object_metas[obj_id] = obj_meta
+
+        # Store media reference
+        try:
+            from PIL import Image
+            import io as _io
+            img = Image.open(_io.BytesIO(data))
+            width, height = img.size
+        except Exception:
+            width, height = 1080, 1080
+
+        media_ref = {
+            "id": media_id,
+            "name": name,
+            "width": width,
+            "height": height,
+            "mtype": "image/png",
+            "mediaId": obj_id,
+            "isLocal": True,
+        }
+        self._media_refs[media_id] = media_ref
+
+        return media_id
 
     def build(self) -> bytes:
         """Build and return the .penpot ZIP bytes in Penpot v3 binfile format."""
@@ -300,9 +433,23 @@ class PenpotWriter:
                         json.dumps(shape_data, indent=2),
                     )
 
-            # 4. Embedded objects
+            # 4. Media references
+            for media_id, media_ref in self._media_refs.items():
+                zf.writestr(
+                    f"files/{self.file_id}/media/{media_id}.json",
+                    json.dumps(media_ref, indent=2),
+                )
+
+            # 5. Storage objects (binary + metadata)
             for obj_id, obj_bytes in self._objects.items():
-                zf.writestr(f"objects/{obj_id}", obj_bytes)
+                mtype = self._object_metas.get(obj_id, {}).get("contentType", "image/png")
+                ext = mtype.split("/")[-1] if "/" in mtype else "bin"
+                zf.writestr(f"objects/{obj_id}.{ext}", obj_bytes)
+                if obj_id in self._object_metas:
+                    zf.writestr(
+                        f"objects/{obj_id}.json",
+                        json.dumps(self._object_metas[obj_id], indent=2),
+                    )
 
         buf.seek(0)
         return buf.read()
@@ -324,7 +471,6 @@ class PenpotWriter:
         }
 
     def _build_file_meta(self) -> dict:
-        import datetime
         now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         return {
             "id": self.file_id,
@@ -338,6 +484,11 @@ class PenpotWriter:
             "modifiedAt": now_str,
             "features": _PENPOT_FEATURES,
             "migrations": _PENPOT_MIGRATIONS,
+            "pages": [p["id"] for p in self.pages],
+            "pages-index": {
+                p["id"]: {"name": p["name"], "id": p["id"]}
+                for p in self.pages
+            },
             "options": {
                 "componentsV2": True,
                 "baseFontSize": "16px",
@@ -457,8 +608,10 @@ class PenpotReader:
         try:
             with self._zip.open("manifest.json") as f:
                 self._manifest = json.load(f)
-                files = self._manifest.get("files", {})
-                if files:
+                files = self._manifest.get("files", [])
+                if isinstance(files, list) and files:
+                    self._file_id = files[0].get("id")
+                elif isinstance(files, dict):
                     self._file_id = next(iter(files))
         except Exception as e:
             log.warning("[PenpotReader] Could not read manifest: %s", e)

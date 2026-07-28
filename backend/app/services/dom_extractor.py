@@ -28,7 +28,9 @@ class DOMNode:
     tag: str = "div"
     node_id: str = ""
     class_list: list[str] = field(default_factory=list)
+    pseudo: str = ""  # "before", "after", or empty for real elements
     text: str = ""
+    has_inline_children: bool = False
     x: float = 0.0
     y: float = 0.0
     width: float = 0.0
@@ -44,8 +46,37 @@ class DOMNode:
     letter_spacing: str = "0px"
     text_align: str = "left"
     border_radius: str = "0px"
+    # Per-corner border radius (extracted individually for asymmetric values)
+    border_top_left_radius: float = 0.0
+    border_top_right_radius: float = 0.0
+    border_bottom_right_radius: float = 0.0
+    border_bottom_left_radius: float = 0.0
+
     opacity: float = 1.0
     overflow: str = "visible"
+
+    # Background image / gradient
+    background_image: str = ""
+    has_gradient: bool = False
+
+    # Per-side border properties
+    border_top_width: float = 0.0
+    border_right_width: float = 0.0
+    border_bottom_width: float = 0.0
+    border_left_width: float = 0.0
+    border_top_color: str = "transparent"
+    border_right_color: str = "transparent"
+    border_bottom_color: str = "transparent"
+    border_left_color: str = "transparent"
+    border_top_style: str = "none"
+    border_right_style: str = "none"
+    border_bottom_style: str = "none"
+    border_left_style: str = "none"
+
+    # Shadow & effects
+    box_shadow: str = ""
+    filter: str = ""
+    background_clip: str = ""
 
     # SVG content (for .math and .diagram elements)
     svg_content: str | None = None
@@ -143,7 +174,9 @@ def _parse_dom_node(data: dict) -> DOMNode:
         tag=data.get("tag", "div"),
         node_id=data.get("id", ""),
         class_list=data.get("classList", []),
+        pseudo=data.get("pseudo", ""),
         text=data.get("text", ""),
+        has_inline_children=bool(data.get("hasInlineChildren", False)),
         x=float(data.get("x", 0)),
         y=float(data.get("y", 0)),
         width=float(data.get("width", 0)),
@@ -157,8 +190,29 @@ def _parse_dom_node(data: dict) -> DOMNode:
         letter_spacing=str(data.get("letterSpacing", "0px")),
         text_align=data.get("textAlign", "left"),
         border_radius=str(data.get("borderRadius", "0px")),
+        border_top_left_radius=float(data.get("borderTopLeftRadius", 0)),
+        border_top_right_radius=float(data.get("borderTopRightRadius", 0)),
+        border_bottom_right_radius=float(data.get("borderBottomRightRadius", 0)),
+        border_bottom_left_radius=float(data.get("borderBottomLeftRadius", 0)),
         opacity=float(data.get("opacity", 1.0)),
         overflow=data.get("overflow", "visible"),
+        background_image=data.get("backgroundImage", ""),
+        has_gradient=bool(data.get("hasGradient", False)),
+        border_top_width=float(data.get("borderTopWidth", 0)),
+        border_right_width=float(data.get("borderRightWidth", 0)),
+        border_bottom_width=float(data.get("borderBottomWidth", 0)),
+        border_left_width=float(data.get("borderLeftWidth", 0)),
+        border_top_color=data.get("borderTopColor", "transparent"),
+        border_right_color=data.get("borderRightColor", "transparent"),
+        border_bottom_color=data.get("borderBottomColor", "transparent"),
+        border_left_color=data.get("borderLeftColor", "transparent"),
+        border_top_style=data.get("borderTopStyle", "none"),
+        border_right_style=data.get("borderRightStyle", "none"),
+        border_bottom_style=data.get("borderBottomStyle", "none"),
+        border_left_style=data.get("borderLeftStyle", "none"),
+        box_shadow=data.get("boxShadow", ""),
+        filter=data.get("filter", ""),
+        background_clip=data.get("backgroundClip", ""),
         svg_content=data.get("svgContent"),
     )
 

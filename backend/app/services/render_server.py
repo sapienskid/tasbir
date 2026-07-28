@@ -105,6 +105,14 @@ async def extract_dom(req: DOMExtractionRequest):
 
         # JavaScript that walks the DOM and extracts computed styles + bounding boxes
         dom_tree = await page.evaluate("""({width, height}) => {
+            // Tags considered inline (text-level semantics, NOT structural containers)
+            const INLINE_TAGS = new Set([
+                'span', 'strong', 'em', 'a', 'b', 'i', 'u', 's',
+                'code', 'sub', 'sup', 'label', 'small', 'mark',
+                'del', 'ins', 'q', 'abbr', 'cite', 'kbd', 'samp',
+                'var', 'time', 'dfn',
+            ]);
+
             function extractNode(el, parentX, parentY) {
                 const rect = el.getBoundingClientRect();
                 const style = window.getComputedStyle(el);
@@ -114,13 +122,58 @@ async def extract_dom(req: DOMExtractionRequest):
                 if (rect.width === 0 && rect.height === 0 && tag !== 'text') return null;
                 if (style.display === 'none' || style.visibility === 'hidden') return null;
 
+                // Check all children are inline elements
+                const children = Array.from(el.children);
+                const hasInlineChildren = children.length > 0 && children.every(
+                    c => INLINE_TAGS.has(c.tagName.toLowerCase())
+                );
+
+                // Extract text content:
+                //   - Single text node: use its textContent
+                //   - Mixed inline children: use innerText (preserves full text across inline boundaries)
+                //   - Otherwise: empty string
+                let text = '';
+                if (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
+                    text = el.childNodes[0].textContent.trim();
+                } else if (hasInlineChildren || el.childNodes.length > 0) {
+                    text = (el.innerText || '').trim();
+                }
+
+                // Parse per-side border properties
+                const borderStyles = ['top', 'right', 'bottom', 'left'];
+                const border = {};
+                for (const side of borderStyles) {
+                    border[side] = {
+                        width: parseFloat(style[`border${side.charAt(0).toUpperCase() + side.slice(1)}Width`]) || 0,
+                        color: style[`border${side.charAt(0).toUpperCase() + side.slice(1)}Color`] || 'transparent',
+                        style: style[`border${side.charAt(0).toUpperCase() + side.slice(1)}Style`] || 'none',
+                    };
+                }
+
+                // Parse box-shadow into its first shadow component (CSS supports comma-separated)
+                const boxShadow = style.boxShadow && style.boxShadow !== 'none'
+                    ? style.boxShadow.split(',')[0].trim()
+                    : '';
+
+                // Extract filter blur value if present
+                const filterValue = style.filter && style.filter !== 'none' ? style.filter : '';
+
+                // Parse per-corner border-radius (CSS shorthand may not expose all corners)
+                const brTL = parseFloat(style.borderTopLeftRadius) || 0;
+                const brTR = parseFloat(style.borderTopRightRadius) || 0;
+                const brBR = parseFloat(style.borderBottomRightRadius) || 0;
+                const brBL = parseFloat(style.borderBottomLeftRadius) || 0;
+
+                // Detect gradient background for fill conversion
+                const bgImage = style.backgroundImage || 'none';
+                const hasGradient = bgImage.startsWith('linear-gradient') || bgImage.startsWith('radial-gradient');
+
                 const node = {
                     tag: tag,
                     id: el.id || '',
                     classList: Array.from(el.classList || []),
-                    text: el.childNodes.length === 1 && el.childNodes[0].nodeType === 3
-                          ? el.childNodes[0].textContent.trim()
-                          : '',
+                    text: text,
+                    hasInlineChildren: hasInlineChildren,
                     x: rect.left,
                     y: rect.top,
                     width: rect.width,
@@ -134,8 +187,35 @@ async def extract_dom(req: DOMExtractionRequest):
                     letterSpacing: style.letterSpacing,
                     textAlign: style.textAlign,
                     borderRadius: style.borderRadius,
+                    // Per-corner border radius
+                    borderTopLeftRadius: brTL,
+                    borderTopRightRadius: brTR,
+                    borderBottomRightRadius: brBR,
+                    borderBottomLeftRadius: brBL,
                     opacity: parseFloat(style.opacity) || 1,
                     overflow: style.overflow,
+                    // Background
+                    backgroundImage: bgImage,
+                    hasGradient: hasGradient,
+                    // Per-side border
+                    borderTopWidth: border.top.width,
+                    borderRightWidth: border.right.width,
+                    borderBottomWidth: border.bottom.width,
+                    borderLeftWidth: border.left.width,
+                    borderTopColor: border.top.color,
+                    borderRightColor: border.right.color,
+                    borderBottomColor: border.bottom.color,
+                    borderLeftColor: border.left.color,
+                    borderTopStyle: border.top.style,
+                    borderRightStyle: border.right.style,
+                    borderBottomStyle: border.bottom.style,
+                    borderLeftStyle: border.left.style,
+                    // Shadow & effects
+                    boxShadow: boxShadow,
+                    filter: filterValue,
+                    backgroundImage: style.backgroundImage,
+                    backgroundClip: style.backgroundClip,
+                    // Children
                     children: [],
                     svgContent: null,
                 };
@@ -148,10 +228,90 @@ async def extract_dom(req: DOMExtractionRequest):
                     }
                 }
 
-                // Recursively process children (elements only, skip text nodes)
-                for (const child of el.children) {
+                // Recursively process children.
+                // Skip inline children (span, strong, etc.) — their text is included
+                // in the parent's innerText; processing them as separate shapes would
+                // create overlapping text layers in Penpot.
+                // EXCEPTION: .math and .diagram elements — they render as SVGs that
+                // must be extracted as svg-raw shapes.
+                for (const child of children) {
+                    const childTag = child.tagName.toLowerCase();
+                    const isMathOrDiagram = child.classList &&
+                        (child.classList.contains('math') || child.classList.contains('diagram'));
+                    if (INLINE_TAGS.has(childTag) && !isMathOrDiagram) continue;
                     const childNode = extractNode(child, rect.left, rect.top);
                     if (childNode) node.children.push(childNode);
+                }
+
+                // Extract pseudo-elements (::before, ::after) as synthetic children.
+                // These are commonly used for decorative backgrounds, overlays, and accents.
+                for (const pseudo of ['before', 'after']) {
+                    const pStyle = window.getComputedStyle(el, `::${pseudo}`);
+                    const pContent = pStyle.content || '';
+                    // Pseudo-element exists when content is not "none"
+                    if (pContent && pContent !== 'none' && pStyle.display !== 'none') {
+                        // Detect text-only pseudo-elements (e.g. ::before { content: ">" }).
+                        // These are rendered inline and can't be positioned as separate shapes.
+                        // Skip them — the browser handles inline pseudo text natively.
+                        const isTextOnly = !pStyle.backgroundImage
+                            || pStyle.backgroundImage === 'none';
+                        if (isTextOnly) continue;
+
+                        // Pseudo-element position/size: use parent's rect as default
+                        // (absolute-positioned pseudos are the most common use case)
+                        const pWidth = parseFloat(pStyle.width) || rect.width;
+                        const pHeight = parseFloat(pStyle.height) || rect.height;
+                        const pTop = parseFloat(pStyle.top) || 0;
+                        const pLeft = parseFloat(pStyle.left) || 0;
+                        node.children.push({
+                            tag: 'pseudo-' + pseudo,
+                            id: '',
+                            classList: [],
+                            text: '',
+                            hasInlineChildren: false,
+                            pseudo: pseudo,
+                            x: rect.left + pLeft,
+                            y: rect.top + pTop,
+                            width: isNaN(pWidth) ? rect.width : pWidth,
+                            height: isNaN(pHeight) ? rect.height : pHeight,
+                            backgroundColor: pStyle.backgroundColor,
+                            color: pStyle.color,
+                            fontFamily: 'inherit',
+                            fontSize: 16,
+                            fontWeight: '400',
+                            lineHeight: 'normal',
+                            letterSpacing: '0px',
+                            textAlign: 'left',
+                            borderRadius: pStyle.borderRadius,
+                            borderTopLeftRadius: parseFloat(pStyle.borderTopLeftRadius) || 0,
+                            borderTopRightRadius: parseFloat(pStyle.borderTopRightRadius) || 0,
+                            borderBottomRightRadius: parseFloat(pStyle.borderBottomRightRadius) || 0,
+                            borderBottomLeftRadius: parseFloat(pStyle.borderBottomLeftRadius) || 0,
+                            opacity: parseFloat(pStyle.opacity) || 1,
+                            overflow: 'visible',
+                            borderTopWidth: parseFloat(pStyle.borderTopWidth) || 0,
+                            borderRightWidth: parseFloat(pStyle.borderRightWidth) || 0,
+                            borderBottomWidth: parseFloat(pStyle.borderBottomWidth) || 0,
+                            borderLeftWidth: parseFloat(pStyle.borderLeftWidth) || 0,
+                            borderTopColor: pStyle.borderTopColor || 'transparent',
+                            borderRightColor: pStyle.borderRightColor || 'transparent',
+                            borderBottomColor: pStyle.borderBottomColor || 'transparent',
+                            borderLeftColor: pStyle.borderLeftColor || 'transparent',
+                            borderTopStyle: pStyle.borderTopStyle || 'none',
+                            borderRightStyle: pStyle.borderRightStyle || 'none',
+                            borderBottomStyle: pStyle.borderBottomStyle || 'none',
+                            borderLeftStyle: pStyle.borderLeftStyle || 'none',
+                            boxShadow: pStyle.boxShadow && pStyle.boxShadow !== 'none'
+                                ? pStyle.boxShadow.split(',')[0].trim()
+                                : '',
+                            filter: pStyle.filter && pStyle.filter !== 'none' ? pStyle.filter : '',
+                            backgroundImage: pStyle.backgroundImage,
+                            hasGradient: (pStyle.backgroundImage || '').startsWith('linear-gradient') || (pStyle.backgroundImage || '').startsWith('radial-gradient'),
+                            backgroundClip: pStyle.backgroundClip || '',
+                            children: [],
+                            svgContent: null,
+                        });
+                    }
                 }
 
                 return node;

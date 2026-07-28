@@ -182,7 +182,7 @@ services:
     environment:
       <<: *shared-env
       SERVICE: worker
-    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2 --autoreload
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
     volumes:
       - ./backend/app:/app/app
       - ./backend/data:/app/data
