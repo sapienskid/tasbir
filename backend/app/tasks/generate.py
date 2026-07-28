@@ -1,4 +1,4 @@
-"""Celery generate task — runs the LangGraph pipeline asynchronously with automatic Penpot API sync.
+"""Celery generate task — runs the LangGraph pipeline, outputs SVG files.
 """
 
 import asyncio
@@ -7,7 +7,6 @@ import logging
 from app.agents.orchestrator.graph import run_pipeline
 from app.db.repositories.tasks import TaskRepository
 from app.db.session import get_shared_session_factory
-from app.services.penpot_sync import PenpotAPISync
 from app.tasks.celery_app import celery_app
 
 log = logging.getLogger(__name__)
@@ -53,26 +52,16 @@ def generate_task(self, task_id: str, source_data: dict):
                 )
             return
 
-        penpot_path = state.get("penpot_file_path", "")
-        boards = state.get("boards", {})
+        svg_path = state.get("svg_path", "")
         brief = state.get("strategic_brief", {})
         format_tasks = state.get("format_tasks", {})
-
-        # Automatic Sync to Penpot API if configured
-        sync_result = {}
-        if penpot_path:
-            sync_client = PenpotAPISync()
-            sync_result = await sync_client.auto_import_penpot_file(
-                penpot_file_path=penpot_path,
-                file_name=f"Tasbir Auto - {source_data.get('title', 'Design')}",
-            )
 
         platform_results = {
             fmt_id: {
                 "status": ft.get("status", "unknown"),
                 "quality_score": ft.get("quality_score", 0),
                 "quality_issues": ft.get("quality_issues", []),
-                "penpot_file_path": ft.get("penpot_file_path", ""),
+                "svg_path": ft.get("svg_path", ""),
                 "error": ft.get("error"),
             }
             for fmt_id, ft in format_tasks.items()
@@ -83,14 +72,12 @@ def generate_task(self, task_id: str, source_data: dict):
                 task_id=task_id,
                 status="completed",
                 result={
-                    "penpot_file_path": penpot_path,
-                    "boards": boards,
+                    "svg_path": svg_path,
                     "strategic_brief": brief,
                     "platforms": platform_results,
-                    "penpot_sync": sync_result,
                 },
             )
 
-        log.info("[generate_task] Task %s completed automatically. Sync: %s", task_id, sync_result.get("status"))
+        log.info("[generate_task] Task %s completed. SVG: %s", task_id, svg_path)
 
     asyncio.run(_run())

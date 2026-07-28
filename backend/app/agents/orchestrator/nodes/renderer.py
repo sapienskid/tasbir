@@ -1,15 +1,13 @@
-"""HTML→Penpot converter node — hybrid approach.
+"""HTML→SVG converter node — outputs editable SVG vector files.
 
 Pipeline:
-  1. Inject CSS token values into HTML (so browser resolves var(--color-*))
-  2. Render HTML to PNG via Playwright (pixel-perfect visual copy)
-  3. Extract DOM text elements with computed positions from Playwright
-  4. Build .penpot ZIP:
-     - Embed the rendered PNG as a full-size background image
-     - Overlay editable text shapes at correct DOM positions
-  5. Save to data/output/{task_id}/{fmt_id}.penpot
+  1. Inject CSS token values into HTML
+  2. Extract computed DOM tree via Playwright (positions, styles, text)
+  3. Map DOM elements → SVG elements (rect, text, g, defs)
+  4. Save as .svg file with embedded design token CSS variables
 
-Falls back gracefully if Playwright is unavailable.
+SVG output opens in Inkscape, Illustrator, or any browser.
+Text remains editable, colors are theme-aware via CSS variables.
 
 Input (from GenerationState via _processing_format_id):
   - format_tasks[fmt_id].html: str
@@ -17,33 +15,25 @@ Input (from GenerationState via _processing_format_id):
   - _task_id: str
 
 Output (to GenerationState):
-  - format_tasks[fmt_id].penpot_file_path: str
-  - format_tasks[fmt_id].status: "penpot_ready"
-  - penpot_file_path: str (path to the combined file)
-  - boards: dict (fmt_id → board ID)
+  - format_tasks[fmt_id].svg_path: str
+  - format_tasks[fmt_id].status: "svg_ready"
+  - svg_path: str
 """
 
 from __future__ import annotations
 
+import html as html_mod
 import logging
 import re
 from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
-from app.services.dom_extractor import extract_dom_tree, render_to_png
+from app.services.dom_extractor import DOMNode, extract_dom_tree
 from app.services.formats import get_format_info
-from app.services.penpot_io import (
-    DEFAULT_TOKEN_VALUES,
-    Fill,
-    PenpotShape,
-    PenpotWriter,
-    TextContent,
-    inject_tokens_into_html,
-)
+from app.services.penpot_io import DEFAULT_TOKEN_VALUES, inject_tokens_into_html
 
 log = logging.getLogger(__name__)
 
-# Colors that are "transparent" or "rgba(0,0,0,0)"
 _TRANSPARENT_COLORS = {"transparent", "rgba(0, 0, 0, 0)", "rgba(0,0,0,0)"}
 
 
@@ -76,74 +66,110 @@ def _font_weight_int(fw: str) -> int:
     return mapping.get(cleaned.lower(), 400)
 
 
-def _extract_text_shapes_from_dom(node: "DOMNode", shapes: list[PenpotShape]) -> None:
-    """Walk the DOM tree and extract text elements as Penpot text shapes.
+def _escape_svg_text(text: str) -> str:
+    """Escape text for safe inclusion in SVG."""
+    return html_mod.escape(text).replace("\n", "&#10;")
 
-    Each visible text node becomes an editable text layer in the Penpot output.
-    Text elements are placed at their DOM positions, overlaying the PNG background.
-    """
-    if node is None:
-        return
+
+def _svg_rect(x: float, y: float, w: float, h: float, fill: str = "none",
+              rx: float = 0, opacity: float = 1.0, stroke: str | None = None,
+              stroke_width: float = 0) -> str:
+    attrs = f'x="{x}" y="{y}" width="{w}" height="{h}" fill="{fill}" opacity="{opacity}"'
+    if rx > 0:
+        attrs += f' rx="{rx}" ry="{rx}"'
+    if stroke and stroke_width > 0:
+        attrs += f' stroke="{stroke}" stroke-width="{stroke_width}"'
+    return f"<rect {attrs}/>"
+
+
+def _node_to_svg(node: DOMNode, depth: int = 0) -> str:
+    """Convert a DOMNode to SVG elements. Returns empty string if node should be skipped."""
+    if node is None or (node.width < 1 and node.height < 1):
+        return ""
+
+    parts: list[str] = []
 
     is_text_tag = node.tag in ("h1", "h2", "h3", "h4", "h5", "h6", "p", "span", "a", "strong", "em", "label")
+    has_bg = node.background_color and node.background_color not in _TRANSPARENT_COLORS
+    indent = "  " * (depth + 2)
 
-    # Only create text shapes for actual text-bearing elements, not containers
-    # whose innerText is derived from child elements (to avoid duplicates).
-    is_empty_container = node.tag in ("div", "section", "article", "main", "body", "header", "footer") and node.children and not node.has_inline_children
+    # Background rect for this element
+    if has_bg:
+        bg_hex = _css_color_to_hex(node.background_color, "#0f172a")
+        rx = _parse_px(node.border_radius) if node.border_radius else 0
+        parts.append(indent + _svg_rect(node.x, node.y, node.width, node.height, bg_hex, rx, node.opacity))
 
-    if not is_empty_container and node.text and node.width > 0 and node.height > 0:
-        text_to_use = node.text
+    # Border rect (if border exists)
+    has_border = any([
+        node.border_top_width > 0, node.border_right_width > 0,
+        node.border_bottom_width > 0, node.border_left_width > 0,
+    ])
+    if has_border:
+        max_w = max(node.border_top_width, node.border_right_width,
+                     node.border_bottom_width, node.border_left_width)
+        # Use thickest border's color
+        colors = []
+        for w, c, s in [(node.border_top_width, node.border_top_color, node.border_top_style),
+                        (node.border_right_width, node.border_right_color, node.border_right_style),
+                        (node.border_bottom_width, node.border_bottom_color, node.border_bottom_style),
+                        (node.border_left_width, node.border_left_color, node.border_left_style)]:
+            if w > 0 and s != "none":
+                colors.append((w, c))
+        if colors:
+            best = max(colors, key=lambda x: x[0])
+            border_color = _css_color_to_hex(best[1], "#000000")
+            rx = _parse_px(node.border_radius) if node.border_radius else 0
+            parts.append(indent + _svg_rect(node.x, node.y, node.width, node.height,
+                                            "none", rx, node.opacity,
+                                            border_color, max_w))
+
+    # Text content — render for ANY element that has visible text, including
+    # container divs that hold direct text (badge, tagline, etc.)
+    has_structural_children = node.children and not node.has_inline_children
+    if node.text and node.width > 0 and node.height > 0 and not has_structural_children:
+        text = _escape_svg_text(node.text)
         color_hex = _css_color_to_hex(node.color, "#ffffff")
         font_fam = node.font_family.split(",")[0].strip().strip("'\"") if node.font_family else "Inter"
+        font_size = node.font_size if node.font_size > 0 else 16
+        font_weight = _font_weight_int(node.font_weight)
+        text_anchor = "start"
+        if node.text_align == "center":
+            text_anchor = "middle"
+        elif node.text_align == "right":
+            text_anchor = "end"
 
-        if is_text_tag:
-            shape = PenpotShape(
-                name=f"Text: {text_to_use[:30]}",
-                shape_type="text",
-                x=node.x, y=node.y,
-                width=max(node.width, 10),
-                height=max(node.height, 10),
-                opacity=node.opacity,
-                text_content=TextContent(
-                    text=text_to_use,
-                    font_family=font_fam,
-                    font_size=node.font_size,
-                    font_weight=_font_weight_int(node.font_weight),
-                    color=color_hex,
-                    line_height=_parse_px(node.line_height, node.font_size * 1.4) / node.font_size
-                    if node.font_size > 0 else 1.4,
-                    letter_spacing=_parse_px(node.letter_spacing, 0.0),
-                    text_align=node.text_align or "left",
-                ),
-            )
-        else:
-            shape = PenpotShape(
-                name=f"Text: {text_to_use[:30]}",
-                shape_type="text",
-                x=node.x, y=node.y,
-                width=max(node.width, 10),
-                height=max(node.height, 10),
-                text_content=TextContent(
-                    text=text_to_use,
-                    font_family=font_fam,
-                    font_size=node.font_size,
-                    font_weight=_font_weight_int(node.font_weight),
-                    color=color_hex,
-                    line_height=1.4,
-                    letter_spacing=0.0,
-                    text_align=node.text_align or "left",
-                ),
-            )
-        shapes.append(shape)
+        x_pos = node.x + node.width / 2 if text_anchor == "middle" else (node.x + node.width if text_anchor == "end" else node.x)
+        y_pos = node.y + font_size
 
-    # Recurse into children (unless this node has inline children that were merged)
+        parts.append(
+            f'{indent}<text x="{x_pos}" y="{y_pos}" '
+            f'font-family="{font_fam}" font-size="{font_size}" '
+            f'font-weight="{font_weight}" fill="{color_hex}" '
+            f'text-anchor="{text_anchor}" opacity="{node.opacity}">'
+            f'{text}</text>'
+        )
+
+    # Recurse children
     if not node.has_inline_children:
         for child in node.children:
-            _extract_text_shapes_from_dom(child, shapes)
+            child_svg = _node_to_svg(child, depth + 1)
+            if child_svg:
+                parts.append(child_svg)
+
+    return "\n".join(parts)
+
+
+def _build_tokens_css(tokens: dict[str, str]) -> str:
+    """Build a CSS :root block for design tokens."""
+    lines = [":root {"]
+    for var, value in tokens.items():
+        lines.append(f"  {var}: {value};")
+    lines.append("}")
+    return "\n".join(lines)
 
 
 async def renderer_node_single(state: GenerationState) -> dict:
-    """Render HTML to PNG + overlay editable text shapes in Penpot."""
+    """Convert HTML to editable SVG via Playwright DOM extraction."""
     from app.config import get_settings
 
     settings = get_settings()
@@ -157,7 +183,7 @@ async def renderer_node_single(state: GenerationState) -> dict:
     design_tokens = state.get("design_tokens", DEFAULT_TOKEN_VALUES)
 
     if not html:
-        log.warning("[html_to_penpot] No HTML for %s, skipping", fmt_id)
+        log.warning("[renderer] No HTML for %s, skipping", fmt_id)
         return {
             "format_tasks": {
                 fmt_id: {**task, "status": "error", "error": "No HTML to convert"}
@@ -169,104 +195,53 @@ async def renderer_node_single(state: GenerationState) -> dict:
 
     output_dir = Path(settings.output_dir) / task_id
     output_dir.mkdir(parents=True, exist_ok=True)
-    platform_penpot_path = output_dir / f"{fmt_id}.penpot"
 
-    # Step 2: Render HTML → PNG
-    log.info("[html_to_penpot] Rendering %s to PNG", fmt_id)
-    png_bytes = await render_to_png(html_with_tokens, fmt.width, fmt.height)
-
-    # Also save HTML for debugging
+    # Save HTML for reference
     html_path = output_dir / f"{fmt_id}.html"
     html_path.write_text(html_with_tokens, encoding="utf-8")
 
-    # Step 3: Extract DOM text elements
+    # Step 2: Extract DOM tree via Playwright
+    log.info("[renderer] Extracting DOM for %s (%dx%d)", fmt_id, fmt.width, fmt.height)
     dom_root = await extract_dom_tree(html_with_tokens, fmt.width, fmt.height)
 
-    # Step 4: Build Penpot file
-    writer = PenpotWriter(file_name=f"Tasbir — {fmt_id}")
+    if not dom_root:
+        log.warning("[renderer] DOM extraction failed for %s — fallback to HTML only", fmt_id)
+        return {
+            "format_tasks": {
+                fmt_id: {
+                    **task,
+                    "svg_path": str(html_path),
+                    "status": "svg_ready",
+                }
+            }
+        }
 
-    # 4a: Create root board frame
-    root = PenpotShape(
-        name=fmt_id,
-        shape_type="frame",
-        x=0, y=0,
-        width=float(fmt.width),
-        height=float(fmt.height),
-        fills=[],
+    # Step 3: Generate SVG
+    tokens_css = _build_tokens_css(design_tokens)
+    body_svg = _node_to_svg(dom_root)
+
+    svg_content = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'width="{fmt.width}" height="{fmt.height}" '
+        f'viewBox="0 0 {fmt.width} {fmt.height}">\n'
+        f'<style>\n{tokens_css}\n</style>\n'
+        f'<g id="tasbir-design">\n'
+        f'{body_svg}\n'
+        f'</g>\n'
+        f'</svg>'
     )
 
-    if png_bytes:
-        # 4b: Embed PNG as SVG with foreignObject + CSS background image.
-        # This renders correctly in Penpot's SVG engine and avoids media/object
-        # import limitations.
-        import base64
-        b64 = base64.b64encode(png_bytes).decode("ascii")
-        svg = (
-            f'<svg xmlns="http://www.w3.org/2000/svg" '
-            f'width="{fmt.width}" height="{fmt.height}">'
-            f'<foreignObject width="{fmt.width}" height="{fmt.height}">'
-            f'<div xmlns="http://www.w3.org/1999/xhtml" '
-            f'style="width:{fmt.width}px;height:{fmt.height}px;'
-            f'background:url(data:image/png;base64,{b64});'
-            f'background-size:cover"/>'
-            f'</foreignObject>'
-            f'</svg>'
-        )
-        img_shape = PenpotShape(
-            name="Design Preview (PNG)",
-            shape_type="svg-raw",
-            x=0, y=0,
-            width=float(fmt.width),
-            height=float(fmt.height),
-            svg_content=svg,
-        )
-        root.children.append(img_shape)
-
-        # 4c: Overlay editable text shapes on top of the image
-        text_shapes: list[PenpotShape] = []
-        if dom_root:
-            _extract_text_shapes_from_dom(dom_root, text_shapes)
-        for ts in text_shapes:
-            root.children.append(ts)
-
-        log.info(
-            "[html_to_penpot] %s — PNG %d bytes, %d text layers",
-            fmt_id, len(png_bytes), len(text_shapes),
-        )
-    else:
-        log.warning("[html_to_penpot] PNG render failed for %s — using placeholder", fmt_id)
-        text_shape = PenpotShape(
-            name="Placeholder",
-            shape_type="text",
-            x=float(fmt.width) * 0.1,
-            y=float(fmt.height) * 0.4,
-            width=float(fmt.width) * 0.8,
-            height=80.0,
-            text_content=TextContent(
-                text=f"{fmt_id} — Design generated (open HTML to preview)",
-                font_family="Inter", font_size=24.0, font_weight=400,
-                color="#94a3b8", text_align="center",
-            ),
-        )
-        root.children.append(text_shape)
-
-    # Step 5: Write .penpot file
-    board_id = writer.add_board(fmt_id, fmt.width, fmt.height, root)
-    penpot_bytes = writer.build()
-    platform_penpot_path.write_bytes(penpot_bytes)
-    log.info("[html_to_penpot] Wrote %s (%d bytes)", platform_penpot_path, len(penpot_bytes))
-
-    boards = dict(state.get("boards", {}))
-    boards[fmt_id] = board_id
+    svg_path = output_dir / f"{fmt_id}.svg"
+    svg_path.write_text(svg_content, encoding="utf-8")
+    log.info("[renderer] Wrote SVG %s (%d chars)", svg_path, len(svg_content))
 
     return {
         "format_tasks": {
             fmt_id: {
                 **task,
-                "penpot_file_path": str(platform_penpot_path),
-                "status": "penpot_ready",
+                "svg_path": str(svg_path),
+                "status": "svg_ready",
             }
         },
-        "boards": boards,
-        "penpot_file_path": str(platform_penpot_path),
+        "svg_path": str(svg_path),
     }

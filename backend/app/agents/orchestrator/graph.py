@@ -25,7 +25,7 @@ NODE_PROGRESS: dict[str, int] = {
     "strategist": 10,
     "copywriter": 25,
     "process_format:designer": 50,
-    "process_format:html_to_penpot": 75,
+    "process_format:renderer": 75,
     "process_format:verifier": 90,
 }
 
@@ -33,7 +33,7 @@ NODE_LABELS: dict[str, str] = {
     "strategist": "Analyzing content...",
     "copywriter": "Writing copy...",
     "process_format:designer": "Designing layouts...",
-    "process_format:html_to_penpot": "Converting to Penpot...",
+    "process_format:renderer": "Rendering SVG...",
     "process_format:verifier": "Verifying quality...",
 }
 
@@ -60,12 +60,12 @@ def fan_out_to_formats(state: GenerationState) -> list[Send]:
 def build_format_subgraph() -> StateGraph:
     subgraph = StateGraph(GenerationState)
     subgraph.add_node("designer", designer_node_single)
-    subgraph.add_node("html_to_penpot", renderer_node_single)
+    subgraph.add_node("renderer", renderer_node_single)
     subgraph.add_node("verifier", quality_check_node_single)
 
     subgraph.set_entry_point("designer")
-    subgraph.add_edge("designer", "html_to_penpot")
-    subgraph.add_edge("html_to_penpot", "verifier")
+    subgraph.add_edge("designer", "renderer")
+    subgraph.add_edge("renderer", "verifier")
     subgraph.add_conditional_edges("verifier", after_verifier)
 
     return subgraph.compile()
