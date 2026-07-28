@@ -13,19 +13,15 @@ log = logging.getLogger(__name__)
 
 
 def _load_design_tokens() -> dict:
-    """Load design tokens from the Design System .penpot file."""
-    try:
-        from app.config import get_settings
-        from app.services.penpot_io import PenpotReader
+    """Load design tokens from the tokens YAML file."""
+    from app.config import get_settings
+    from app.services.tokens import load_tokens, DEFAULT_TOKEN_VALUES
 
-        settings = get_settings()
-        reader = PenpotReader(settings.design_system_path)
-        tokens = reader.get_tokens()
-        reader.close()
-        return tokens
+    settings = get_settings()
+    try:
+        return load_tokens(settings.tokens_path)
     except Exception as e:
-        log.warning("[generate_task] Could not load design tokens: %s — using defaults", e)
-        from app.services.penpot_io import DEFAULT_TOKEN_VALUES
+        log.warning("[generate_task] Could not load tokens: %s — using defaults", e)
         return dict(DEFAULT_TOKEN_VALUES)
 
 

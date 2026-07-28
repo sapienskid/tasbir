@@ -37,7 +37,7 @@ settings = get_settings()
 app = FastAPI(
     title="Tasbir API",
     version="0.3.0",
-    description="AI-powered social media asset pipeline — Penpot native output",
+    description="AI-powered social media asset pipeline — HTML + PNG output",
     lifespan=lifespan,
 )
 

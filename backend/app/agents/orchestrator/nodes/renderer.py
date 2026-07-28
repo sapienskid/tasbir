@@ -20,7 +20,7 @@ from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
 from app.services.formats import get_format_info
-from app.services.penpot_io import DEFAULT_TOKEN_VALUES, inject_tokens_into_html
+from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html
 
 log = logging.getLogger(__name__)
 

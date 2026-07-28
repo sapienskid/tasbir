@@ -5,7 +5,6 @@ evaluation against the design system and platform requirements.
 
 Input (from GenerationState via _processing_format_id):
   - format_tasks[fmt_id].html: str
-  - format_tasks[fmt_id].penpot_file_path: str
   - design_tokens: dict
 
 Output (to GenerationState):
@@ -27,7 +26,7 @@ from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
 from app.services.dom_extractor import render_to_png
 from app.services.formats import get_format_info
-from app.services.penpot_io import DEFAULT_TOKEN_VALUES, inject_tokens_into_html
+from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html
 
 log = logging.getLogger(__name__)
 

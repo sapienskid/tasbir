@@ -1,7 +1,6 @@
 """Format dimensions — hardcoded defaults for known platforms.
 
-No longer loaded from database. New platforms can be added as
-pages in the Penpot Design System file.
+Each format defines a canvas size for the generated design.
 """
 
 from dataclasses import dataclass

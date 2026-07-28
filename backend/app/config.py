@@ -21,13 +21,9 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "info"
 
-    # Design System
-    design_system_path: str = "data/design_system/Tasbir Design System.penpot"
+    # Output
     output_dir: str = "data/output"
-
-    # Penpot API sync
-    penpot_url: str = "http://penpot-backend:6060"
-    penpot_access_token: str = ""
+    tokens_path: str = "data/design_system/tokens.yaml"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

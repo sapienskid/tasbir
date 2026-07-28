@@ -2,7 +2,7 @@
 
 Two endpoints:
   POST /render        → returns PNG bytes (for Verifier)
-  POST /extract-dom   → returns computed DOM tree JSON (for HTML→Penpot converter)
+  POST /extract-dom   → returns computed DOM tree JSON
   GET  /health        → liveness check
 
 Run via: uvicorn render_server:app --host 0.0.0.0 --port 4000
@@ -231,7 +231,7 @@ async def extract_dom(req: DOMExtractionRequest):
                 // Recursively process children.
                 // Skip inline children (span, strong, etc.) — their text is included
                 // in the parent's innerText; processing them as separate shapes would
-                // create overlapping text layers in Penpot.
+                // create overlapping text layers.
                 // EXCEPTION: .math and .diagram elements — they render as SVGs that
                 // must be extracted as svg-raw shapes.
                 for (const child of children) {

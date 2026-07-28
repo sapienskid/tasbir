@@ -176,7 +176,7 @@ async def copywriter_node(state: GenerationState) -> dict:
             status="copy_ready",
             copy=copy_json,
             html=None,
-            penpot_file_path=None,
+            html_path=None,
             quality_score=0,
             quality_issues=[],
             refinement_count=0,

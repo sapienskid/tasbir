@@ -2,7 +2,7 @@
 
 Communicates with the Playwright Docker service at playwright:4000.
 Extracts a structured DOM tree with computed CSS properties for each element,
-which is then mapped to Penpot shapes by the html_to_penpot node.
+used for generating SVG output or extracting text positions.
 """
 
 from __future__ import annotations

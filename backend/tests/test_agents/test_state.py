@@ -49,7 +49,7 @@ def test_format_task_structure():
         status="html_ready",
         copy='{"headline": "Test"}',
         html="<html><body>test</body></html>",
-        penpot_file_path=None,
+        html_path=None,
         quality_score=0,
         quality_issues=[],
         refinement_count=0,
@@ -63,13 +63,13 @@ def test_format_task_structure():
 def test_merge_format_tasks_update():
     a = {
         "fmt1": FormatTask(
-            status="waiting", copy="", html=None, penpot_file_path=None,
+            status="waiting", copy="", html=None, html_path=None,
             quality_score=0, quality_issues=[], refinement_count=0, error=None,
         )
     }
     b = {
         "fmt1": FormatTask(
-            status="html_ready", copy='{"headline": "H"}', html="<html>", penpot_file_path=None,
+            status="html_ready", copy='{"headline": "H"}', html="<html>", html_path=None,
             quality_score=0, quality_issues=[], refinement_count=0, error=None,
         )
     }
@@ -81,13 +81,13 @@ def test_merge_format_tasks_update():
 def test_merge_format_tasks_disjoint():
     a = {
         "fmt1": FormatTask(
-            status="html_ready", copy="C1", html="<h1>", penpot_file_path=None,
+            status="html_ready", copy="C1", html="<h1>", html_path=None,
             quality_score=50, quality_issues=[], refinement_count=0, error=None,
         )
     }
     b = {
         "fmt2": FormatTask(
-            status="penpot_ready", copy="C2", html="<h2>", penpot_file_path="/path/f2.penpot",
+            status="html_saved", copy="C2", html="<h2>", html_path="/path/f2.html",
             quality_score=95, quality_issues=[], refinement_count=0, error=None,
         )
     }
@@ -95,4 +95,4 @@ def test_merge_format_tasks_disjoint():
     assert "fmt1" in merged
     assert "fmt2" in merged
     assert merged["fmt1"]["copy"] == "C1"
-    assert merged["fmt2"]["penpot_file_path"] == "/path/f2.penpot"
+    assert merged["fmt2"]["html_path"] == "/path/f2.html"

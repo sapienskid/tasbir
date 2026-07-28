@@ -1,12 +1,10 @@
 """LangGraph state machine for the v3 generation pipeline.
 
-Topology (5 nodes):
-  strategist → copywriter → designer → html_to_penpot → verifier
-                                                     ↓
-                                              [fail+retry<2] → designer
+Topology:
+  strategist → copywriter → designer → verifier
 
 Copywriter and Designer use Send fan-out per platform.
-HTML→Penpot and Verifier run per-platform (no LLM, fast).
+Verifier renders HTML to PNG for visual quality check.
 """
 
 from collections.abc import Awaitable, Callable

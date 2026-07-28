@@ -5,8 +5,8 @@ document with CSS variables (var(--color-*)) for colors. Never receives
 actual brand hex values — only CSS variable names.
 
 The HTML document will be:
-  1. Rendered to PNG for Verifier (multimodal QC)
-  2. Converted to .penpot shapes by the HTML→Penpot converter
+  1. Saved to the output directory
+  2. Rendered to PNG by the Verifier for multimodal QC
 
 Input (from GenerationState via _processing_format_id):
   - format_tasks[fmt_id].copy: JSON string (PlatformCopy)

@@ -1,0 +1,21 @@
+# Tasbir Design Tokens
+# CSS variable → value mappings for the design system.
+# These are injected into HTML as CSS :root variables.
+# Edit these to change brand colors, fonts, or spacing.
+
+--color-bg: "#0f172a"
+--color-bg-secondary: "#1e293b"
+--color-text: "#ffffff"
+--color-text-secondary: "#94a3b8"
+--color-primary: "#667eea"
+--color-secondary: "#764ba2"
+--color-accent: "#6366f1"
+--color-border: "#334155"
+
+--font-sans: "Inter, sans-serif"
+--font-serif: "Instrument Serif, serif"
+--font-mono: "JetBrains Mono, monospace"
+
+--radius-sm: "4px"
+--radius-md: "8px"
+--shadow-md: "0 4px 6px rgba(0,0,0,0.3)"

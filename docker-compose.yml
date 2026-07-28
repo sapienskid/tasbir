@@ -1,9 +1,5 @@
 name: tasbir
 
-volumes:
-  penpot_postgres:
-  penpot_assets:
-
 networks:
   tasbir:
     driver: bridge
@@ -14,44 +10,8 @@ x-shared: &shared-env
   DATABASE_URL: sqlite+aiosqlite:///data/tasbir.db
   REDIS_URL: redis://redis:6379/0
   LOG_LEVEL: ${LOG_LEVEL:-info}
-  PENPOT_URL: http://penpot-backend:6060
-  PENPOT_ACCESS_TOKEN: ${PENPOT_ACCESS_TOKEN:-}
-
-x-penpot-flags: &penpot-flags
-  PENPOT_FLAGS: >-
-    disable-email-verification
-    disable-secure-session-cookies
-    enable-prepl-server
-    enable-mcp
-    enable-access-tokens
-    enable-access-tokens-management
-
-
-x-penpot-uri: &penpot-public-uri
-  PENPOT_PUBLIC_URI: http://localhost:9001
-
-x-penpot-secret: &penpot-secret-key
-  PENPOT_SECRET_KEY: ${PENPOT_SECRET_KEY:-change-this-insecure-key}
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    volumes:
-      - penpot_postgres:/var/lib/postgresql/data
-    networks:
-      - tasbir
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U penpot"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    environment:
-      POSTGRES_DB: penpot
-      POSTGRES_USER: penpot
-      POSTGRES_PASSWORD: penpot
-    mem_limit: 512m
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -64,71 +24,6 @@ services:
       retries: 10
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     mem_limit: 128m
-
-  penpot-frontend:
-    image: penpotapp/frontend:2.16
-    restart: unless-stopped
-    ports:
-      - "9001:8080"
-    networks:
-      - tasbir
-    depends_on:
-      - penpot-backend
-      - penpot-exporter
-    volumes:
-      - penpot_assets:/opt/data/assets
-    environment:
-      <<: [*penpot-flags, *penpot-public-uri]
-
-  penpot-backend:
-    image: penpotapp/backend:2.16
-    restart: unless-stopped
-    networks:
-      - tasbir
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - penpot_assets:/opt/data/assets
-    environment:
-      <<: [*penpot-flags, *penpot-public-uri, *penpot-secret-key]
-      PENPOT_DATABASE_URI: postgresql://postgres/penpot
-      PENPOT_DATABASE_USERNAME: penpot
-      PENPOT_DATABASE_PASSWORD: penpot
-      PENPOT_REDIS_URI: redis://redis:6379/0
-      PENPOT_OBJECTS_STORAGE_BACKEND: fs
-      PENPOT_OBJECTS_STORAGE_FS_DIRECTORY: /opt/data/assets
-      PENPOT_TELEMETRY_ENABLED: "false"
-      PENPOT_SMTP_DEFAULT_FROM: no-reply@example.com
-      PENPOT_SMTP_DEFAULT_REPLY_TO: no-reply@example.com
-      PENPOT_SMTP_HOST: localhost
-      PENPOT_SMTP_PORT: 1025
-      PENPOT_SMTP_TLS: "false"
-      PENPOT_SMTP_SSL: "false"
-    # JVM needs heap for startup — no mem_limit
-
-  penpot-exporter:
-    image: penpotapp/exporter:2.16
-    restart: unless-stopped
-    networks:
-      - tasbir
-    depends_on:
-      redis:
-        condition: service_healthy
-    environment:
-      <<: [*penpot-secret-key, *penpot-public-uri]
-      PENPOT_INTERNAL_URI: http://penpot-frontend:8080
-      PENPOT_REDIS_URI: redis://redis:6379/0
-    mem_limit: 512m
-
-  penpot-mcp:
-    image: penpotapp/mcp:2.16
-    restart: unless-stopped
-    networks:
-      - tasbir
-    mem_limit: 256m
 
   playwright:
     image: mcr.microsoft.com/playwright/python:v1.61.0-noble-amd64
