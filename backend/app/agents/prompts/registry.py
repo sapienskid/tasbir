@@ -1,197 +1,122 @@
-"""Prompt registry — loads prompts from database with fallback to defaults.
+"""YAML prompt loader — reads agent prompts from config/prompts/*.yaml.
 
-Prompts are stored in the `prompt_registry` table and can be edited
-via the API without redeploying the application.
+Each YAML file has:
+  persona: "Agent Name"
+  role: "Agent Role"
+  system_prompt: |
+    Full system prompt text...
+  temperature: 0.7
+  max_tokens: 2000
 """
 
+from __future__ import annotations
+
+import logging
+import os
 from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+log = logging.getLogger(__name__)
 
-from app.agents.prompts.copywriter import COPYWRITER_SYSTEM_PROMPT
-from app.agents.prompts.designer import DESIGNER_SYSTEM_PROMPT
-from app.agents.prompts.quality_check import QUALITY_CHECK_SYSTEM_PROMPT
-from app.agents.prompts.strategist import STRATEGIST_SYSTEM_PROMPT
-from app.agents.prompts.token_generator import TOKEN_GENERATOR_SYSTEM_PROMPT
-from app.agents.prompts.visual_director import VISUAL_DIRECTOR_SYSTEM_PROMPT
+# Resolve config dir relative to this file (backend/app/agents/prompts/ → backend/config/prompts/)
+_THIS_DIR = Path(__file__).parent
+_PROMPTS_DIR = _THIS_DIR.parent.parent.parent / "config" / "prompts"
+if not _PROMPTS_DIR.exists():
+    _PROMPTS_DIR = _THIS_DIR.parent.parent.parent.parent / "config" / "prompts"
+
 
 
 @dataclass
-class PromptVersion:
+class PromptConfig:
+    persona: str
+    role: str
     system_prompt: str
-    user_template: Optional[str] = None
     temperature: float = 0.7
     max_tokens: int = 2000
 
 
-DEFAULT_PROMPTS: dict[str, PromptVersion] = {
-    "strategist": PromptVersion(
-        system_prompt=STRATEGIST_SYSTEM_PROMPT,
-        temperature=0.7,
-        max_tokens=1500,
-    ),
-    "copywriter": PromptVersion(
-        system_prompt=COPYWRITER_SYSTEM_PROMPT,
-        temperature=0.75,
-        max_tokens=2000,
-    ),
-    "visual_director": PromptVersion(
-        system_prompt=VISUAL_DIRECTOR_SYSTEM_PROMPT,
-        temperature=0.6,
-        max_tokens=1200,
-    ),
-    "designer": PromptVersion(
-        system_prompt=DESIGNER_SYSTEM_PROMPT,
-        temperature=0.7,
-        max_tokens=8192,
-    ),
-    "quality_check": PromptVersion(
-        system_prompt=QUALITY_CHECK_SYSTEM_PROMPT,
-        temperature=0.3,
-        max_tokens=800,
-    ),
-    "token_generator": PromptVersion(
-        system_prompt=TOKEN_GENERATOR_SYSTEM_PROMPT,
-        temperature=0.7,
-        max_tokens=2000,
-    ),
-}
+@lru_cache(maxsize=32)
+def load_prompt(agent_name: str) -> PromptConfig:
+    """Load a YAML prompt config by agent name.
 
-
-async def get_prompt(
-    name: str,
-    db: AsyncSession | None = None,
-) -> PromptVersion:
-    """Get a prompt by name.
-
-    Attempts to load from database first. Falls back to defaults
-    if the prompt is not found in the registry or no DB session provided.
+    Looks in backend/config/prompts/{agent_name}.yaml.
+    Falls back to inline defaults if the file is missing.
     """
-    if db is None:
-        try:
-            from app.db.session import get_shared_session_factory
+    import yaml
 
-            pool = await get_shared_session_factory()
-            async with pool() as session:
-                from app.models.prompt import PromptRegistry
+    yaml_path = _PROMPTS_DIR / f"{agent_name}.yaml"
 
-                result = await session.execute(
-                    select(PromptRegistry).where(
-                        PromptRegistry.name == name,
-                        PromptRegistry.is_active.is_(True),
-                    )
-                )
-                record = result.scalar_one_or_none()
+    if not yaml_path.exists():
+        log.warning("[prompts] %s not found, using minimal fallback", yaml_path)
+        return _fallback_prompt(agent_name)
 
-            if record is not None:
-                return PromptVersion(
-                    system_prompt=record.system_prompt,
-                    user_template=record.user_template,
-                    temperature=record.temperature,
-                    max_tokens=record.max_tokens,
-                )
-        except Exception:
-            pass
-    elif db is not None:
-        from app.models.prompt import PromptRegistry
+    try:
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
 
-        result = await db.execute(
-            select(PromptRegistry).where(
-                PromptRegistry.name == name,
-                PromptRegistry.is_active.is_(True),
-            )
+        return PromptConfig(
+            persona=data.get("persona", agent_name),
+            role=data.get("role", ""),
+            system_prompt=data.get("system_prompt", ""),
+            temperature=float(data.get("temperature", 0.7)),
+            max_tokens=int(data.get("max_tokens", 2000)),
         )
-        record = result.scalar_one_or_none()
-
-        if record is not None:
-            return PromptVersion(
-                system_prompt=record.system_prompt,
-                user_template=record.user_template,
-                temperature=record.temperature,
-                max_tokens=record.max_tokens,
-            )
-
-    prompt = DEFAULT_PROMPTS.get(name)
-    if not prompt:
-        msg = f"Unknown prompt: {name}. Available: {list(DEFAULT_PROMPTS.keys())}"
-        raise ValueError(msg)
-    return prompt
+    except Exception as e:
+        log.error("[prompts] Failed to load %s: %s", yaml_path, e)
+        return _fallback_prompt(agent_name)
 
 
-async def list_prompts(
-    db: AsyncSession | None = None,
-) -> dict[str, PromptVersion]:
-    """List all available prompts."""
-    prompts = dict(DEFAULT_PROMPTS)
-
-    if db is not None:
-        from app.models.prompt import PromptRegistry
-
-        result = await db.execute(
-            select(PromptRegistry).where(PromptRegistry.is_active.is_(True))
-        )
-        for record in result.scalars().all():
-            prompts[record.name] = PromptVersion(
-                system_prompt=record.system_prompt,
-                user_template=record.user_template,
-                temperature=record.temperature,
-                max_tokens=record.max_tokens,
-            )
-
-    return prompts
-
-
-async def update_prompt(
-    name: str,
-    system_prompt: str,
-    db: AsyncSession,
-    user_template: str | None = None,
-    temperature: float = 0.7,
-    max_tokens: int = 2000,
-) -> PromptVersion:
-    """Update or create a prompt. Creates a new version entry."""
-    from app.models.prompt import PromptRegistry
-    from app.models.prompt import PromptVersion as PromptVersionModel
-
-    result = await db.execute(
-        select(PromptRegistry).where(PromptRegistry.name == name)
-    )
-    record = result.scalar_one_or_none()
-
-    if record:
-        record.system_prompt = system_prompt
-        if user_template is not None:
-            record.user_template = user_template
-        record.temperature = temperature
-        record.max_tokens = max_tokens
-        record.version += 1
-    else:
-        record = PromptRegistry(
-            name=name,
-            system_prompt=system_prompt,
-            user_template=user_template or "",
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        db.add(record)
-
-    version_record = PromptVersionModel(
-        prompt_name=name,
-        version=record.version,
-        system_prompt=system_prompt,
-        user_template=user_template,
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    db.add(version_record)
-    await db.commit()
-    await db.refresh(record)
-
-    return PromptVersion(
-        system_prompt=record.system_prompt,
-        user_template=record.user_template,
-        temperature=record.temperature,
-        max_tokens=record.max_tokens,
+def _fallback_prompt(agent_name: str) -> PromptConfig:
+    """Minimal inline fallbacks if YAML files are missing."""
+    fallbacks: dict[str, PromptConfig] = {
+        "strategist": PromptConfig(
+            persona="Aura Vance",
+            role="Chief Brand Strategist",
+            system_prompt=(
+                "Analyze the given content and return a JSON strategic brief with keys: "
+                "angle, audience, tone, visual_direction, platform_notes."
+            ),
+            temperature=0.7,
+            max_tokens=1500,
+        ),
+        "copywriter": PromptConfig(
+            persona="Julian Sterling",
+            role="Lead Brand Wordsmith",
+            system_prompt=(
+                "Write platform-optimized copy and return JSON with keys: "
+                "headline, subhead, body, tagline, badge. No emojis."
+            ),
+            temperature=0.75,
+            max_tokens=2000,
+        ),
+        "designer": PromptConfig(
+            persona="Marcus Chen",
+            role="Senior Visual Designer",
+            system_prompt=(
+                "Create a standalone HTML document for the given platform. "
+                "Use CSS variables (var(--color-*)) only. No Tailwind. Return HTML only."
+            ),
+            temperature=0.7,
+            max_tokens=8192,
+        ),
+        "verifier": PromptConfig(
+            persona="Victoria Thorne",
+            role="Design Quality Director",
+            system_prompt=(
+                "Audit the rendered design image and return JSON with: "
+                "pass (bool), score (0-100), issues (list), critique (string)."
+            ),
+            temperature=0.3,
+            max_tokens=1000,
+        ),
+    }
+    return fallbacks.get(
+        agent_name,
+        PromptConfig(
+            persona=agent_name,
+            role="AI Agent",
+            system_prompt="You are a helpful AI agent.",
+        ),
     )
