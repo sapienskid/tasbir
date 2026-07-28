@@ -139,11 +139,37 @@ async def designer_node_single(state: GenerationState) -> dict:
     tagline = copy_data.get("tagline", "")
     badge = copy_data.get("badge")
 
-    # Inject brand name + campaign context into designer
+    # Brand + campaign + images context
     brand_info = state.get("brand_info", {})
     campaign = state.get("campaign", {})
+    images_list = state.get("images", [])
     brand_prefix = f"BRAND: {brand_info.get('name', '')}\n" if brand_info.get("name") else ""
-    campaign_prefix = f"CAMPAIGN: {campaign.get('name', '')}\n" if campaign.get("name") else ""
+
+    campaign_block = ""
+    if campaign:
+        label = campaign.get("label", "")
+        visuals = campaign.get("visual_style", "")
+        bg = campaign.get("background", "")
+        illustrations = campaign.get("illustrations", "")
+        campaign_block = (
+            f"CAMPAIGN: {label}\n"
+            f"VISUAL STYLE: {visuals}\n"
+            f"BACKGROUND: {bg}\n"
+            f"ILLUSTRATIONS: {illustrations}\n"
+        )
+
+    # Image descriptions for the designer
+    images_block = ""
+    if images_list:
+        img_descs = []
+        for img in images_list:
+            desc = img.get("description", "")
+            placement = img.get("placement", "auto")
+            alt = img.get("alt", "")
+            if desc or alt:
+                img_descs.append(f"  - {alt or desc} ({placement})")
+        if img_descs:
+            images_block = "EMBEDDED IMAGES (place these in the layout):\n" + "\n".join(img_descs) + "\n"
 
     copy_block = f"""HEADLINE: {headline}
 SUBHEAD: {subhead}
@@ -155,12 +181,13 @@ TAGLINE: {tagline}"""
     fonts_link = _build_google_fonts_link(copy_data)
 
     user_prompt = (
-        f"{brand_prefix}{campaign_prefix}"
+        f"{brand_prefix}{campaign_block}"
         f"PLATFORM: {fmt_id}\n"
         f"CANVAS: {fmt.width}px × {fmt.height}px\n"
         f"VISUAL STYLE: {brief.get('visual_direction', 'editorial')}\n"
         f"TONE: {brief.get('tone', 'professional')}\n\n"
         f"COPY TO USE:\n{copy_block}\n\n"
+        f"{images_block}\n"
         f"GOOGLE FONTS LINK (include in <head>):\n{fonts_link}\n\n"
         f"INSTRUCTIONS:\n"
         f"- Canvas must be EXACTLY {fmt.width}px × {fmt.height}px\n"

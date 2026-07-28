@@ -34,6 +34,9 @@ class GenerationState(TypedDict):
     # Input
     content: str
     title: str
+    url: str
+    excerpt: str
+    tags: list[str]
     platforms: list[str]
     source_url: Optional[str]
 
@@ -42,7 +45,9 @@ class GenerationState(TypedDict):
     design_tokens: dict[str, Any]
     brand_info: dict[str, Any]
     campaign: dict[str, Any]
+    campaign_name: str
     overrides: dict[str, str]
+    images: list[dict[str, Any]]
 
     # Agent Outputs
     strategic_brief: dict[str, Any]
@@ -66,7 +71,12 @@ def initial_state(
     design_tokens: dict[str, Any] | None = None,
     brand_info: dict[str, Any] | None = None,
     campaign: dict[str, Any] | None = None,
+    campaign_name: str = "",
     overrides: dict[str, str] | None = None,
+    images: list[dict[str, Any]] | None = None,
+    url: str = "",
+    excerpt: str = "",
+    tags: list[str] | None = None,
     **kwargs,
 ) -> GenerationState:
     format_tasks: dict[str, FormatTask] = {}
@@ -85,13 +95,18 @@ def initial_state(
     return {
         "title": title,
         "content": content,
+        "url": url or kwargs.get("url", ""),
+        "excerpt": excerpt or kwargs.get("excerpt", ""),
+        "tags": tags or kwargs.get("tags", []),
         "platforms": platforms,
         "source_url": kwargs.get("source_url"),
         "_task_id": _task_id,
         "design_tokens": design_tokens or {},
         "brand_info": brand_info or {},
         "campaign": campaign or {},
+        "campaign_name": campaign_name or kwargs.get("campaign", ""),
         "overrides": overrides or {},
+        "images": images or kwargs.get("images", []),
         "strategic_brief": {},
         "format_tasks": format_tasks,
         "_processing_format_id": "",

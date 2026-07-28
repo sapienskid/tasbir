@@ -99,23 +99,27 @@ async def strategist_node(state: GenerationState) -> dict:
         )
 
     campaign_block = ""
-    if campaign.get("name"):
+    if campaign:
+        label = campaign.get("label", "")
+        tone = campaign.get("tone", "")
+        visual = campaign.get("visual_style", "")
         campaign_block = (
-            f"CAMPAIGN: {campaign.get('name', '')}\n"
-            f"DESCRIPTION: {campaign.get('description', '')}\n"
-            f"POST TYPE: {campaign.get('post_type', '')}\n"
+            f"CAMPAIGN: {label}\n"
+            f"TONE: {tone}\n"
+            f"VISUAL STYLE: {visual}\n"
         )
-        if campaign.get("series_name"):
-            campaign_block += (
-                f"SERIES: {campaign.get('series_name', '')} "
-                f"(Part {campaign.get('series_part', 0)} of {campaign.get('series_total', 0)})\n"
-            )
+
+    # Tags & excerpt
+    tags_str = ", ".join(state.get("tags", []))
+    excerpt_str = state.get("excerpt", "")
 
     user_prompt = (
         f"TITLE: {title}\n\n"
         f"{brand_block}\n"
         f"{campaign_block}\n"
-        f"TARGET PLATFORMS: {', '.join(platforms)}\n\n"
+        f"TARGET PLATFORMS: {', '.join(platforms)}\n"
+        f"TAGS: {tags_str}\n"
+        f"EXCERPT: {excerpt_str}\n\n"
         f"CONTENT:\n{content[:3000]}"
     )
 

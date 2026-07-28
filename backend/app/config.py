@@ -21,10 +21,12 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "info"
 
-    # Output
+    # Design system paths
     output_dir: str = "data/output"
     tokens_path: str = "data/design_system/tokens.yaml"
     brand_path: str = "data/design_system/brand.yaml"
+    platforms_path: str = "data/design_system/platforms.yaml"
+    campaigns_path: str = "data/design_system/campaigns.yaml"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

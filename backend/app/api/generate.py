@@ -9,24 +9,24 @@ from app.tasks.generate import generate_task
 router = APIRouter()
 
 
-class CampaignContext(BaseModel):
-    name: str = ""
+class ImageRequest(BaseModel):
+    url: str
+    alt: str = ""
     description: str = ""
-    post_type: str = ""  # educational, promotional, announcement, thought_leadership
-    series_name: str = ""
-    series_part: int = 0
-    series_total: int = 0
+    placement: str = "auto"  # auto, background, top-left, center, bottom-right
 
 
 class GenerateRequest(BaseModel):
     content: str
     title: str = ""
+    url: str = ""
+    excerpt: str = ""
+    tags: list[str] = Field(default_factory=list)
     platforms: list[str] = ["instagram-square"]
     webhook_url: str | None = None
-
-    # Brand & campaign context
-    campaign: CampaignContext = Field(default_factory=CampaignContext)
+    campaign: str = "default"
     overrides: dict[str, str] = Field(default_factory=dict)
+    images: list[ImageRequest] = Field(default_factory=list)
 
 
 class GenerateResponse(BaseModel):

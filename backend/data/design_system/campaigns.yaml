@@ -1,0 +1,37 @@
+# Campaign presets — define visual style, tone, and background per post type
+# Campaigns are referenced by key in the API: { "campaign": "default" }
+
+default:
+  label: "Default"
+  tone: "professional"
+  visual_style: "clean editorial"
+  background: "dark gradient"
+  illustrations: "geometric accents"
+
+educational:
+  label: "Educational"
+  tone: "warm professional"
+  visual_style: "clean, readable, diagram-friendly"
+  background: "dark with subtle grid"
+  illustrations: "diagrams, code snippets, math"
+
+product-launch:
+  label: "Product Launch"
+  tone: "energetic"
+  visual_style: "bold minimal"
+  background: "solid dark with accent glow"
+  illustrations: "product mockup, logo"
+
+thought-leadership:
+  label: "Thought Leadership"
+  tone: "sophisticated"
+  visual_style: "editorial, serif-friendly"
+  background: "dark premium"
+  illustrations: "minimal, abstract shapes"
+
+tutorial:
+  label: "Tutorial"
+  tone: "friendly technical"
+  visual_style: "clean step-by-step"
+  background: "dark with grid pattern"
+  illustrations: "screenshots, code blocks, diagrams"
