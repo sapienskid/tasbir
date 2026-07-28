@@ -14,13 +14,18 @@ x-shared: &shared-env
   DATABASE_URL: sqlite+aiosqlite:///data/tasbir.db
   REDIS_URL: redis://redis:6379/0
   LOG_LEVEL: ${LOG_LEVEL:-info}
+  PENPOT_URL: http://penpot-backend:6060
+  PENPOT_ACCESS_TOKEN: ${PENPOT_ACCESS_TOKEN:-}
 
 x-penpot-flags: &penpot-flags
-  PENPOT_FLAGS: >
+  PENPOT_FLAGS: >-
     disable-email-verification
     disable-secure-session-cookies
     enable-prepl-server
     enable-mcp
+    enable-access-tokens
+    enable-access-tokens-management
+
 
 x-penpot-uri: &penpot-public-uri
   PENPOT_PUBLIC_URI: http://localhost:9001
@@ -160,6 +165,7 @@ services:
       SERVICE: api
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
+      - ./backend/app:/app/app
       - ./backend/data:/app/data
     mem_limit: 256m
 
@@ -176,7 +182,8 @@ services:
     environment:
       <<: *shared-env
       SERVICE: worker
-    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2 --autoreload
     volumes:
+      - ./backend/app:/app/app
       - ./backend/data:/app/data
     mem_limit: 512m

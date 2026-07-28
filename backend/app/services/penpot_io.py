@@ -46,21 +46,52 @@ DEFAULT_TOKEN_VALUES: dict[str, str] = {
 }
 
 # ---------------------------------------------------------------------------
-# Shape dataclasses (mirrors the .penpot JSON shape schema)
+# Shape dataclasses (mirrors the .penpot v3 JSON shape schema — camelCase)
 # ---------------------------------------------------------------------------
+
+# All migrations a new Penpot 2.16 file has applied (from a real export)
+_PENPOT_MIGRATIONS = [
+    "legacy-2", "legacy-3", "legacy-5", "legacy-6", "legacy-7", "legacy-8",
+    "legacy-9", "legacy-10", "legacy-11", "legacy-12", "legacy-13", "legacy-14",
+    "legacy-16", "legacy-17", "legacy-18", "legacy-19", "legacy-25", "legacy-26",
+    "legacy-27", "legacy-28", "legacy-29", "legacy-31", "legacy-32", "legacy-33",
+    "legacy-34", "legacy-36", "legacy-37", "legacy-38", "legacy-39", "legacy-40",
+    "legacy-41", "legacy-42", "legacy-43", "legacy-44", "legacy-45", "legacy-46",
+    "legacy-47", "legacy-48", "legacy-49", "legacy-50", "legacy-51", "legacy-52",
+    "legacy-53", "legacy-54", "legacy-55", "legacy-56", "legacy-57", "legacy-59",
+    "legacy-62", "legacy-65", "legacy-66", "legacy-67",
+    "0001-remove-tokens-from-groups", "0002-normalize-bool-content-v2",
+    "0002-clean-shape-interactions", "0003-fix-root-shape",
+    "0003-convert-path-content-v2", "0005-deprecate-image-type",
+    "0006-fix-old-texts-fills", "0008-fix-library-colors-v4",
+    "0009-clean-library-colors", "0009-add-partial-text-touched-flags",
+    "0010-fix-swap-slots-pointing-non-existent-shapes",
+    "0011-fix-invalid-text-touched-flags", "0012-fix-position-data",
+    "0013-fix-component-path", "0013-clear-invalid-strokes-and-fills",
+    "0014-fix-tokens-lib-duplicate-ids", "0014-clear-components-nil-objects",
+    "0015-fix-text-attrs-blank-strings", "0015-clean-shadow-color",
+    "0016-copy-fills-from-position-data-to-text-node", "0017-fix-layout-flex-dir",
+    "0018-remove-unneeded-objects-from-components", "0019-fix-missing-swap-slots",
+    "0020-sync-component-id-with-near-main", "0021-fix-shape-svg-attrs",
+    "0022-normalize-component-root-and-resync",
+]
+
+_PENPOT_FEATURES = [
+    "fdata/path-data", "design-tokens/v1", "variants/v1",
+    "layout/grid", "components/v2", "fdata/shape-data-type",
+]
 
 
 @dataclass
 class Fill:
     color: str = "#000000"
     opacity: float = 1.0
-    fill_type: str = "color"  # color | gradient | image
+    # NOTE: do NOT include fill-type — Penpot's FillAttrs schema rejects it as an extra key
 
     def to_dict(self) -> dict:
         return {
             "fill-color": self.color,
             "fill-opacity": self.opacity,
-            "fill-type": self.fill_type,
         }
 
 
@@ -87,14 +118,14 @@ class TextContent:
                             "children": [
                                 {
                                     "text": self.text,
-                                    "font-family": self.font_family,
-                                    "font-size": str(self.font_size),
-                                    "font-weight": str(self.font_weight),
-                                    "fill-color": self.color,
-                                    "fill-opacity": 1,
-                                    "line-height": str(self.line_height),
-                                    "letter-spacing": str(self.letter_spacing),
-                                    "text-align": self.text_align,
+                                    "fontFamily": self.font_family,
+                                    "fontSize": str(self.font_size),
+                                    "fontWeight": str(self.font_weight),
+                                    "fillColor": self.color,
+                                    "fillOpacity": 1,
+                                    "lineHeight": str(self.line_height),
+                                    "letterSpacing": str(self.letter_spacing),
+                                    "textAlign": self.text_align,
                                 }
                             ],
                         }
@@ -131,35 +162,54 @@ class PenpotShape:
     frame_type: str = "none"  # none | grid | flex
 
     def to_dict(self) -> dict:
+        w = max(self.width, 1.0)
+        h = max(self.height, 1.0)
         d: dict[str, Any] = {
             "id": self.id,
             "name": self.name,
             "type": self.shape_type,
             "x": self.x,
             "y": self.y,
-            "width": self.width,
-            "height": self.height,
+            "width": w,
+            "height": h,
             "rotation": self.rotation,
             "opacity": self.opacity,
-            "blend-mode": self.blend_mode,
+            "blendMode": self.blend_mode,
             "fills": [f.to_dict() for f in self.fills],
             "strokes": [],
             "shadow": [],
+            "selrect": {
+                "x": self.x, "y": self.y,
+                "width": w, "height": h,
+                "x1": self.x, "y1": self.y,
+                "x2": self.x + w, "y2": self.y + h,
+            },
+            "points": [
+                {"x": self.x, "y": self.y},
+                {"x": self.x + w, "y": self.y},
+                {"x": self.x + w, "y": self.y + h},
+                {"x": self.x, "y": self.y + h},
+            ],
+            "transform": {"a": 1, "b": 0, "c": 0, "d": 1, "e": 0, "f": 0},
+            "transformInverse": {"a": 1, "b": 0, "c": 0, "d": 1, "e": 0, "f": 0},
+            "hideFillOnExport": False,
         }
 
         if self.shape_type == "frame":
-            d["clip-content"] = self.clip_content
+            d["clipContent"] = self.clip_content
             d["shapes"] = [c.id for c in self.children]
-            d["frame-id"] = d["id"]
 
         elif self.shape_type == "text" and self.text_content:
             d["content"] = self.text_content.to_dict()
+            d["shapes"] = []
 
         elif self.shape_type == "svg-raw" and self.svg_content:
             d["content"] = self.svg_content
+            d["shapes"] = []
 
         elif self.shape_type == "image" and self.image_object_id:
             d["metadata"] = {"id": self.image_object_id}
+            d["shapes"] = []
 
         return d
 
@@ -223,7 +273,7 @@ class PenpotWriter:
         return obj_id
 
     def build(self) -> bytes:
-        """Build and return the .penpot ZIP bytes."""
+        """Build and return the .penpot ZIP bytes in Penpot v3 binfile format."""
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             # 1. manifest.json
@@ -234,13 +284,21 @@ class PenpotWriter:
             file_meta = self._build_file_meta()
             zf.writestr(f"files/{self.file_id}.json", json.dumps(file_meta, indent=2))
 
-            # 3. Pages (data)
-            pages_data = self._build_pages_data()
-            for page_id, page_data in pages_data.items():
+            # 3. Pages & shapes
+            for idx, page in enumerate(self.pages):
+                page_id = page["id"]
+                page_meta = {"id": page_id, "name": page["name"], "index": idx}
                 zf.writestr(
-                    f"files/{self.file_id}/pages/{page_id}",
-                    json.dumps(page_data, indent=2),
+                    f"files/{self.file_id}/pages/{page_id}.json",
+                    json.dumps(page_meta, indent=2),
                 )
+
+                shapes = self._build_page_shapes(page)
+                for shape_id, shape_data in shapes.items():
+                    zf.writestr(
+                        f"files/{self.file_id}/pages/{page_id}/{shape_id}.json",
+                        json.dumps(shape_data, indent=2),
+                    )
 
             # 4. Embedded objects
             for obj_id, obj_bytes in self._objects.items():
@@ -251,89 +309,98 @@ class PenpotWriter:
 
     def _build_manifest(self) -> dict:
         return {
-            "format": 2,
-            "files": {
-                self.file_id: {
+            "type": "penpot/export-files",
+            "version": 1,
+            "generatedBy": "tasbir/1.0",
+            "refer": "penpot",
+            "files": [
+                {
+                    "id": self.file_id,
                     "name": self.file_name,
-                    "features": [],
+                    "features": _PENPOT_FEATURES,
                 }
-            },
+            ],
+            "relations": [],
         }
 
     def _build_file_meta(self) -> dict:
+        import datetime
+        now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         return {
             "id": self.file_id,
             "name": self.file_name,
-            "pages": [p["id"] for p in self.pages],
-            "pages-index": {
-                p["id"]: {"name": p["name"], "id": p["id"]}
-                for p in self.pages
-            },
-            "colors": {},
-            "typographies": {},
-            "components": {},
-            "data": {
-                "id": self.file_id,
-                "name": self.file_name,
+            "vern": 0,
+            "revn": 1,
+            "version": 67,
+            "hasMediaTrimmed": False,
+            "isShared": False,
+            "createdAt": now_str,
+            "modifiedAt": now_str,
+            "features": _PENPOT_FEATURES,
+            "migrations": _PENPOT_MIGRATIONS,
+            "options": {
+                "componentsV2": True,
+                "baseFontSize": "16px",
             },
         }
 
-    def _build_pages_data(self) -> dict[str, dict]:
-        result = {}
-        for page in self.pages:
-            page_id = page["id"]
-            root: PenpotShape = page["root"]
+    def _build_page_shapes(self, page: dict) -> dict[str, dict]:
+        page_id = page["id"]
+        root: PenpotShape = page["root"]
 
-            # Flatten all shapes
-            all_shapes = root.flatten()
-            objects_dict: dict[str, Any] = {}
+        all_shapes = root.flatten()
+        result: dict[str, Any] = {}
 
-            # Root frame ID is the page's frame
-            page_frame_id = root.id
+        page_frame_id = root.id
 
-            for shape in all_shapes:
-                shape_dict = shape.to_dict()
-                # Set frame-id for all shapes (points to root frame)
-                if shape.id != page_frame_id:
-                    shape_dict["frame-id"] = page_frame_id
-                    shape_dict["parent-id"] = self._find_parent_id(root, shape.id)
-                else:
-                    shape_dict["frame-id"] = page_frame_id
-                    shape_dict["parent-id"] = "00000000-0000-0000-0000-000000000000"
-                objects_dict[shape.id] = shape_dict
+        for shape in all_shapes:
+            shape_dict = shape.to_dict()
+            shape_dict["pageId"] = page_id
+            if shape.id != page_frame_id:
+                shape_dict["frameId"] = page_frame_id
+                shape_dict["parentId"] = self._find_parent_id(root, shape.id)
+            else:
+                shape_dict["frameId"] = page_frame_id
+                shape_dict["parentId"] = "00000000-0000-0000-0000-000000000000"
+            result[shape.id] = shape_dict
 
-            # Add the special root "frame" that Penpot expects
-            # (a transparent container for the whole page)
-            root_frame_id = "00000000-0000-0000-0000-000000000000"
-            objects_dict[root_frame_id] = {
-                "id": root_frame_id,
-                "name": "Root Frame",
-                "type": "frame",
-                "x": 0,
-                "y": 0,
-                "width": page["width"],
-                "height": page["height"],
-                "shapes": [root.id],
-                "fills": [],
-                "strokes": [],
-                "shadow": [],
-                "rotation": 0,
-                "opacity": 1,
-                "blend-mode": "normal",
-                "clip-content": False,
-                "frame-id": root_frame_id,
-                "parent-id": None,
-            }
-
-            result[page_id] = {
-                "id": page_id,
-                "name": page["name"],
-                "objects": objects_dict,
-                "options": {
-                    "background": "#e8e9ea",
-                    "saved-grids": {},
-                },
-            }
+        # Special root frame required by Penpot
+        root_frame_id = "00000000-0000-0000-0000-000000000000"
+        result[root_frame_id] = {
+            "id": root_frame_id,
+            "name": "Root Frame",
+            "type": "frame",
+            "x": 0,
+            "y": 0,
+            "width": page["width"],
+            "height": page["height"],
+            "rotation": 0,
+            "selrect": {
+                "x": 0, "y": 0,
+                "width": page["width"], "height": page["height"],
+                "x1": 0, "y1": 0,
+                "x2": page["width"], "y2": page["height"],
+            },
+            "points": [
+                {"x": 0, "y": 0},
+                {"x": page["width"], "y": 0},
+                {"x": page["width"], "y": page["height"]},
+                {"x": 0, "y": page["height"]},
+            ],
+            "transform": {"a": 1, "b": 0, "c": 0, "d": 1, "e": 0, "f": 0},
+            "transformInverse": {"a": 1, "b": 0, "c": 0, "d": 1, "e": 0, "f": 0},
+            "parentId": root_frame_id,
+            "frameId": root_frame_id,
+            "pageId": page_id,
+            "shapes": [root.id],
+            "fills": [],
+            "strokes": [],
+            "shadow": [],
+            "opacity": 1,
+            "blendMode": "normal",
+            "clipContent": False,
+            "hideFillOnExport": False,
+        }
 
         return result
 

@@ -104,7 +104,7 @@ async def extract_dom(req: DOMExtractionRequest):
         await page.set_content(req.html, wait_until="networkidle")
 
         # JavaScript that walks the DOM and extracts computed styles + bounding boxes
-        dom_tree = await page.evaluate("""(width, height) => {
+        dom_tree = await page.evaluate("""({width, height}) => {
             function extractNode(el, parentX, parentY) {
                 const rect = el.getBoundingClientRect();
                 const style = window.getComputedStyle(el);
@@ -159,7 +159,7 @@ async def extract_dom(req: DOMExtractionRequest):
 
             const body = document.body;
             return { dom: extractNode(body) };
-        }""", req.width, req.height)
+        }""", {"width": req.width, "height": req.height})
 
         return dom_tree
 

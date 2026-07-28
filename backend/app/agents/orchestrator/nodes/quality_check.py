@@ -67,12 +67,7 @@ async def _call_vision_llm(
     temperature: float = 0.3,
     max_tokens: int = 1000,
 ) -> str:
-    """Call Gemini Vision with an image + text prompt.
-
-    Uses google-genai directly for multimodal support (LangChain's
-    ChatGoogleGenerativeAI also supports this, but we use google-genai
-    directly for cleaner image handling).
-    """
+    """Call Gemini Vision with an image + text prompt via langchain_google_genai."""
     from app.config import get_settings
 
     settings = get_settings()
@@ -88,29 +83,30 @@ async def _call_vision_llm(
         })
 
     try:
-        import google.generativeai as genai
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import HumanMessage, SystemMessage
 
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash-lite",
-            system_instruction=system_prompt,
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3.5-flash-lite",
+            google_api_key=api_key,
+            max_output_tokens=max_tokens,
         )
 
-        # Encode image as base64 for the API
-        image_part = {
-            "mime_type": "image/png",
-            "data": base64.b64encode(image_bytes).decode("utf-8"),
-        }
+        # Build multimodal message: system + image + text
+        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=[
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{image_b64}"},
+                },
+                {"type": "text", "text": user_prompt},
+            ]),
+        ]
 
-        response = model.generate_content(
-            [image_part, user_prompt],
-            generation_config=genai.types.GenerationConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
-            ),
-        )
-
-        return response.text or ""
+        response = await llm.ainvoke(messages)
+        return response.content or ""
 
     except Exception as e:
         log.error("[verifier] Vision LLM call failed: %s", e)
