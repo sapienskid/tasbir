@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<style>
+:root {
+}
+</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --color-bg: #0f172a;
+  --color-bg-secondary: #1e293b;
+  --color-text: #ffffff;
+  --color-text-secondary: #94a3b8;
+  --color-primary: #667eea;
+  --color-secondary: #764ba2;
+  --color-accent: #6366f1;
+  --color-border: #334155;
+  --font-sans: 'Inter', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: 1080px;
+  height: 1080px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  font-family: var(--font-sans);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 60px;
+  text-align: center;
+}
+.headline {
+  font-size: 48px;
+  font-weight: 800;
+  color: var(--color-text);
+  line-height: 1.1;
+  margin-bottom: 24px;
+}
+.subhead {
+  font-size: 24px;
+  font-weight: 500;
+  color: var(--color-primary);
+  margin-bottom: 24px;
+}
+.body-text {
+  font-size: 18px;
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  margin-bottom: 32px;
+  max-width: 80%;
+}
+.tagline {
+  font-size: 16px;
+  color: var(--color-accent);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.accent-bar {
+  width: 60px;
+  height: 4px;
+  background: var(--color-primary);
+  margin: 24px auto;
+}
+</style>
+</head>
+<body>
+  <div class="headline">Untitled</div>
+  <div class="accent-bar"></div>
+  <div class="subhead"></div>
+  <div class="body-text"></div>
+  <div class="tagline"></div>
+</body>
+</html>
