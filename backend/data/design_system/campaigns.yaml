@@ -35,3 +35,17 @@ tutorial:
   visual_style: "clean step-by-step"
   background: "dark with grid pattern"
   illustrations: "screenshots, code blocks, diagrams"
+
+mathematics:
+  label: "Mathematics"
+  tone: "precise academic"
+  visual_style: "clean, math-friendly, large formulas"
+  background: "dark with subtle grid"
+  illustrations: "mathematical expressions, formulas, diagrams, graphs"
+
+stem:
+  label: "STEM"
+  tone: "clear technical"
+  visual_style: "clean technical, code and formulas"
+  background: "dark with geometric grid"
+  illustrations: "equations, code snippets, diagrams, graphs"

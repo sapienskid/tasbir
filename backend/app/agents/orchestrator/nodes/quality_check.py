@@ -26,7 +26,7 @@ from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
 from app.services.dom_extractor import render_to_png
 from app.services.formats import get_format_info
-from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html
+from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html, inject_katex_into_html
 
 log = logging.getLogger(__name__)
 
@@ -148,6 +148,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # Step 1: Render HTML → PNG
     log.info("[verifier] Rendering %s to PNG for visual audit", fmt_id)
     html_with_tokens = inject_tokens_into_html(html, design_tokens)
+    html_with_tokens = inject_katex_into_html(html_with_tokens)
     png_bytes = await render_to_png(html_with_tokens, fmt.width, fmt.height)
 
     if not png_bytes:

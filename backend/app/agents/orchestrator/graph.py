@@ -45,10 +45,12 @@ def fan_out_to_formats(state: GenerationState) -> list[Send]:
 def build_format_subgraph() -> StateGraph:
     subgraph = StateGraph(GenerationState)
     subgraph.add_node("designer", designer_node_single)
+    subgraph.add_node("renderer", renderer_node_single)
     subgraph.add_node("verifier", quality_check_node_single)
 
     subgraph.set_entry_point("designer")
-    subgraph.add_edge("designer", "verifier")
+    subgraph.add_edge("designer", "renderer")
+    subgraph.add_edge("renderer", "verifier")
     subgraph.add_edge("verifier", END)
 
     return subgraph.compile()

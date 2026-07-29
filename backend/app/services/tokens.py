@@ -126,8 +126,23 @@ def build_css_variable_block(tokens: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
+def _strip_root_blocks(html: str) -> str:
+    """Remove any :root { ... } CSS blocks to prevent designer overrides."""
+    import re
+    def _remove_root(match):
+        content = match.group(0)
+        if ":root" in content:
+            return ""
+        return content
+    html = re.sub(r'<style[^>]*>.*?</style>', _remove_root, html, flags=re.DOTALL)
+    return html
+
+
 def inject_tokens_into_html(html: str, tokens: dict[str, str]) -> str:
     """Inject CSS variable definitions into an HTML document's <head>."""
+    # First strip any existing :root blocks to prevent designer overrides
+    html = _strip_root_blocks(html)
+
     css_block = build_css_variable_block(tokens)
     style_tag = f"<style>\n{css_block}\n</style>"
 
@@ -143,10 +158,7 @@ def inject_tokens_into_html(html: str, tokens: dict[str, str]) -> str:
 
 
 def inject_katex_into_html(html: str) -> str:
-    """Inject KaTeX CDN links for LaTeX rendering if math spans are present."""
-    if '<span class="math"' not in html:
-        return html
-
+    """Inject KaTeX CDN + auto-render for $ and $$ delimiters."""
     katex_css = (
         '<link rel="stylesheet" '
         'href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" '
@@ -161,12 +173,13 @@ def inject_katex_into_html(html: str) -> str:
         '<script defer '
         'src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/'
         'auto-render.min.js" crossorigin="anonymous" '
-        'onload="renderMathInElement(document.body,{'
-        "delimiters:[{left:'$$',right:'$$',display:true},"
-        "{left:'$',right:'$',display:false},"
-        "{left:'\\\\\\\\[',right:'\\\\\\\\]',display:true},"
-        "{left:'(',right:')',display:false}]"
-        '})"></script>'
+        "onload=\"renderMathInElement(document.body,{"
+        "delimiters:["
+        "{left:'$$',right:'$$',display:true},"
+        "{left:'$',right:'$',display:false}"
+        "],"
+        "throwOnError:false"
+        '})\"></script>'
     )
 
     head_tag = katex_css + katex_js + katex_auto

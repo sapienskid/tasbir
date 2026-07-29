@@ -2,7 +2,7 @@
 
 The designer generates platform-optimized HTML. This node:
   1. Injects design tokens as CSS :root variables
-  2. Injects KaTeX CDN if math expressions are detected
+  2. Injects KaTeX CDN + auto-render for math rendering
   3. Embeds base64 images if provided
   4. Saves to data/output/{task_id}/{fmt_id}.html
 """

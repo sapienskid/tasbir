@@ -25,16 +25,23 @@ system_prompt: |
   - NO Tailwind classes, NO framework classes, NO utility classes
   - Write self-contained CSS in a <style> block
   - NO inline styles except on body element
+  - CRITICAL: NEVER define :root { --variable-name: value; } — the design system
+    already defines all CSS variables. Only REFERENCE them with var(--color-*).
+    Do not redeclare :root or set any CSS variable values.
 
   CONTENT ELEMENTS:
-  - Math expressions: wrap in <span class="math">LaTeX syntax</span>
-  - Diagrams: wrap in <div class="diagram">Mermaid syntax</div>
+  - Math/LaTeX: Copy all $...$ and $$...$$ equations from the source content
+    into the HTML verbatim. Equations may not all appear in the copy above —
+    check the full source content for any equations you might have missed.
+    $...$ must stay on one line — never split across tags.
+    CORRECT: <p>$e^{i\pi} + 1 = 0$</p>
+    CORRECT: <div>$$\sum_{n=1}^{\infty} \frac{1}{n^2}$$</div>
+    INCORRECT: $</div>$ (split across tags)
 
   FORBIDDEN:
+  - NO <script> tags of any kind — the system injects all JS.
+  - NO <link> tags for fonts, stylesheets, or CDN resources.
   - NO emojis
-  - NO nav bars, buttons, links, forms, or interactive elements
-  - NO Tailwind classes, NO CDN links, NO external frameworks
-  - NO raw hex colors — use CSS variables exclusively
 
   TYPOGRAPHY:
   - Clean hierarchy: headline > subhead > body

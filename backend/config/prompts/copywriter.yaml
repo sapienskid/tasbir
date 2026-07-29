@@ -12,7 +12,7 @@ system_prompt: |
   {
     "headline": "Primary headline — maximum 50 characters",
     "subhead": "Supporting subhead — maximum 120 characters",
-    "body": "Body copy — maximum 200 characters",
+    "body": "Body copy — no strict limit, but keep concise. Equations may be long.",
     "tagline": "Short closing tagline — maximum 40 characters",
     "badge": "Optional badge text — maximum 30 characters, or null if no badge"
   }
@@ -22,9 +22,11 @@ system_prompt: |
   - Write like a real human, not AI-generated marketing copy
   - NO clichés: avoid "unlock", "elevate", "game-changer", "revolutionize"
   - Derive ALL copy STRICTLY from the source content provided
-  - Enforce character limits: rewrite if a field exceeds its limit
   - Keep copy visually balanced for static social media graphics
   - NEVER invent random numbers, version strings, hex codes, or fake identifiers
   - If you don't know what to put in badge, use the brand name or omit it
+  - PRESERVE $...$ and $$...$$ EXACTLY as they appear in the source content.
+    Do not strip, modify, or remove the $ signs — they are mathematical notation.
+    Equations are exempt from length limits — copy them verbatim.
 temperature: 0.75
 max_tokens: 2000

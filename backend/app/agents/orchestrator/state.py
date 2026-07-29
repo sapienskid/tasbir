@@ -7,6 +7,28 @@ Per-format streaming via FormatTask dict + Send fan-out.
 from typing import Annotated, Any, Optional, TypedDict
 
 
+def _keep_first(a: str, b: str) -> str:
+    return a if a else b
+
+
+def _keep_first_list(a: list, b: list) -> list:
+    return a if a else b
+
+
+def _keep_first_dict(a: dict, b: dict) -> dict:
+    return a if a else b
+
+
+def _merge_dicts(a: dict, b: dict) -> dict:
+    merged = dict(a)
+    for k, v in b.items():
+        if isinstance(v, dict) and k in merged and isinstance(merged[k], dict):
+            merged[k] = {**merged[k], **v}
+        else:
+            merged[k] = v
+    return merged
+
+
 class FormatTask(TypedDict):
     status: str
     copy: str
@@ -32,35 +54,35 @@ def merge_format_tasks(
 
 class GenerationState(TypedDict):
     # Input
-    content: str
-    title: str
-    url: str
-    excerpt: str
-    tags: list[str]
-    platforms: list[str]
-    source_url: Optional[str]
+    content: Annotated[str, _keep_first]
+    title: Annotated[str, _keep_first]
+    url: Annotated[str, _keep_first]
+    excerpt: Annotated[str, _keep_first]
+    tags: Annotated[list[str], _keep_first_list]
+    platforms: Annotated[list[str], _keep_first_list]
+    source_url: Annotated[Optional[str], _keep_first]
 
     # Configuration
-    _task_id: str
-    design_tokens: dict[str, Any]
-    brand_info: dict[str, Any]
-    campaign: dict[str, Any]
-    campaign_name: str
-    overrides: dict[str, str]
-    images: list[dict[str, Any]]
+    _task_id: Annotated[str, _keep_first]
+    design_tokens: Annotated[dict[str, Any], _keep_first_dict]
+    brand_info: Annotated[dict[str, Any], _keep_first_dict]
+    campaign: Annotated[dict[str, Any], _keep_first_dict]
+    campaign_name: Annotated[str, _keep_first]
+    overrides: Annotated[dict[str, str], _keep_first_dict]
+    images: Annotated[list[dict[str, Any]], _keep_first_list]
 
     # Agent Outputs
-    strategic_brief: dict[str, Any]
+    strategic_brief: Annotated[dict[str, Any], _keep_first_dict]
 
     format_tasks: Annotated[dict[str, FormatTask], merge_format_tasks]
 
-    _processing_format_id: str
+    _processing_format_id: Annotated[str, _keep_first]
 
-    verification: dict[str, dict]
-    retry_count: dict[str, int]
+    verification: Annotated[dict[str, dict], _merge_dicts]
+    retry_count: Annotated[dict[str, int], _merge_dicts]
 
     # Output
-    output_paths: dict[str, str]
+    output_paths: Annotated[dict[str, str], _merge_dicts]
 
 
 def initial_state(

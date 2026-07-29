@@ -13,7 +13,7 @@ class ImageRequest(BaseModel):
     url: str
     alt: str = ""
     description: str = ""
-    placement: str = "auto"  # auto, background, top-left, center, bottom-right
+    placement: str = "auto"
 
 
 class GenerateRequest(BaseModel):
@@ -36,7 +36,8 @@ class GenerateResponse(BaseModel):
 
 @router.post("", response_model=GenerateResponse)
 async def generate(request: GenerateRequest, db: AsyncSession = Depends(get_db)):
+    data = request.model_dump()
     repo = TaskRepository(db)
-    task = await repo.create(source_data=request.model_dump())
-    generate_task.delay(str(task.id), request.model_dump())
+    task = await repo.create(source_data=data)
+    generate_task.delay(str(task.id), data)
     return GenerateResponse(task_id=str(task.id))
