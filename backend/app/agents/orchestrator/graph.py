@@ -1,10 +1,8 @@
 """LangGraph state machine for the v3 generation pipeline.
 
 Topology:
-  strategist → copywriter → designer → verifier
-
-Copywriter and Designer use Send fan-out per platform.
-Verifier renders HTML to PNG for visual quality check.
+  strategist → copywriter → [designer → renderer → verifier] per-format subgraph
+  verifier → designer (retry loop, up to 2 attempts)
 """
 
 from collections.abc import Awaitable, Callable
@@ -15,7 +13,7 @@ from langgraph.types import Send
 from app.agents.orchestrator.nodes.strategist import strategist_node
 from app.agents.orchestrator.nodes.copywriter import copywriter_node
 from app.agents.orchestrator.nodes.designer import designer_node_single
-from app.agents.orchestrator.nodes.quality_check import quality_check_node_single
+from app.agents.orchestrator.nodes.quality_check import quality_check_node_single, MAX_RETRIES
 from app.agents.orchestrator.nodes.renderer import renderer_node_single
 from app.agents.orchestrator.nodes.quality_check import quality_check_node_single
 from app.agents.orchestrator.state import GenerationState, initial_state
@@ -42,6 +40,31 @@ def fan_out_to_formats(state: GenerationState) -> list[Send]:
     ]
 
 
+def _route_after_verifier(state: GenerationState) -> str:
+    """Route back to designer for retry or to END.
+
+    Checks the current platform's verification result and retry count.
+    If quality failed and retries remain, route back to designer.
+    Otherwise route to END.
+    """
+    fmt_id = state.get("_processing_format_id", "")
+    if not fmt_id:
+        return END
+
+    verification = state.get("verification", {})
+    fmt_verification = verification.get(fmt_id, {})
+    passed = fmt_verification.get("pass", True)
+
+    if passed:
+        return END
+
+    retry_count = state.get("retry_count", {}).get(fmt_id, 0)
+    if retry_count < MAX_RETRIES:
+        return "designer"
+
+    return END
+
+
 def build_format_subgraph() -> StateGraph:
     subgraph = StateGraph(GenerationState)
     subgraph.add_node("designer", designer_node_single)
@@ -51,7 +74,7 @@ def build_format_subgraph() -> StateGraph:
     subgraph.set_entry_point("designer")
     subgraph.add_edge("designer", "renderer")
     subgraph.add_edge("renderer", "verifier")
-    subgraph.add_edge("verifier", END)
+    subgraph.add_conditional_edges("verifier", _route_after_verifier)
 
     return subgraph.compile()
 

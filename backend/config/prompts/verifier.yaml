@@ -41,4 +41,4 @@ system_prompt: |
 
   CRITICAL: Your output is ANONYMOUS — never include your name.
 temperature: 0.3
-max_tokens: 1000
+max_tokens: 2048

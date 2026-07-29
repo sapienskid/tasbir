@@ -49,27 +49,44 @@ class PlatformCopy(BaseModel):
     @field_validator("headline")
     @classmethod
     def trim_headline(cls, v: str) -> str:
-        return v[:50] if v else v
+        if len(v) > 50:
+            idx = v.rfind(" ", 0, 50)
+            log.warning("headline truncated from %d to 50 chars", len(v))
+            return v[:idx] if idx > 0 else v[:50]
+        return v
 
     @field_validator("subhead")
     @classmethod
     def trim_subhead(cls, v: str) -> str:
-        return v[:120] if v else v
+        if len(v) > 120:
+            idx = v.rfind(" ", 0, 120)
+            log.warning("subhead truncated from %d to 120 chars", len(v))
+            return v[:idx] if idx > 0 else v[:120]
+        return v
 
     @field_validator("body")
     @classmethod
     def trim_body(cls, v: str) -> str:
-        return v[:200] if v else v
+        if len(v) > 500:
+            idx = v.rfind(" ", 0, 500)
+            log.warning("body truncated from %d to 500 chars", len(v))
+            return v[:idx] if idx > 0 else v[:500]
+        return v
 
     @field_validator("tagline")
     @classmethod
     def trim_tagline(cls, v: str) -> str:
-        return v[:40] if v else v
+        if len(v) > 40:
+            idx = v.rfind(" ", 0, 40)
+            log.warning("tagline truncated from %d to 40 chars", len(v))
+            return v[:idx] if idx > 0 else v[:40]
+        return v
 
     @field_validator("badge")
     @classmethod
     def trim_badge(cls, v: str | None) -> str | None:
         if v and len(v) > 30:
+            log.warning("badge truncated from %d to 30 chars", len(v))
             return v[:30]
         return v
 
@@ -77,6 +94,12 @@ class PlatformCopy(BaseModel):
 def _extract_json(text: str) -> dict:
     """Extract the first valid JSON object from LLM output."""
     text = text.strip()
+
+    # Detect truncation — JSON must end with }
+    stripped = text.rstrip()
+    if stripped and not stripped.endswith("}"):
+        log.warning("[copywriter] JSON output appears truncated (no closing brace) — %d chars", len(stripped))
+
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -115,22 +138,26 @@ async def _write_copy_for_platform(
     fmt = get_format_info(platform_id)
     platform_note = brief.get("platform_notes", {}).get(platform_id, "")
 
-    # Apply deterministic overrides first (bypass LLM for these fields)
     overrides = overrides or {}
-    if overrides.get("headline") or overrides.get("badge") or overrides.get("tagline"):
-        text = overrides.get("headline", "")
-        sub = overrides.get("subhead", "")
-        body = overrides.get("body", "")
-        tag = overrides.get("tagline", "")
-        badge = overrides.get("badge")
-        log.info("[copywriter] Using overrides for %s", platform_id)
+    has_headline_override = bool(overrides.get("headline"))
+    has_badge_override = bool(overrides.get("badge"))
+    has_tagline_override = bool(overrides.get("tagline"))
+    has_subhead_override = bool(overrides.get("subhead"))
+    has_body_override = bool(overrides.get("body"))
+    all_overridden = has_headline_override and has_subhead_override and has_body_override and has_tagline_override
+
+    if all_overridden:
+        log.info("[copywriter] All fields overridden for %s — skipping LLM", platform_id)
         return platform_id, PlatformCopy(
-            headline=text or title[:50],
-            subhead=sub or "Key insights from the article",
-            body=body or "Discover the key takeaways from this analysis.",
-            tagline=tag or "Read more",
-            badge=badge or None,
+            headline=overrides.get("headline", title[:50]),
+            subhead=overrides.get("subhead", ""),
+            body=overrides.get("body", ""),
+            tagline=overrides.get("tagline", ""),
+            badge=overrides.get("badge") or None,
         )
+
+    if has_headline_override or has_badge_override or has_tagline_override:
+        log.info("[copywriter] Partial overrides for %s — filling rest via LLM", platform_id)
 
     # Build brand + campaign context
     brand_block = ""
@@ -174,15 +201,38 @@ async def _write_copy_for_platform(
     try:
         data = _extract_json(raw)
         copy = PlatformCopy(**data)
+
+        # Apply partial overrides on top of LLM output
+        if overrides:
+            overrides_applied = []
+            if has_headline_override:
+                copy.headline = overrides["headline"]
+                overrides_applied.append("headline")
+            if has_subhead_override:
+                copy.subhead = overrides["subhead"]
+                overrides_applied.append("subhead")
+            if has_body_override:
+                copy.body = overrides["body"]
+                overrides_applied.append("body")
+            if has_tagline_override:
+                copy.tagline = overrides["tagline"]
+                overrides_applied.append("tagline")
+            if has_badge_override:
+                copy.badge = overrides["badge"] or None
+                overrides_applied.append("badge")
+            if overrides_applied:
+                log.info("[copywriter] Overrides applied for %s: %s", platform_id, overrides_applied)
+
         log.info("[copywriter] Copy ready for %s — headline: %s", platform_id, copy.headline[:40])
         return platform_id, copy
     except Exception as e:
         log.warning("[copywriter] Parse failed for %s: %s — using fallback", platform_id, e)
+        fallback_body = content[:300].strip() if content else "No content available"
         fallback = PlatformCopy(
             headline=title[:50],
-            subhead="Key insights from the article",
-            body="Discover the key takeaways and insights from this analysis.",
-            tagline="Read more",
+            subhead="",
+            body=fallback_body,
+            tagline="",
             badge=None,
         )
         return platform_id, fallback

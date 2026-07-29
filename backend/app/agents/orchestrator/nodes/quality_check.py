@@ -24,7 +24,11 @@ from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
-from app.services.design_instruction import substitute_image_keys
+from app.services.design_instruction import (
+    format_design_instruction_block,
+    load_design_instruction,
+    substitute_image_keys,
+)
 from app.services.dom_extractor import render_to_png
 from app.services.formats import get_format_info
 from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html, inject_katex_into_html
@@ -106,7 +110,17 @@ async def _call_vision_llm(
         ]
 
         response = await llm.ainvoke(messages)
-        return response.content or ""
+        content = response.content or ""
+        # LangChain can return content as a list of content blocks
+        if isinstance(content, list):
+            texts = []
+            for block in content:
+                if isinstance(block, dict) and "text" in block:
+                    texts.append(block["text"])
+                elif isinstance(block, str):
+                    texts.append(block)
+            content = "\n".join(texts)
+        return content
 
     except Exception as e:
         log.error("[verifier] Vision LLM call failed: %s", e)
@@ -119,12 +133,29 @@ async def _call_vision_llm(
         })
 
 
-def _build_design_system_context(tokens: dict) -> str:
+def _build_design_system_context(tokens: dict, design_instruction: dict) -> str:
     """Build a concise design system spec for the verifier prompt."""
     lines = ["DESIGN SYSTEM:"]
     for var, value in tokens.items():
-        if var.startswith("--color"):
+        if var.startswith("--color") or var.startswith("--font"):
             lines.append(f"  {var}: {value}")
+    
+    # Add design instruction constraints
+    di = design_instruction or {}
+    ts = di.get("type_scale", {})
+    if ts.get("sizes_px"):
+        lines.append(f"  Type scale (px): {', '.join(str(s) for s in ts['sizes_px'])}")
+    dec = di.get("decoration", {})
+    bans = []
+    if not dec.get("unicode_symbols", True): bans.append("unicode symbols")
+    if not dec.get("gradients_as_bg", True): bans.append("gradient backgrounds")
+    if not dec.get("glassmorphism", True): bans.append("glassmorphism")
+    if bans:
+        lines.append(f"  Forbidden: {', '.join(bans)}")
+    g = di.get("grid", {})
+    if g.get("columns"):
+        lines.append(f"  Grid: {g['columns']}-column, margin={g.get('margin', '6%')}")
+    
     return "\n".join(lines)
 
 
@@ -148,6 +179,8 @@ async def quality_check_node_single(state: GenerationState) -> dict:
 
     # Step 1: Inject tokens, KaTeX, and images into HTML
     log.info("[verifier] Rendering %s to PNG for visual audit", fmt_id)
+    from app.config import get_settings
+    settings = get_settings()
     images_list = state.get("images", [])
     html_with_tokens = inject_tokens_into_html(html, design_tokens)
     html_with_tokens = inject_katex_into_html(html_with_tokens)
@@ -163,7 +196,10 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # Save PNG and HTML for output
     _save_png(task_id, fmt_id, png_bytes)
     _save_html_preview(task_id, fmt_id, html_with_tokens)
-    ds_context = _build_design_system_context(design_tokens)
+    from pathlib import Path
+    di_path = Path(settings.design_system_dir) / "design-instruction.yaml"
+    design_instruction = load_design_instruction(di_path)
+    ds_context = _build_design_system_context(design_tokens, design_instruction)
     user_prompt = (
         f"TARGET PLATFORM: {fmt_id} ({fmt.width}x{fmt.height}px)\n"
         f"{ds_context}\n\n"
@@ -228,15 +264,16 @@ def _auto_pass(state: GenerationState, fmt_id: str, task: dict, reason: str) -> 
     verification = dict(state.get("verification", {}))
     verification[fmt_id] = {
         "pass": True,
-        "score": 70,
+        "score": 40,
         "issues": [reason],
         "critique": reason,
+        "auto_passed": True,
     }
     return {
         "format_tasks": {
             fmt_id: {
                 **task,
-                "quality_score": 70,
+                "quality_score": 40,
                 "quality_issues": [reason],
                 "status": "verified",
             }
