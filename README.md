@@ -1,7 +1,7 @@
 # Tasbir v3
 
 AI-powered social media asset pipeline. Blog content goes in,
-platform-optimized `.penpot` design files come out. Zero API costs.
+platform-optimized HTML + PNG renders come out. Zero API costs.
 Self-hosted via Docker.
 
 > **For AI agents**: Read [AGENTS.md](AGENTS.md) before making changes.
@@ -16,22 +16,23 @@ cp .env.example .env
 docker compose up -d
 ```
 
-Open http://localhost:9001 for Penpot, or http://localhost:8000/docs for the API.
+Open http://localhost:8000/docs for the API.
 
 ## Architecture
 
 ```
-n8n/Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → .penpot file
-                                                  │
-                                           User opens in
-                                           Penpot (editable)
+n8n/Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → HTML + PNG
+                                                         │
+                                                  Designer creates HTML
+                                                  Verifier renders to PNG
+                                                  via Playwright
 ```
 
-### Pipeline (5 agents)
+### Pipeline (4 agents)
 
-Strategist → Copywriter → Designer → HTML→Penpot Converter → Verifier
+Strategist → Copywriter → Designer → Verifier
 
-Each agent outputs typed JSON (Pydantic). Design tokens live in Penpot —
+Each agent outputs typed JSON (Pydantic). Design tokens live in YAML files —
 the LLM never sees brand colors or hex values.
 
 ### Agent Team
@@ -39,17 +40,16 @@ the LLM never sees brand colors or hex values.
 1. **Strategist** (Aura Vance) — content analysis → structured brief
 2. **Copywriter** (Julian Sterling) — per-platform copy (headline, subhead, body)
 3. **Designer** (Marcus Chen) — HTML with CSS variables (`var(--color-*)`)
-4. **HTML→Penpot Converter** (programmatic) — Playwright DOM extraction → `.penpot` shapes
-5. **Verifier** (Victoria Thorne) — multimodal audit via Gemini Vision
+4. **Verifier** (Victoria Thorne) — injects tokens/KateX/images, renders to PNG,
+   multimodal audit via Gemini Vision
 
 ## Services
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| Penpot | http://localhost:9001 | Design tool (view, edit generated files) |
 | API | http://localhost:8000 | FastAPI (trigger generation, task status) |
 | API docs | http://localhost:8000/docs | OpenAPI/Swagger |
-| Playwright | :4000 | DOM extraction for HTML→Penpot conversion |
+| Playwright | http://localhost:4000 | Headless Chromium (HTML render + DOM extraction) |
 
 ## Development
 
@@ -70,7 +70,8 @@ python -m pytest
 ## Stack
 
 - **Backend**: Python 3.12+ (FastAPI, LangGraph, Celery, Playwright)
-- **Design**: Penpot (self-hosted, open source)
+- **Rendering**: Playwright (headless Chromium, Docker)
 - **Queue**: Celery + Redis
-- **Storage**: SQLite (tasks) + `.penpot` files (designs)
+- **Storage**: SQLite (tasks) + `data/output/{task_id}/` (HTML, PNG)
 - **AI**: Gemini 3.5 Flash Lite (free tier)
+- **Config**: YAML (brand, tokens, platforms, campaigns)

@@ -1,64 +1,65 @@
 # Tasbir v3 — Project Plan
 
 AI-powered social media asset pipeline. Zero API costs.
-Self-hosted via Docker, Penpot-native output.
+Self-hosted via Docker, HTML + PNG output.
 
 ## Mission
 
 Convert blog content into platform-optimized social media designs using a
-multi-agent AI pipeline. Outputs native `.penpot` files — editable in Penpot,
-with no separate storage or UI needed.
+multi-agent AI pipeline. Outputs HTML files (opened in any browser) and
+PNG renders (ready to share), with no separate storage or UI needed.
 
 ## Core Principles
 
-1. **Penpot-native output** — Generated designs are valid `.penpot` files, fully editable
+1. **HTML + PNG output** — Generated designs are standalone HTML files with CSS
+   variables, rendered to PNG via Playwright for visual verification.
 2. **Zero API costs** — Gemini free tier, CSS backgrounds, free embeddings
 3. **Self-hosted** — Docker, no SaaS dependencies
-4. **Design token driven** — Penpot Design System file is the single source of truth
-5. **Human-editable** — User opens generated file in Penpot, tweaks, promotes to template
+4. **YAML design system** — Tokens, brand, platforms, and campaigns in YAML files
+5. **Human-editable** — User opens HTML in browser, tweaks CSS, re-renders
 6. **Minimal infrastructure** — SQLite for task tracking, no MinIO, no separate UI
-7. **Multi-agent pipeline** — LangGraph with 5 agents (Strategist → Copywriter → Designer → HTML→Penpot → Verifier)
+7. **Multi-agent pipeline** — LangGraph with 4 agents (Strategist → Copywriter → Designer → Verifier)
 
 ## Architecture Summary
 
 ```
-n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → .penpot file
+n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → HTML + PNG
     │                                                           │
     └────────── polls GET /tasks/{id} for status ──────────────┘
-                                                    User opens in Penpot
-                                                    (edit, review, promote)
+                                                  Files in data/output/{task_id}/
+                                                  (.html for review, .png for sharing)
 ```
 
 ## Phase Progress
 
-### Phase 1: Foundation — Docker + API (v2, reworked for v3)
-- [x] `docker-compose.yml` with core services (reduced for v3)
+### Phase 1: Foundation — Docker + API
+- [x] `docker-compose.yml` with core services (API, worker, Redis, Playwright)
 - [x] FastAPI app skeleton with health check
-- [x] SQLite for task tracking (replaces PostgreSQL for app data)
+- [x] SQLite for task tracking
 - [x] Celery + Redis for background task processing
-- [x] Caddy reverse proxy (optional, depends on deployment)
 
 ### Phase 2: Data Layer — Minimal Models
 - [x] `generation_tasks` table (SQLite) — id, status, source_data, result, error
 - [x] `audit_logs` table (SQLite) — per-agent decisions, verifier critiques
 - [x] API: `POST /generate`, `GET /tasks/{id}`, `GET /health`
-- [x] YakYAML prompt configs (`backend/config/prompts/*.yaml`)
+- [x] YAML prompt configs (`backend/config/prompts/*.yaml`)
 
-### Phase 3: .penpot I/O Layer
-- [x] `penpot_io.py` — Read/write `.penpot` files (ZIP + JSON)
-- [x] Python library for `.penpot` schema (generate valid shapes, pages, tokens)
-- [x] Design System file support & fallback tokens (`data/design_system/Tasbir Design System.penpot`)
+### Phase 3: YAML Design System
+- [x] `brand.yaml` — Brand identity (name, tagline, mission, story, social)
+- [x] `tokens.yaml` — CSS variable → value mappings
+- [x] `platforms.yaml` — Platform dimensions
+- [x] `campaigns.yaml` — Campaign presets (tone, visual_style, background, illustrations)
 
 ### Phase 4: Agent Pipeline — LangGraph Multi-Agent
 - [x] **Strategist** (Aura Vance) — content analysis → structured brief
 - [x] **Copywriter** (Julian Sterling) — brief → structured copy per platform
-- [x] **Designer** (Marcus Chen) — copy + templates → HTML with CSS variables
-- [x] **HTML→Penpot Converter** (programmatic) — Playwright DOM extraction → .penpot shapes
-- [x] **Verifier** (Victoria Thorne) — multimodal audit of rendered image via Gemini Vision
+- [x] **Designer** (Marcus Chen) — copy + brand + campaign + images → HTML with CSS variables
+- [x] **Verifier** (Victoria Thorne) — inject tokens/KateX/images, render to PNG,
+      multimodal audit via Gemini Vision, retry loop on failure
 
 ### Phase 5: Integration
 - [ ] n8n workflow: Ghost webhook → Tasbir API
-- [ ] User workflow: open .penpot in Penpot → edit → promote good designs to template
+- [ ] User workflow: open HTML in browser → tweak CSS → re-render
 - [ ] Status endpoint for n8n polling
 - [ ] Docker Compose finalization
 
@@ -67,22 +68,23 @@ n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → .penpot fi
 - [ ] Documentation (AGENTS.md, DESIGN.md, this file)
 - [ ] YAML prompt tuning
 - [ ] Rate limit optimization for Gemini free tier
+- [ ] Mermaid diagram rendering support
 
 ## What Was Removed From v2
 
 | Removed | Replaced By |
 |---------|-------------|
 | PostgreSQL (app DB) | SQLite |
-| MinIO | .penpot files (design IS the asset) |
-| SvelteKit UI | n8n triggers + Penpot viewing/editing |
+| MinIO | Files on disk (HTML, PNG) |
+| SvelteKit UI | n8n triggers + HTML/PNG output |
 | Socket.IO | n8n polls REST API for status |
 | Tailwind CLI | Clean CSS in HTML, no Tailwind compilation |
 | Prompt DB tables | YAML files in `config/prompts/` |
-| Templates DB table | Board pages in `.penpot` Design System file |
-| Brands DB table | `.penpot` Design System file |
-| DesignTokens DB table | `tokens.json` in `.penpot` Design System file |
-| Formats DB table | Pages in `.penpot` Design System file |
+| Templates DB table | LLM generates from scratch (no template files) |
+| Brands DB table | `brand.yaml` |
+| DesignTokens DB table | `tokens.yaml` |
+| Formats DB table | `platforms.yaml` |
 | Settings DB table | Removed (not needed) |
 | Ghost SDK | n8n handles Ghost webhooks |
-| Token Generator agent | Penpot-native token management |
-| Visual Director agent | Merged into Designer + Penpot templates |
+| Design tool service | Removed (HTML + PNG output opens in any browser) |
+| HTML-to-design-file converter | Removed (Verifier renders HTML → PNG via Playwright) |
