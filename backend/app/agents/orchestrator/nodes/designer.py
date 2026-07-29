@@ -24,9 +24,14 @@ from __future__ import annotations
 import json
 import logging
 import re
+from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
+from app.services.design_instruction import (
+    format_design_instruction_block,
+    load_design_instruction,
+)
 from app.services.formats import get_format_info
 from app.services.llm import call_llm
 
@@ -36,9 +41,9 @@ log = logging.getLogger(__name__)
 # (variable NAMES only — not values — so the LLM knows what to use)
 CSS_VARS_REFERENCE = """
 Available CSS variables (use ONLY these for colors — never hardcode hex):
-  var(--color-bg)            — primary background (dark)
+  var(--color-bg)            — primary background
   var(--color-bg-secondary)  — secondary background
-  var(--color-text)          — primary text (light)
+  var(--color-text)          — primary text
   var(--color-text-secondary)— secondary/muted text
   var(--color-primary)       — accent/brand primary
   var(--color-secondary)     — secondary accent
@@ -97,10 +102,11 @@ def _parse_copy(copy_json: str) -> dict:
     try:
         return json.loads(copy_json)
     except Exception:
+        stripped = copy_json.strip().strip("'\"")
         return {
-            "headline": copy_json[:50] if copy_json else "Untitled",
+            "headline": "Untitled",
             "subhead": "",
-            "body": "",
+            "body": stripped[:300] if stripped else "No body copy available",
             "tagline": "",
             "badge": None,
         }
@@ -108,6 +114,8 @@ def _parse_copy(copy_json: str) -> dict:
 
 async def designer_node_single(state: GenerationState) -> dict:
     """Create HTML layout for a single platform."""
+    from app.config import get_settings
+
     prompt_cfg = load_prompt("designer")
     fmt_id = state.get("_processing_format_id", "")
     fmt = get_format_info(fmt_id)
@@ -117,14 +125,19 @@ async def designer_node_single(state: GenerationState) -> dict:
     copy_data = _parse_copy(task.get("copy", ""))
     brief = state.get("strategic_brief", {})
 
-    # Check if this is a retry with verifier critique
     verification = state.get("verification", {})
     fmt_verification = verification.get(fmt_id, {})
     critique = fmt_verification.get("critique", "")
     retry_count = state.get("retry_count", {}).get(fmt_id, 0)
 
-    # Build system prompt — insert CSS variable reference where {TEMPLATE_CONTEXT} appears
-    template_context = CSS_VARS_REFERENCE
+    # Load design-instruction YAML
+    settings = get_settings()
+    di_path = Path(settings.design_system_dir) / "design-instruction.yaml"
+    di_config = load_design_instruction(di_path)
+    di_block = format_design_instruction_block(di_config)
+
+    # Build template context: CSS vars + design instruction
+    template_context = f"{CSS_VARS_REFERENCE}\n\n{di_block}"
     if retry_count > 0 and critique:
         template_context += f"\n\nVERIFIER CRITIQUE (PREVIOUS ATTEMPT):\n{critique}\nFix ALL issues listed above."
 
@@ -132,14 +145,13 @@ async def designer_node_single(state: GenerationState) -> dict:
     system_prompt = system_prompt.replace("{WIDTH}", str(fmt.width))
     system_prompt = system_prompt.replace("{HEIGHT}", str(fmt.height))
 
-    # User prompt: give the designer only what they need
+    # Parse copy
     headline = copy_data.get("headline", "")
     subhead = copy_data.get("subhead", "")
     body = copy_data.get("body", "")
     tagline = copy_data.get("tagline", "")
     badge = copy_data.get("badge")
 
-    # Brand + campaign + images context
     brand_info = state.get("brand_info", {})
     campaign = state.get("campaign", {})
     images_list = state.get("images", [])
@@ -158,18 +170,37 @@ async def designer_node_single(state: GenerationState) -> dict:
             f"ILLUSTRATIONS: {illustrations}\n"
         )
 
-    # Image descriptions for the designer
+    # Image metadata with data-image-key markers and placement
     images_block = ""
     if images_list:
         img_descs = []
-        for img in images_list:
+        for idx, img in enumerate(images_list):
+            alt = img.get("alt", "")
             desc = img.get("description", "")
             placement = img.get("placement", "auto")
-            alt = img.get("alt", "")
-            if desc or alt:
-                img_descs.append(f"  - {alt or desc} ({placement})")
+            label = alt or desc or f"Image {idx}"
+            img_descs.append(f"  data-image-key=\"{idx}\" | \"{label}\" | placement=\"{placement}\"")
         if img_descs:
-            images_block = "EMBEDDED IMAGES (place these in the layout):\n" + "\n".join(img_descs) + "\n"
+            images_block = (
+                "AVAILABLE IMAGES (place in layout using <img data-image-key=\"N\">):\n"
+                + "\n".join(img_descs)
+                + "\n"
+            )
+
+    # Image placement guidelines
+    placement_guide = (
+        "\nIMAGE PLACEMENT GUIDE:\n"
+        "  placement=\"background\" → full-bleed background with gradient/text overlay\n"
+        "  placement=\"full-width\" → full-width banner between content sections\n"
+        "  placement=\"half-top\" → top half of canvas, content overlays or sits below\n"
+        "  placement=\"half-bottom\" → bottom half of canvas\n"
+        "  placement=\"half-left\" → left half, text on right\n"
+        "  placement=\"half-right\" → right half, text on left\n"
+        "  placement=\"center\" → centered content block\n"
+        "  placement=\"auto\" → you decide what looks best\n"
+        "  When placement is \"background\", use CSS to pin the image behind content.\n"
+        "  Do NOT put images in a separate card/box — integrate them into the layout.\n"
+    )
 
     copy_block = f"""HEADLINE: {headline}
 SUBHEAD: {subhead}
@@ -188,17 +219,13 @@ TAGLINE: {tagline}"""
         f"TONE: {brief.get('tone', 'professional')}\n\n"
         f"COPY TO USE:\n{copy_block}\n\n"
         f"{images_block}\n"
+        f"{placement_guide}\n"
         f"GOOGLE FONTS LINK (include in <head>):\n{fonts_link}\n\n"
         f"INSTRUCTIONS:\n"
         f"- Canvas must be EXACTLY {fmt.width}px × {fmt.height}px\n"
         f"- Body style: width:{fmt.width}px;height:{fmt.height}px;overflow:hidden;margin:0\n"
         f"- Use ONLY the copy provided above — no additional text\n"
         f"- Do NOT invent random numbers, version strings, or fake identifiers\n"
-        f"- Use CSS variables exclusively for all colors\n"
-        f"- Create a visually striking, professional social media graphic\n"
-        f"- Typography hierarchy: headline is largest, subhead smaller, body smallest\n"
-        f"- Ensure adequate contrast and readability\n"
-        f"- NO interactive elements, NO buttons, NO links"
     )
 
     if retry_count > 0:

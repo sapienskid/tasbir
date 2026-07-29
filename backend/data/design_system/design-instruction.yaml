@@ -1,0 +1,44 @@
+# Design Instruction — compositional constraints for the visual system.
+# Values here are injected into the designer prompt at runtime.
+# Configure per brand to define the structural visual identity.
+
+grid:
+  columns: 12
+  margin: "6%"          # per side, % of canvas width
+  gutter: "2%"          # between columns, % of canvas width
+  baseline: "8px"       # vertical rhythm unit
+  max_violations: 1     # deliberate grid breaks allowed per card
+
+type_scale:
+  base: "16px"
+  ratio: 1.333
+  sizes_px: [12, 16, 21, 28, 38, 51, 68]
+  weights:
+    headline: [700, 800, 900]
+    body: [400, 500]
+  headline_tracking: "-0.02em"
+  headline_leading: "0.95"
+  body_leading: "1.5"
+  uppercase_tracking: "0.10em"
+
+decoration:
+  unicode_symbols: false
+  gradients_as_bg: false
+  glassmorphism: false
+  badges_pills: false
+  decorative_buttons: false
+  max_border_radius: "4px"
+  corner_marks: false
+  dividers: "hairline"
+
+shadow:
+  style: "hard_offset"
+  default: "4px 4px 0 var(--color-text)"
+
+images:
+  default_crop: "sharp_rect"
+  text_overlay_fade: "targeted"
+
+math:
+  dedicated_grid_block: true
+  fallback: "reduce_headline"

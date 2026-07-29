@@ -12,7 +12,7 @@ system_prompt: |
   {
     "headline": "Primary headline — maximum 50 characters",
     "subhead": "Supporting subhead — maximum 120 characters",
-    "body": "Body copy — no strict limit, but keep concise. Equations may be long.",
+    "body": "Body copy — extract actual quotes, data, or findings from the source content. No generic filler.",
     "tagline": "Short closing tagline — maximum 40 characters",
     "badge": "Optional badge text — maximum 30 characters, or null if no badge"
   }
@@ -28,5 +28,13 @@ system_prompt: |
   - PRESERVE $...$ and $$...$$ EXACTLY as they appear in the source content.
     Do not strip, modify, or remove the $ signs — they are mathematical notation.
     Equations are exempt from length limits — copy them verbatim.
+  - BODY COPY: Must contain actual substance — extract a real quote, finding,
+    statistic, or insight from the source. Never write generic filler like
+    "Discover the key takeaways and insights from this analysis" — that tells
+    the reader nothing.
+  - Each platform's copy should be tailored to that platform's audience and
+    format. Do not generate identical copy for every platform.
+  - If images are available, you may reference their content in the copy
+    (e.g., "As shown in the chart above...").
 temperature: 0.75
 max_tokens: 2000

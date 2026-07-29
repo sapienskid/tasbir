@@ -13,12 +13,12 @@ import logging
 from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
+from app.services.design_instruction import substitute_image_keys
 from app.services.formats import get_format_info
 from app.services.tokens import (
     DEFAULT_TOKEN_VALUES,
     inject_tokens_into_html,
     inject_katex_into_html,
-    inject_images_into_html,
 )
 
 log = logging.getLogger(__name__)
@@ -53,8 +53,8 @@ async def renderer_node_single(state: GenerationState) -> dict:
     # 2. Inject KaTeX for math rendering
     html = inject_katex_into_html(html)
 
-    # 3. Embed images as base64
-    html = inject_images_into_html(html, images)
+    # 3. Embed images as base64 via data-image-key markers
+    html = substitute_image_keys(html, images)
 
     output_dir = Path(settings.output_dir) / task_id
     output_dir.mkdir(parents=True, exist_ok=True)

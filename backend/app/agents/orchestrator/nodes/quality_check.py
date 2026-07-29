@@ -24,6 +24,7 @@ from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
+from app.services.design_instruction import substitute_image_keys
 from app.services.dom_extractor import render_to_png
 from app.services.formats import get_format_info
 from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html, inject_katex_into_html
@@ -145,10 +146,12 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         log.warning("[verifier] No HTML for %s, auto-passing", fmt_id)
         return _auto_pass(state, fmt_id, task, "No HTML to verify")
 
-    # Step 1: Render HTML → PNG
+    # Step 1: Inject tokens, KaTeX, and images into HTML
     log.info("[verifier] Rendering %s to PNG for visual audit", fmt_id)
+    images_list = state.get("images", [])
     html_with_tokens = inject_tokens_into_html(html, design_tokens)
     html_with_tokens = inject_katex_into_html(html_with_tokens)
+    html_with_tokens = substitute_image_keys(html_with_tokens, images_list)
     png_bytes = await render_to_png(html_with_tokens, fmt.width, fmt.height)
 
     if not png_bytes:

@@ -194,10 +194,11 @@ All agent prompts are stored in `backend/config/prompts/*.yaml`. Each agent outp
 
 ```
 data/design_system/
-├── brand.yaml         ← Brand identity (name, tagline, mission, story, social, overrides)
-├── tokens.yaml        ← CSS variable → value mappings (colors, fonts, spacing, shadows)
-├── platforms.yaml     ← Platform dimensions [width, height] in pixels
-└── campaigns.yaml     ← Campaign presets (tone, visual_style, background, illustrations)
+├── brand.yaml              ← Brand identity (name, tagline, mission, story, social, overrides)
+├── tokens.yaml             ← CSS variable → value mappings (colors, fonts, spacing, shadows)
+├── platforms.yaml          ← Platform dimensions [width, height] in pixels
+├── campaigns.yaml          ← Campaign presets (tone, visual_style, background, illustrations)
+└── design-instruction.yaml ← Compositional constraints (grid, type scale, decoration rules)
 ```
 
 ### `brand.yaml`
@@ -289,6 +290,39 @@ tutorial:
   illustrations: "screenshots, code blocks, diagrams"
 ```
 
+### `design-instruction.yaml`
+
+```yaml
+grid:
+  columns: 12
+  margin: "6%"
+  gutter: "2%"
+  baseline: "8px"
+  max_violations: 1
+
+type_scale:
+  base: "16px"
+  ratio: 1.333
+  sizes_px: [12, 16, 21, 28, 38, 51, 68]
+  weights:
+    headline: [700, 800, 900]
+    body: [400, 500]
+
+decoration:
+  unicode_symbols: false
+  gradients_as_bg: false
+  glassmorphism: false
+  badges_pills: false
+  max_border_radius: "4px"
+
+images:
+  default_crop: "sharp_rect"
+  text_overlay_fade: "targeted"
+
+math:
+  dedicated_grid_block: true
+```
+
 ## Token Variable Reference (CSS Variable → YAML Value)
 
 | CSS Variable | Token Path (tokens.yaml) | Example Value |
@@ -335,7 +369,8 @@ tasbir/
 │   │   │   ├── brand.yaml              ← Brand identity
 │   │   │   ├── tokens.yaml             ← Design tokens (CSS vars)
 │   │   │   ├── platforms.yaml          ← Platform dimensions
-│   │   │   └── campaigns.yaml          ← Campaign presets
+│   │   │   ├── campaigns.yaml          ← Campaign presets
+│   │   │   └── design-instruction.yaml ← Compositional constraints (grid, type scale, decoration rules)
 │   │   └── output/{task_id}/           ← Generated HTML + PNG files
 │   │
 │   ├── app/
@@ -428,6 +463,11 @@ Restart the worker to pick up changes.
 1. Set `overrides.headline`, `overrides.subhead`, etc. in the API request
 2. Or set `overrides.badge` / `overrides.tagline` in `brand.yaml`
 3. Copywriter applies overrides before calling LLM
+
+### Modifying design-instruction.yaml (grid, type scale, decoration rules)
+1. Edit values in `data/design_system/design-instruction.yaml`
+2. No code changes needed — loaded dynamically by the designer node
+3. Restart the worker to pick up changes
 
 ### Adding embedded images
 1. Include `images` array in POST /generate request

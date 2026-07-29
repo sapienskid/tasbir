@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # Design system paths
     output_dir: str = "data/output"
+    design_system_dir: str = "data/design_system"
     tokens_path: str = "data/design_system/tokens.yaml"
     brand_path: str = "data/design_system/brand.yaml"
     platforms_path: str = "data/design_system/platforms.yaml"
