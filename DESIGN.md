@@ -34,7 +34,7 @@
 ## Data Flow & Multi-Agent Architecture
 
 The pipeline uses LangGraph with typed state. Each agent is a dedicated node.
-Formats are processed in parallel via Send fan-out.
+Formats are processed in parallel via asyncio.gather with isolated per-format branches (no reducer races).
 
 ### Generation Pipeline Flow
 
@@ -66,13 +66,13 @@ n8n Webhook → POST /generate
           │
      ┌────┴────────┐
      │Copywriter   │  Julian Sterling — copy per format
-     │Node 2       │  X formats in parallel via Send fan-out
+     │Node 2       │  X formats in parallel via gather+Semaphore
      │             │  Overrides applied before LLM call
      └────┬────────┘
           │
      ┌────┴────────┐
      │Designer     │  Marcus Chen — HTML per format
-     │Node 3       │  X formats in parallel via Send fan-out
+     │Node 3       │  X formats in parallel via gather (isolated branches)
      │             │  Input: copy + brand + campaign + images
      │             │  CSS variables only: var(--color-*)
      │             │  No brand hex values in prompt
@@ -135,7 +135,7 @@ The design system is split into four YAML files, each serving a specific purpose
 
 1. API request includes `campaign: "educational"` (string key)
 2. Celery task loads the corresponding preset from `campaigns.yaml`
-3. Campaign defines: tone, visual_style, background, illustrations
+3. Campaign defines: tone, ground (white|black), and verbal language
 4. Tone → Strategist, Copywriter, Designer
 5. Visual style, background, illustrations → Designer (HTML layout)
 6. Campaign presets can be extended by editing `campaigns.yaml` — no code changes needed

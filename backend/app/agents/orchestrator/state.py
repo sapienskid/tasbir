@@ -70,6 +70,10 @@ class GenerationState(TypedDict):
     campaign_name: Annotated[str, _keep_first]
     overrides: Annotated[dict[str, str], _keep_first_dict]
     images: Annotated[list[dict[str, Any]], _keep_first_list]
+    footer: Annotated[dict[str, Any], _keep_first_dict]
+    categories: Annotated[list[dict[str, Any]], _keep_first_list]
+    category: Annotated[str, _keep_first]
+    ground: Annotated[str, _keep_first]
 
     # Agent Outputs
     strategic_brief: Annotated[dict[str, Any], _keep_first_dict]
@@ -96,6 +100,10 @@ def initial_state(
     campaign_name: str = "",
     overrides: dict[str, str] | None = None,
     images: list[dict[str, Any]] | None = None,
+    footer: dict[str, Any] | None = None,
+    categories: list[dict[str, Any]] | None = None,
+    category: str = "",
+    ground: str = "",
     url: str = "",
     excerpt: str = "",
     tags: list[str] | None = None,
@@ -129,6 +137,10 @@ def initial_state(
         "campaign_name": campaign_name or kwargs.get("campaign", ""),
         "overrides": overrides or {},
         "images": images or kwargs.get("images", []),
+        "footer": footer or {},
+        "categories": categories or [],
+        "category": category or kwargs.get("category", ""),
+        "ground": ground or kwargs.get("ground", ""),
         "strategic_brief": {},
         "format_tasks": format_tasks,
         "_processing_format_id": "",

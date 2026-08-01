@@ -1,51 +1,45 @@
-# Campaign presets — define visual style, tone, and background per post type
-# Campaigns are referenced by key in the API: { "campaign": "default" }
+# Campaign presets — tone + ground per post type.
+# Ground must be one of: white | black (the only allowed backgrounds).
+# Referenced by key in the API: { "campaign": "default" }
 
 default:
   label: "Default"
   tone: "professional"
-  visual_style: "clean editorial"
-  background: "dark gradient"
-  illustrations: "geometric accents"
+  ground: "white"
+  language: "clean editorial, weight-and-size hierarchy, generous whitespace"
 
 educational:
   label: "Educational"
   tone: "warm professional"
-  visual_style: "clean, readable, diagram-friendly"
-  background: "dark with subtle grid"
-  illustrations: "diagrams, code snippets, math"
+  ground: "white"
+  language: "clean, readable, math-friendly, generous whitespace"
 
 product-launch:
   label: "Product Launch"
   tone: "energetic"
-  visual_style: "bold minimal"
-  background: "solid dark with accent glow"
-  illustrations: "product mockup, logo"
+  ground: "black"
+  language: "bold minimal, strong typographic contrast"
 
 thought-leadership:
   label: "Thought Leadership"
   tone: "sophisticated"
-  visual_style: "editorial, serif-friendly"
-  background: "dark premium"
-  illustrations: "minimal, abstract shapes"
+  ground: "black"
+  language: "editorial, generous whitespace, quiet confidence"
 
 tutorial:
   label: "Tutorial"
   tone: "friendly technical"
-  visual_style: "clean step-by-step"
-  background: "dark with grid pattern"
-  illustrations: "screenshots, code blocks, diagrams"
+  ground: "white"
+  language: "clean step-by-step, math-friendly"
 
 mathematics:
   label: "Mathematics"
   tone: "precise academic"
-  visual_style: "clean, math-friendly, large formulas"
-  background: "dark with subtle grid"
-  illustrations: "mathematical expressions, formulas, diagrams, graphs"
+  ground: "white"
+  language: "clean, math-friendly, large formulas"
 
 stem:
   label: "STEM"
   tone: "clear technical"
-  visual_style: "clean technical, code and formulas"
-  background: "dark with geometric grid"
-  illustrations: "equations, code snippets, diagrams, graphs"
+  ground: "white"
+  language: "clean technical, code and formulas"

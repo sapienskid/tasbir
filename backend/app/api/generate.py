@@ -25,6 +25,7 @@ class GenerateRequest(BaseModel):
     platforms: list[str] = ["instagram-square"]
     webhook_url: str | None = None
     campaign: str = "default"
+    category: str | None = None
     overrides: dict[str, str] = Field(default_factory=dict)
     images: list[ImageRequest] = Field(default_factory=list)
 

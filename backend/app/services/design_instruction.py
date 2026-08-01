@@ -16,39 +16,61 @@ import yaml
 log = logging.getLogger(__name__)
 
 DEFAULT_DESIGN_INSTRUCTION: dict = {
-    "grid": {
-        "columns": 12,
-        "margin": "6%",
-        "gutter": "2%",
-        "baseline": "8px",
-        "max_violations": 1,
+    "style": {
+        "name": "Swiss / International Typographic Style",
+        "palette": "monochrome",
+        "allowed_grounds": ["white", "black"],
+        "default_ground": "white",
+        "accent": "none",
+        "max_weights_per_post": 2,
+        "shadows": False,
+        "border_radius": "0px",
+        "illustrations": False,
+        "icons": False,
+        "emoji": False,
+        "gradients": False,
     },
     "type_scale": {
-        "base": "16px",
-        "ratio": 1.333,
-        "sizes_px": [12, 16, 21, 28, 38, 51, 68],
-        "weights": {
-            "headline": [700, 800, 900],
-            "body": [400, 500],
+        "base_canvas_width": 1080,
+        "roles": {
+            "category": {"size": 22, "weight": 500, "tracking": "0.12em", "case": "uppercase", "line_height": 1.2, "max_chars": 24},
+            "headline": {"size": 68, "weight": 700, "tracking": 0, "case": "sentence", "line_height": 1.05,
+                         "max_lines": {"square": 4, "portrait": 4, "story": 4, "landscape": 3}},
+            "subhead": {"size": 36, "weight": 400, "tracking": 0, "case": "sentence", "line_height": 1.3, "max_lines": 3},
+            "body": {"size": 28, "weight": 400, "tracking": 0, "case": "sentence", "line_height": 1.3, "max_lines": 5, "min_size": 24},
+            "metadata": {"size": 20, "weight": 500, "tracking": "0.08em", "case": "uppercase", "line_height": 1.2, "min_size": 18},
         },
-        "headline_tracking": "-0.02em",
-        "headline_leading": "0.95",
-        "body_leading": "1.5",
-        "uppercase_tracking": "0.10em",
     },
-    "decoration": {
-        "unicode_symbols": False,
-        "gradients_as_bg": False,
-        "glassmorphism": False,
-        "badges_pills": False,
-        "decorative_buttons": False,
-        "max_border_radius": "4px",
-        "corner_marks": False,
-        "dividers": "hairline",
+    "spacing": {
+        "unit": 8,
+        "scale": [8, 16, 24, 32, 48, 64, 96, 128],
+        "margin": 64,
+        "margin_story_vertical": 160,
+        "gap_category_label": 24,
+        "gap_headline_body": 32,
+        "gap_footer_rule": 24,
+        "gap_section": 96,
     },
-    "shadow": {
-        "style": "hard_offset",
-        "default": "4px 4px 0 var(--color-text)",
+    "format_families": {
+        "instagram-square": "square",
+        "instagram-portrait": "portrait",
+        "instagram-story": "story",
+        "linkedin-post": "landscape",
+        "twitter-card": "landscape",
+        "facebook-post": "landscape",
+        "pinterest-pin": "portrait",
+    },
+    "formats": {
+        "square": {"label": "Square post", "margins": [64, 64, 64, 64], "footer_y": 1016},
+        "portrait": {"label": "Portrait post (4:5)", "margins": [64, 64, 64, 64]},
+        "story": {"label": "Story/Reel (9:16)", "margins": [160, 64, 160, 64], "headline_zone": [160, 700], "footer_y": 1760},
+        "landscape": {"label": "Landscape (16:9)", "margins": [64, 64, 64, 64]},
+    },
+    "footer": {
+        "enabled": True,
+        "rule": "1px hairline",
+        "gap": 24,
+        "style": "metadata",
     },
     "images": {
         "default_crop": "sharp_rect",
@@ -57,6 +79,22 @@ DEFAULT_DESIGN_INSTRUCTION: dict = {
     "math": {
         "dedicated_grid_block": True,
         "fallback": "reduce_headline",
+    },
+    "do_dont": {
+        "do": [
+            "Left-align everything, always",
+            "Use weight and size for hierarchy — never color",
+            "Keep hairline rules exactly 1px: hairline on white-ground, hairline-inverted on black-ground",
+            "Use generous whitespace — flexible space is intentional, not empty by accident",
+        ],
+        "dont": [
+            "No hue of any kind — not even 'just a little' blue, amber, or green",
+            "No icons, illustrations, or motifs of any kind",
+            "No centering",
+            "No more than 2 weights per post (one bold, one regular)",
+            "No shadows, gradients, borders-with-radius, or any softening effect",
+            "No third color, ever — if a post needs emphasis, use weight or size",
+        ],
     },
 }
 
@@ -92,61 +130,142 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _yn(val: bool) -> str:
+    return "ALLOWED" if val else "FORBIDDEN"
+
+
+def scaled_type_sizes(config: dict, canvas_width: int) -> dict[str, dict]:
+    """Return type roles with sizes scaled to the given canvas width."""
+    ts = config.get("type_scale", {})
+    base_width = int(ts.get("base_canvas_width", 1080))
+    scale = canvas_width / base_width if base_width else 1.0
+    roles = ts.get("roles", {})
+    out: dict[str, dict] = {}
+    for role, r in roles.items():
+        out[role] = dict(r)
+        out[role]["size"] = round(int(r.get("size", 28)) * scale)
+        ml = r.get("max_lines")
+        if isinstance(ml, dict):
+            out[role]["max_lines"] = ml
+    return out
+
+
 def format_design_instruction_block(config: dict) -> str:
     """Format design instruction YAML into a human-readable prompt block."""
-    g = config.get("grid", {})
+    st = config.get("style", {})
     ts = config.get("type_scale", {})
-    dec = config.get("decoration", {})
-    sh = config.get("shadow", {})
+    sp = config.get("spacing", {})
+    ft = config.get("footer", {})
+    dd = config.get("do_dont", {})
     img_rules = config.get("images", {})
     math_rules = config.get("math", {})
 
-    def _yn(val: bool) -> str:
-        return "ALLOWED" if val else "FORBIDDEN"
-
     lines = [
-        "DESIGN SYSTEM — COMPOSITION RULES",
+        f"DESIGN SYSTEM — {st.get('name', 'SWISS / INTERNATIONAL TYPOGRAPHIC STYLE').upper()}",
         "",
-        "--- GRID ---",
-        f"  {g.get('columns', 12)}-column grid",
-        f"  Margin: {g.get('margin', '6%')} each side",
-        f"  Gutter: {g.get('gutter', '2%')} between columns",
-        f"  Baseline unit: {g.get('baseline', '8px')}",
-        f"  Max deliberate grid violations per card: {g.get('max_violations', 1)}",
+        "--- PALETTE (STRICTLY MONOCHROME) ---",
+        f"  Palette: {st.get('palette', 'monochrome')} — pure black/white/gray only, NO hue ever",
+        f"  Allowed grounds: {', '.join(st.get('allowed_grounds', ['white', 'black']))}",
+        f"  Max weights per post: {st.get('max_weights_per_post', 2)} (one bold, one regular)",
+        f"  Shadows: {_yn(st.get('shadows', False))}",
+        f"  Border radius: {st.get('border_radius', '0px')} — no rounded corners",
+        f"  Illustrations/icons: {_yn(st.get('illustrations', False))}",
+        f"  Gradients: {_yn(st.get('gradients', False))}",
         "",
-        "--- TYPE SCALE (locked — use only these sizes) ---",
-        f"  Base: {ts.get('base', '16px')}, ratio {ts.get('ratio', 1.333)}",
-        f"  Available sizes (px): {', '.join(str(s) for s in ts.get('sizes_px', []))}",
-        f"  Allowed weights — headline: {ts.get('weights', {}).get('headline', [])}",
-        f"  Allowed weights — body/support: {ts.get('weights', {}).get('body', [])}",
-        f"  Headline tracking: {ts.get('headline_tracking', '-0.02em')}",
-        f"  Headline leading: {ts.get('headline_leading', '0.95')}",
-        f"  Body leading: {ts.get('body_leading', '1.5')}",
-        f"  Uppercase text: reserved for labels/eyebrows only",
-        f"  Uppercase tracking: {ts.get('uppercase_tracking', '0.10em')}",
+        "--- TYPE SCALE (sizes at 1080px canvas width; scale by width/1080) ---",
+        "  One grotesque sans family (var(--font-sans)). Hierarchy from weight,",
+        "  size, and tracking only — never mix in serif or monospace.",
+    ]
+
+    roles = ts.get("roles", {})
+    for role, r in roles.items():
+        tracking = r.get("tracking", 0)
+        tracking = f"{tracking}em" if isinstance(tracking, (int, float)) else tracking
+        lines.append(
+            f"  {role.upper():10s} {r.get('size', 28)}px · weight {r.get('weight', 400)} · "
+            f"tracking {tracking or '0'} · {r.get('case', 'sentence')} · "
+            f"line-height {r.get('line_height', 1.3)}"
+        )
+
+    lines += [
         "",
-        "--- DECORATION ---",
-        f"  Unicode symbols: {_yn(dec.get('unicode_symbols', False))}",
-        f"  Gradients as backgrounds: {_yn(dec.get('gradients_as_bg', False))}",
-        f"  Glassmorphism (backdrop-filter blur): {_yn(dec.get('glassmorphism', False))}",
-        f"  Badges/pills: {_yn(dec.get('badges_pills', False))}",
-        f"  Decorative button shapes: {_yn(dec.get('decorative_buttons', False))}",
-        f"  Max border radius: {dec.get('max_border_radius', '4px')}",
-        f"  Dividers: {dec.get('dividers', 'hairline')} — 1-2px solid rule, no gradients",
-        f"  Corner crop marks: {_yn(dec.get('corner_marks', False))}",
+        "--- SPACING (8px base grid — every value a multiple of 8) ---",
+        f"  Scale: {', '.join(str(s) for s in sp.get('scale', []))}",
+        f"  Canvas margin: {sp.get('margin', 64)}px on every edge",
+        f"  Story top/bottom margin: {sp.get('margin_story_vertical', 160)}px",
+        f"  Category → headline gap: {sp.get('gap_category_label', 24)}px",
+        f"  Headline → body gap: {sp.get('gap_headline_body', 32)}px",
+        f"  Rule → footer gap: {sp.get('gap_footer_rule', 24)}px",
         "",
-        "--- SHADOW ---",
-        f"  Style: {sh.get('style', 'hard_offset')}",
-        f"  Default: {sh.get('default', '4px 4px 0 var(--color-text)')}",
+        "--- FOOTER (every format) ---",
+        f"  {ft.get('rule', '1px hairline')} above footer, {ft.get('gap', 24)}px gap",
+        "  Left: brand name (tracked uppercase) · Right: @handle (tracked uppercase)",
+        f"  Metadata size ({roles.get('metadata', {}).get('size', 20)}px), secondary gray.",
+        "  No logo, no mark, no icon — typography is the signature.",
+        "",
+        "--- DO ---",
+    ]
+    for d in dd.get("do", []):
+        lines.append(f"  • {d}")
+    lines.append("")
+    lines.append("--- DON'T ---")
+    for d in dd.get("dont", []):
+        lines.append(f"  • {d}")
+
+    lines += [
         "",
         "--- IMAGES ---",
-        f"  Default crop: {img_rules.get('default_crop', 'sharp_rect')}",
+        f"  Default crop: {img_rules.get('default_crop', 'sharp_rect')} (no rounded corners)",
         f"  Text-over-image fade: {img_rules.get('text_overlay_fade', 'targeted')}",
         "",
-        "--- MATH & DIAGRAMS ---",
+        "--- MATH ---",
         f"  Dedicated grid block: {'yes' if math_rules.get('dedicated_grid_block', True) else 'no'}",
-        f"  If math/diagram content overflows canvas: {math_rules.get('fallback', 'reduce_headline')}",
+        f"  If math overflows canvas: {math_rules.get('fallback', 'reduce_headline')}",
     ]
+    return "\n".join(lines)
+
+
+def format_format_layout_block(
+    config: dict,
+    format_id: str,
+    width: int,
+    height: int,
+) -> str:
+    """Per-format layout rules derived from design-instruction.yaml."""
+    ff = config.get("format_families", {})
+    family = ff.get(format_id, "square")
+    fm = config.get("formats", {})
+    family_cfg = fm.get(family, {})
+    ts = config.get("type_scale", {})
+    base_width = int(ts.get("base_canvas_width", 1080))
+    scale = width / base_width if base_width else 1.0
+    margins = family_cfg.get("margins", [64, 64, 64, 64])
+
+    lines = [
+        f"FORMAT LAYOUT — {format_id} ({width}x{height}px) · family: {family}",
+        f"  Canvas: EXACTLY {width}px × {height}px — zero scrollbars, zero overflow",
+        f"  Margins: top {margins[0]}px · right {margins[1]}px · bottom {margins[2]}px · left {margins[3]}px",
+        f"  Type scale factor: ×{round(scale, 3)} (base {base_width}px canvas)",
+    ]
+    if "footer_y" in family_cfg:
+        lines.append(f"  Footer rule baseline: y≈{family_cfg['footer_y']}px (bottom-anchored)")
+    if "headline_zone" in family_cfg:
+        hz = family_cfg["headline_zone"]
+        lines.append(f"  Headline zone: y {hz[0]}–{hz[1]}px (upper third)")
+
+    scaled = scaled_type_sizes(config, width)
+    lines.append("  Scaled role sizes (px):")
+    for role, r in scaled.items():
+        ml = r.get("max_lines")
+        ml_txt = ""
+        if isinstance(ml, dict):
+            ml_txt = f" · max {ml.get(family, 4)} lines"
+        lines.append(
+            f"    {role.upper():10s} {r.get('size', 28)}px · weight {r.get('weight', 400)} · "
+            f"tracking {r.get('tracking', 0) if r.get('tracking') else 0} · {r.get('case', 'sentence')}"
+            f"{ml_txt}"
+        )
+
     return "\n".join(lines)
 
 

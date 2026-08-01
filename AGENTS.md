@@ -68,7 +68,7 @@ renders to PNG for visual verification.
 - LLM client (Gemini 3.5 Flash Lite via OpenRouter fallback)
 - KaTeX automatic injection for math rendering
 - Image embedding (download, base64 encode, inject into HTML)
-- Campaign presets (tone, visual_style, background, illustrations)
+- Campaign presets (tone, ground, language)
 
 ### Stack
 
@@ -111,29 +111,36 @@ n8n Webhook → FastAPI (POST /generate) → Celery Worker → LangGraph Pipelin
 START
   │
   ▼
-Strategist → analyzes content, produces structured brief (1 LLM call)
+Strategist → analyzes content, produces structured brief + category + ground (1 LLM call)
   │
   ▼
-Copywriter → per-platform parallel (Send fan-out), produces structured copy
-  │           (Semaphore controls concurrent LLM calls)
-  ▼
-Designer → per-platform parallel (Send fan-out)
-  │         Input: copy + strategic brief + brand info + campaign + images
-  │         Output: HTML document with CSS variables (var(--color-*), NOT brand hex values)
+Copywriter → per-platform parallel (asyncio.gather + Semaphore), structured copy
   │
   ▼
-Verifier → per-platform
-  │         1. Injects design tokens as CSS :root variables
-  │         2. Injects KaTeX CDN if `<span class="math">` detected
-  │         3. Embeds base64 images
-  │         4. Saves HTML to data/output/{task_id}/{fmt_id}.html
-  │         5. Renders to PNG via Playwright
-  │         6. Multimodal LLM audit on rendered PNG
-  │         Output: {pass, score, issues, critique}
+process_all_formats → per-platform, in parallel via asyncio.gather:
+  │        Each format runs an isolated branch:
   │
-  ├── [pass] → END (success, HTML + PNG ready)
-  └── [fail + retry < 2] → loop back to Designer with critique as additional context
+  │        Designer → Input: copy + brief + ground + category + footer + images
+  │        │         Output: HTML with CSS variables (var(--color-*), NOT brand hex)
+  │        │
+  │        Renderer → injects tokens (strip designer :root, add system :root),
+  │        │           KaTeX CDN, base64 images; saves {fmt_id}.html
+  │        │
+  │        Verifier  → 1. deterministic checks (emoji, hex, footer, category,
+  │        │             canvas size) — hard fail on violation
+  │        │             2. renders to PNG via Playwright
+  │        │             3. multimodal LLM audit on rendered PNG
+  │        │             Output: {pass, score, issues, critique}
+  │        │
+  │        └── [pass] → branch done
+  │            [fail + retry < 2] → loop back to Designer with critique
+  │
+  ▼
+END (success, HTML + PNG per format ready)
 ```
+
+Each format branch merges its slice back deterministically (no reducer races),
+so the final state always reflects every format's real status.
 
 ## Agent Personas & Responsibilities
 
@@ -180,7 +187,7 @@ All agent prompts are stored in `backend/config/prompts/*.yaml`. Each agent outp
 
 ### 7. Brand Context Flows Through Every Agent
 - Brand name/tagline/mission/story passed to Strategist, Copywriter, Designer
-- Campaign presets define tone, visual_style, background, illustrations
+- Campaign presets define tone, ground, and verbal language
 - Overrides (badge, tagline) from `brand.yaml` applied at Copywriter level
 
 ### 8. KaTeX Injected Automatically
@@ -197,8 +204,8 @@ data/design_system/
 ├── brand.yaml              ← Brand identity (name, tagline, mission, story, social, overrides)
 ├── tokens.yaml             ← CSS variable → value mappings (colors, fonts, spacing, shadows)
 ├── platforms.yaml          ← Platform dimensions [width, height] in pixels
-├── campaigns.yaml          ← Campaign presets (tone, visual_style, background, illustrations)
-└── design-instruction.yaml ← Compositional constraints (grid, type scale, decoration rules)
+├── campaigns.yaml          ← Campaign presets (tone, ground, language)
+└── design-instruction.yaml ← Swiss style rules (palette, type scale, spacing, formats)
 ```
 
 ### `brand.yaml`
@@ -215,29 +222,52 @@ brand:
     twitter: "username"
     linkedin: "username"
 
+# Footer row — rendered on every post (bottom-anchored, hairline rule above).
+footer:
+  left: "SABIN POKHAREL"
+  right: "@SAPIENSKID"
+
+# Approved category labels — every post has exactly one. Optional per-category
+# "ground" reserves black-ground for that category.
+categories:
+  - name: "PORTFOLIO"
+    description: "Project posts"
+  - name: "PROJECT"
+    description: "Individual build/ship updates"
+  - name: "WRITING"
+    description: "Blog posts"
+  - name: "THE LIMITS No.{issue}"
+    description: "Newsletter posts — substitute the real issue number"
+  - name: "NOTE"
+    description: "Short-form/thought posts"
+    ground: "black"
+
 overrides:
   badge: ""       # When set, used instead of LLM-generated badge
   tagline: ""     # When set, used instead of LLM-generated tagline
+  category: ""    # When set, forces this exact category label
 ```
 
 ### `tokens.yaml`
 
 ```yaml
---color-bg: "#0a0a1a"
---color-bg-secondary: "#141428"
---color-text: "#e8e8f0"
---color-text-secondary: "#9494b8"
---color-primary: "#5b8def"
---color-secondary: "#7c6df0"
---color-accent: "#48c6ef"
---color-border: "#2a2a4a"
---font-sans: "Inter, system-ui, sans-serif"
---font-serif: "Merriweather, Georgia, serif"
---font-mono: "JetBrains Mono, Fira Code, monospace"
---radius-sm: "4px"
---radius-md: "8px"
---shadow-md: "0 4px 12px rgba(0,0,0,0.4)"
+--color-bg: "#FFFFFF"
+--color-bg-inverted: "#000000"
+--color-text: "#000000"
+--color-text-inverted: "#FFFFFF"
+--color-text-secondary: "#6E6E6E"
+--color-text-tertiary: "#B0B0B0"
+--color-border: "#D9D9D9"
+--color-border-inverted: "#2A2A2A"
+--font-sans: "Inter, 'Helvetica Neue', Arial, sans-serif"
+--radius-sm: "0px"
+--radius-md: "0px"
+--shadow-md: "none"
 ```
+
+Strictly grayscale (Swiss monochrome). Two grounds: white (`--color-bg`) and
+black (`--color-bg-inverted`). No hue, ever. The verifier exposes these values;
+the designer only ever sees variable NAMES + semantic roles.
 
 ### `platforms.yaml`
 
@@ -257,90 +287,95 @@ pinterest-pin: [1000, 1500]
 default:
   label: "Default"
   tone: "professional"
-  visual_style: "clean editorial"
-  background: "dark gradient"
-  illustrations: "geometric accents"
+  ground: "white"
+  language: "clean editorial, weight-and-size hierarchy, generous whitespace"
 
 educational:
   label: "Educational"
   tone: "warm professional"
-  visual_style: "clean, readable, diagram-friendly"
-  background: "dark with subtle grid"
-  illustrations: "diagrams, code snippets, math"
-
-product-launch:
-  label: "Product Launch"
-  tone: "energetic"
-  visual_style: "bold minimal"
-  background: "solid dark with accent glow"
-  illustrations: "product mockup, logo"
+  ground: "white"
+  language: "clean, readable, math-friendly, generous whitespace"
 
 thought-leadership:
   label: "Thought Leadership"
   tone: "sophisticated"
-  visual_style: "editorial, serif-friendly"
-  background: "dark premium"
-  illustrations: "minimal, abstract shapes"
-
-tutorial:
-  label: "Tutorial"
-  tone: "friendly technical"
-  visual_style: "clean step-by-step"
-  background: "dark with grid pattern"
-  illustrations: "screenshots, code blocks, diagrams"
+  ground: "black"
+  language: "editorial, generous whitespace, quiet confidence"
 ```
+
+Campaigns set tone, ground (white | black — the only two allowed backgrounds),
+and verbal language guidance. Ground priority: campaign → category → white.
 
 ### `design-instruction.yaml`
 
 ```yaml
-grid:
-  columns: 12
-  margin: "6%"
-  gutter: "2%"
-  baseline: "8px"
-  max_violations: 1
+style:
+  palette: "monochrome"
+  allowed_grounds: ["white", "black"]
+  default_ground: "white"
+  max_weights_per_post: 2
+  shadows: false
+  border_radius: "0px"
+  illustrations: false
+  gradients: false
 
 type_scale:
-  base: "16px"
-  ratio: 1.333
-  sizes_px: [12, 16, 21, 28, 38, 51, 68]
-  weights:
-    headline: [700, 800, 900]
-    body: [400, 500]
+  base_canvas_width: 1080
+  roles:
+    category:  {size: 22, weight: 500, tracking: "0.12em", case: "uppercase"}
+    headline:  {size: 68, weight: 700, tracking: 0, case: "sentence", max_lines: {square: 4, landscape: 3}}
+    subhead:   {size: 36, weight: 400, case: "sentence"}
+    body:      {size: 28, weight: 400, case: "sentence", min_size: 24}
+    metadata:  {size: 20, weight: 500, tracking: "0.08em", case: "uppercase"}
 
-decoration:
-  unicode_symbols: false
-  gradients_as_bg: false
-  glassmorphism: false
-  badges_pills: false
-  max_border_radius: "4px"
+spacing:
+  unit: 8
+  scale: [8, 16, 24, 32, 48, 64, 96, 128]
+  margin: 64
+  margin_story_vertical: 160
 
-images:
-  default_crop: "sharp_rect"
-  text_overlay_fade: "targeted"
+format_families:
+  instagram-square: square
+  instagram-portrait: portrait
+  instagram-story: story
+  linkedin-post: landscape
+  twitter-card: landscape
+  facebook-post: landscape
+  pinterest-pin: portrait
 
-math:
-  dedicated_grid_block: true
+footer:
+  enabled: true
+  rule: "1px hairline"
+  gap: 24
+  style: "metadata"
+
+do_dont:
+  do: ["Left-align everything, always", "Use weight and size for hierarchy — never color", "..."]
+  dont: ["No hue of any kind", "No icons/illustrations", "No centering", "Max 2 weights", "No shadows/gradients/rounded corners", "..."]
 ```
+
+The full Swiss / International Typographic Style — palette, named type roles,
+8px spacing grid, per-format margins, footer spec, and the do/don't checklist.
+Injected verbatim into the designer and verifier prompts.
 
 ## Token Variable Reference (CSS Variable → YAML Value)
 
 | CSS Variable | Token Path (tokens.yaml) | Example Value |
 |---|---|---|
-| `var(--color-bg)` | `--color-bg` | `#0a0a1a` |
-| `var(--color-bg-secondary)` | `--color-bg-secondary` | `#141428` |
-| `var(--color-text)` | `--color-text` | `#e8e8f0` |
-| `var(--color-text-secondary)` | `--color-text-secondary` | `#9494b8` |
-| `var(--color-primary)` | `--color-primary` | `#5b8def` |
-| `var(--color-secondary)` | `--color-secondary` | `#7c6df0` |
-| `var(--color-accent)` | `--color-accent` | `#48c6ef` |
-| `var(--color-border)` | `--color-border` | `#2a2a4a` |
-| `var(--font-sans)` | `--font-sans` | `Inter, system-ui, sans-serif` |
-| `var(--font-serif)` | `--font-serif` | `Merriweather, Georgia, serif` |
-| `var(--font-mono)` | `--font-mono` | `JetBrains Mono, Fira Code, monospace` |
-| `var(--radius-sm)` | `--radius-sm` | `4px` |
-| `var(--radius-md)` | `--radius-md` | `8px` |
-| `var(--shadow-md)` | `--shadow-md` | `0 4px 12px rgba(0,0,0,0.4)` |
+| `var(--color-bg)` | `--color-bg` | `#FFFFFF` (white ground) |
+| `var(--color-bg-inverted)` | `--color-bg-inverted` | `#000000` (black ground) |
+| `var(--color-text)` | `--color-text` | `#000000` (ink on light ground) |
+| `var(--color-text-inverted)` | `--color-text-inverted` | `#FFFFFF` (ink on black ground) |
+| `var(--color-text-secondary)` | `--color-text-secondary` | `#6E6E6E` (gray-600 metadata) |
+| `var(--color-text-tertiary)` | `--color-text-tertiary` | `#B0B0B0` (gray-300, rare) |
+| `var(--color-border)` | `--color-border` | `#D9D9D9` (hairline on white) |
+| `var(--color-border-inverted)` | `--color-border-inverted` | `#2A2A2A` (hairline on black) |
+| `var(--font-sans)` | `--font-sans` | `Inter, 'Helvetica Neue', Arial, sans-serif` |
+| `var(--radius-sm)` | `--radius-sm` | `0px` |
+| `var(--radius-md)` | `--radius-md` | `0px` |
+| `var(--shadow-md)` | `--shadow-md` | `none` |
+
+Strictly grayscale — no `--color-primary`/`secondary`/`accent`, no serif/mono.
 
 ## Directory Structure
 
@@ -370,7 +405,7 @@ tasbir/
 │   │   │   ├── tokens.yaml             ← Design tokens (CSS vars)
 │   │   │   ├── platforms.yaml          ← Platform dimensions
 │   │   │   ├── campaigns.yaml          ← Campaign presets
-│   │   │   └── design-instruction.yaml ← Compositional constraints (grid, type scale, decoration rules)
+│   │   │   └── design-instruction.yaml ← Swiss style rules (palette, type scale, spacing, formats)
 │   │   └── output/{task_id}/           ← Generated HTML + PNG files
 │   │
 │   ├── app/
@@ -440,7 +475,7 @@ tasbir/
 
 ### Adding a new campaign preset
 1. Add a new key to `data/design_system/campaigns.yaml`
-2. Set tone, visual_style, background, illustrations
+2. Set tone, ground (`white` | `black`), and a verbal `language` hint
 3. Reference by name in API: `"campaign": "educational"`
 
 ### Adding a new agent
@@ -451,23 +486,29 @@ tasbir/
 
 ### Editing agent prompts
 Edit the YAML files in `backend/config/prompts/`. No code changes needed.
-Restart the worker to pick up changes.
+Restart the worker to pick up changes. (Prompt files are bind-mounted into the
+containers at `/app/config/prompts`.)
 
 ### Adding a new token variable
 1. Add `--variable-name: "value"` to `data/design_system/tokens.yaml`
-2. Add the CSS variable reference to the Designer's CSS_VARS_REFERENCE in `backend/app/agents/orchestrator/nodes/designer.py`
+2. Add the semantic role description to `SEMANTIC_VAR_ROLES` in `backend/app/services/tokens.py` (this is what the designer prompt sees)
 3. Add default value to `DEFAULT_TOKEN_VALUES` in `backend/app/services/tokens.py`
 4. Document the new variable in AGENTS.md Token Variable Reference table
 
 ### Overriding copy fields
 1. Set `overrides.headline`, `overrides.subhead`, etc. in the API request
-2. Or set `overrides.badge` / `overrides.tagline` in `brand.yaml`
-3. Copywriter applies overrides before calling LLM
+2. Or set `overrides.badge` / `overrides.tagline` / `overrides.category` in `brand.yaml`
+3. Copywriter applies copy overrides before calling LLM; category overrides are applied by the strategist
 
-### Modifying design-instruction.yaml (grid, type scale, decoration rules)
+### Modifying design-instruction.yaml (palette, type scale, spacing, do/don't)
 1. Edit values in `data/design_system/design-instruction.yaml`
-2. No code changes needed — loaded dynamically by the designer node
+2. No code changes needed — loaded dynamically by the designer and verifier nodes
 3. Restart the worker to pick up changes
+
+### Forcing a category label
+1. Pass `"category": "PROJECT"` (or any approved label) in POST /generate
+2. Or set `overrides.category` in `brand.yaml`
+3. The strategist validates against the approved list and falls back to WRITING
 
 ### Adding embedded images
 1. Include `images` array in POST /generate request
@@ -491,6 +532,7 @@ cd backend && .venv/bin/python -m pytest
   "tags": ["ai", "math"],
   "platforms": ["instagram-square", "linkedin-post"],
   "campaign": "default",
+  "category": "WRITING",
   "overrides": {
     "headline": "Custom Headline"
   },
@@ -516,8 +558,14 @@ Response:
   "source_data": { ... },
   "result": {
     "output_paths": {
-      "html": "data/output/task-id/instagram-square.html",
-      "png": "data/output/task-id/instagram-square.png"
+      "instagram-square": {
+        "html": "data/output/task-id/instagram-square.html",
+        "png": "data/output/task-id/instagram-square.png"
+      },
+      "linkedin-post": {
+        "html": "data/output/task-id/linkedin-post.html",
+        "png": "data/output/task-id/linkedin-post.png"
+      }
     },
     "strategic_brief": { ... },
     "platforms": {

@@ -13,21 +13,63 @@ import yaml
 log = logging.getLogger(__name__)
 
 DEFAULT_TOKEN_VALUES: dict[str, str] = {
-    "--color-bg": "#0a0a1a",
-    "--color-bg-secondary": "#141428",
-    "--color-text": "#e8e8f0",
-    "--color-text-secondary": "#9494b8",
-    "--color-primary": "#5b8def",
-    "--color-secondary": "#7c6df0",
-    "--color-accent": "#48c6ef",
-    "--color-border": "#2a2a4a",
-    "--font-sans": "Inter, system-ui, sans-serif",
-    "--font-serif": "Merriweather, Georgia, serif",
-    "--font-mono": "JetBrains Mono, Fira Code, monospace",
-    "--radius-sm": "4px",
-    "--radius-md": "8px",
-    "--shadow-md": "0 4px 12px rgba(0,0,0,0.4)",
+    "--color-bg": "#FFFFFF",
+    "--color-bg-inverted": "#000000",
+    "--color-text": "#000000",
+    "--color-text-inverted": "#FFFFFF",
+    "--color-text-secondary": "#6E6E6E",
+    "--color-text-tertiary": "#B0B0B0",
+    "--color-border": "#D9D9D9",
+    "--color-border-inverted": "#2A2A2A",
+    "--font-sans": "Inter, 'Helvetica Neue', Arial, sans-serif",
+    "--radius-sm": "0px",
+    "--radius-md": "0px",
+    "--shadow-md": "none",
 }
+
+# Semantic roles for each CSS variable — shown to the LLM as the var NAME plus
+# role description. Never includes the actual hex value (design tokens stay
+# out of prompts). This is what lets the designer know --color-bg is a light
+# ground without ever seeing "#FFFFFF".
+SEMANTIC_VAR_ROLES: dict[str, str] = {
+    "--color-bg": "page background — LIGHT ground (white)",
+    "--color-bg-inverted": "page background — BLACK ground (inverted)",
+    "--color-text": "primary ink — BLACK (on light ground)",
+    "--color-text-inverted": "primary ink — WHITE (on black ground)",
+    "--color-text-secondary": "secondary/metadata text — mid-gray",
+    "--color-text-tertiary": "tertiary text — light gray, use sparingly",
+    "--color-border": "hairline rule on light ground",
+    "--color-border-inverted": "hairline rule on black ground",
+    "--font-sans": "single grotesque sans typeface (the only font)",
+}
+
+DEFAULT_CATEGORIES: list[dict] = [
+    {"name": "PORTFOLIO", "description": "Project posts"},
+    {"name": "PROJECT", "description": "Individual build/ship updates"},
+    {"name": "WRITING", "description": "Blog posts"},
+    {"name": "THE LIMITS No.{issue}", "description": "Newsletter posts — substitute the real issue number"},
+    {"name": "NOTE", "description": "Short-form/thought posts", "ground": "black"},
+]
+
+DEFAULT_FOOTER: dict[str, str] = {"left": "", "right": ""}
+
+
+def build_css_var_reference(tokens: dict[str, str]) -> str:
+    """Build a semantic CSS-variable reference for the designer prompt.
+
+    Lists each load-bearing variable with its role description — variable
+    NAMES only, never values.
+    """
+    lines = [
+        "AVAILABLE CSS VARIABLES (use ONLY these for all color/typography —",
+        "never hardcode hex values or font names):",
+    ]
+    for var, value in tokens.items():
+        if var not in SEMANTIC_VAR_ROLES:
+            continue
+        role = SEMANTIC_VAR_ROLES[var]
+        lines.append(f"  {var} — {role}")
+    return "\n".join(lines)
 
 
 def load_brand(path: str | Path) -> dict:
@@ -76,6 +118,70 @@ def load_tokens(path: str | Path) -> dict[str, str]:
     except Exception as e:
         log.warning("[tokens] Failed to load %s: %s — using defaults", path, e)
         return dict(DEFAULT_TOKEN_VALUES)
+
+
+def load_brand_design(brand_path: str | Path) -> dict:
+    """Load the brand's footer + category taxonomy from brand.yaml.
+
+    Returns {"footer": {"left", "right"}, "categories": [{name, description,
+    ground?}, ...]} with defaults applied for missing sections.
+    """
+    data = load_brand(brand_path)
+    footer = data.get("footer") or {}
+    categories = data.get("categories") or DEFAULT_CATEGORIES
+    return {
+        "footer": {
+            "left": str(footer.get("left", "") or DEFAULT_FOOTER["left"]),
+            "right": str(footer.get("right", "") or DEFAULT_FOOTER["right"]),
+        },
+        "categories": categories if isinstance(categories, list) else DEFAULT_CATEGORIES,
+    }
+
+
+def category_matches(value: str, categories: list[dict]) -> bool:
+    """Return True if value matches an approved category name.
+
+    Handles the "{issue}" placeholder in names like "THE LIMITS No.{issue}"
+    by matching a base prefix followed by digits.
+    """
+    value = (value or "").strip()
+    if not value:
+        return False
+    upper = value.upper()
+    for cat in categories:
+        name = (cat.get("name") or "").strip()
+        if "{issue}" in name:
+            base = name.replace("{issue}", "").upper()
+            suffix = upper[len(base):].strip()
+            if upper.startswith(base) and suffix.isdigit():
+                return True
+        elif upper == name.upper():
+            return True
+    return False
+
+
+def resolve_ground(
+    campaign: dict,
+    category: str,
+    categories: list[dict],
+    default: str = "white",
+) -> str:
+    """Resolve the post ground. Priority: campaign → category → default.
+
+    Only "white" and "black" are valid (both grounds are monochrome-safe).
+    """
+    campaign_ground = (campaign or {}).get("ground", "")
+    if campaign_ground in ("white", "black"):
+        return campaign_ground
+
+    if category:
+        for cat in categories:
+            if cat.get("name") and category_matches(category, [cat]):
+                cat_ground = cat.get("ground")
+                if cat_ground in ("white", "black"):
+                    return cat_ground
+
+    return default if default in ("white", "black") else "white"
 
 
 # YAML loaders for platforms and campaigns
@@ -127,15 +233,14 @@ def build_css_variable_block(tokens: dict[str, str]) -> str:
 
 
 def _strip_root_blocks(html: str) -> str:
-    """Remove any :root { ... } CSS blocks to prevent designer overrides."""
+    """Remove `:root { ... }` selector rules, keeping the rest of the CSS.
+
+    The designer sometimes combines the (forbidden) :root block with the real
+    styles in a single <style> tag. Only the :root rule must be removed —
+    deleting the whole block would strip all styling from the design.
+    """
     import re
-    def _remove_root(match):
-        content = match.group(0)
-        if ":root" in content:
-            return ""
-        return content
-    html = re.sub(r'<style[^>]*>.*?</style>', _remove_root, html, flags=re.DOTALL)
-    return html
+    return re.sub(r":root\s*\{[^}]*\}", "", html, flags=re.IGNORECASE)
 
 
 def inject_tokens_into_html(html: str, tokens: dict[str, str]) -> str:

@@ -22,7 +22,7 @@ def generate_task(self, task_id: str, source_data: dict):
             await repo.update_status(task_id=task_id, status="running")
 
         from app.config import get_settings
-        from app.services.tokens import load_tokens, load_brand, load_campaign, DEFAULT_TOKEN_VALUES
+        from app.services.tokens import load_tokens, load_brand, load_campaign, load_brand_design, DEFAULT_TOKEN_VALUES
         from app.services.image_loader import prepare_images
 
         settings = get_settings()
@@ -36,6 +36,15 @@ def generate_task(self, task_id: str, source_data: dict):
         brand_data = load_brand(settings.brand_path)
         pipeline_input["brand_info"] = brand_data.get("brand", {})
         pipeline_input["overrides"] = {**brand_data.get("overrides", {}), **source_data.get("overrides", {})}
+
+        # Load brand footer + category taxonomy
+        brand_design = load_brand_design(settings.brand_path)
+        pipeline_input["footer"] = brand_design["footer"]
+        pipeline_input["categories"] = brand_design["categories"]
+
+        # Category override from API request (highest priority)
+        if source_data.get("category"):
+            pipeline_input["category"] = source_data["category"]
 
         # Load campaign preset by name (string) — fallback to "default"
         campaign_name = source_data.get("campaign", "default")
@@ -65,7 +74,9 @@ def generate_task(self, task_id: str, source_data: dict):
         if output_dir.exists():
             for f in output_dir.iterdir():
                 if f.is_file():
-                    output_paths[f.suffix.lstrip(".")] = str(f)
+                    fmt_id = f.stem
+                    ext = f.suffix.lstrip(".")
+                    output_paths.setdefault(fmt_id, {})[ext] = str(f)
 
         brief = state.get("strategic_brief", {})
         format_tasks = state.get("format_tasks", {})

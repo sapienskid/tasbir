@@ -1,19 +1,18 @@
 # Tasbir Design Tokens — Sabin Pokharel brand
-# CSS variable → value mappings for the design system.
+# Swiss / International Typographic Style — STRICTLY GRAYSCALE.
+# Two grounds only: white (default) and black (inverted). No hue, ever.
 
---color-bg: "#0a0a1a"
---color-bg-secondary: "#141428"
---color-text: "#e8e8f0"
---color-text-secondary: "#9494b8"
---color-primary: "#5b8def"
---color-secondary: "#7c6df0"
---color-accent: "#48c6ef"
---color-border: "#2a2a4a"
+--color-bg: "#FFFFFF"
+--color-bg-inverted: "#000000"
+--color-text: "#000000"
+--color-text-inverted: "#FFFFFF"
+--color-text-secondary: "#6E6E6E"
+--color-text-tertiary: "#B0B0B0"
+--color-border: "#D9D9D9"
+--color-border-inverted: "#2A2A2A"
 
---font-sans: "Inter, system-ui, sans-serif"
---font-serif: "Merriweather, Georgia, serif"
---font-mono: "JetBrains Mono, Fira Code, monospace"
+--font-sans: "Inter, 'Helvetica Neue', Arial, sans-serif"
 
---radius-sm: "4px"
---radius-md: "8px"
---shadow-md: "0 4px 12px rgba(0,0,0,0.4)"
+--radius-sm: "0px"
+--radius-md: "0px"
+--shadow-md: "none"

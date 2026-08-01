@@ -20,8 +20,31 @@ brand:
     twitter: "sapienskid"
     linkedin: "sapienskid"
 
+# Footer row — rendered on every post (bottom-anchored, hairline rule above).
+# Left: name (tracked uppercase). Right: handle (tracked uppercase).
+footer:
+  left: "SABIN POKHAREL"
+  right: "@SAPIENSKID"
+
+# Approved category labels — every post has exactly one, matching the site's
+# taxonomy. Never invent a new one without adding it here first.
+# Optional per-category "ground" reserves black-ground for that category.
+categories:
+  - name: "PORTFOLIO"
+    description: "Project posts"
+  - name: "PROJECT"
+    description: "Individual build/ship updates"
+  - name: "WRITING"
+    description: "Blog posts"
+  - name: "THE LIMITS No.{issue}"
+    description: "Newsletter posts — substitute the real issue number"
+  - name: "NOTE"
+    description: "Short-form/thought posts"
+    ground: "black"
+
 # Overrides for generated content — leave empty to let the LLM decide.
 # When set, these values are used instead of LLM generation.
 overrides:
   badge: ""
   tagline: ""
+  category: ""

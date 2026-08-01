@@ -2,7 +2,7 @@
 
 Takes the copy and strategic brief, produces a complete standalone HTML
 document with CSS variables (var(--color-*)) for colors. Never receives
-actual brand hex values — only CSS variable names.
+actual brand hex values — only CSS variable names and their semantic roles.
 
 The HTML document will be:
   1. Saved to the output directory
@@ -12,6 +12,8 @@ Input (from GenerationState via _processing_format_id):
   - format_tasks[fmt_id].copy: JSON string (PlatformCopy)
   - strategic_brief: dict
   - design_tokens: dict (CSS var → value, for CSS injection reference only)
+  - design-instruction.yaml (style, type scale, spacing, formats, do/don't)
+  - category, ground, footer (resolved upstream)
   - verification[fmt_id].critique: str (if this is a retry)
 
 Output (to GenerationState):
@@ -30,31 +32,39 @@ from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
 from app.services.design_instruction import (
     format_design_instruction_block,
+    format_format_layout_block,
     load_design_instruction,
 )
 from app.services.formats import get_format_info
 from app.services.llm import call_llm
+from app.services.tokens import build_css_var_reference
 
 log = logging.getLogger(__name__)
 
-# CSS variable declarations injected into every Designer prompt
-# (variable NAMES only — not values — so the LLM knows what to use)
-CSS_VARS_REFERENCE = """
-Available CSS variables (use ONLY these for colors — never hardcode hex):
-  var(--color-bg)            — primary background
-  var(--color-bg-secondary)  — secondary background
-  var(--color-text)          — primary text
-  var(--color-text-secondary)— secondary/muted text
-  var(--color-primary)       — accent/brand primary
-  var(--color-secondary)     — secondary accent
-  var(--color-accent)        — highlight color
-  var(--color-border)        — dividers/borders
-  var(--font-sans)           — sans-serif font stack
-  var(--font-serif)          — serif font stack
-  var(--font-mono)           — monospace font stack
-  var(--radius-sm)           — small border radius (4px)
-  var(--radius-md)           — medium border radius (8px)
-""".strip()
+
+def _build_google_fonts_link(design_tokens: dict, design_instruction: dict) -> str:
+    """Build a Google Fonts <link> from the --font-sans token and type weights.
+
+    Only the single grotesque sans family is loaded (Swiss rule: one family).
+    Weights are derived from the type scale roles in design-instruction.yaml.
+    """
+    font_family = design_tokens.get("--font-sans", "Inter, sans-serif")
+    family = re.split(r"[,'\"]", font_family)[0].strip() or "Inter"
+
+    roles = design_instruction.get("type_scale", {}).get("roles", {})
+    weights: set[str] = set()
+    for r in roles.values():
+        w = r.get("weight")
+        if isinstance(w, (int, str)):
+            weights.add(str(w))
+    wght = ";".join(sorted(weights)) if weights else "400;700"
+
+    return (
+        '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
+        f'<link href="https://fonts.googleapis.com/css2?family={family}:wght@{wght}&display=swap" '
+        'rel="stylesheet">'
+    )
 
 
 def _clean_html(raw: str) -> str:
@@ -74,19 +84,6 @@ def _clean_html(raw: str) -> str:
         return raw[idx:].strip()
 
     return raw.strip()
-
-
-def _build_google_fonts_link(copy_data: dict) -> str:
-    """Build a Google Fonts <link> tag for the fonts needed."""
-    return (
-        '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
-        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
-        '<link href="https://fonts.googleapis.com/css2?'
-        "family=Inter:wght@400;500;600;700;800;900&"
-        "family=Instrument+Serif&"
-        "family=JetBrains+Mono:wght@400;500&"
-        'display=swap" rel="stylesheet">'
-    )
 
 
 def _parse_copy(copy_json: str) -> dict:
@@ -112,6 +109,25 @@ def _parse_copy(copy_json: str) -> dict:
         }
 
 
+def _ground_css_vars(ground: str) -> str:
+    """Map the resolved ground to the correct token variables (no hex)."""
+    if ground == "black":
+        return (
+            "GROUND VARIABLES (black-ground):\n"
+            "  background → var(--color-bg-inverted)\n"
+            "  primary text → var(--color-text-inverted)\n"
+            "  hairline rules → var(--color-border-inverted)\n"
+            "  secondary text → var(--color-text-secondary) (same on both grounds)"
+        )
+    return (
+        "GROUND VARIABLES (white-ground):\n"
+        "  background → var(--color-bg)\n"
+        "  primary text → var(--color-text)\n"
+        "  hairline rules → var(--color-border)\n"
+        "  secondary text → var(--color-text-secondary) (same on both grounds)"
+    )
+
+
 async def designer_node_single(state: GenerationState) -> dict:
     """Create HTML layout for a single platform."""
     from app.config import get_settings
@@ -135,9 +151,14 @@ async def designer_node_single(state: GenerationState) -> dict:
     di_path = Path(settings.design_system_dir) / "design-instruction.yaml"
     di_config = load_design_instruction(di_path)
     di_block = format_design_instruction_block(di_config)
+    layout_block = format_format_layout_block(di_config, fmt_id, fmt.width, fmt.height)
 
-    # Build template context: CSS vars + design instruction
-    template_context = f"{CSS_VARS_REFERENCE}\n\n{di_block}"
+    # Design tokens (variable names + semantic roles only — never values)
+    design_tokens = state.get("design_tokens", {})
+    css_var_reference = build_css_var_reference(design_tokens)
+
+    # Build template context: CSS vars + design instruction + format layout
+    template_context = f"{css_var_reference}\n\n{di_block}\n\n{layout_block}"
     if retry_count > 0 and critique:
         template_context += f"\n\nVERIFIER CRITIQUE (PREVIOUS ATTEMPT):\n{critique}\nFix ALL issues listed above."
 
@@ -150,25 +171,49 @@ async def designer_node_single(state: GenerationState) -> dict:
     subhead = copy_data.get("subhead", "")
     body = copy_data.get("body", "")
     tagline = copy_data.get("tagline", "")
-    badge = copy_data.get("badge")
 
     brand_info = state.get("brand_info", {})
     campaign = state.get("campaign", {})
     images_list = state.get("images", [])
+
+    # Resolved design decisions (deterministic — set upstream, not by the LLM)
+    ground = state.get("ground", "white")
+    category = state.get("category", "")
+    footer = state.get("footer", {})
+    footer_left = footer.get("left", "")
+    footer_right = footer.get("right", "")
+
     brand_prefix = f"BRAND: {brand_info.get('name', '')}\n" if brand_info.get("name") else ""
 
     campaign_block = ""
     if campaign:
         label = campaign.get("label", "")
-        visuals = campaign.get("visual_style", "")
-        bg = campaign.get("background", "")
-        illustrations = campaign.get("illustrations", "")
+        tone = campaign.get("tone", "")
+        language = campaign.get("language", "")
         campaign_block = (
             f"CAMPAIGN: {label}\n"
-            f"VISUAL STYLE: {visuals}\n"
-            f"BACKGROUND: {bg}\n"
-            f"ILLUSTRATIONS: {illustrations}\n"
+            f"TONE: {tone}\n"
+            f"LANGUAGE: {language}\n"
         )
+
+    ground_block = _ground_css_vars(ground)
+
+    category_block = (
+        f"CATEGORY LABEL (EXACT — tracked uppercase, category role size): {category}\n"
+        if category
+        else "CATEGORY LABEL: none\n"
+    )
+
+    footer_block = "FOOTER ROW (REQUIRED on every format):\n"
+    if footer_left and footer_right:
+        footer_block += (
+            f"  Left: {footer_left}\n"
+            f"  Right: {footer_right}\n"
+            "  metadata role size, tracked uppercase, secondary gray\n"
+            "  1px hairline rule above, then 24px gap\n"
+        )
+    else:
+        footer_block += "  (footer text not configured — omit)\n"
 
     # Image metadata with data-image-key markers and placement
     images_block = ""
@@ -190,7 +235,7 @@ async def designer_node_single(state: GenerationState) -> dict:
     # Image placement guidelines
     placement_guide = (
         "\nIMAGE PLACEMENT GUIDE:\n"
-        "  placement=\"background\" → full-bleed background with gradient/text overlay\n"
+        "  placement=\"background\" → full-bleed background with text overlay\n"
         "  placement=\"full-width\" → full-width banner between content sections\n"
         "  placement=\"half-top\" → top half of canvas, content overlays or sits below\n"
         "  placement=\"half-bottom\" → bottom half of canvas\n"
@@ -206,17 +251,18 @@ async def designer_node_single(state: GenerationState) -> dict:
 SUBHEAD: {subhead}
 BODY: {body}
 TAGLINE: {tagline}"""
-    if badge:
-        copy_block += f"\nBADGE: {badge}"
 
-    fonts_link = _build_google_fonts_link(copy_data)
+    fonts_link = _build_google_fonts_link(design_tokens, di_config)
 
     user_prompt = (
         f"{brand_prefix}{campaign_block}"
         f"PLATFORM: {fmt_id}\n"
         f"CANVAS: {fmt.width}px × {fmt.height}px\n"
-        f"VISUAL STYLE: {brief.get('visual_direction', 'editorial')}\n"
+        f"VISUAL DIRECTION: {brief.get('visual_direction', 'clean editorial')}\n"
         f"TONE: {brief.get('tone', 'professional')}\n\n"
+        f"{ground_block}\n\n"
+        f"{category_block}\n"
+        f"{footer_block}\n"
         f"COPY TO USE:\n{copy_block}\n\n"
         f"{images_block}\n"
         f"{placement_guide}\n"
@@ -269,7 +315,14 @@ TAGLINE: {tagline}"""
         log.error("[designer] Failed for %s: %s", fmt_id, e, exc_info=True)
 
         # Generate emergency fallback HTML
-        fallback_html = _build_fallback_html(fmt, copy_data)
+        fallback_html = _build_fallback_html(
+            fmt,
+            copy_data,
+            ground=ground,
+            category=category,
+            footer_left=footer_left,
+            footer_right=footer_right,
+        )
         return {
             "format_tasks": {
                 fmt_id: {
@@ -282,12 +335,35 @@ TAGLINE: {tagline}"""
         }
 
 
-def _build_fallback_html(fmt: object, copy_data: dict) -> str:
-    """Build a minimal fallback HTML when the LLM fails."""
+def _build_fallback_html(
+    fmt: object,
+    copy_data: dict,
+    ground: str = "white",
+    category: str = "",
+    footer_left: str = "",
+    footer_right: str = "",
+) -> str:
+    """Build a minimal Swiss-style fallback HTML when the LLM fails.
+
+    Uses only var(--color-*) references — the pipeline injects the token
+    block before rendering, so no hex values live in this code.
+    """
     headline = copy_data.get("headline", "Untitled")
     subhead = copy_data.get("subhead", "")
     body = copy_data.get("body", "")
     tagline = copy_data.get("tagline", "")
+
+    is_story = fmt.width == 1080 and fmt.height == 1920
+    pad_vertical = 160 if is_story else 64
+    body_block = f'<div class="body-text">{body}</div>' if body else ""
+    subhead_block = f'<div class="subhead">{subhead}</div>' if subhead else ""
+    tagline_block = f'<div class="tagline">{tagline}</div>' if tagline else ""
+    category_block = f'<div class="kicker">{category}</div>' if category else ""
+    footer_block = (
+        f'<div class="rule"></div>\n  <div class="footer"><span>{footer_left}</span><span>{footer_right}</span></div>'
+        if footer_left and footer_right
+        else ""
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -295,19 +371,9 @@ def _build_fallback_html(fmt: object, copy_data: dict) -> str:
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-:root {{
-  --color-bg: #0f172a;
-  --color-bg-secondary: #1e293b;
-  --color-text: #ffffff;
-  --color-text-secondary: #94a3b8;
-  --color-primary: #667eea;
-  --color-secondary: #764ba2;
-  --color-accent: #6366f1;
-  --color-border: #334155;
-  --font-sans: 'Inter', sans-serif;
-}}
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 body {{
   width: {fmt.width}px;
@@ -315,53 +381,66 @@ body {{
   overflow: hidden;
   margin: 0;
   background: var(--color-bg);
+  color: var(--color-text);
   font-family: var(--font-sans);
+  padding: {pad_vertical}px 64px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 60px;
-  text-align: center;
+}}
+.kicker {{
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 24px;
 }}
 .headline {{
-  font-size: 48px;
-  font-weight: 800;
-  color: var(--color-text);
-  line-height: 1.1;
-  margin-bottom: 24px;
+  font-size: 68px;
+  font-weight: 700;
+  line-height: 1.05;
+  margin-bottom: 32px;
 }}
 .subhead {{
-  font-size: 24px;
-  font-weight: 500;
-  color: var(--color-primary);
-  margin-bottom: 24px;
+  font-size: 36px;
+  font-weight: 400;
+  line-height: 1.3;
+  margin-bottom: 32px;
 }}
 .body-text {{
-  font-size: 18px;
-  color: var(--color-text-secondary);
-  line-height: 1.6;
+  font-size: 28px;
+  font-weight: 400;
+  line-height: 1.3;
   margin-bottom: 32px;
-  max-width: 80%;
 }}
 .tagline {{
-  font-size: 16px;
-  color: var(--color-accent);
-  letter-spacing: 0.1em;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-bottom: 32px;
 }}
-.accent-bar {{
-  width: 60px;
-  height: 4px;
-  background: var(--color-primary);
-  margin: 24px auto;
+.spacer {{ flex: 1; }}
+.rule {{ border-top: 1px solid var(--color-border); }}
+.footer {{
+  display: flex;
+  justify-content: space-between;
+  padding-top: 24px;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
 }}
 </style>
 </head>
 <body>
+  {category_block}
   <div class="headline">{headline}</div>
-  <div class="accent-bar"></div>
-  <div class="subhead">{subhead}</div>
-  <div class="body-text">{body}</div>
-  <div class="tagline">{tagline}</div>
+  {subhead_block}
+  {body_block}
+  {tagline_block}
+  <div class="spacer"></div>
+  {footer_block}
 </body>
 </html>"""

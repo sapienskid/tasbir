@@ -16,6 +16,7 @@ Output (to GenerationState):
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -36,6 +37,26 @@ from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html, i
 log = logging.getLogger(__name__)
 
 MAX_RETRIES = 2  # Max verifier retry loops
+
+# Vision calls are expensive on the free tier (15 req/min). Serialize them and
+# enforce a minimum interval so parallel formats don't exhaust the quota.
+_VISION_LOCK = asyncio.Lock()
+_VISION_LAST_CALL = 0.0
+_VISION_MIN_INTERVAL = 5.0  # seconds between vision LLM calls
+
+# Decorative/emoji Unicode ranges to scan for — excludes mathematical operators
+# (U+2200–U+22FF) so KaTeX/$...$ math content never false-positives.
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F000-\U0001FAFF"  # emoticons & pictographs
+    "\U00002600-\U000027BF"  # misc symbols & dingbats
+    "\U00002B00-\U00002BFF"  # misc symbols and arrows
+    "\U0001F1E6-\U0001F1FF"  # regional indicators (flags)
+    "\U0000FE0F"             # variation selector
+    "]+"
+)
+
+_HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 
 
 def _extract_json(text: str) -> dict:
@@ -109,7 +130,16 @@ async def _call_vision_llm(
             ]),
         ]
 
-        response = await llm.ainvoke(messages)
+        # Serialize + space vision calls to respect free-tier rate limits
+        global _VISION_LAST_CALL
+        loop = asyncio.get_event_loop()
+        async with _VISION_LOCK:
+            elapsed = loop.time() - _VISION_LAST_CALL
+            if elapsed < _VISION_MIN_INTERVAL:
+                await asyncio.sleep(_VISION_MIN_INTERVAL - elapsed)
+            _VISION_LAST_CALL = loop.time()
+            response = await llm.ainvoke(messages)
+
         content = response.content or ""
         # LangChain can return content as a list of content blocks
         if isinstance(content, list):
@@ -133,30 +163,123 @@ async def _call_vision_llm(
         })
 
 
-def _build_design_system_context(tokens: dict, design_instruction: dict) -> str:
-    """Build a concise design system spec for the verifier prompt."""
-    lines = ["DESIGN SYSTEM:"]
+def _build_design_system_context(
+    tokens: dict,
+    design_instruction: dict,
+    footer: dict,
+    category: str,
+    ground: str,
+) -> str:
+    """Build a full design system spec for the verifier prompt.
+
+    Includes the complete Swiss style rules (type scale, spacing, footer,
+    do/don't) plus token values, the resolved ground, and the required
+    category label — everything the auditor needs to judge the render.
+    """
+    lines = [
+        "DESIGN SYSTEM (AUDIT THE RENDER AGAINST EVERY POINT):",
+        "  Ground: " + (ground if ground in ("white", "black") else "white"),
+    ]
+
+    if category:
+        lines.append(f"  Required category label (tracked uppercase): {category}")
+    if footer.get("left") and footer.get("right"):
+        lines.append(
+            f"  Required footer row: '{footer['left']}' left · '{footer['right']}' right, "
+            "hairline rule above, metadata size"
+        )
+
+    # Token values (the verifier sees actual values — it's the auditor)
+    lines.append("  Token values:")
     for var, value in tokens.items():
         if var.startswith("--color") or var.startswith("--font"):
-            lines.append(f"  {var}: {value}")
-    
-    # Add design instruction constraints
-    di = design_instruction or {}
-    ts = di.get("type_scale", {})
-    if ts.get("sizes_px"):
-        lines.append(f"  Type scale (px): {', '.join(str(s) for s in ts['sizes_px'])}")
-    dec = di.get("decoration", {})
-    bans = []
-    if not dec.get("unicode_symbols", True): bans.append("unicode symbols")
-    if not dec.get("gradients_as_bg", True): bans.append("gradient backgrounds")
-    if not dec.get("glassmorphism", True): bans.append("glassmorphism")
-    if bans:
-        lines.append(f"  Forbidden: {', '.join(bans)}")
-    g = di.get("grid", {})
-    if g.get("columns"):
-        lines.append(f"  Grid: {g['columns']}-column, margin={g.get('margin', '6%')}")
-    
-    return "\n".join(lines)
+            lines.append(f"    {var}: {value}")
+
+    # Math rendered by KaTeX uses its own math typeface (Computer Modern).
+    # This is EXPECTED — do not flag math formula fonts as a violation.
+    lines.append(
+        "  Math note: LaTeX formulas rendered by KaTeX use KaTeX's own math "
+        "typeface. This is EXPECTED and exempt from the single-family rule — "
+        "do NOT flag math fonts as a serif violation."
+    )
+
+    di_block = format_design_instruction_block(design_instruction or {})
+    return "\n".join(lines) + "\n\n" + di_block
+
+
+def _run_deterministic_checks(
+    html: str,
+    footer: dict,
+    category: str,
+    canvas_width: int = 1080,
+    canvas_height: int = 1080,
+) -> list[str]:
+    """Check for hard design-system violations WITHOUT an LLM.
+
+    Returns a list of critical issues. Any issue → the design must be fixed
+    and retried. These encode the spec's non-negotiable rules:
+      - the canvas is a styled, correctly-sized document
+      - no emoji / decorative unicode symbols
+      - no raw hex colors in real styles (must use var(--color-*))
+      - footer name + handle present (when configured)
+      - approved category label present (when configured)
+
+    A designer `:root` block is NOT flagged: the system strips any `:root`
+    redeclaration before rendering and injects its own token block, so a
+    designer `:root` (and the hex values inside it) never reaches the output.
+    """
+    issues: list[str] = []
+
+    # 0. Structural integrity — the HTML must be a styled, canvas-pinned document
+    if "<style" not in html.lower() or "</style>" not in html.lower():
+        issues.append("HTML has no <style> block — the design would render unstyled")
+    width_ok = re.search(rf"width\s*:\s*{canvas_width}px", html)
+    height_ok = re.search(rf"height\s*:\s*{canvas_height}px", html)
+    if not width_ok or not height_ok:
+        issues.append(
+            f"Canvas size must be defined as width:{canvas_width}px;height:{canvas_height}px "
+            "(on the body or in a CSS rule)"
+        )
+
+    # 1. Emoji / decorative symbols
+    emoji_matches = _EMOJI_RE.findall(html)
+    if emoji_matches:
+        issues.append(
+            f"Emoji/decorative unicode symbols detected (forbidden): "
+            f"{sorted(set(emoji_matches))[:6]}"
+        )
+
+    # 2. Raw hex colors in real CSS. Strip :root blocks first — they are
+    #    removed by the token injector before rendering, so hex inside a
+    #    designer :root block is harmless.
+    has_diagram = 'class="diagram"' in html or "mermaid" in html.lower()
+    if not has_diagram:
+        no_root = re.sub(r":root\s*\{[^}]*\}", "", html, flags=re.IGNORECASE)
+        hex_found = _HEX_RE.findall(no_root)
+        if hex_found:
+            issues.append(
+                f"Raw hex color values in HTML (must use var(--color-*)): "
+                f"{sorted(set(hex_found))[:6]}"
+            )
+
+    # 3. Footer presence
+    if footer.get("left") and footer["left"].lower() not in html.lower():
+        issues.append(f"Footer name '{footer['left']}' is missing from the design")
+    if footer.get("right") and footer["right"].lower() not in html.lower():
+        issues.append(f"Footer handle '{footer['right']}' is missing from the design")
+
+    # 4. Category label presence
+    if category:
+        upper = html.upper()
+        if "{issue}" in category:
+            base = category.replace("{issue}", "").upper()
+            matches = [s for s in upper.split() if s.startswith(base)]
+            if not matches:
+                issues.append(f"Category label '{category}' is missing from the design")
+        elif category.upper() not in upper:
+            issues.append(f"Category label '{category}' is missing from the design")
+
+    return issues
 
 
 async def quality_check_node_single(state: GenerationState) -> dict:
@@ -172,10 +295,41 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     design_tokens = state.get("design_tokens", DEFAULT_TOKEN_VALUES)
 
     retry_count = state.get("retry_count", {}).get(fmt_id, 0)
+    footer = state.get("footer", {})
+    category = state.get("category", "")
+    ground = state.get("ground", "white")
 
     if not html:
         log.warning("[verifier] No HTML for %s, auto-passing", fmt_id)
         return _auto_pass(state, fmt_id, task, "No HTML to verify")
+
+    # Step 0: Deterministic design-system checks (no LLM cost). Any violation
+    # is a hard spec failure — fix and retry.
+    check_issues = _run_deterministic_checks(html, footer, category, fmt.width, fmt.height)
+    if check_issues:
+        log.warning("[verifier] Deterministic violations for %s: %s", fmt_id, check_issues)
+        _save_html_preview(task_id, fmt_id, html)
+        verification = dict(state.get("verification", {}))
+        verification[fmt_id] = {
+            "pass": False,
+            "score": 20,
+            "issues": check_issues,
+            "critique": "Automated design-system checks failed. Fix: " + "; ".join(check_issues),
+        }
+        new_retry_count = dict(state.get("retry_count", {}))
+        new_retry_count[fmt_id] = retry_count + 1
+        return {
+            "format_tasks": {
+                fmt_id: {
+                    **task,
+                    "quality_score": 20,
+                    "quality_issues": check_issues,
+                    "status": "needs_retry",
+                }
+            },
+            "verification": verification,
+            "retry_count": new_retry_count,
+        }
 
     # Step 1: Inject tokens, KaTeX, and images into HTML
     log.info("[verifier] Rendering %s to PNG for visual audit", fmt_id)
@@ -199,9 +353,10 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     from pathlib import Path
     di_path = Path(settings.design_system_dir) / "design-instruction.yaml"
     design_instruction = load_design_instruction(di_path)
-    ds_context = _build_design_system_context(design_tokens, design_instruction)
+    ds_context = _build_design_system_context(design_tokens, design_instruction, footer, category, ground)
     user_prompt = (
         f"TARGET PLATFORM: {fmt_id} ({fmt.width}x{fmt.height}px)\n"
+        f"EXPECTED GROUND: {ground}\n"
         f"{ds_context}\n\n"
         f"Audit this design image. Score it 0-100 and provide actionable critique.\n"
         f"Return ONLY valid JSON: {{\"pass\": bool, \"score\": int, \"issues\": [...], \"critique\": \"...\"}}"

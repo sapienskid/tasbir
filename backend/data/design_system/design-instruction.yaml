@@ -1,39 +1,109 @@
 # Design Instruction — compositional constraints for the visual system.
-# Values here are injected into the designer prompt at runtime.
-# Configure per brand to define the structural visual identity.
+# Encodes the Swiss / International Typographic Style for Sabin Pokharel.
+# Injected into designer & verifier prompts at runtime. No code changes needed.
 
-grid:
-  columns: 12
-  margin: "6%"          # per side, % of canvas width
-  gutter: "2%"          # between columns, % of canvas width
-  baseline: "8px"       # vertical rhythm unit
-  max_violations: 1     # deliberate grid breaks allowed per card
+style:
+  name: "Swiss / International Typographic Style"
+  palette: "monochrome"           # strictly grayscale — no hue of any kind
+  allowed_grounds: ["white", "black"]
+  default_ground: "white"
+  accent: "none"
+  max_weights_per_post: 2         # one bold + one regular
+  shadows: false
+  border_radius: "0px"
+  illustrations: false
+  icons: false
+  emoji: false
+  gradients: false
 
 type_scale:
-  base: "16px"
-  ratio: 1.333
-  sizes_px: [12, 16, 21, 28, 38, 51, 68]
-  weights:
-    headline: [700, 800, 900]
-    body: [400, 500]
-  headline_tracking: "-0.02em"
-  headline_leading: "0.95"
-  body_leading: "1.5"
-  uppercase_tracking: "0.10em"
+  base_canvas_width: 1080
+  # Sizes are at base_canvas_width; scale by width/1080 for other formats.
+  # One grotesque sans family (var(--font-sans)) does all the work —
+  # hierarchy comes from weight + size + tracking, never from mixing faces.
+  roles:
+    category:
+      size: 22
+      weight: 500
+      tracking: "0.12em"
+      case: "uppercase"
+      line_height: 1.2
+      max_chars: 24
+    headline:
+      size: 68
+      weight: 700
+      tracking: 0
+      case: "sentence"
+      line_height: 1.05
+      max_lines:
+        square: 4
+        portrait: 4
+        story: 4
+        landscape: 3
+    subhead:
+      size: 36
+      weight: 400
+      tracking: 0
+      case: "sentence"
+      line_height: 1.3
+      max_lines: 3
+    body:
+      size: 28
+      weight: 400
+      tracking: 0
+      case: "sentence"
+      line_height: 1.3
+      max_lines: 5
+      min_size: 24
+    metadata:
+      size: 20
+      weight: 500
+      tracking: "0.08em"
+      case: "uppercase"
+      line_height: 1.2
+      min_size: 18
 
-decoration:
-  unicode_symbols: false
-  gradients_as_bg: false
-  glassmorphism: false
-  badges_pills: false
-  decorative_buttons: false
-  max_border_radius: "4px"
-  corner_marks: false
-  dividers: "hairline"
+spacing:
+  unit: 8
+  scale: [8, 16, 24, 32, 48, 64, 96, 128]
+  margin: 64                       # px, every edge, every format
+  margin_story_vertical: 160       # px, top/bottom on 9:16 to clear platform UI
+  gap_category_label: 24           # px, label → headline
+  gap_headline_body: 32            # px, headline → body
+  gap_footer_rule: 24              # px, rule → footer text
+  gap_section: 96                  # px, section separation on tall formats
 
-shadow:
-  style: "hard_offset"
-  default: "4px 4px 0 var(--color-text)"
+format_families:
+  instagram-square: square
+  instagram-portrait: portrait
+  instagram-story: story
+  linkedin-post: landscape
+  twitter-card: landscape
+  facebook-post: landscape
+  pinterest-pin: portrait
+
+formats:
+  square:
+    label: "Square post"
+    margins: [64, 64, 64, 64]
+    footer_y: 1016
+  portrait:
+    label: "Portrait post (4:5)"
+    margins: [64, 64, 64, 64]
+  story:
+    label: "Story/Reel (9:16)"
+    margins: [160, 64, 160, 64]
+    headline_zone: [160, 700]
+    footer_y: 1760
+  landscape:
+    label: "Landscape (16:9)"
+    margins: [64, 64, 64, 64]
+
+footer:
+  enabled: true
+  rule: "1px hairline"
+  gap: 24
+  style: "metadata"
 
 images:
   default_crop: "sharp_rect"
@@ -42,3 +112,17 @@ images:
 math:
   dedicated_grid_block: true
   fallback: "reduce_headline"
+
+do_dont:
+  do:
+    - "Left-align everything, always"
+    - "Use weight and size for hierarchy — never color"
+    - "Keep hairline rules exactly 1px: hairline on white-ground, hairline-inverted on black-ground"
+    - "Use generous whitespace — flexible space is intentional, not empty by accident"
+  dont:
+    - "No hue of any kind — not even 'just a little' blue, amber, or green"
+    - "No icons, illustrations, or motifs of any kind"
+    - "No centering"
+    - "No more than 2 weights per post (one bold, one regular)"
+    - "No shadows, gradients, borders-with-radius, or any softening effect"
+    - "No third color, ever — if a post needs emphasis, use weight or size"

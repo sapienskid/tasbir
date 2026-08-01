@@ -24,6 +24,7 @@ from pydantic import BaseModel, field_validator
 from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
 from app.services.llm import call_llm
+from app.services.tokens import category_matches, resolve_ground
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class StrategicBrief(BaseModel):
     audience: str
     tone: str
     visual_direction: str
+    category: str = ""
+    ground: str = ""
     platform_notes: dict[str, str] = {}
 
     @field_validator("tone")
@@ -84,8 +87,9 @@ async def strategist_node(state: GenerationState) -> dict:
     content = state.get("content", "")
     title = state.get("title", "")
     platforms = state.get("platforms", [])
+    categories = state.get("categories", [])
 
-    # Build user prompt with brand + campaign context
+    # Build brand + campaign context
     brand_info = state.get("brand_info", {})
     campaign = state.get("campaign", {})
 
@@ -102,12 +106,26 @@ async def strategist_node(state: GenerationState) -> dict:
     if campaign:
         label = campaign.get("label", "")
         tone = campaign.get("tone", "")
-        visual = campaign.get("visual_style", "")
+        ground = campaign.get("ground", "")
+        language = campaign.get("language", "")
         campaign_block = (
             f"CAMPAIGN: {label}\n"
             f"TONE: {tone}\n"
-            f"VISUAL STYLE: {visual}\n"
+            f"GROUND: {ground}\n"
+            f"LANGUAGE: {language}\n"
         )
+
+    # Approved category taxonomy (exact strings the designer must use)
+    categories_block = ""
+    if categories:
+        cat_lines = []
+        for cat in categories:
+            name = cat.get("name", "")
+            desc = cat.get("description", "")
+            ground = cat.get("ground", "")
+            ground_note = f" [ground: {ground}]" if ground else ""
+            cat_lines.append(f"  {name} — {desc}{ground_note}")
+        categories_block = "APPROVED CATEGORY LABELS (choose exactly one):\n" + "\n".join(cat_lines) + "\n"
 
     # Tags & excerpt
     tags_str = ", ".join(state.get("tags", []))
@@ -117,6 +135,7 @@ async def strategist_node(state: GenerationState) -> dict:
         f"TITLE: {title}\n\n"
         f"{brand_block}\n"
         f"{campaign_block}\n"
+        f"{categories_block}\n"
         f"TARGET PLATFORMS: {', '.join(platforms)}\n"
         f"TAGS: {tags_str}\n"
         f"EXCERPT: {excerpt_str}\n\n"
@@ -124,6 +143,9 @@ async def strategist_node(state: GenerationState) -> dict:
     )
 
     log.info("[strategist] Analyzing content for %d platform(s)", len(platforms))
+
+    # Category override (API or brand overrides) wins — no LLM needed for it
+    override_category = str(state.get("overrides", {}).get("category") or state.get("category") or "").strip()
 
     try:
         raw = await call_llm(
@@ -145,16 +167,41 @@ async def strategist_node(state: GenerationState) -> dict:
 
         brief = StrategicBrief(**data)
         log.info("[strategist] Brief produced — angle: %s", brief.angle[:60])
-        return {"strategic_brief": brief.model_dump()}
+
+        # Resolve category: override > LLM > WRITING fallback
+        category = override_category.upper() if override_category else (brief.category or "").upper().strip()
+        if not category_matches(category, categories):
+            log.warning("[strategist] Category '%s' not approved — falling back to WRITING", category)
+            category = "WRITING"
+
+        ground = resolve_ground(campaign, category, categories, default="white")
+        brief.category = category
+        brief.ground = ground
+
+        return {
+            "strategic_brief": brief.model_dump(),
+            "category": category,
+            "ground": ground,
+        }
 
     except Exception as e:
         log.error("[strategist] Failed: %s", e, exc_info=True)
         # Return a minimal fallback brief so the pipeline can continue
+        category = override_category.upper() if override_category else "WRITING"
+        if not category_matches(category, categories):
+            category = "WRITING"
+        ground = resolve_ground(campaign, category, categories, default="white")
         fallback = StrategicBrief(
             angle=f"Key insights from: {title}",
             audience="General audience interested in this topic",
             tone="professional",
             visual_direction="clean editorial",
+            category=category,
+            ground=ground,
             platform_notes={p: f"Optimized for {p}" for p in platforms},
         )
-        return {"strategic_brief": fallback.model_dump()}
+        return {
+            "strategic_brief": fallback.model_dump(),
+            "category": category,
+            "ground": ground,
+        }
