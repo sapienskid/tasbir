@@ -18,7 +18,7 @@ PNG renders (ready to share), with no separate storage or UI needed.
 4. **YAML design system** — Tokens, brand, platforms, and campaigns in YAML files
 5. **Human-editable** — User opens HTML in browser, tweaks CSS, re-renders
 6. **Minimal infrastructure** — SQLite for task tracking, no MinIO, no separate UI
-7. **Multi-agent pipeline** — LangGraph with 4 agents (Strategist → Copywriter → Designer → Verifier)
+7. **Multi-agent pipeline** — LangGraph with agent nodes (Strategist → Copywriter → Designer → Verifier) + a deterministic Renderer
 
 ## Architecture Summary
 
@@ -63,13 +63,14 @@ n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → HTML + PNG
 - [ ] n8n workflow: Ghost webhook → Tasbir API
 - [x] User workflow: open HTML in browser → tweak CSS → re-render
 - [x] Status endpoint for n8n polling
-- [x] Docker Compose finalization (healthchecks, baked images)
+- [x] Docker Compose finalization (healthchecks, baked images, slim render image)
 
 ### Phase 6: Polish
 - [x] Comprehensive test suite
 - [x] Documentation (AGENTS.md, DESIGN.md, docs/adr, docs/glossary)
 - [x] YAML prompt tuning
 - [x] Rate limit optimization for Gemini free tier (serialized vision calls)
+- [x] Docker image slimming (~55% smaller stack; chromium headless shell only)
 - [ ] Mermaid diagram rendering support
 
 ## What Was Removed From v2

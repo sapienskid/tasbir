@@ -61,14 +61,16 @@ renders to PNG for visual verification.
 - FastAPI (`POST /generate`, `GET /tasks/{id}`, `GET /health`)
 - Celery + Redis task queue
 - SQLite task tracking (GenerationTask + AuditLog models)
-- LangGraph pipeline with 4 agent nodes
-- Playwright service (HTML rendering + DOM extraction)
+- LangGraph pipeline (strategist → copywriter → process_all_formats)
+- Playwright service (HTML rendering + DOM extraction + overflow detection)
 - YAML prompt configs (`config/prompts/*.yaml`)
-- YAML design system (`data/design_system/*.yaml`)
+- YAML design system (`data/design_system/*.yaml`) — 3 type voices, layout archetypes
 - LLM client (Gemini 3.5 Flash Lite via OpenRouter fallback)
 - KaTeX automatic injection for math rendering
 - Image embedding (download, base64 encode, inject into HTML)
-- Campaign presets (tone, ground, language)
+- Campaign presets (tone, ground, language) + category taxonomy
+- Deterministic QC: emoji/hex/footer/category/display-face/canvas checks + DOM overflow
+- Deterministic font loading (auto-quoted families, `document.fonts.ready`)
 
 ### Stack
 
@@ -76,10 +78,10 @@ renders to PNG for visual verification.
 |-----------|-----------|
 | API | FastAPI (Python) |
 | Task Queue | Celery + Redis |
-| Pipeline | LangGraph (4 nodes) |
+| Pipeline | LangGraph (3 nodes + per-format chain) |
 | LLM | Gemini 3.5 Flash Lite (free tier) |
-| Rendering | Playwright (headless Chromium) |
-| Database | SQLite (aiosqlite) |
+| Rendering | Playwright (headless Chromium, slim image) |
+| Database | SQLite (aiosqlite, create_all on boot) |
 | Workflow | n8n (triggers from Ghost CMS) |
 
 ### Cost Target
@@ -121,15 +123,17 @@ process_all_formats → per-platform, in parallel via asyncio.gather:
   │        Each format runs an isolated branch:
   │
   │        Designer → Input: copy + brief + ground + category + footer + images
+  │        │           + a deterministic layout archetype (composition varies per post)
   │        │         Output: HTML with CSS variables (var(--color-*), NOT brand hex)
   │        │
-  │        Renderer → injects tokens (strip designer :root, add system :root),
-  │        │           KaTeX CDN, base64 images; saves {fmt_id}.html
+  │        Renderer → injects tokens (auto-quoted font families), Google Fonts
+  │        │           link, KaTeX CDN, base64 images; saves {fmt_id}.html
   │        │
-  │        Verifier  → 1. deterministic checks (emoji, hex, footer, category,
-  │        │             canvas size) — hard fail on violation
-  │        │             2. renders to PNG via Playwright
-  │        │             3. multimodal LLM audit on rendered PNG
+  │        Verifier  → 1. deterministic checks (emoji, raw hex, footer, category,
+  │        │             display face, canvas size) — hard fail on violation
+  │        │             2. renders to PNG via Playwright (waits for fonts)
+  │        │             3. DOM-based overflow check — hard fail + retry
+  │        │             4. multimodal LLM audit on rendered PNG
   │        │             Output: {pass, score, issues, critique}
   │        │
   │        └── [pass] → branch done
@@ -188,7 +192,7 @@ All agent prompts are stored in `backend/config/prompts/*.yaml`. Each agent outp
 ### 7. Brand Context Flows Through Every Agent
 - Brand name/tagline/mission/story passed to Strategist, Copywriter, Designer
 - Campaign presets define tone, ground, and verbal language
-- Overrides (badge, tagline) from `brand.yaml` applied at Copywriter level
+- Overrides (badge, tagline, category) from `brand.yaml` applied at the Copywriter/Strategist level
 
 ### 8. KaTeX Injected Automatically
 - If Designer output contains `<span class="math">`, KaTeX CDN is injected
@@ -401,9 +405,16 @@ tasbir/
 ├── DESIGN.md                            ← Architecture decisions
 ├── docker-compose.yml
 ├── .env.example
+├── docs/                                ← ADRs + glossary
+│   ├── glossary.md
+│   └── adr/
+│       ├── 0001-two-family-typography.md
+│       └── ...
 │
 ├── backend/
-│   ├── Dockerfile
+│   ├── Dockerfile                       ← API/worker image
+│   ├── Dockerfile.playwright            ← Slim render service (chromium headless shell)
+│   ├── .dockerignore
 │   ├── pyproject.toml
 │   ├── requirements.txt
 │   │
@@ -416,16 +427,16 @@ tasbir/
 │   │
 │   ├── data/
 │   │   ├── design_system/
-│   │   │   ├── brand.yaml              ← Brand identity
-│   │   │   ├── tokens.yaml             ← Design tokens (CSS vars)
+│   │   │   ├── brand.yaml              ← Brand identity + footer + categories
+│   │   │   ├── tokens.yaml             ← Design tokens (CSS vars + 3 font voices)
 │   │   │   ├── platforms.yaml          ← Platform dimensions
-│   │   │   ├── campaigns.yaml          ← Campaign presets
-│   │   │   └── design-instruction.yaml ← Swiss style rules (palette, type scale, spacing, formats)
+│   │   │   ├── campaigns.yaml          ← Campaign presets (tone, ground, language)
+│   │   │   └── design-instruction.yaml ← Swiss style rules (type voices, roles, measure, archetypes)
 │   │   └── output/{task_id}/           ← Generated HTML + PNG files
 │   │
 │   ├── app/
 │   │   ├── __init__.py
-│   │   ├── main.py                      ← FastAPI app entry
+│   │   ├── main.py                      ← FastAPI app entry (create_all on boot)
 │   │   ├── config.py                    ← Pydantic Settings (env-based)
 │   │   │
 │   │   ├── api/
@@ -435,23 +446,24 @@ tasbir/
 │   │   │
 │   │   ├── agents/
 │   │   │   ├── orchestrator/
-│   │   │   │   ├── graph.py             ← LangGraph pipeline (4 nodes)
+│   │   │   │   ├── graph.py             ← LangGraph pipeline (3 nodes, parallel branches)
 │   │   │   │   ├── state.py             ← GenerationState + Pydantic models
 │   │   │   │   └── nodes/
-│   │   │   │       ├── strategist.py    ← LLM node
-│   │   │   │       ├── copywriter.py    ← LLM node (parallel)
-│   │   │   │       ├── designer.py      ← LLM node (parallel)
-│   │   │   │       ├── quality_check.py ← Verifier (render + multimodal)
-│   │   │   │       └── renderer.py      ← HTML persistence (tokens/KateX/images)
+│   │   │   │       ├── strategist.py    ← LLM node (category + ground)
+│   │   │   │       ├── copywriter.py    ← LLM node (parallel, length limits)
+│   │   │   │       ├── designer.py      ← LLM node (layout archetype)
+│   │   │   │       ├── quality_check.py ← Verifier (deterministic + overflow + vision)
+│   │   │   │       └── renderer.py      ← HTML persistence (tokens/fonts/KateX/images)
 │   │   │   └── prompts/
 │   │   │       └── registry.py          ← YAML prompt loader
 │   │   │
 │   │   ├── services/
 │   │   │   ├── llm.py                   ← Gemini/OpenRouter client
-│   │   │   ├── tokens.py                ← Token/brand/campaign/platform YAML loader
+│   │   │   ├── tokens.py                ← Token/brand/campaign/platform YAML loader + semantic vars
+│   │   │   ├── design_instruction.py    ← Swiss style loader + font link builder + archetypes
 │   │   │   ├── formats.py               ← Format dimension helper
 │   │   │   ├── image_loader.py          ← Image download + base64 embed
-│   │   │   ├── dom_extractor.py         ← Playwright DOM extraction client
+│   │   │   ├── dom_extractor.py         ← Playwright DOM extraction + overflow detection
 │   │   │   ├── renderer.py              ← Playwright PNG render client
 │   │   │   └── render_server.py         ← Playwright HTTP microservice (Docker)
 │   │   │
@@ -509,6 +521,18 @@ containers at `/app/config/prompts`.)
 2. Add the semantic role description to `SEMANTIC_VAR_ROLES` in `backend/app/services/tokens.py` (this is what the designer prompt sees)
 3. Add default value to `DEFAULT_TOKEN_VALUES` in `backend/app/services/tokens.py`
 4. Document the new variable in AGENTS.md Token Variable Reference table
+
+### Changing a typeface / font voice
+1. Edit the `--font-*` value in `data/design_system/tokens.yaml`
+2. The Google Fonts link, CSS-variable reference, and fallback HTML all derive from it — no code changes
+3. Multi-word family names are auto-quoted at injection time (Chromium rejects unquoted names like `Source Serif 4`)
+4. Restart the worker to pick up changes
+
+### Adding a layout archetype
+1. Add a key + description under `layout_archetypes` in `data/design_system/design-instruction.yaml`
+2. The pipeline picks one deterministically per post (seeded by title + format)
+3. The verifier audits within any approved archetype — update `verifier.yaml`/design-instruction `do_dont` if the new archetype changes constraints
+4. Restart the worker to pick up changes
 
 ### Overriding copy fields
 1. Set `overrides.headline`, `overrides.subhead`, etc. in the API request

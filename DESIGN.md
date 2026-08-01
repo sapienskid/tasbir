@@ -98,14 +98,15 @@ n8n Webhook → POST /generate
 
 ### Configuration Files in `data/design_system/`
 
-The design system is split into four YAML files, each serving a specific purpose:
+The design system is split into five YAML files, each serving a specific purpose:
 
 | File | Purpose | Loaded By |
 |------|---------|-----------|
-| `brand.yaml` | Brand identity (name, tagline, mission, story, social links, overrides) | Celery task → all agents |
-| `tokens.yaml` | CSS variable → value mappings (colors, fonts, spacing, shadows) | Celery task → Verifier/Designer |
+| `brand.yaml` | Brand identity (name, tagline, mission, story, social, footer, categories, overrides) | Celery task → all agents |
+| `tokens.yaml` | CSS variable → value mappings (grayscale palette, 3 font voices) | Celery task → Verifier/Designer |
 | `platforms.yaml` | Platform dimensions `[width, height]` in pixels | `get_format_info()` |
-| `campaigns.yaml` | Visual presets (tone, style, background, illustrations) | Celery task → Strategist/Designer |
+| `campaigns.yaml` | Campaign presets (tone, ground, language) | Celery task → Strategist/Designer |
+| `design-instruction.yaml` | Swiss typographic style (type voices, roles, measure, layout archetypes) | Designer + Verifier nodes |
 
 ### Why YAML
 
@@ -115,13 +116,15 @@ The design system is split into four YAML files, each serving a specific purpose
 - **Fast loading**: YAML is millisecond-fast to parse
 - **Composable**: Separate files for brand, tokens, platforms, campaigns — each independently editable
 
-### How Tokens Work
+### How Tokens & Fonts Work
 
 1. All design tokens live in `tokens.yaml` as CSS variable → value mappings
 2. The Designer writes CSS variables: `var(--color-bg)`, `var(--color-text)`, etc.
-3. The LLM is told what CSS variable names exist (list in system prompt) but NEVER sees actual color values
-4. After the Designer outputs HTML, the Verifier injects the actual token values as a `<style>:root { ... }</style>` block
-5. The LLM never sees brand colors — only variable names
+3. The LLM is told what CSS variable names exist (with semantic role descriptions) but NEVER sees actual color values
+4. After the Designer outputs HTML, the system injects the actual token values as a `<style>:root { ... }</style>` block
+5. Multi-word font families (e.g. `Source Serif 4`) are **quoted automatically** in the injected `:root` — unquoted names silently fall back to Times New Roman in Chromium
+6. The Google Fonts `<link>` is generated from the token families + type-scale weights and injected **deterministically** — it never depends on the LLM
+7. The render service waits for `document.fonts.ready` before screenshotting so webfonts always render
 
 ### How Brand Context Flows
 
@@ -129,16 +132,35 @@ The design system is split into four YAML files, each serving a specific purpose
 2. Brand name/tagline passed to Strategist for tone alignment
 3. Brand name/tagline passed to Copywriter for voice consistency
 4. Brand name passed to Designer for visual alignment
-5. Overrides (badge, tagline) from `brand.yaml` applied before Copywriter LLM call
+5. Overrides (badge, tagline, category) from `brand.yaml` applied before the relevant LLM call
 
 ### How Campaigns Work
 
 1. API request includes `campaign: "educational"` (string key)
 2. Celery task loads the corresponding preset from `campaigns.yaml`
 3. Campaign defines: tone, ground (white|black), and verbal language
-4. Tone → Strategist, Copywriter, Designer
-5. Visual style, background, illustrations → Designer (HTML layout)
+4. Tone + language → Strategist, Copywriter, Designer; ground → resolved post background
+5. Ground priority: campaign → category (`brand.yaml` `categories[].ground`) → white
 6. Campaign presets can be extended by editing `campaigns.yaml` — no code changes needed
+
+### How Typography Works
+
+Three config-driven voices (from `design-instruction.yaml` `type_voice` + `type_scale.roles`):
+
+- **Display** — Space Grotesk (`var(--font-display)`): headline + footer wordmark only
+- **Serif** — Source Serif 4 (`var(--font-serif)`): subhead + body copy (editorial measure ~600px)
+- **Sans** — Inter (`var(--font-sans)`): category label, metadata, handle
+
+Swapping a face or weight is a YAML-only change — the Google Fonts link, the
+CSS-variable reference, and both prompts derive from the same config.
+
+### How Layout Archetypes Work
+
+`design-instruction.yaml` `layout_archetypes` defines approved compositions
+(`editorial-stack`, `split-editorial`, `quiet-minimal`). The pipeline picks one
+**deterministically per post** (seeded by title + format), so designs vary
+across runs while staying on-brand. The verifier audits within any approved
+archetype rather than demanding one fixed layout.
 
 ### How Images Work
 
@@ -203,19 +225,24 @@ data/
 ### Render Pipeline
 
 ```
-Designer HTML
+Designer HTML (per format)
      │
      ▼
-[Verifier] injects:
-  1. CSS :root variables from tokens.yaml
-  2. KaTeX CDN if <span class="math"> detected
-  3. Base64 <img> tags for embedded images
+[Renderer / Verifier] injects deterministically:
+  1. CSS :root variables from tokens.yaml (font families auto-quoted)
+  2. Google Fonts <link> (derived from type-scale families + weights)
+  3. KaTeX CDN if <span class="math"> detected
+  4. Base64 <img> tags for embedded images
      │
      ▼
 Save HTML → data/output/{task_id}/{fmt_id}.html
      │
      ▼
-Playwright renders HTML → PNG screenshot
+Playwright renders HTML → PNG (waits for document.fonts.ready)
+     │
+     ▼
+Deterministic checks (no LLM): emoji, raw hex, footer, category,
+display face, canvas size, DOM-based overflow → hard fail + retry
      │
      ▼
 Gemini Vision audits PNG against design system
@@ -238,20 +265,31 @@ backend/config/prompts/
 
 | Agent Name | Studio Role | Primary Responsibilities |
 |---|---|---|
-| `strategist` | Aura Vance | Strategic brief, target audience, brand tone, visual narrative, platform notes. |
-| `copywriter` | Julian Sterling | Per-platform copy (Headline, Subhead, Body, Tagline, Badge). Respects overrides. |
-| `designer` | Marcus Chen | HTML with CSS variables, typography hierarchy, image placement, zero overflow. |
-| `verifier` | Victoria Thorne | Inject tokens/KateX/images, render to PNG, multimodal audit via Gemini Vision, score 0-100. |
+| `strategist` | Aura Vance | Strategic brief, target audience, brand tone, category, ground, platform notes. |
+| `copywriter` | Julian Sterling | Per-platform copy (Headline, Subhead, Body, Tagline). Respects overrides + length limits matched to the design measure. |
+| `designer` | Marcus Chen | HTML with CSS variables, three-voice typography, layout archetype, image placement, zero overflow. |
+| `renderer` | — | Deterministic injection: tokens, fonts link, KaTeX, images. Saves HTML. |
+| `verifier` | Victoria Thorne | Deterministic checks (emoji/hex/footer/category/display-face/canvas/overflow) + PNG render + multimodal audit, score 0-100. |
 
 ## Core Design & Technical Constraints
 
 1. **HTML + PNG Output**: Pipeline outputs `.html` + `.png` files. Open HTML in any browser, share PNG anywhere.
-2. **Strict No-Emoji Rule**: Enforced via system prompts.
-3. **CSS Variables Only**: Designer writes `var(--color-*)` — never raw hex colors.
-4. **Design Tokens Not in Prompts**: LLM never sees actual token values — only variable names.
-5. **YAML Configuration**: All brand, token, platform, and campaign data in `data/design_system/*.yaml`.
-6. **Intra-Node Format Concurrency**: `asyncio.gather()` with semaphores for parallel platform processing.
+2. **Strict No-Emoji Rule**: Enforced via system prompts + deterministic emoji scan.
+3. **CSS Variables Only**: Designer writes `var(--color-*)` — never raw hex colors. Hex in the designer's own HTML is a deterministic violation.
+4. **Design Tokens Not in Prompts**: LLM never sees actual token values — only variable names + semantic roles.
+5. **YAML Configuration**: All brand, token, platform, campaign, and typography data in `data/design_system/*.yaml`. Fonts links and the CSS-variable reference are generated from YAML — no hardcoded design values in code.
+6. **Intra-Node Format Concurrency**: `asyncio.gather()` with isolated per-format branches (no reducer races).
 7. **Typed Agent I/O**: Every agent uses Pydantic models, not markdown parsing.
 8. **Brand Context Everywhere**: Brand name/tagline/mission flows to all agents for consistent voice.
 9. **Automatic KaTeX Injection**: Math spans auto-detect and inject KaTeX CDN — no manual setup.
+10. **Deterministic Font Loading**: Font families auto-quoted; `document.fonts.ready` awaited before screenshots.
+11. **Overflow Is a Hard Failure**: DOM-based overflow detection fails + retries any clipped text.
+
+## Docker & Deployment
+
+- `backend/Dockerfile` — API/worker image: `python:3.12-slim`, deps pinned in `pyproject.toml`/`requirements.txt`, **no** `playwright` package (rendering goes over HTTP to the render service).
+- `backend/Dockerfile.playwright` — render service: `python:3.12-slim-bookworm` + only the **chromium headless shell** (`--only-shell`), browsers at `/ms-playwright`. ~1.2GB vs 3.6GB for the official image.
+- `backend/.dockerignore` — excludes `.venv`, `data/`, `tests/`, `tailwindcss` from the build context.
+- `docker-compose.yml` — healthchecks on all services, API runs `--workers 2`, worker waits for Playwright healthy, config + data bind-mounted for config-driven control.
+- Runtime SQLite DB (`backend/data/tasbir.db`) and `backend/data/output/` are gitignored and recreated on boot.
 10. **Image Embedding**: Images downloaded and base64-embedded into HTML at pipeline runtime.
