@@ -49,28 +49,29 @@ class PlatformCopy(BaseModel):
     @field_validator("headline")
     @classmethod
     def trim_headline(cls, v: str) -> str:
-        if len(v) > 50:
-            idx = v.rfind(" ", 0, 50)
-            log.warning("headline truncated from %d to 50 chars", len(v))
-            return v[:idx] if idx > 0 else v[:50]
+        if len(v) > 60:
+            idx = v.rfind(" ", 0, 60)
+            log.warning("headline truncated from %d to 60 chars", len(v))
+            return v[:idx] if idx > 0 else v[:60]
         return v
 
     @field_validator("subhead")
     @classmethod
     def trim_subhead(cls, v: str) -> str:
-        if len(v) > 120:
-            idx = v.rfind(" ", 0, 120)
-            log.warning("subhead truncated from %d to 120 chars", len(v))
-            return v[:idx] if idx > 0 else v[:120]
+        if len(v) > 100:
+            idx = v.rfind(" ", 0, 100)
+            log.warning("subhead truncated from %d to 100 chars", len(v))
+            return v[:idx] if idx > 0 else v[:100]
         return v
 
     @field_validator("body")
     @classmethod
     def trim_body(cls, v: str) -> str:
-        if len(v) > 500:
-            idx = v.rfind(" ", 0, 500)
-            log.warning("body truncated from %d to 500 chars", len(v))
-            return v[:idx] if idx > 0 else v[:500]
+        # Body sits in a ~600px measure at 28px serif (~45 chars/line, 5 lines)
+        if len(v) > 230:
+            idx = v.rfind(" ", 0, 230)
+            log.warning("body truncated from %d to 230 chars", len(v))
+            return v[:idx] if idx > 0 else v[:230]
         return v
 
     @field_validator("tagline")

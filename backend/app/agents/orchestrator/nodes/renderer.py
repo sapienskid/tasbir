@@ -13,7 +13,12 @@ import logging
 from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
-from app.services.design_instruction import substitute_image_keys
+from app.services.design_instruction import (
+    build_google_fonts_link,
+    inject_fonts_into_html,
+    load_design_instruction,
+    substitute_image_keys,
+)
 from app.services.formats import get_format_info
 from app.services.tokens import (
     DEFAULT_TOKEN_VALUES,
@@ -49,6 +54,13 @@ async def renderer_node_single(state: GenerationState) -> dict:
 
     # 1. Inject CSS tokens
     html = inject_tokens_into_html(html, design_tokens)
+
+    # 1b. Guarantee the Google Fonts link (system-controlled, not left to LLM)
+    from pathlib import Path
+    di_config = load_design_instruction(
+        Path(get_settings().design_system_dir) / "design-instruction.yaml"
+    )
+    html = inject_fonts_into_html(html, build_google_fonts_link(design_tokens, di_config))
 
     # 2. Inject KaTeX for math rendering
     html = inject_katex_into_html(html)

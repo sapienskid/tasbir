@@ -1,0 +1,17 @@
+# Build context exclusions — keep the API/worker images lean.
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Runtime data (bind-mounted into containers)
+data/
+
+# Dev artifacts
+tests/
+playground-results/
+tailwindcss

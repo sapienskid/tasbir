@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/playwright/python:v1.61.0-noble-amd64
+
+# The base image ships the browsers (chromium-1228 = playwright 1.61.0) at
+# /ms-playwright, but NOT the playwright Python package. Install the matching
+# package + fastapi/uvicorn so the service boots in seconds — no browser
+# download needed (PLAYWRIGHT_BROWSERS_PATH=/ms-playwright is already set).
+
+WORKDIR /app
+
+COPY app/services/render_server.py /app/render_server.py
+
+RUN pip install --no-cache-dir \
+    playwright==1.61.0 \
+    fastapi==0.139.2 \
+    uvicorn==0.51.0
+
+EXPOSE 4000
+
+CMD ["uvicorn", "render_server:app", "--host", "0.0.0.0", "--port", "4000"]

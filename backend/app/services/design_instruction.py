@@ -22,7 +22,7 @@ DEFAULT_DESIGN_INSTRUCTION: dict = {
         "allowed_grounds": ["white", "black"],
         "default_ground": "white",
         "accent": "none",
-        "max_weights_per_post": 2,
+        "max_weights_per_family": 2,
         "shadows": False,
         "border_radius": "0px",
         "illustrations": False,
@@ -30,15 +30,20 @@ DEFAULT_DESIGN_INSTRUCTION: dict = {
         "emoji": False,
         "gradients": False,
     },
+    "type_voice": {
+        "display": "Space Grotesk (var(--font-display)) is the signature display voice. Use it ONLY for the headline and the footer wordmark.",
+        "serif": "Source Serif 4 (var(--font-serif)) is the editorial text voice. It carries the subhead and body copy.",
+        "body": "Inter (var(--font-sans)) is the quiet interface voice — category label, metadata, and the footer handle.",
+    },
     "type_scale": {
         "base_canvas_width": 1080,
         "roles": {
-            "category": {"size": 22, "weight": 500, "tracking": "0.12em", "case": "uppercase", "line_height": 1.2, "max_chars": 24},
-            "headline": {"size": 68, "weight": 700, "tracking": 0, "case": "sentence", "line_height": 1.05,
+            "category": {"family": "sans", "size": 22, "weight": 500, "tracking": "0.12em", "case": "uppercase", "line_height": 1.2, "max_chars": 24},
+            "headline": {"family": "display", "size": 76, "weight": 700, "tracking": "-0.01em", "case": "sentence", "line_height": 1.0,
                          "max_lines": {"square": 4, "portrait": 4, "story": 4, "landscape": 3}},
-            "subhead": {"size": 36, "weight": 400, "tracking": 0, "case": "sentence", "line_height": 1.3, "max_lines": 3},
-            "body": {"size": 28, "weight": 400, "tracking": 0, "case": "sentence", "line_height": 1.3, "max_lines": 5, "min_size": 24},
-            "metadata": {"size": 20, "weight": 500, "tracking": "0.08em", "case": "uppercase", "line_height": 1.2, "min_size": 18},
+            "subhead": {"family": "serif", "size": 36, "weight": 400, "tracking": 0, "case": "sentence", "line_height": 1.3, "max_lines": 3, "measure_px": 600},
+            "body": {"family": "serif", "size": 28, "weight": 400, "tracking": 0, "case": "sentence", "line_height": 1.4, "max_lines": 5, "min_size": 24, "measure_px": 600},
+            "metadata": {"family": "sans", "size": 20, "weight": 500, "tracking": "0.08em", "case": "uppercase", "line_height": 1.2, "min_size": 18},
         },
     },
     "spacing": {
@@ -71,6 +76,13 @@ DEFAULT_DESIGN_INSTRUCTION: dict = {
         "rule": "1px hairline",
         "gap": 24,
         "style": "metadata",
+        "wordmark": {
+            "family": "display",
+            "size": 24,
+            "weight": 500,
+            "tracking": "-0.01em",
+            "case": "uppercase",
+        },
     },
     "images": {
         "default_crop": "sharp_rect",
@@ -84,6 +96,8 @@ DEFAULT_DESIGN_INSTRUCTION: dict = {
         "do": [
             "Left-align everything, always",
             "Use weight and size for hierarchy — never color",
+            "THREE VOICES: display (Space Grotesk) for headline + wordmark; serif (Source Serif 4) for subhead + body; sans (Inter) for category, metadata, handle",
+            "Constrain subhead/body copy to the measure (~600px at 1080) — never full-width lines",
             "Keep hairline rules exactly 1px: hairline on white-ground, hairline-inverted on black-ground",
             "Use generous whitespace — flexible space is intentional, not empty by accident",
         ],
@@ -91,7 +105,9 @@ DEFAULT_DESIGN_INSTRUCTION: dict = {
             "No hue of any kind — not even 'just a little' blue, amber, or green",
             "No icons, illustrations, or motifs of any kind",
             "No centering",
-            "No more than 2 weights per post (one bold, one regular)",
+            "No more than 2 weights per family (Space Grotesk 500+700, Source Serif 4 400, Inter 500)",
+            "Never use the display face for body, subhead, category, or metadata text",
+            "Never use the serif for headlines, category labels, metadata, or the wordmark",
             "No shadows, gradients, borders-with-radius, or any softening effect",
             "No third color, ever — if a post needs emphasis, use weight or size",
         ],
@@ -144,10 +160,90 @@ def scaled_type_sizes(config: dict, canvas_width: int) -> dict[str, dict]:
     for role, r in roles.items():
         out[role] = dict(r)
         out[role]["size"] = round(int(r.get("size", 28)) * scale)
+        if r.get("measure_px"):
+            out[role]["measure_px"] = round(int(r["measure_px"]) * scale)
         ml = r.get("max_lines")
         if isinstance(ml, dict):
             out[role]["max_lines"] = ml
     return out
+
+
+_FAMILY_LABEL = {
+    "display": "var(--font-display) — Space Grotesk (signature display voice)",
+    "serif": "var(--font-serif) — Source Serif 4 (editorial serif text voice)",
+    "sans": "var(--font-sans) — Inter (interface sans voice)",
+}
+
+
+def _family_name(r: dict) -> str:
+    fam = r.get("family", "sans")
+    return _FAMILY_LABEL.get(fam, f"var(--font-{fam})")
+
+
+_FONT_TOKENS = ("--font-sans", "--font-display", "--font-serif")
+
+
+def _google_family(font_value: str) -> str:
+    """Extract the Google Fonts family name from a --font-* token value."""
+    family = re.split(r"[,'\"]", font_value)[0].strip()
+    return family.replace(" ", "+") if family else ""
+
+
+def build_google_fonts_link(tokens: dict, config: dict) -> str:
+    """Build a Google Fonts <link> for every family in the type system.
+
+    Each family's weights come from the type-scale roles (matched by the
+    role's `family` field) plus the footer wordmark. Only families actually
+    referenced are loaded.
+    """
+    roles = config.get("type_scale", {}).get("roles", {})
+    wm = config.get("footer", {}).get("wordmark", {})
+
+    weights: dict[str, set[str]] = {}
+    for r in roles.values():
+        fam = r.get("family", "sans")
+        token = f"--font-{fam}" if fam in ("sans", "display", "serif") else "--font-sans"
+        weights.setdefault(token, set())
+        w = r.get("weight")
+        if isinstance(w, (int, str)):
+            weights[token].add(str(w))
+    wm_token = f"--font-{wm.get('family', 'display')}"
+    weights.setdefault(wm_token, set())
+    if wm.get("weight"):
+        weights[wm_token].add(str(wm["weight"]))
+
+    families = []
+    for token in _FONT_TOKENS:
+        fam = _google_family(tokens.get(token, ""))
+        if not fam:
+            continue
+        wght = ";".join(sorted(weights.get(token, {"400", "700"})))
+        families.append(f"family={fam}:wght@{wght}")
+
+    if not families:
+        families = ["family=Inter:wght@400;500;700"]
+
+    return (
+        '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
+        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
+        f'<link href="https://fonts.googleapis.com/css2?{"&".join(families)}&display=swap" '
+        'rel="stylesheet">'
+    )
+
+
+def inject_fonts_into_html(html: str, link: str) -> str:
+    """Guarantee the Google Fonts <link> is present in <head>.
+
+    The designer is asked to include it, but the system injects it anyway so
+    fonts always load regardless of LLM output. No-ops if already present.
+    """
+    if "fonts.googleapis.com/css2" in html:
+        return html
+    if "</head>" in html:
+        return html.replace("</head>", f"{link}\n</head>", 1)
+    if "<head>" in html:
+        return html.replace("<head>", f"<head>\n{link}", 1)
+    return f"{link}\n{html}"
 
 
 def format_design_instruction_block(config: dict) -> str:
@@ -156,6 +252,7 @@ def format_design_instruction_block(config: dict) -> str:
     ts = config.get("type_scale", {})
     sp = config.get("spacing", {})
     ft = config.get("footer", {})
+    tv = config.get("type_voice", {})
     dd = config.get("do_dont", {})
     img_rules = config.get("images", {})
     math_rules = config.get("math", {})
@@ -166,27 +263,39 @@ def format_design_instruction_block(config: dict) -> str:
         "--- PALETTE (STRICTLY MONOCHROME) ---",
         f"  Palette: {st.get('palette', 'monochrome')} — pure black/white/gray only, NO hue ever",
         f"  Allowed grounds: {', '.join(st.get('allowed_grounds', ['white', 'black']))}",
-        f"  Max weights per post: {st.get('max_weights_per_post', 2)} (one bold, one regular)",
+        f"  Max weights per family: {st.get('max_weights_per_family', 2)} (Space Grotesk 500+700, Source Serif 4 400, Inter 500)",
         f"  Shadows: {_yn(st.get('shadows', False))}",
         f"  Border radius: {st.get('border_radius', '0px')} — no rounded corners",
         f"  Illustrations/icons: {_yn(st.get('illustrations', False))}",
         f"  Gradients: {_yn(st.get('gradients', False))}",
         "",
+        "--- TYPE VOICE (THREE FAMILIES — READ THIS) ---",
+    ]
+    if tv.get("display"):
+        lines.append(f"  DISPLAY: {tv['display']}")
+    if tv.get("serif"):
+        lines.append(f"  SERIF: {tv['serif']}")
+    if tv.get("body"):
+        lines.append(f"  SANS: {tv['body']}")
+
+    lines += [
+        "",
         "--- TYPE SCALE (sizes at 1080px canvas width; scale by width/1080) ---",
-        "  One grotesque sans family (var(--font-sans)). Hierarchy from weight,",
-        "  size, and tracking only — never mix in serif or monospace.",
     ]
 
     roles = ts.get("roles", {})
     for role, r in roles.items():
         tracking = r.get("tracking", 0)
         tracking = f"{tracking}em" if isinstance(tracking, (int, float)) else tracking
+        measure = r.get("measure_px")
+        measure_txt = f" · max-width {measure}px" if measure else ""
         lines.append(
-            f"  {role.upper():10s} {r.get('size', 28)}px · weight {r.get('weight', 400)} · "
-            f"tracking {tracking or '0'} · {r.get('case', 'sentence')} · "
-            f"line-height {r.get('line_height', 1.3)}"
+            f"  {role.upper():10s} {_family_name(r)} · {r.get('size', 28)}px · "
+            f"weight {r.get('weight', 400)} · tracking {tracking or '0'} · "
+            f"{r.get('case', 'sentence')} · line-height {r.get('line_height', 1.3)}{measure_txt}"
         )
 
+    wm = ft.get("wordmark", {})
     lines += [
         "",
         "--- SPACING (8px base grid — every value a multiple of 8) ---",
@@ -199,8 +308,9 @@ def format_design_instruction_block(config: dict) -> str:
         "",
         "--- FOOTER (every format) ---",
         f"  {ft.get('rule', '1px hairline')} above footer, {ft.get('gap', 24)}px gap",
-        "  Left: brand name (tracked uppercase) · Right: @handle (tracked uppercase)",
-        f"  Metadata size ({roles.get('metadata', {}).get('size', 20)}px), secondary gray.",
+        "  Left: brand NAME as a signature wordmark — display face, tight tracking,",
+        f"        {wm.get('size', 24)}px · weight {wm.get('weight', 500)} · tracking {wm.get('tracking', '-0.01em')} · uppercase",
+        "  Right: @handle in metadata style (Inter, tracked uppercase, secondary gray)",
         "  No logo, no mark, no icon — typography is the signature.",
         "",
         "--- DO ---",
@@ -260,13 +370,43 @@ def format_format_layout_block(
         ml_txt = ""
         if isinstance(ml, dict):
             ml_txt = f" · max {ml.get(family, 4)} lines"
+        measure = r.get("measure_px")
+        measure_txt = f" · max-width {measure}px" if measure else ""
         lines.append(
-            f"    {role.upper():10s} {r.get('size', 28)}px · weight {r.get('weight', 400)} · "
-            f"tracking {r.get('tracking', 0) if r.get('tracking') else 0} · {r.get('case', 'sentence')}"
-            f"{ml_txt}"
+            f"    {role.upper():10s} {_family_name(r)} · {r.get('size', 28)}px · "
+            f"weight {r.get('weight', 400)} · tracking "
+            f"{r.get('tracking', 0) if r.get('tracking') else 0} · {r.get('case', 'sentence')}"
+            f"{ml_txt}{measure_txt}"
         )
 
     return "\n".join(lines)
+
+
+def pick_layout_archetype(config: dict, seed: str) -> tuple[str, str]:
+    """Deterministically pick a layout archetype from the config.
+
+    The seed (e.g. title + format) makes the choice stable for the same input
+    but different across posts, so layouts vary without breaking reproducibility.
+    """
+    import hashlib
+
+    archetypes = config.get("layout_archetypes", {})
+    if not archetypes:
+        return "editorial-stack", ""
+    keys = list(archetypes.keys())
+    digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()
+    key = keys[int(digest, 16) % len(keys)]
+    desc = archetypes.get(key, {}).get("description", "")
+    return key, desc
+
+
+def format_layout_archetype_block(key: str, description: str) -> str:
+    """Human-readable layout archetype block for the designer prompt."""
+    return (
+        "LAYOUT ARCHETYPE (follow this composition — and VARY it from previous\n"
+        "posts; do not reproduce the same layout every time):\n"
+        f"  [{key}] {description}"
+    )
 
 
 def substitute_image_keys(html: str, images: list[dict]) -> str:

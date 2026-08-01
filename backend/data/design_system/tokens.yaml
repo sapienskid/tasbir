@@ -12,6 +12,8 @@
 --color-border-inverted: "#2A2A2A"
 
 --font-sans: "Inter, 'Helvetica Neue', Arial, sans-serif"
+--font-display: "Space Grotesk, Inter, sans-serif"
+--font-serif: "Source Serif 4, Georgia, serif"
 
 --radius-sm: "0px"
 --radius-md: "0px"

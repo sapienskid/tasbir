@@ -260,6 +260,8 @@ overrides:
 --color-border: "#D9D9D9"
 --color-border-inverted: "#2A2A2A"
 --font-sans: "Inter, 'Helvetica Neue', Arial, sans-serif"
+--font-display: "Space Grotesk, Inter, sans-serif"
+--font-serif: "Source Serif 4, Georgia, serif"
 --radius-sm: "0px"
 --radius-md: "0px"
 --shadow-md: "none"
@@ -313,20 +315,25 @@ style:
   palette: "monochrome"
   allowed_grounds: ["white", "black"]
   default_ground: "white"
-  max_weights_per_post: 2
+  max_weights_per_family: 2
   shadows: false
   border_radius: "0px"
   illustrations: false
   gradients: false
 
+type_voice:
+  display: "Space Grotesk (var(--font-display)) is the signature display voice — headline + footer wordmark ONLY"
+  serif: "Source Serif 4 (var(--font-serif)) is the editorial text voice — subhead + body copy"
+  body: "Inter (var(--font-sans)) is the quiet interface voice — category, metadata, handle"
+
 type_scale:
   base_canvas_width: 1080
   roles:
-    category:  {size: 22, weight: 500, tracking: "0.12em", case: "uppercase"}
-    headline:  {size: 68, weight: 700, tracking: 0, case: "sentence", max_lines: {square: 4, landscape: 3}}
-    subhead:   {size: 36, weight: 400, case: "sentence"}
-    body:      {size: 28, weight: 400, case: "sentence", min_size: 24}
-    metadata:  {size: 20, weight: 500, tracking: "0.08em", case: "uppercase"}
+    category:  {family: sans,    size: 22, weight: 500, tracking: "0.12em", case: "uppercase"}
+    headline:  {family: display, size: 76, weight: 700, tracking: "-0.01em", case: "sentence", line_height: 1.0, max_lines: {square: 4, landscape: 3}}
+    subhead:   {family: serif,   size: 36, weight: 400, case: "sentence", measure_px: 600}
+    body:      {family: serif,   size: 28, weight: 400, case: "sentence", min_size: 24, measure_px: 600}
+    metadata:  {family: sans,    size: 20, weight: 500, tracking: "0.08em", case: "uppercase"}
 
 spacing:
   unit: 8
@@ -348,15 +355,18 @@ footer:
   rule: "1px hairline"
   gap: 24
   style: "metadata"
+  wordmark: {family: display, size: 24, weight: 500, tracking: "-0.01em", case: "uppercase"}
 
 do_dont:
-  do: ["Left-align everything, always", "Use weight and size for hierarchy — never color", "..."]
-  dont: ["No hue of any kind", "No icons/illustrations", "No centering", "Max 2 weights", "No shadows/gradients/rounded corners", "..."]
+  do: ["Left-align everything, always", "THREE voices: display (Space Grotesk) headline+wordmark, serif (Source Serif 4) subhead+body, sans (Inter) category/metadata/handle", "Constrain body copy to the measure", "..."]
+  dont: ["No hue of any kind", "No icons/illustrations", "No centering", "Never use display face for body/subhead/category", "Never use serif for headline/category/metadata", "Max 2 weights per family", "No shadows/gradients/rounded corners", "..."]
 ```
 
-The full Swiss / International Typographic Style — palette, named type roles,
-8px spacing grid, per-format margins, footer spec, and the do/don't checklist.
-Injected verbatim into the designer and verifier prompts.
+The full Swiss / International Typographic Style — three type voices (Space
+Grotesk display + Source Serif 4 editorial + Inter interface), named type
+roles, 8px spacing grid, per-format margins, body measure, footer wordmark,
+and the do/don't checklist. Injected verbatim into the designer and verifier
+prompts.
 
 ## Token Variable Reference (CSS Variable → YAML Value)
 
@@ -371,11 +381,16 @@ Injected verbatim into the designer and verifier prompts.
 | `var(--color-border)` | `--color-border` | `#D9D9D9` (hairline on white) |
 | `var(--color-border-inverted)` | `--color-border-inverted` | `#2A2A2A` (hairline on black) |
 | `var(--font-sans)` | `--font-sans` | `Inter, 'Helvetica Neue', Arial, sans-serif` |
+| `var(--font-display)` | `--font-display` | `Space Grotesk, Inter, sans-serif` |
+| `var(--font-serif)` | `--font-serif` | `Source Serif 4, Georgia, serif` |
 | `var(--radius-sm)` | `--radius-sm` | `0px` |
 | `var(--radius-md)` | `--radius-md` | `0px` |
 | `var(--shadow-md)` | `--shadow-md` | `none` |
 
-Strictly grayscale — no `--color-primary`/`secondary`/`accent`, no serif/mono.
+Strictly grayscale — no `--color-primary`/`secondary`/`accent`. Three type
+voices: `--font-sans` (Inter, category/metadata/handle), `--font-display`
+(Space Grotesk, headline + wordmark), `--font-serif` (Source Serif 4,
+subhead + body).
 
 ## Directory Structure
 

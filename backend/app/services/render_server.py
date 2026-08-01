@@ -81,6 +81,13 @@ async def render(req: RenderRequest):
             except Exception:
                 pass
 
+        # Wait for webfonts to finish loading before capturing — otherwise
+        # font-display:swap renders fallback fonts (e.g. Times New Roman).
+        try:
+            await page.evaluate("document.fonts.ready")
+        except Exception:
+            pass
+
         png_bytes = await page.screenshot(
             type="png",
             clip={"x": 0, "y": 0, "width": req.width, "height": req.height},
@@ -102,6 +109,12 @@ async def extract_dom(req: DOMExtractionRequest):
 
     try:
         await page.set_content(req.html, wait_until="networkidle")
+
+        # Wait for webfonts so computed font families reflect the real faces.
+        try:
+            await page.evaluate("document.fonts.ready")
+        except Exception:
+            pass
 
         # JavaScript that walks the DOM and extracts computed styles + bounding boxes
         dom_tree = await page.evaluate("""({width, height}) => {
@@ -321,7 +334,30 @@ async def extract_dom(req: DOMExtractionRequest):
             return { dom: extractNode(body) };
         }""", {"width": req.width, "height": req.height})
 
-        return dom_tree
+        # Detect text elements overflowing the canvas (clipped by overflow:hidden).
+        overflow = await page.evaluate("""() => {
+            const vw = window.innerWidth, vh = window.innerHeight;
+            const offenders = [];
+            for (const el of document.querySelectorAll('*')) {
+                if (el === document.body || el === document.documentElement) continue;
+                const rect = el.getBoundingClientRect();
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden') continue;
+                if (!(el.innerText || '').trim()) continue;
+                if (rect.bottom > vh + 2 || rect.right > vw + 2) {
+                    offenders.push({
+                        tag: el.tagName.toLowerCase(),
+                        cls: String(el.className || ''),
+                        text: (el.innerText || '').trim().slice(0, 48),
+                        overflowY: Math.round(rect.bottom - vh),
+                        overflowX: Math.round(rect.right - vw),
+                    });
+                }
+            }
+            return offenders.slice(0, 10);
+        }""")
+
+        return {**dom_tree, "overflow": overflow}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -45,29 +45,31 @@ n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → HTML + PNG
 - [x] YAML prompt configs (`backend/config/prompts/*.yaml`)
 
 ### Phase 3: YAML Design System
-- [x] `brand.yaml` — Brand identity (name, tagline, mission, story, social)
-- [x] `tokens.yaml` — CSS variable → value mappings
+- [x] `brand.yaml` — Brand identity (name, tagline, mission, story, social, footer, categories)
+- [x] `tokens.yaml` — CSS variable → value mappings (grayscale palette + 3 font voices)
 - [x] `platforms.yaml` — Platform dimensions
-- [x] `campaigns.yaml` — Campaign presets (tone, visual_style, background, illustrations)
+- [x] `campaigns.yaml` — Campaign presets (tone, ground, language)
+- [x] `design-instruction.yaml` — Swiss typographic style (type roles, measure, layout archetypes)
 
 ### Phase 4: Agent Pipeline — LangGraph Multi-Agent
-- [x] **Strategist** (Aura Vance) — content analysis → structured brief
+- [x] **Strategist** (Aura Vance) — content analysis → structured brief + category + ground
 - [x] **Copywriter** (Julian Sterling) — brief → structured copy per platform
 - [x] **Designer** (Marcus Chen) — copy + brand + campaign + images → HTML with CSS variables
-- [x] **Verifier** (Victoria Thorne) — inject tokens/KateX/images, render to PNG,
+- [x] **Renderer** — injects tokens/fonts/KaTeX/images deterministically, saves HTML
+- [x] **Verifier** (Victoria Thorne) — deterministic checks + overflow detection, render to PNG,
       multimodal audit via Gemini Vision, retry loop on failure
 
 ### Phase 5: Integration
 - [ ] n8n workflow: Ghost webhook → Tasbir API
-- [ ] User workflow: open HTML in browser → tweak CSS → re-render
-- [ ] Status endpoint for n8n polling
-- [ ] Docker Compose finalization
+- [x] User workflow: open HTML in browser → tweak CSS → re-render
+- [x] Status endpoint for n8n polling
+- [x] Docker Compose finalization (healthchecks, baked images)
 
 ### Phase 6: Polish
-- [ ] Comprehensive test suite
-- [ ] Documentation (AGENTS.md, DESIGN.md, this file)
-- [ ] YAML prompt tuning
-- [ ] Rate limit optimization for Gemini free tier
+- [x] Comprehensive test suite
+- [x] Documentation (AGENTS.md, DESIGN.md, docs/adr, docs/glossary)
+- [x] YAML prompt tuning
+- [x] Rate limit optimization for Gemini free tier (serialized vision calls)
 - [ ] Mermaid diagram rendering support
 
 ## What Was Removed From v2

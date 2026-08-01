@@ -168,6 +168,55 @@ async def render_to_png(
         return None
 
 
+async def detect_overflow(
+    html: str,
+    width: int = 1080,
+    height: int = 1080,
+) -> list[str]:
+    """Detect content overflow past the canvas bounds.
+
+    Calls the Playwright extract-dom endpoint, which reports the amount the
+    document scrolls past the viewport. Returns human-readable issues for any
+    element text that overflows (clipped by overflow:hidden).
+    """
+    settings = get_settings()
+    renderer_url = getattr(settings, "renderer_url", PLAYWRIGHT_SERVICE_URL)
+
+    payload = {"html": html, "width": width, "height": height}
+
+    try:
+        async with httpx.AsyncClient(timeout=RENDER_TIMEOUT) as client:
+            response = await client.post(
+                f"{renderer_url}/extract-dom",
+                json=payload,
+            )
+            response.raise_for_status()
+            data = response.json()
+    except Exception as e:
+        log.warning("[dom_extractor] Overflow check failed: %s", e)
+        return []
+
+    overflow = data.get("overflow") or []
+    issues: list[str] = []
+    for off in overflow if isinstance(overflow, list) else []:
+        text = (off.get("text") or "").strip()
+        over_y = int(off.get("overflowY") or 0)
+        over_x = int(off.get("overflowX") or 0)
+        where = []
+        if over_x > 0:
+            where.append(f"{over_x}px past the right edge")
+        if over_y > 0:
+            where.append(f"{over_y}px past the bottom edge")
+        if not where:
+            continue
+        cls = off.get("cls") or off.get("tag") or "element"
+        issues.append(
+            f"Element '.{cls}' ('{text[:40]}') overflows the {width}x{height} canvas "
+            f"({' and '.join(where)}) — reduce sizes or shorten copy so everything fits."
+        )
+    return issues
+
+
 def _parse_dom_node(data: dict) -> DOMNode:
     """Recursively parse a raw DOM dict into DOMNode objects."""
     node = DOMNode(

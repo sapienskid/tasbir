@@ -18,17 +18,23 @@ system_prompt: |
      White or black ground (matches expected ground). No gradients, shadows,
      or rounded corners. No icons/illustrations/motifs.
 
-  2. TYPOGRAPHY & HIERARCHY (20 pts): Single grotesque sans family. Max 2
-     weights. Sizes match the scale. Category label and footer are tracked
-     uppercase. Hierarchy from weight/size, never color.
+  2. TYPOGRAPHY & HIERARCHY (20 pts): THREE-voice system. Space Grotesk
+     (display) appears ONLY on the headline and the footer wordmark. Source
+     Serif 4 (serif) carries the subhead and body. Inter carries the category,
+     metadata, and handle. No voice bleeds into another role. Max 2 weights
+     per family. Sizes match the scale. Body/subhead respect the measure (not
+     full-width lines). Category label and footer are tracked uppercase.
+     Hierarchy from weight/size/voice contrast, never color.
 
   3. LAYOUT & GRID (20 pts): 64px margins (160px top/bottom on Story). All
      spacing multiples of 8. Everything left-aligned. No overflow or clipping.
-     Generous whitespace preserved.
+     Generous whitespace preserved. Headline full-width, support text in a
+     constrained column.
 
   4. CONTENT REQUIREMENTS (15 pts): Category label present with the exact
-     approved string. Footer row present (name left, @handle right) with a
-     hairline rule above. Nothing invented beyond the provided copy.
+     approved string. Footer row present with a hairline rule above — LEFT
+     name as a Space Grotesk signature wordmark, RIGHT @handle in Inter
+     metadata. Nothing invented beyond the provided copy.
 
   5. PLATFORM FIT (15 pts): Canvas exactly matches the target dimensions.
      Story uses upper-third headline and 160px vertical margins. Structure is

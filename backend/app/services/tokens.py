@@ -22,6 +22,8 @@ DEFAULT_TOKEN_VALUES: dict[str, str] = {
     "--color-border": "#D9D9D9",
     "--color-border-inverted": "#2A2A2A",
     "--font-sans": "Inter, 'Helvetica Neue', Arial, sans-serif",
+    "--font-display": "Space Grotesk, Inter, sans-serif",
+    "--font-serif": "Source Serif 4, Georgia, serif",
     "--radius-sm": "0px",
     "--radius-md": "0px",
     "--shadow-md": "none",
@@ -40,7 +42,9 @@ SEMANTIC_VAR_ROLES: dict[str, str] = {
     "--color-text-tertiary": "tertiary text — light gray, use sparingly",
     "--color-border": "hairline rule on light ground",
     "--color-border-inverted": "hairline rule on black ground",
-    "--font-sans": "single grotesque sans typeface (the only font)",
+    "--font-sans": "interface sans — Inter (category, metadata, handle only)",
+    "--font-display": "signature display typeface — for the headline and footer wordmark ONLY",
+    "--font-serif": "editorial serif text face — for the subhead and body copy ONLY",
 }
 
 DEFAULT_CATEGORIES: list[dict] = [
@@ -223,10 +227,30 @@ def load_campaign(name: str, campaigns_path: str | Path) -> dict:
 
 # CSS variable injection helper
 
+def _quote_font_value(value: str) -> str:
+    """Quote multi-word font family names for valid CSS.
+
+    Chromium rejects unquoted family names like `Source Serif 4` (contains a
+    number / multiple identifiers), silently falling back to the generic
+    `serif`. YAML strips the surrounding quotes from token values, so we must
+    re-quote any family with spaces.
+    """
+    families = [fam.strip() for fam in value.split(",")]
+    quoted = []
+    for fam in families:
+        if fam and " " in fam and not (fam.startswith("'") or fam.startswith('"')):
+            quoted.append(f"'{fam}'")
+        else:
+            quoted.append(fam)
+    return ", ".join(quoted)
+
+
 def build_css_variable_block(tokens: dict[str, str]) -> str:
     """Build a CSS :root block with all token values for injection into HTML."""
     lines = [":root {"]
     for var, value in tokens.items():
+        if var.startswith("--font") and value:
+            value = _quote_font_value(value)
         lines.append(f"  {var}: {value};")
     lines.append("}")
     return "\n".join(lines)

@@ -26,11 +26,13 @@ from pathlib import Path
 from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
 from app.services.design_instruction import (
+    build_google_fonts_link,
     format_design_instruction_block,
+    inject_fonts_into_html,
     load_design_instruction,
     substitute_image_keys,
 )
-from app.services.dom_extractor import render_to_png
+from app.services.dom_extractor import render_to_png, detect_overflow
 from app.services.formats import get_format_info
 from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html, inject_katex_into_html
 
@@ -188,6 +190,11 @@ def _build_design_system_context(
             f"  Required footer row: '{footer['left']}' left · '{footer['right']}' right, "
             "hairline rule above, metadata size"
         )
+        lines.append(
+            "  Footer note: the footer text is verified present programmatically — "
+            "audit its placement, the hairline rule, and styling ONLY. Do not report "
+            "the footer as 'missing' unless the rule or text is actually absent."
+        )
 
     # Token values (the verifier sees actual values — it's the auditor)
     lines.append("  Token values:")
@@ -199,9 +206,18 @@ def _build_design_system_context(
     # This is EXPECTED — do not flag math formula fonts as a violation.
     lines.append(
         "  Math note: LaTeX formulas rendered by KaTeX use KaTeX's own math "
-        "typeface. This is EXPECTED and exempt from the single-family rule — "
+        "typeface. This is EXPECTED and exempt from the family rules — "
         "do NOT flag math fonts as a serif violation."
     )
+
+    # Layout archetypes are approved — audit within whichever the design follows.
+    archetypes = (design_instruction or {}).get("layout_archetypes", {})
+    if archetypes:
+        lines.append(
+            "  Layout note: any of the approved composition archetypes is valid "
+            f"({', '.join(archetypes.keys())}). Audit the composition within the "
+            "archetype it follows — do not demand one fixed layout."
+        )
 
     di_block = format_design_instruction_block(design_instruction or {})
     return "\n".join(lines) + "\n\n" + di_block
@@ -213,12 +229,14 @@ def _run_deterministic_checks(
     category: str,
     canvas_width: int = 1080,
     canvas_height: int = 1080,
+    display_family: str = "Space Grotesk",
 ) -> list[str]:
     """Check for hard design-system violations WITHOUT an LLM.
 
     Returns a list of critical issues. Any issue → the design must be fixed
     and retried. These encode the spec's non-negotiable rules:
       - the canvas is a styled, correctly-sized document
+      - the signature display face is actually used (headline/wordmark)
       - no emoji / decorative unicode symbols
       - no raw hex colors in real styles (must use var(--color-*))
       - footer name + handle present (when configured)
@@ -239,6 +257,17 @@ def _run_deterministic_checks(
         issues.append(
             f"Canvas size must be defined as width:{canvas_width}px;height:{canvas_height}px "
             "(on the body or in a CSS rule)"
+        )
+
+    # 0b. Signature display face must appear (var(--font-display) or the face name)
+    display_token_ok = "--font-display" in html
+    family_ok = bool(display_family) and re.search(
+        re.escape(display_family), html, re.IGNORECASE
+    )
+    if not display_token_ok and not family_ok:
+        issues.append(
+            f"The signature display face ('{display_family}' / var(--font-display)) "
+            "must be used on the headline and footer wordmark"
         )
 
     # 1. Emoji / decorative symbols
@@ -305,7 +334,11 @@ async def quality_check_node_single(state: GenerationState) -> dict:
 
     # Step 0: Deterministic design-system checks (no LLM cost). Any violation
     # is a hard spec failure — fix and retry.
-    check_issues = _run_deterministic_checks(html, footer, category, fmt.width, fmt.height)
+    display_value = design_tokens.get("--font-display", "Space Grotesk, Inter, sans-serif")
+    display_family = display_value.split(",")[0].strip()
+    check_issues = _run_deterministic_checks(
+        html, footer, category, fmt.width, fmt.height, display_family
+    )
     if check_issues:
         log.warning("[verifier] Deterministic violations for %s: %s", fmt_id, check_issues)
         _save_html_preview(task_id, fmt_id, html)
@@ -331,12 +364,17 @@ async def quality_check_node_single(state: GenerationState) -> dict:
             "retry_count": new_retry_count,
         }
 
-    # Step 1: Inject tokens, KaTeX, and images into HTML
+    # Step 1: Inject tokens, fonts, KaTeX, and images into HTML
     log.info("[verifier] Rendering %s to PNG for visual audit", fmt_id)
     from app.config import get_settings
     settings = get_settings()
     images_list = state.get("images", [])
     html_with_tokens = inject_tokens_into_html(html, design_tokens)
+    from pathlib import Path as _Path
+    di_config = load_design_instruction(_Path(settings.design_system_dir) / "design-instruction.yaml")
+    html_with_tokens = inject_fonts_into_html(
+        html_with_tokens, build_google_fonts_link(design_tokens, di_config)
+    )
     html_with_tokens = inject_katex_into_html(html_with_tokens)
     html_with_tokens = substitute_image_keys(html_with_tokens, images_list)
     png_bytes = await render_to_png(html_with_tokens, fmt.width, fmt.height)
@@ -347,11 +385,37 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         _save_html_preview(task_id, fmt_id, html_with_tokens)
         return _auto_pass(state, fmt_id, task, "PNG render unavailable — auto-passed")
 
+    # Step 1b: Overflow check — content must never exceed the canvas
+    overflow_issues = await detect_overflow(html_with_tokens, fmt.width, fmt.height)
+    if overflow_issues:
+        log.warning("[verifier] Overflow for %s: %s", fmt_id, overflow_issues)
+        _save_html_preview(task_id, fmt_id, html_with_tokens)
+        verification = dict(state.get("verification", {}))
+        verification[fmt_id] = {
+            "pass": False,
+            "score": 30,
+            "issues": overflow_issues,
+            "critique": "Content overflows the canvas. Fix: " + "; ".join(overflow_issues),
+        }
+        new_retry_count = dict(state.get("retry_count", {}))
+        new_retry_count[fmt_id] = retry_count + 1
+        return {
+            "format_tasks": {
+                fmt_id: {
+                    **task,
+                    "quality_score": 30,
+                    "quality_issues": overflow_issues,
+                    "status": "needs_retry",
+                }
+            },
+            "verification": verification,
+            "retry_count": new_retry_count,
+        }
+
     # Save PNG and HTML for output
     _save_png(task_id, fmt_id, png_bytes)
     _save_html_preview(task_id, fmt_id, html_with_tokens)
-    from pathlib import Path
-    di_path = Path(settings.design_system_dir) / "design-instruction.yaml"
+    di_path = _Path(settings.design_system_dir) / "design-instruction.yaml"
     design_instruction = load_design_instruction(di_path)
     ds_context = _build_design_system_context(design_tokens, design_instruction, footer, category, ground)
     user_prompt = (

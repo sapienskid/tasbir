@@ -53,10 +53,11 @@ def _base_state(**kw):
 
 GOOD_HTML = (
     '<html><head><style>body{background:var(--color-bg);color:var(--color-text);'
-    'font-family:var(--font-sans)}.kicker{text-transform:uppercase}</style></head>'
+    'font-family:var(--font-sans)}.kicker{text-transform:uppercase}'
+    '.headline{font-family:var(--font-display)}</style></head>'
     '<body style="width:1080px;height:1080px;overflow:hidden;margin:0">'
-    '<div class="kicker">WRITING</div><h1>Hello World Headline</h1>'
-    '<div class="footer"><span>A</span><span>@B</span></div></body></html>'
+    '<div class="kicker">WRITING</div><h1 class="headline">Hello World Headline</h1>'
+    '<div class="footer"><span>SABIN POKHAREL</span><span>@B</span></div></body></html>'
 )
 
 BAD_HTML = (
@@ -82,10 +83,13 @@ def _patches():
             '<html><head><style>'
             f'body{{width:{w}px;height:{h}px;background:var(--color-bg);'
             'color:var(--color-text);font-family:var(--font-sans)}}'
-            '.kicker{text-transform:uppercase}</style></head>'
+            '.kicker{text-transform:uppercase}'
+            '.headline{font-family:var(--font-display)}'
+            '.wordmark{font-family:var(--font-display)}'
+            '</style></head>'
             f'<body style="width:{w}px;height:{h}px;overflow:hidden;margin:0">'
-            '<div class="kicker">WRITING</div><h1>Hello World Headline</h1>'
-            '<div class="footer"><span>A</span><span>@B</span></div></body></html>'
+            '<div class="kicker">WRITING</div><h1 class="headline">Hello World Headline</h1>'
+            '<div class="footer"><span class="wordmark">A</span><span>@B</span></div></body></html>'
         )
 
     return (

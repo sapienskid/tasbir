@@ -31,6 +31,7 @@ from pathlib import Path
 from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
 from app.services.design_instruction import (
+    build_google_fonts_link,
     format_design_instruction_block,
     format_format_layout_block,
     load_design_instruction,
@@ -40,31 +41,6 @@ from app.services.llm import call_llm
 from app.services.tokens import build_css_var_reference
 
 log = logging.getLogger(__name__)
-
-
-def _build_google_fonts_link(design_tokens: dict, design_instruction: dict) -> str:
-    """Build a Google Fonts <link> from the --font-sans token and type weights.
-
-    Only the single grotesque sans family is loaded (Swiss rule: one family).
-    Weights are derived from the type scale roles in design-instruction.yaml.
-    """
-    font_family = design_tokens.get("--font-sans", "Inter, sans-serif")
-    family = re.split(r"[,'\"]", font_family)[0].strip() or "Inter"
-
-    roles = design_instruction.get("type_scale", {}).get("roles", {})
-    weights: set[str] = set()
-    for r in roles.values():
-        w = r.get("weight")
-        if isinstance(w, (int, str)):
-            weights.add(str(w))
-    wght = ";".join(sorted(weights)) if weights else "400;700"
-
-    return (
-        '<link rel="preconnect" href="https://fonts.googleapis.com">\n'
-        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
-        f'<link href="https://fonts.googleapis.com/css2?family={family}:wght@{wght}&display=swap" '
-        'rel="stylesheet">'
-    )
 
 
 def _clean_html(raw: str) -> str:
@@ -157,6 +133,15 @@ async def designer_node_single(state: GenerationState) -> dict:
     design_tokens = state.get("design_tokens", {})
     css_var_reference = build_css_var_reference(design_tokens)
 
+    # Layout archetype — deterministic per post so designs vary across runs
+    from app.services.design_instruction import (
+        format_layout_archetype_block,
+        pick_layout_archetype,
+    )
+    seed = f"{state.get('title', '')}|{fmt_id}|{state.get('category', '')}|{retry_count}"
+    archetype_key, archetype_desc = pick_layout_archetype(di_config, seed)
+    archetype_block = format_layout_archetype_block(archetype_key, archetype_desc)
+
     # Build template context: CSS vars + design instruction + format layout
     template_context = f"{css_var_reference}\n\n{di_block}\n\n{layout_block}"
     if retry_count > 0 and critique:
@@ -207,10 +192,10 @@ async def designer_node_single(state: GenerationState) -> dict:
     footer_block = "FOOTER ROW (REQUIRED on every format):\n"
     if footer_left and footer_right:
         footer_block += (
-            f"  Left: {footer_left}\n"
-            f"  Right: {footer_right}\n"
-            "  metadata role size, tracked uppercase, secondary gray\n"
-            "  1px hairline rule above, then 24px gap\n"
+            f"  Left (SIGNATURE WORDMARK): {footer_left} — display face "
+            "(var(--font-display)), ~24px, weight 500, tight tracking, uppercase\n"
+            f"  Right: {footer_right} — metadata style (Inter, tracked uppercase, secondary gray)\n"
+            "  1px hairline rule above, then 24px gap, bottom-anchored\n"
         )
     else:
         footer_block += "  (footer text not configured — omit)\n"
@@ -252,7 +237,7 @@ SUBHEAD: {subhead}
 BODY: {body}
 TAGLINE: {tagline}"""
 
-    fonts_link = _build_google_fonts_link(design_tokens, di_config)
+    fonts_link = build_google_fonts_link(design_tokens, di_config)
 
     user_prompt = (
         f"{brand_prefix}{campaign_block}"
@@ -260,6 +245,7 @@ TAGLINE: {tagline}"""
         f"CANVAS: {fmt.width}px × {fmt.height}px\n"
         f"VISUAL DIRECTION: {brief.get('visual_direction', 'clean editorial')}\n"
         f"TONE: {brief.get('tone', 'professional')}\n\n"
+        f"{archetype_block}\n\n"
         f"{ground_block}\n\n"
         f"{category_block}\n"
         f"{footer_block}\n"
@@ -360,7 +346,9 @@ def _build_fallback_html(
     tagline_block = f'<div class="tagline">{tagline}</div>' if tagline else ""
     category_block = f'<div class="kicker">{category}</div>' if category else ""
     footer_block = (
-        f'<div class="rule"></div>\n  <div class="footer"><span>{footer_left}</span><span>{footer_right}</span></div>'
+        f'<div class="rule"></div>\n'
+        f'  <div class="footer"><span class="wordmark">{footer_left}</span>'
+        f'<span class="handle">{footer_right}</span></div>'
         if footer_left and footer_right
         else ""
     )
@@ -372,7 +360,7 @@ def _build_fallback_html(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500&family=Space+Grotesk:wght@500;700&family=Source+Serif+4:wght@400&display=swap" rel="stylesheet">
 <style>
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 body {{
@@ -395,22 +383,28 @@ body {{
   margin-bottom: 24px;
 }}
 .headline {{
-  font-size: 68px;
+  font-family: var(--font-display);
+  font-size: 76px;
   font-weight: 700;
-  line-height: 1.05;
+  letter-spacing: -0.01em;
+  line-height: 1.0;
   margin-bottom: 32px;
 }}
 .subhead {{
+  font-family: var(--font-serif);
   font-size: 36px;
   font-weight: 400;
   line-height: 1.3;
   margin-bottom: 32px;
+  max-width: 600px;
 }}
 .body-text {{
+  font-family: var(--font-serif);
   font-size: 28px;
   font-weight: 400;
-  line-height: 1.3;
+  line-height: 1.4;
   margin-bottom: 32px;
+  max-width: 600px;
 }}
 .tagline {{
   font-size: 20px;
@@ -425,7 +419,17 @@ body {{
 .footer {{
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   padding-top: 24px;
+}}
+.wordmark {{
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}}
+.handle {{
   font-size: 20px;
   font-weight: 500;
   letter-spacing: 0.08em;

@@ -23,11 +23,21 @@ system_prompt: |
   - NO icons, illustrations, motifs, logos, or decorative shapes. The grid
     and the type ARE the design.
   - LEFT-ALIGN everything, always. Never center anything.
-  - One grotesque sans family only (var(--font-sans)). Never mix serif or
-    monospace. Emphasis is weight/size, never italics.
-  - Max 2 weights per post (one bold + one regular).
+  - THREE-TYPE-VOICE SYSTEM (THE SIGNATURE):
+      • Space Grotesk (var(--font-display)) — the display voice. Use it ONLY
+        for the HEADLINE and the FOOTER WORDMARK.
+      • Source Serif 4 (var(--font-serif)) — the editorial serif text voice.
+        Use it for the SUBHEAD and BODY copy.
+      • Inter (var(--font-sans)) — the quiet interface voice. Category label,
+        metadata, and the footer handle.
+    Never mix these roles. Never add serif or monospace anywhere else.
+    Emphasis is weight/size/voice contrast, never italics.
+  - Max 2 weights per family: Space Grotesk 500+700, Source Serif 4 400,
+    Inter 500.
   - Use ONLY the type sizes given in the layout block. Category label and
     footer/metadata are tracked UPPERCASE.
+  - Constrain subhead and body copy to the measure (max-width ~600px at 1080)
+    — never full-width lines. The headline spans full width.
   - Canvas margins and 8px spacing grid from the layout block — exact.
 
   GROUND & INK:
@@ -37,10 +47,12 @@ system_prompt: |
   CATEGORY & FOOTER (REQUIRED):
   - Place the CATEGORY LABEL exactly as given, tracked uppercase, category size,
     at the top of the content column.
-  - The FOOTER ROW is required on every format: name left, @handle right, in
-    metadata size, tracked uppercase, secondary gray, with a 1px hairline rule
-    above and a 24px gap. Bottom-anchored. No logo, no icon — typography is
-    the signature.
+  - The FOOTER ROW is required on every format, bottom-anchored, with a 1px
+    hairline rule above and a 24px gap:
+      Left: brand NAME as a SIGNATURE WORDMARK — Space Grotesk
+            (var(--font-display)), ~24px, weight 500, tight tracking, uppercase
+      Right: @handle — Inter metadata style, tracked uppercase, secondary gray
+  - No logo, no icon — typography is the signature.
 
   MATH & LATEX:
   - Copy all $...$ and $$...$$ equations from the COPY section below
@@ -78,10 +90,14 @@ system_prompt: |
 
   TYPOGRAPHY RULES:
   - Use ONLY the type scale sizes listed in the layout block — never arbitrary
-  - Headline: bold weight, tight tracking, tight leading (per scale)
-  - Body/support text: regular weight, normal tracking, per scale
-  - Uppercase only for category labels and footer/metadata — never uppercase
-    in body copy or headlines themselves
+  - HEADLINE: Space Grotesk (var(--font-display)), bold weight, tight tracking
+    (-0.01em), tight leading (1.0) — full width, confident
+  - SUBHEAD + BODY: Source Serif 4 (var(--font-serif)), regular weight, normal
+    tracking — constrained to the measure, literary and quiet
+  - Category, metadata, handle: Inter (var(--font-sans)), tracked uppercase
+  - Footer NAME: Space Grotesk wordmark; footer HANDLE: Inter metadata
+  - Uppercase only for category labels, footer wordmark, and metadata — never
+    uppercase in body copy or headlines themselves
 
   OUTPUT: <!DOCTYPE html> only. NO markdown code fences. NO explanations.
 temperature: 0.7
