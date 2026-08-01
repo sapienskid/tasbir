@@ -1,47 +1,57 @@
-# Python
+# ── Python ─────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*$py.class
 *.egg-info/
+.eggs/
 dist/
-*.egg
+build/
 .venv/
 venv/
+env/
 
-# Node
-node_modules/
-.svelte-kit/
+# Python tooling & caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mutation_cache/
 
-# Environment
+# ── Environment / secrets ───────────────────────────────────────────────
 .env
 .env.*
 !.env.example
+*.pem
+**/secrets/
 
-# IDE
+# ── IDE / editor ────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# OS
+# ── OS ──────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 
-# Build
-dist/
-build/
+# ── Logs ─────────────────────────────────────────────────────────────────
 *.log
+logs/
 
-# Docker
-caddy_data/
-
-# Generated
-backend/app/db/migrations/versions/*.py
-backend/tests/coverage/
-
-# Generated output data
-backend/data/output/
+# ── Databases (runtime data) ─────────────────────────────────────────────
+*.db
+*.sqlite3
 backend/data/tasbir.db
 
-# Secrets
-**/secrets/
-/data
+# ── Generated output (designs) ───────────────────────────────────────────
+backend/data/output/
+
+# ── Test artifacts ────────────────────────────────────────────────────────
+backend/tests/coverage/
+
+# ── Legacy / local-only artifacts ─────────────────────────────────────────
+backend/tailwindcss
+backend/playground-results/
