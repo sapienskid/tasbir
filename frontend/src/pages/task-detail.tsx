@@ -67,28 +67,48 @@ export default function TaskDetailPage() {
   const visualEditorRef = useRef<VisualEditorHandle>(null)
   const previewFrameRef = useRef<PreviewZoomHandle>(null)
 
-  // Ctrl/Cmd ± / 0 zoom the editing surface (visual canvas or live preview),
-  // never the browser page. Capture phase on the parent document so it fires
-  // before the browser's page-zoom handler — even when focus is inside the
-  // GrapesJS canvas iframe.
+  // Ctrl/Cmd ± / 0 and Ctrl+wheel zoom the editing surface (visual canvas or
+  // live preview), never the browser page. Capture phase on the parent
+  // document as the outer net; the GrapesJS frame attaches its own handlers
+  // and tags the event (__tasbirZoomHandled) so we don't zoom twice.
   useEffect(() => {
+    const applyZoom = (dir: "in" | "out" | "fit") => {
+      if (mode === "visual") {
+        if (dir === "fit") visualEditorRef.current?.zoomToFit()
+        else visualEditorRef.current?.zoomBy(dir === "out" ? 1 / 1.2 : 1.2)
+      } else {
+        if (dir === "fit") previewFrameRef.current?.fit()
+        else previewFrameRef.current?.zoomBy(dir === "out" ? 1 / 1.25 : 1.25)
+      }
+    }
+    const alreadyHandled = (e: Event) =>
+      (e as unknown as { __tasbirZoomHandled?: boolean }).__tasbirZoomHandled === true
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return
       const k = e.key.toLowerCase()
-      if (k !== "-" && k !== "+" && k !== "=" && k !== "0") return
+      let dir: "in" | "out" | "fit" | null = null
+      if (k === "-") dir = "out"
+      else if (k === "+" || k === "=") dir = "in"
+      else if (k === "0") dir = "fit"
+      else return
       e.preventDefault()
-      if (mode === "visual") {
-        if (k === "-") visualEditorRef.current?.zoomBy(1 / 1.2)
-        else if (k === "+" || k === "=") visualEditorRef.current?.zoomBy(1.2)
-        else visualEditorRef.current?.zoomToFit()
-      } else {
-        if (k === "-") previewFrameRef.current?.zoomBy(1 / 1.25)
-        else if (k === "+" || k === "=") previewFrameRef.current?.zoomBy(1.25)
-        else previewFrameRef.current?.fit()
-      }
+      if (alreadyHandled(e)) return
+      applyZoom(dir)
     }
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      if (alreadyHandled(e)) return
+      applyZoom(e.deltaY > 0 ? "out" : "in")
+    }
+
     document.addEventListener("keydown", onKeyDown, true)
-    return () => document.removeEventListener("keydown", onKeyDown, true)
+    document.addEventListener("wheel", onWheel, { passive: false, capture: true })
+    return () => {
+      document.removeEventListener("keydown", onKeyDown, true)
+      document.removeEventListener("wheel", onWheel, { capture: true })
+    }
   }, [mode])
 
   // Per-format caches so tab switches don't lose edits or consume files twice.

@@ -60,6 +60,12 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
   const wrapperRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Editor | null>(null)
   const originalRef = useRef<Document | null>(null)
+  const frameHandlersRef = useRef<{
+    win: Window | null
+    doc: Document | null
+    onKey: (e: KeyboardEvent) => void
+    onWheel: (e: WheelEvent) => void
+  } | null>(null)
   const [ready, setReady] = useState(false)
   const [zoomPct, setZoomPct] = useState(100)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -158,6 +164,39 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
 
       editor = ed
       editorRef.current = ed
+
+      // Attach zoom handlers DIRECTLY on the canvas frame window/document.
+      // The browser applies page zoom (Ctrl± keyboard, Ctrl+wheel, pinch) at
+      // the browser level, and with focus/pointer inside the GrapesJS iframe
+      // a parent-only handler isn't reliably honored. preventDefault inside
+      // the frame stops the page zoom; we tag the event so the parent skips
+      // its own (single zoom). Cleaned up on destroy.
+      const frameWin = ed.Canvas.getWindow()
+      const frameDoc = ed.Canvas.getDocument()
+      const tag = (e: Event) => {
+        ;(e as unknown as { __tasbirZoomHandled?: boolean }).__tasbirZoomHandled = true
+      }
+      const onFrameKey = (e: KeyboardEvent) => {
+        if (!(e.ctrlKey || e.metaKey)) return
+        const k = e.key.toLowerCase()
+        if (k !== "-" && k !== "+" && k !== "=" && k !== "0") return
+        e.preventDefault()
+        tag(e)
+        if (k === "-") setZoom(ed.Canvas.getZoom() / 1.2)
+        else if (k === "+" || k === "=") setZoom(ed.Canvas.getZoom() * 1.2)
+        else setZoom(fitPctFor(ed))
+      }
+      const onFrameWheel = (e: WheelEvent) => {
+        if (!e.ctrlKey) return
+        e.preventDefault()
+        tag(e)
+        const factor = e.deltaY > 0 ? 1 / 1.2 : 1.2
+        setZoom(ed.Canvas.getZoom() * factor)
+      }
+      frameWin?.addEventListener("keydown", onFrameKey, true)
+      frameDoc?.addEventListener("wheel", onFrameWheel, { passive: false, capture: true })
+      frameHandlersRef.current = { win: frameWin ?? null, doc: frameDoc ?? null, onKey: onFrameKey, onWheel: onFrameWheel }
+
       setZoomPct(fitPct)
       setReady(true)
     }
@@ -165,6 +204,12 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
     void init()
     return () => {
       cancelled = true
+      const fh = frameHandlersRef.current
+      if (fh) {
+        fh.win?.removeEventListener("keydown", fh.onKey, true)
+        fh.doc?.removeEventListener("wheel", fh.onWheel, { capture: true })
+        frameHandlersRef.current = null
+      }
       try {
         editor?.destroy()
       } catch {
