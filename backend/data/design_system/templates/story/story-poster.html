@@ -27,7 +27,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 .headline {
   margin-top: {{ (height * 0.1) | round | int }}px;
   font-family: var(--font-display);
-  font-size: {{ (width * 0.1) | round | int }}px;
+  font-size: {{ (108 * tscale) | round | int }}px;
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 0.94;
@@ -37,7 +37,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 .kicker {
   margin-top: {{ (height * 0.08) | round | int }}px;
   font-family: var(--font-sans);
-  font-size: {{ (width * 0.019) | round | int }}px;
+  font-size: {{ (21 * tscale) | round | int }}px;
   font-weight: 500;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -53,7 +53,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   justify-content: space-between;
   align-items: baseline;
   font-family: var(--font-sans);
-  font-size: {{ (width * 0.019) | round | int }}px;
+  font-size: {{ (21 * tscale) | round | int }}px;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;

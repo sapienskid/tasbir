@@ -20,7 +20,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 
 .kicker {
   font-family: var(--font-sans);
-  font-size: {{ (width * 0.020) | round | int }}px;
+  font-size: {{ (22 * tscale) | round | int }}px;
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -30,7 +30,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 .headline {
   margin-top: {{ (height * 0.03) | round | int }}px;
   font-family: var(--font-display);
-  font-size: {{ (width * 0.072) | round | int }}px;
+  font-size: {{ (78 * tscale) | round | int }}px;
   font-weight: 700;
   letter-spacing: -0.018em;
   line-height: 1.02;
@@ -39,22 +39,22 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 
 .body {
   margin-top: {{ (height * 0.035) | round | int }}px;
-  font-size: {{ (width * 0.028) | round | int }}px;
+  font-size: {{ (30 * tscale) | round | int }}px;
   line-height: 1.55;
   color: var(--color-text-secondary);
   max-width: {{ (width * 0.62) | round | int }}px;
 }
 
-/* quiet lower region — big whitespace, meta low */
+/* quiet lower region — meta low, tighter now that type is scaled up */
 .lower {
-  margin-top: {{ (height * 0.1) | round | int }}px;
+  margin-top: {{ (height * 0.04) | round | int }}px;
   border-top: 1px solid var(--color-border);
   padding-top: {{ (width * 0.022) | round | int }}px;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   font-family: var(--font-sans);
-  font-size: {{ (width * 0.019) | round | int }}px;
+  font-size: {{ (21 * tscale) | round | int }}px;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -69,7 +69,7 @@ body[data-ground="black"] .lower { border-color: var(--color-border-inverted); }
     <div class="kicker" data-slot="kicker">{{ kicker }}</div>
     <h1 class="headline" data-slot="headline">{{ headline }}</h1>
     {% if subhead %}
-    <div class="body" data-slot="subhead" style="color:var(--color-text);font-size:{{ (width * 0.034) | round | int }}px;line-height:1.4;">{{ subhead }}</div>
+    <div class="body" data-slot="subhead" style="color:var(--color-text);font-size: {{ (37 * tscale) | round | int }}px;line-height:1.4;">{{ subhead }}</div>
     {% endif %}
     {% if body %}
     <div class="body" data-slot="body">{{ body }}</div>
