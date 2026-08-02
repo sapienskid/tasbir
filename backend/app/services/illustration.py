@@ -343,49 +343,20 @@ def generate_illustration_svg(
 # LLM tool integration — the generator as a callable tool
 # ---------------------------------------------------------------------------
 
-ILLUSTRATION_TOOL: dict = {
-    "type": "function",
-    "function": {
-        "name": "generate_illustration",
-        "description": (
-            "Generate a monochrome, Anthropic-style editorial SVG illustration "
-            "for the post (organic carrier shape + naive gestural linework). "
-            "Call exactly once, choosing an abstract theme that echoes the "
-            "post's subject. Returns an <svg> fragment for the template's "
-            "illustration slot."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "theme": {
-                    "type": "string",
-                    "description": (
-                        "A short abstract theme for the composition — e.g. "
-                        "'growth', 'spiral journey', 'burst of light', "
-                        "'layered stack', 'flowing wave', 'orbit'. No real "
-                        "objects, no text, no color words."
-                    ),
-                },
-                "ground": {
-                    "type": "string",
-                    "enum": ["white", "black"],
-                    "description": "The card background — white or black.",
-                },
-            },
-            "required": ["theme"],
-        },
-    },
-}
+# The unified ``illustrate`` tool (Anthropic procedural OR hand-drawn CC0 kits)
+# lives in services/tools/illustrator.py; alias it here so existing importers
+# and the deterministic generator stay stable.
+from app.services.tools.illustrator import ILLUSTRATE_TOOL as ILLUSTRATION_TOOL  # noqa: E402
 
 _DIRECTOR_SYSTEM = (
     "You are the illustration director for a strict monochrome editorial "
-    "design system. Decide the abstract visual theme for this post, then call "
-    "the generate_illustration tool EXACTLY ONCE. The tool renders a naive, "
-    "hand-drawn Anthropic-style composition in the brand's grayscale palette. "
-    "Rules: choose an abstract theme only (growth, flow, burst, orbit, layers, "
-    "spiral...) — no literal objects, no words/letters, no emoji, no color "
-    "terms. Keep the theme under 60 characters. Never refuse; always call the "
-    "tool."
+    "design system. Decide the illustration for this post, then call the "
+    "illustrate tool EXACTLY ONCE. Choose a style: 'anthropic' for abstract "
+    "procedural compositions, 'open-peeps' for a hand-drawn person, "
+    "'open-doodles' for a hand-drawn scene. Rules: choose an abstract theme "
+    "only (growth, flow, burst, orbit, layers, spiral...) — no literal "
+    "objects, no words/letters, no emoji, no color terms. Keep the theme "
+    "under 60 characters. Never refuse; always call the tool."
 )
 
 
@@ -397,9 +368,10 @@ async def illustration_via_tool(
     ground: str = "white",
     seed: str = "",
 ) -> str:
-    """Ask the LLM (via the tool) for a post illustration; fall back to a
-    plain deterministic render if the tool call fails for any reason."""
+    """Ask the LLM (via the unified tool) for a post illustration; fall back
+    to a plain deterministic render if the tool call fails for any reason."""
     from app.services.llm import call_llm_for_tool
+    from app.services.tools.illustrator import run_illustrate
 
     user = (
         f"Title: {title or '(untitled)'}\n"
@@ -416,11 +388,7 @@ async def illustration_via_tool(
             temperature=0.8,
             max_tokens=1024,
         )
-        theme = str(args.get("theme") or "")[:60]
-        g = str(args.get("ground") or ground)
-        if g not in ("white", "black"):
-            g = ground
-        return generate_illustration_svg(seed, g, theme=theme)
+        return run_illustrate(args, seed)
     except Exception as e:  # noqa: BLE001 — never let the art break the post
         log.warning("[illustration] LLM tool call failed (%s) — using deterministic fallback", e)
         return generate_illustration_svg(seed, ground)

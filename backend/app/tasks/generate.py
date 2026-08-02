@@ -128,6 +128,10 @@ def generate_task(self, task_id: str, source_data: dict):
 
         from pathlib import Path
 
+        from app.agents.orchestrator.post_cache import post_cache_clear
+
+        post_cache_clear(task_id)
+
         output_dir = Path(settings.output_dir) / task_id
 
         output_paths = {}
@@ -168,6 +172,7 @@ def generate_task(self, task_id: str, source_data: dict):
                     "post_plan": state.get("post_plan", {}),
                     "sequence_check": state.get("sequence_check", {}),
                     "platforms": platform_results,
+                    "media_credits": state.get("media_credits") or [],
                 },
             )
 

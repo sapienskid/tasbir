@@ -152,6 +152,10 @@ class GenerationState(TypedDict):
     # Output
     output_paths: Annotated[dict[str, str], _merge_dicts]
 
+    # Auto-media attribution (photos/illustrations fetched by the media tools).
+    # Set once per post by process_all_formats (concatenated across branches).
+    media_credits: Annotated[list[dict], _keep_first_list]
+
 
 def initial_state(
     title: str,

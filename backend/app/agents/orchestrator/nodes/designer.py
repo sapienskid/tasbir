@@ -115,6 +115,108 @@ def _ground_css_vars(
     )
 
 
+_MEDIA_DIRECTOR_SYSTEM = (
+    "You are the media director for a strict monochrome editorial design "
+    "system. Decide whether this post benefits from a stock photo or an "
+    "illustration, then call EXACTLY ONE tool: find_photo (concrete query) or "
+    "illustrate (style + abstract theme). If neither helps, prefer a calm "
+    "illustration. Photos are shown grayscale. Never refuse; always call a tool."
+)
+
+
+async def _designer_media_director(state: GenerationState, fmt) -> None:
+    """Ask the LLM (media tools) for a photo/illustration for an LLM-designed post.
+
+    The director decision is computed once per post (shared per-post cache) and
+    then applied to this branch's local state: a chosen photo is downloaded and
+    appended to ``state["images"]`` (so the designer's image block + renderer's
+    key substitution both see it); a chosen illustration is stored in
+    ``state["_designer_figure"]`` for marker injection after generation.
+    """
+    if state.get("_designer_media_applied"):
+        return
+    if state.get("images"):
+        return  # user media already present — no auto media
+
+    from app.agents.orchestrator.post_cache import post_cached
+
+    title = state.get("title", "")
+    task = (state.get("format_tasks") or {}).get(state.get("_processing_format_id", ""), {})
+    copy_data = _parse_copy(task.get("copy", ""), title)
+    category = state.get("category", "")
+    orientation = "landscape" if fmt.width > fmt.height else ("portrait" if fmt.height > fmt.width else "square")
+
+    from app.services.llm import call_llm_for_tools
+    from app.services.tools.photo import FIND_PHOTO_TOOL, download_photo, run_find_photo
+    from app.services.tools.illustrator import ILLUSTRATE_TOOL, run_illustrate
+
+    async def loader() -> dict | None:
+        user = (
+            f"Title: {title or '(untitled)'}\n"
+            f"Headline: {copy_data.get('headline', '') or '(none)'}\n"
+            f"Category: {category or '(none)'}\n"
+            f"Orientation: {orientation}\n"
+            f"Ground: {state.get('ground', 'white')}"
+        )
+        try:
+            name, args = await call_llm_for_tools(
+                agent_role="designer",
+                system_prompt=_MEDIA_DIRECTOR_SYSTEM,
+                user_prompt=user,
+                tools=[FIND_PHOTO_TOOL, ILLUSTRATE_TOOL],
+                temperature=0.7,
+                max_tokens=256,
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("[designer] media director failed (%s)", e)
+            return None
+
+        try:
+            if name == "find_photo":
+                args["orientation"] = orientation
+                candidate = await run_find_photo(args)
+                if not candidate.get("ok"):
+                    return None
+                image = await download_photo(candidate)
+                if not image:
+                    return None
+                return {"kind": "photo", "image": image, "candidate": candidate}
+            if name == "illustrate":
+                fig = run_illustrate(args, f"{title or ''}|designer-illustration")
+                if fig:
+                    return {"kind": "illustration", "figure": fig}
+        except Exception as e:  # noqa: BLE001
+            log.warning("[designer] media director execution failed (%s)", e)
+        return None
+
+    media = await post_cached(state.get("_task_id", ""), "designer_media", loader)
+    if not media:
+        return
+
+    state["_designer_media_applied"] = True
+    if media.get("kind") == "photo":
+        image = media["image"]
+        candidate = media.get("candidate") or {}
+        images = list(state.get("images") or [])
+        images.append({
+            **image,
+            "description": candidate.get("attribution", ""),
+            "placement": "auto",
+        })
+        state["images"] = images
+        credits = list(state.get("media_credits") or [])
+        credits.append({
+            "kind": "photo",
+            "provider": candidate.get("provider"),
+            "photographer": candidate.get("photographer"),
+            "license": candidate.get("license"),
+            "credit": candidate.get("attribution", ""),
+        })
+        state["media_credits"] = credits
+    elif media.get("kind") == "illustration":
+        state["_designer_figure"] = media["figure"]
+
+
 async def designer_node_single(state: GenerationState) -> dict:
     """Create HTML layout for a single platform."""
     prompt_cfg = await get_agent_config("designer")
@@ -175,6 +277,9 @@ async def designer_node_single(state: GenerationState) -> dict:
 
     brand_info = state.get("brand_info", {})
     campaign = state.get("campaign", {})
+    # Auto media (photo/illustration) may add to state["images"] before the
+    # image block is assembled below.
+    await _designer_media_director(state, fmt)
     images_list = state.get("images", [])
 
     # Resolved design decisions (deterministic — set upstream, not by the LLM)
@@ -274,6 +379,20 @@ async def designer_node_single(state: GenerationState) -> dict:
             "image at render time — do NOT put a real <img> here.\n"
         )
 
+    # Prepared illustration (from the media director) — injected after
+    # generation via a placeholder marker.
+    figure_block = ""
+    if state.get("_designer_figure"):
+        figure_block = (
+            "\nPREPARED ILLUSTRATION:\n"
+            "  The system has prepared a monochrome illustration for this post. "
+            "Place this marker exactly once where it fits best (a balanced corner "
+            "or side, keeping text dominant):\n"
+            "  <div data-illustration></div>\n"
+            "  The actual artwork is injected automatically — do NOT draw your own "
+            "SVG/illustration.\n"
+        )
+
     copy_block = f"""HEADLINE: {headline}
 SUBHEAD: {subhead}
 BODY: {body}
@@ -294,6 +413,7 @@ TAGLINE: {tagline}"""
         f"{footer_block}\n"
         f"COPY TO USE:\n{copy_block}\n\n"
         f"{logo_block}\n"
+        f"{figure_block}\n"
         f"{images_block}\n"
         f"{placement_guide}\n"
         f"GOOGLE FONTS LINK (include in <head>):\n{fonts_link}\n\n"
@@ -323,6 +443,17 @@ TAGLINE: {tagline}"""
         # Sanitize LLM output before it can reach the renderer — strips any
         # script/frame/event-handler the model was steered into emitting.
         html = sanitize_html(html, mode="strict")
+
+        # Inject the prepared illustration where the designer placed its marker.
+        figure = state.get("_designer_figure")
+        if figure:
+            marker_re = re.compile(
+                r'<div[^>]*data-illustration[^>]*></div>|<span[^>]*data-illustration[^>]*></span>',
+                re.IGNORECASE,
+            )
+            html, n = marker_re.subn(figure, html, count=1)
+            if n:
+                log.info("[designer] injected illustration into %s", fmt_id)
 
         # Validate it's a real HTML document
         if len(html) < 100 or "<body" not in html.lower():

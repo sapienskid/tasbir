@@ -139,6 +139,7 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
         "format_tasks": {fmt_id: local["format_tasks"].get(fmt_id, {})},
         "verification": {fmt_id: local["verification"].get(fmt_id, {})},
         "retry_count": {fmt_id: local["retry_count"].get(fmt_id, 0)},
+        "media_credits": local.get("media_credits") or [],
     }
 
 
@@ -197,10 +198,12 @@ async def process_all_formats_node(state: GenerationState) -> dict:
     merged_tasks = {}
     verification = {}
     retry_count = {}
+    media_credits: list[dict] = []
     for r in results:
         merged_tasks.update(r.get("format_tasks", {}))
         verification.update(r.get("verification", {}))
         retry_count.update(r.get("retry_count", {}))
+        media_credits.extend(r.get("media_credits") or [])
 
     merged_state = dict(base_state)
     merged_state["format_tasks"] = merged_tasks
@@ -212,6 +215,7 @@ async def process_all_formats_node(state: GenerationState) -> dict:
         "verification": verification,
         "retry_count": retry_count,
         "sequence_check": sequence,
+        "media_credits": media_credits,
     }
 
 

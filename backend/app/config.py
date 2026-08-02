@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     openrouter_api_key: str = ""
 
+    # Stock-photo providers (media tools). Wikimedia Commons needs no key.
+    pexels_api_key: str = ""
+    pixabay_api_key: str = ""
+
     # Database (SQLite)
     database_url: str = "sqlite+aiosqlite:///data/tasbir.db"
 

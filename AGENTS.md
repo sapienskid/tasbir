@@ -476,6 +476,7 @@ tasbir/
 │   │   │   ├── campaigns.yaml          ← Campaign presets (tone, ground, language)
 │   │   │   └── design-instruction.yaml ← Swiss style rules (type voices, roles, measure, archetypes)
 │   │   │   └── templates/                  ← Human-authored Jinja2 post templates + catalog.yaml
+│   │   ├── illustrations/              ← Vendored CC0 hand-drawn kits (open-peeps/, open-doodles/)
 │   │   └── output/{task_id}/           ← Generated HTML + PNG files
 │   │
 │   ├── app/
@@ -508,8 +509,12 @@ tasbir/
 │   │   │       └── registry.py          ← YAML prompt loader
 │   │   │
 │   │   ├── services/
-│   │   │   ├── llm.py                   ← Gemini/OpenRouter client
+│   │   │   ├── llm.py                   ← Gemini/OpenRouter client (+ call_llm_for_tools)
 │   │   │   ├── vision.py                ← shared Gemini Vision helper (verifier + agents)
+│   │   │   ├── tools/                   ← LLM media tools (find_photo, illustrate)
+│   │   │   │   ├── photo.py             ← find_photo tool + providers fallback + embed
+│   │   │   │   ├── illustrator.py       ← unified illustrate tool + kit composition
+│   │   │   │   └── providers/           ← pexels.py / pixabay.py / wikimedia.py
 │   │   │   ├── tokens.py                ← Token/brand/campaign/platform YAML loader + semantic vars
 │   │   │   ├── design_instruction.py    ← Swiss style loader + font link builder + archetypes
 │   │   │   ├── design_systems.py        ← DB design-system CRUD + pipeline payload + preview
@@ -657,6 +662,24 @@ restart needed. `Reset to seed` restores the YAML seed; the YAML files in
 1. Include `images` array in POST /generate request
 2. Each image: `{url, alt, description, placement}`
 3. Placement options: `auto`, `background`, `top-left`, `center`, `bottom-right`
+
+### Auto-media (LLM tools)
+Templates and the Designer can pull media automatically via two LLM tools:
+- **`find_photo(query, orientation?, min_width?)`** — stock photos in fallback
+  order Pexels → Pixabay → Wikimedia Commons (unkeyed providers skipped; long
+  queries degrade to simpler variants). Downloads are SSRF-guarded, photos
+  render grayscale with an attribution caption, and credits land on the task
+  result as `media_credits`. Add a key via `PEXELS_API_KEY` / `PIXABAY_API_KEY`;
+  Wikimedia needs none.
+- **`illustrate(style: anthropic|open-peeps|open-doodles, theme, ground)`** —
+  unified illustration director. `anthropic` is the procedural generator;
+  `open-peeps`/`open-doodles` compose vendored CC0 SVGs
+  (`backend/data/illustrations/`) recolored to `var(--color-*)`.
+
+Triggers: a template with exactly one empty image slot and no user media →
+`find_photo`; any template with `{{ illustration | safe }}` → `illustrate`;
+LLM-designed posts get both via the media director. Results are cached once
+per post (`app/agents/orchestrator/post_cache.py`).
 
 ### Adding a template
 Templates are DB-backed (v0.5) and scoped to a design system. Prefer the
@@ -849,6 +872,8 @@ Response: `{"status": "ok"}`
 |----------|----------|---------|-------------|
 | `GEMINI_API_KEY` | Yes | — | Google AI Studio API key |
 | `OPENROUTER_API_KEY` | No | — | Fallback LLM provider |
+| `PEXELS_API_KEY` | No | — | Stock-photo search (media tools) |
+| `PIXABAY_API_KEY` | No | — | Stock-photo search (media tools); Wikimedia Commons needs none |
 | `REDIS_URL` | Yes | `redis://localhost:6379/0` | Celery broker |
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///data/tasbir.db` | SQLite for task tracking |
 | `API_KEYS` | Yes* | — | Comma-separated API keys (auth fails closed if empty) |

@@ -176,6 +176,31 @@ async def call_llm_for_tool(
     model is expected to emit a single ``generate_illustration``-style tool
     call; its ``args`` are returned. Raises if no tool call comes back.
     """
+    _, args = await call_llm_for_tools(
+        agent_role=agent_role,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        tools=[tool],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return args
+
+
+async def call_llm_for_tools(
+    agent_role: str,
+    system_prompt: str,
+    user_prompt: str,
+    tools: list[dict],
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
+) -> tuple[str, dict]:
+    """Call the LLM with one or more function-calling tools bound.
+
+    Walks the same per-agent fallback model chain as :func:`call_llm`. The
+    model is expected to emit a single tool call. Returns ``(tool_name, args)``.
+    Raises if no tool call comes back.
+    """
     import logging
 
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -201,7 +226,7 @@ async def call_llm_for_tool(
             max_retries=0,
         )
         try:
-            bound = llm.bind_tools([tool])
+            bound = llm.bind_tools(tools)
             response = await call_llm_with_retry(bound, messages)
             tool_calls = getattr(response, "tool_calls", None) or []
             if not tool_calls:
@@ -209,17 +234,16 @@ async def call_llm_for_tool(
             args = tool_calls[0].get("args")
             if not isinstance(args, dict):
                 raise RuntimeError(f"unexpected tool args: {args!r}")
-            log.info("[llm] tool %r args=%r (model %s)", tool["function"]["name"], args, model)
-            return dict(args)
+            name = tool_calls[0].get("name") or tools[0]["function"]["name"]
+            log.info("[llm] tool %r args=%r (model %s)", name, args, model)
+            return (name, dict(args))
         except Exception as e:  # noqa: BLE001
             last_error = e
             log.warning(
                 "[LLM] model %s tool call failed for %r (%s) — trying next", model, agent_role, e
             )
 
-    settings = get_settings()
-    if settings.openrouter_api_key:
-        log.warning("[LLM] tool-calling has no OpenRouter fallback; skipping (agent %s)", agent_role)
+    log.warning("[LLM] tool-calling has no OpenRouter fallback; skipping (agent %s)", agent_role)
     raise last_error or RuntimeError("LLM tool call failed")
 
 

@@ -73,8 +73,9 @@ def test_empty_seed_is_safe():
 def test_tool_schema_shape():
     assert ILLUSTRATION_TOOL["type"] == "function"
     fn = ILLUSTRATION_TOOL["function"]
-    assert fn["name"] == "generate_illustration"
+    assert fn["name"] == "illustrate"
     params = fn["parameters"]
+    assert "style" in params["properties"]
     assert "theme" in params["properties"]
     assert "theme" in params["required"]
     assert "ground" in params["properties"]

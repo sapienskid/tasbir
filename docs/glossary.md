@@ -7,6 +7,11 @@ Terms used across the config, prompts, and code. Sorted alphabetically.
 stored under `data/output/{task_id}/`. Delivered once over HTTP and deleted
 after delivery (see *One-time download*).
 
+**Attribution caption** — A small tracked-uppercase overlay on a stock photo's
+bottom-right corner crediting the photographer and license (e.g. "Photo by
+Daria on Pexels"). Persisted on the task as `media_credits`. Required for CC
+content (Wikimedia) and requested by Pexels/Pixabay.
+
 ## B
 **Body voice** — See *Serif voice*.
 
@@ -27,6 +32,16 @@ It makes posts recognizable.
 **Measure** — The maximum width of a body/subhead text column (~600px at
 1080px canvas, scaled by width). A proper measure keeps lines readable and
 reads as premium editorial.
+
+**Media tools** — LLM-callable tools that source media for a post:
+`find_photo` (Pexels / Pixabay / Wikimedia Commons) and the unified
+`illustrate` director (Anthropic procedural SVG or vendored CC0 hand-drawn
+kits — Open Peeps / Open Doodles). Output is recolored/forced to the
+monochrome brand.
+
+**Media credits** — Provider, photographer, license, and credit string for
+every auto-placed photo, stored on the task result (see *Attribution
+caption*).
 
 **Metadata style** — 20px Inter, weight 500, tracking +0.08em, uppercase,
 secondary gray. Used for the @handle and timestamps.

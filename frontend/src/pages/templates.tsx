@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { ArrowLeft, Copy, Eye, EyeOff, Loader2, PenLine, Plus, Power, PowerOff, Trash2 } from "lucide-react"
+import { ArrowLeft, ChevronDown, Copy, Eye, EyeOff, Loader2, PenLine, Plus, Power, PowerOff, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,7 +22,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -446,6 +448,12 @@ function EditTemplateDialog({
 }) {
   const [html, setHtml] = useState("")
   const [grounds, setGrounds] = useState<string[]>(template.grounds)
+  const [name, setName] = useState(template.name)
+  const [description, setDescription] = useState(template.description)
+  const [categories, setCategories] = useState<string[]>(template.categories)
+  const [hintTags, setHintTags] = useState<string[]>(template.hint_tags)
+  const [weight, setWeight] = useState(template.weight)
+  const [isActive, setIsActive] = useState(template.is_active)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
@@ -460,6 +468,12 @@ function EditTemplateDialog({
         if (!alive) return
         setHtml(full.html ?? "")
         setGrounds(full.grounds ?? template.grounds)
+        setName(full.name ?? template.name)
+        setDescription(full.description ?? template.description)
+        setCategories(full.categories ?? template.categories)
+        setHintTags(full.hint_tags ?? template.hint_tags)
+        setWeight(full.weight ?? template.weight)
+        setIsActive(full.is_active ?? template.is_active)
         setLoading(false)
       })
       .catch((e) => {
@@ -501,7 +515,16 @@ function EditTemplateDialog({
   async function save() {
     setSaving(true)
     try {
-      await updateTemplate(template.id, { html, grounds })
+      await updateTemplate(template.id, {
+        html,
+        grounds,
+        name,
+        description,
+        categories,
+        hint_tags: hintTags,
+        weight,
+        is_active: isActive,
+      })
       toast.success("Template saved")
       onSaved()
     } catch (err) {
@@ -530,6 +553,77 @@ function EditTemplateDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid min-h-0 flex-1 gap-4">
+          <details className="group rounded-md border p-3">
+            <summary className="cursor-pointer select-none text-sm font-medium">
+              Metadata
+              <ChevronDown className="ml-1 inline size-4 align-text-bottom transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="tpl-name">Name</Label>
+                <Input id="tpl-name" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="tpl-weight">Weight (selection bias, 0.1–10)</Label>
+                <Input
+                  id="tpl-weight"
+                  type="number"
+                  step={0.1}
+                  min={0.1}
+                  max={10}
+                  value={weight}
+                  onChange={(e) => setWeight(Number(e.target.value))}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="tpl-cat">Categories (comma-separated)</Label>
+                <Input
+                  id="tpl-cat"
+                  value={categories.join(", ")}
+                  onChange={(e) =>
+                    setCategories(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="tpl-tags">Hint tags (comma-separated)</Label>
+                <Input
+                  id="tpl-tags"
+                  value={hintTags.join(", ")}
+                  onChange={(e) =>
+                    setHintTags(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="tpl-desc">Description</Label>
+                <Textarea
+                  id="tpl-desc"
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col justify-between gap-2">
+                <div className="space-y-1">
+                  <Label>Identity (read-only)</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Badge variant="outline">{template.family}</Badge>
+                    <Badge variant="secondary">{template.id}</Badge>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                  />
+                  Active (selectable by the pipeline)
+                </label>
+              </div>
+            </div>
+          </details>
+
           <div className="flex items-center gap-3">
             <Label className="shrink-0">Grounds</Label>
             {(["white", "black"] as const).map((g) => (
