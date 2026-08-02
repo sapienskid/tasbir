@@ -89,3 +89,35 @@ class TestRerender:
         out_dir = tmp_path / task_id
         saved = (out_dir / "instagram-square.html").read_text()
         assert "script" not in saved
+
+
+class TestRenderFailure:
+    async def test_save_survives_png_render_failure(
+        self, authed_client: AsyncClient, _mock_services, monkeypatch, tmp_path
+    ):
+        """A render-service hiccup must not lose the edit — HTML is saved anyway."""
+        from app.services import dom_extractor
+
+        async def no_png(html, width, height):
+            return None
+
+        monkeypatch.setattr(dom_extractor, "render_to_png", no_png)
+
+        task_id = str(uuid.uuid4())
+        await seed_task(task_id)
+        res = await authed_client.post(
+            f"/api/tasks/{task_id}/formats/instagram-square/rerender",
+            headers={"x-api-key": "test-key"},
+            json={"html": _HTML},
+        )
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert data["pass"] is False
+        assert data["png_b64"] == ""
+        assert any("PNG render unavailable" in i for i in data["quality"]["issues"])
+
+        # The HTML is still persisted to disk.
+        out_dir = tmp_path / task_id
+        assert (out_dir / "instagram-square.html").is_file()
+        saved = (out_dir / "instagram-square.html").read_text()
+        assert "content" in saved

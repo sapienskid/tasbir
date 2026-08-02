@@ -268,16 +268,23 @@ async def rerender_format(
 
     png_bytes = await render_to_png(html, fmt.width, fmt.height)
     if not png_bytes:
-        raise HTTPException(status_code=502, detail="PNG render unavailable")
+        issues.append(
+            "PNG render unavailable — the HTML was saved; re-render to regenerate the image"
+        )
+        passed = False
+        score = min(score, 40)
 
     out_dir = os.path.join(settings.output_dir, task_id)
     os.makedirs(out_dir, exist_ok=True)
     png_path = os.path.join(out_dir, f"{fmt_id}.png")
     html_path = os.path.join(out_dir, f"{fmt_id}.html")
-    with open(png_path, "wb") as fh:
-        fh.write(png_bytes)
+    # The HTML is the source of truth — always persist it even if the PNG
+    # render failed, so an edit is never lost to a render-service hiccup.
     with open(html_path, "w", encoding="utf-8") as fh:
         fh.write(html)
+    if png_bytes:
+        with open(png_path, "wb") as fh:
+            fh.write(png_bytes)
 
     # Reflect the rerender QC in the stored task result
     from datetime import datetime, timezone
@@ -298,7 +305,7 @@ async def rerender_format(
         "format": fmt_id,
         "pass": passed,
         "quality": {"score": score, "issues": issues, "critique": critique},
-        "png_b64": base64.b64encode(png_bytes).decode("ascii"),
+        "png_b64": base64.b64encode(png_bytes).decode("ascii") if png_bytes else "",
     }
 
 

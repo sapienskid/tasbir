@@ -7,6 +7,7 @@ used for generating SVG output or extracting text positions.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -164,18 +165,28 @@ async def render_to_png(
     if settings.render_service_key:
         headers["X-Render-Key"] = settings.render_service_key
 
-    try:
-        async with httpx.AsyncClient(timeout=RENDER_TIMEOUT) as client:
-            response = await client.post(
-                f"{renderer_url}/render",
-                json=payload,
-                headers=headers,
+    # Retry transient render-service failures — a single hiccup shouldn't
+    # fail a save or a pipeline step.
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            async with httpx.AsyncClient(timeout=RENDER_TIMEOUT) as client:
+                response = await client.post(
+                    f"{renderer_url}/render",
+                    json=payload,
+                    headers=headers,
+                )
+                response.raise_for_status()
+                return response.content
+        except Exception as e:
+            last_error = e
+            log.warning(
+                "[dom_extractor] PNG render failed (attempt %d/3): %s", attempt + 1, e
             )
-            response.raise_for_status()
-            return response.content
-    except Exception as e:
-        log.warning("[dom_extractor] PNG render failed: %s", e)
-        return None
+            if attempt < 2:
+                await asyncio.sleep(1 + attempt)
+    log.error("[dom_extractor] PNG render failed after 3 attempts: %s", last_error)
+    return None
 
 
 async def detect_overflow(
