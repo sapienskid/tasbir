@@ -1,5 +1,6 @@
 """Template library tests — catalog, selection, Jinja2 fill, slotize, promote."""
 
+import pytest
 
 from app.services.templates import (
     build_template_context,
@@ -31,9 +32,21 @@ def _render(tid, family, ground="white", copy=None, seed="test", has_image=False
     entry = load_template_catalog()["templates"][tid]
     w, h = DIMS[family]
     ctx = build_template_context(
-        copy or COPY, "WRITING", ground, FOOTER, w, h, has_image, seed=seed
+        copy or COPY, "WRITING", ground, FOOTER, w, h, has_image, seed=seed, family=family
     )
     return render_template_file(entry["file"], ctx)
+
+
+def test_family_type_scale():
+    def scale(family, w, h):
+        ctx = build_template_context({"headline": "x"}, "", "white", {}, w, h, False, family=family)
+        return ctx["tscale"]
+
+    assert scale("square", 1080, 1080) == 1.0
+    assert scale("portrait", 1080, 1350) > 1.0
+    assert scale("story", 1080, 1920) > scale("portrait", 1080, 1350)
+    # landscape stays equivalent to its old width-based sizing (1200/1080).
+    assert abs(scale("landscape", 1200, 627) - 1200 / 1080) < 1e-6
 
 
 class TestCatalog:
@@ -165,3 +178,48 @@ def test_format_family_mapping():
     assert format_family("instagram-story") == "story"
     assert format_family("linkedin-post") == "landscape"
     assert format_family("twitter-card") == "landscape"
+
+
+@pytest.mark.asyncio
+async def test_no_template_overflows_at_max_copy():
+    """Every template × ground must fit maximum-length copy.
+
+    Requires the Playwright render service (reachable in the full stack);
+    skipped when it is not available.
+    """
+    import httpx
+
+    from app.services.dom_extractor import detect_overflow
+
+    try:
+        resp = httpx.get("http://playwright:4000/health", timeout=2)
+        if resp.status_code != 200:
+            pytest.skip("render service not reachable")
+    except Exception:
+        pytest.skip("render service not reachable")
+
+    max_copy = {
+        "headline": (
+            "The measure of a column is the quiet contract between line and breath"
+        ),
+        "subhead": (
+            "A grid sets order and a measure sets pace; constrain the line, free the reader."
+        ),
+        "body": (
+            "Swiss design distills a message to its essence: black, white, and the space "
+            "between. A column of serif type at a proper measure keeps the eye moving. "
+            "Generous margins, tabular numerals, a hairline rule, and nothing else."
+        ),
+        "tagline": "No. 12 — On grid systems",
+        "badge": None,
+    }
+    for tid, entry in load_template_catalog()["templates"].items():
+        family = entry["family"]
+        w, h = DIMS[family]
+        for ground in ("white", "black"):
+            ctx = build_template_context(
+                dict(max_copy), "WRITING", ground, FOOTER, w, h, False, seed=tid, family=family
+            )
+            html = render_template_file(entry["file"], ctx)
+            overflow = await detect_overflow(html, w, h)
+            assert not overflow, f"{tid} ({ground}) overflows: {overflow}"
