@@ -13,7 +13,7 @@ class TestRateLimit:
         fake_redis.eval = AsyncMock(return_value=1)
         monkeypatch.setattr(ratelimit, "_get_redis", AsyncMock(return_value=fake_redis))
 
-        res = await authed_client.get("/tasks", headers={"x-api-key": "test-key"})
+        res = await authed_client.get("/api/tasks", headers={"x-api-key": "test-key"})
         assert res.status_code == 200
 
     async def test_429_when_bucket_exhausted(self, authed_client: AsyncClient, monkeypatch):
@@ -25,7 +25,7 @@ class TestRateLimit:
         fake_redis.eval = AsyncMock(return_value=0)
         monkeypatch.setattr(ratelimit, "_get_redis", AsyncMock(return_value=fake_redis))
 
-        res = await authed_client.get("/tasks", headers={"x-api-key": "test-key"})
+        res = await authed_client.get("/api/tasks", headers={"x-api-key": "test-key"})
         assert res.status_code == 429
 
     async def test_fails_open_when_redis_unavailable(self, authed_client: AsyncClient, monkeypatch):
@@ -37,5 +37,5 @@ class TestRateLimit:
 
         monkeypatch.setattr(ratelimit, "_get_redis", boom)
 
-        res = await authed_client.get("/tasks", headers={"x-api-key": "test-key"})
+        res = await authed_client.get("/api/tasks", headers={"x-api-key": "test-key"})
         assert res.status_code == 200

@@ -37,6 +37,14 @@ def _render(tid, family, ground="white", copy=None, seed="test", has_image=False
     return render_template_file(entry["file"], ctx)
 
 
+def _catalog_templates() -> list[dict]:
+    """Catalog entries shaped like DB template dicts (with ``id``)."""
+    return [
+        {"id": tid, **entry}
+        for tid, entry in load_template_catalog()["templates"].items()
+    ]
+
+
 def test_family_type_scale():
     def scale(family, w, h):
         ctx = build_template_context({"headline": "x"}, "", "white", {}, w, h, False, family=family)
@@ -69,37 +77,38 @@ class TestCatalog:
 
 class TestSelection:
     def test_family_filter(self):
-        selection = select_template("square", "white", "NOTE", "", "seed")
+        selection = select_template("square", "white", "NOTE", "", "seed", _catalog_templates())
         assert selection is not None
         assert selection[0].startswith("square-")
 
     def test_ground_filter(self):
-        selection = select_template("square", "black", "NOTE", "", "seed")
+        selection = select_template("square", "black", "NOTE", "", "seed", _catalog_templates())
         assert selection is not None
         # NOTE + black should prefer index-numeral (weighted/category boost)
         assert selection[0] == "square-index-numeral"
 
     def test_no_match_for_unknown_family(self):
-        assert select_template("octagonal", "white", "", "", "seed") is None
+        assert select_template("octagonal", "white", "", "", "seed", _catalog_templates()) is None
 
     def test_category_boost(self):
-        selection = select_template("landscape", "white", "PORTFOLIO", "", "seed")
+        selection = select_template("landscape", "white", "PORTFOLIO", "", "seed", _catalog_templates())
         # PORTFOLIO maps to both landscape-split and landscape-ad-card.
         assert selection is not None
         assert selection[0] in {"landscape-split", "landscape-ad-card"}
 
     def test_hint_boost(self):
-        selection = select_template("square", "white", "", "note-card", "seed")
+        selection = select_template("square", "white", "", "note-card", "seed", _catalog_templates())
         assert selection[0] == "square-note-card"
 
     def test_deterministic(self):
-        a = select_template("square", "white", "", "", "the-same-seed")
-        b = select_template("square", "white", "", "", "the-same-seed")
+        a = select_template("square", "white", "", "", "the-same-seed", _catalog_templates())
+        b = select_template("square", "white", "", "", "the-same-seed", _catalog_templates())
         assert a == b
 
     def test_excludes_recent(self):
         first = select_template(
-            "square", "white", "", "", "seed", exclude={"square-editorial-stack"}
+            "square", "white", "", "", "seed", _catalog_templates(),
+            exclude={"square-editorial-stack"},
         )
         assert first is not None
 

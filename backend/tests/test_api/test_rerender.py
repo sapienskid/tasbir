@@ -36,7 +36,7 @@ class TestRerender:
         task_id = str(uuid.uuid4())
         await seed_task(task_id)
         res = await authed_client.post(
-            f"/tasks/{task_id}/formats/instagram-square/rerender",
+            f"/api/tasks/{task_id}/formats/instagram-square/rerender",
             headers={"x-api-key": "test-key"},
             json={"html": _HTML},
         )
@@ -53,7 +53,7 @@ class TestRerender:
         task_id = str(uuid.uuid4())
         await seed_task(task_id)
         res = await authed_client.post(
-            f"/tasks/{task_id}/formats/does-not-exist/rerender",
+            f"/api/tasks/{task_id}/formats/does-not-exist/rerender",
             headers={"x-api-key": "test-key"},
             json={"html": _HTML},
         )
@@ -63,7 +63,7 @@ class TestRerender:
         self, authed_client: AsyncClient, _mock_services
     ):
         res = await authed_client.post(
-            f"/tasks/{str(uuid.uuid4())}/formats/instagram-square/rerender",
+            f"/api/tasks/{str(uuid.uuid4())}/formats/instagram-square/rerender",
             headers={"x-api-key": "test-key"},
             json={"html": _HTML},
         )
@@ -75,7 +75,7 @@ class TestRerender:
         task_id = str(uuid.uuid4())
         await seed_task(task_id)
         res = await authed_client.post(
-            f"/tasks/{task_id}/formats/instagram-square/rerender",
+            f"/api/tasks/{task_id}/formats/instagram-square/rerender",
             headers={"x-api-key": "test-key"},
             json={
                 "html": (

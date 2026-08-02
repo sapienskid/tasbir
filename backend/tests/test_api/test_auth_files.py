@@ -18,15 +18,15 @@ async def _write_output(task_id: str, fmt: str = "instagram-square") -> None:
 
 class TestAuth:
     async def test_missing_key_rejected(self, authed_client: AsyncClient):
-        res = await authed_client.get("/tasks")
+        res = await authed_client.get("/api/tasks")
         assert res.status_code == 401
 
     async def test_invalid_key_rejected(self, authed_client: AsyncClient):
-        res = await authed_client.get("/tasks", headers={"x-api-key": "wrong"})
+        res = await authed_client.get("/api/tasks", headers={"x-api-key": "wrong"})
         assert res.status_code == 401
 
     async def test_valid_key_accepted(self, authed_client: AsyncClient):
-        res = await authed_client.get("/tasks", headers={"x-api-key": "test-key"})
+        res = await authed_client.get("/api/tasks", headers={"x-api-key": "test-key"})
         assert res.status_code == 200
         assert isinstance(res.json(), list)
 
@@ -42,19 +42,19 @@ class TestServeAndDelete:
         await _write_output(task_id)
         headers = {"x-api-key": "test-key"}
 
-        res = await authed_client.get(f"/tasks/{task_id}/files", headers=headers)
+        res = await authed_client.get(f"/api/tasks/{task_id}/files", headers=headers)
         assert res.status_code == 200
         names = [f["filename"] for f in res.json()]
         assert "instagram-square.png" in names
 
         # Default: files persist — a second download still succeeds.
         first = await authed_client.get(
-            f"/tasks/{task_id}/files/instagram-square.png", headers=headers
+            f"/api/tasks/{task_id}/files/instagram-square.png", headers=headers
         )
         assert first.status_code == 200
         assert first.content == b"PNGDATA"
         second = await authed_client.get(
-            f"/tasks/{task_id}/files/instagram-square.png", headers=headers
+            f"/api/tasks/{task_id}/files/instagram-square.png", headers=headers
         )
         assert second.status_code == 200
         assert second.content == b"PNGDATA"
@@ -66,14 +66,14 @@ class TestServeAndDelete:
         headers = {"x-api-key": "test-key"}
 
         res = await authed_client.get(
-            f"/tasks/{task_id}/files/instagram-square.png?consume=true", headers=headers
+            f"/api/tasks/{task_id}/files/instagram-square.png?consume=true", headers=headers
         )
         assert res.status_code == 200
         assert res.content == b"PNGDATA"
 
         # Consumed → gone.
         res = await authed_client.get(
-            f"/tasks/{task_id}/files/instagram-square.png", headers=headers
+            f"/api/tasks/{task_id}/files/instagram-square.png", headers=headers
         )
         assert res.status_code == 404
 
@@ -82,7 +82,7 @@ class TestServeAndDelete:
         await seed_task(task_id)
         await _write_output(task_id)
         res = await authed_client.get(
-            f"/tasks/{task_id}/files/../../etc/passwd", headers={"x-api-key": "test-key"}
+            f"/api/tasks/{task_id}/files/../../etc/passwd", headers={"x-api-key": "test-key"}
         )
         assert res.status_code == 404
 
@@ -93,9 +93,9 @@ class TestServeAndDelete:
         out_dir = Path(get_settings().output_dir) / task_id
         assert out_dir.exists()
 
-        res = await authed_client.delete(f"/tasks/{task_id}", headers={"x-api-key": "test-key"})
+        res = await authed_client.delete(f"/api/tasks/{task_id}", headers={"x-api-key": "test-key"})
         assert res.status_code == 204
         assert not out_dir.exists()
 
-        res = await authed_client.get(f"/tasks/{task_id}", headers={"x-api-key": "test-key"})
+        res = await authed_client.get(f"/api/tasks/{task_id}", headers={"x-api-key": "test-key"})
         assert res.status_code == 404
