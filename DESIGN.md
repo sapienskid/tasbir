@@ -205,12 +205,17 @@ data/
 │   ├── tokens.yaml               ← Design tokens
 │   ├── platforms.yaml            ← Platform dimensions
 │   └── campaigns.yaml            ← Campaign presets
-└── output/{task_id}/
+└── output/{task_id}/             ← EPHEMERAL — one-time download + TTL sweep
     ├── instagram-square.html     ← Generated HTML (open in browser)
     ├── instagram-square.png      ← Rendered PNG (share ready)
     ├── linkedin-post.html
     └── linkedin-post.png
 ```
+
+Artifacts are delivered once over HTTP (`GET /tasks/{id}/files/{filename}`
+streams then deletes) and a hourly Celery beat task sweeps everything older
+than `OUTPUT_TTL_HOURS` (default 24h), bounding disk and DB growth. See
+ADR-0007.
 
 ## HTML Render & Verification Pipeline
 
@@ -284,12 +289,19 @@ backend/config/prompts/
 9. **Automatic KaTeX Injection**: Math spans auto-detect and inject KaTeX CDN — no manual setup.
 10. **Deterministic Font Loading**: Font families auto-quoted; `document.fonts.ready` awaited before screenshots.
 11. **Overflow Is a Hard Failure**: DOM-based overflow detection fails + retries any clipped text.
+12. **Fail-Closed Auth**: `x-api-key` required on all API routes (401 if `API_KEYS` unset) + per-key Redis token-bucket rate limiting.
+13. **Render Service Is Internal**: Playwright is not published to the host; it requires `RENDER_SERVICE_KEY` and runs with same-origin security enabled.
+14. **SSRF-Guarded Image Fetch**: The worker validates every image URL (block loopback/link-local/metadata, allow LAN, size/redirect caps).
+15. **Sanitized LLM/Edited HTML**: Designer output and rerender payloads pass through the HTML sanitizer before rendering/saving.
+16. **Ephemeral Artifacts**: Files are served once then deleted; an hourly TTL sweep bounds disk and DB growth (ADR-0007).
+17. **Manual Edit → Re-render**: `POST /tasks/{id}/formats/{fmt}/rerender` renders edited HTML without the designer LLM; vision audit is opt-in (ADR-0010).
 
 ## Docker & Deployment
 
-- `backend/Dockerfile` — API/worker image: `python:3.12-slim`, deps pinned in `pyproject.toml`/`requirements.txt`, **no** `playwright` package (rendering goes over HTTP to the render service).
+- `backend/Dockerfile` — API/worker/beat image: `python:3.12-slim`, deps pinned in `pyproject.toml`/`requirements.txt`, **no** `playwright` package (rendering goes over HTTP to the render service).
 - `backend/Dockerfile.playwright` — render service: `python:3.12-slim-bookworm` + only the **chromium headless shell** (`--only-shell`), browsers at `/ms-playwright`. ~1.2GB vs 3.6GB for the official image.
+- `frontend/Dockerfile` — Node build stage → static `dist/`, staged into a shared `frontend-dist` volume that the API mounts at `/app/static` and serves (SPA fallback).
 - `backend/.dockerignore` — excludes `.venv`, `data/`, `tests/`, `tailwindcss` from the build context.
-- `docker-compose.yml` — healthchecks on all services, API runs `--workers 2`, worker waits for Playwright healthy, config + data bind-mounted for config-driven control.
+- `docker-compose.yml` — healthchecks on all services, API runs `--workers 2`, worker waits for Playwright healthy, `beat` runs the hourly retention sweep, config + data bind-mounted for config-driven control, Playwright has **no host port**.
 - Runtime SQLite DB (`backend/data/tasbir.db`) and `backend/data/output/` are gitignored and recreated on boot.
 10. **Image Embedding**: Images downloaded and base64-embedded into HTML at pipeline runtime.

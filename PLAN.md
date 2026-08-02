@@ -73,6 +73,15 @@ n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → HTML + PNG
 - [x] Docker image slimming (~55% smaller stack; chromium headless shell only)
 - [ ] Mermaid diagram rendering support
 
+### Phase 7: Hardening + Studio (v3.1)
+- [x] Security hardening — fail-closed API keys, per-key rate limit, SSRF guard,
+      HTML sanitizer, input caps, CORS, internal-only render service, verifier honesty
+- [x] Ephemeral artifact delivery — serve-and-delete endpoints + hourly TTL sweep
+- [x] Manual edit → re-render endpoint (`POST /tasks/{id}/formats/{fmt}/rerender`)
+- [x] Tasbir Studio — React + Vite + shadcn/ui SPA (task list, Monaco editor,
+      PNG preview, QC report, downloads, delete) served by FastAPI
+- [x] ADRs 0007–0010 (ephemeral delivery, auth/trust boundary, SSRF policy, rerender)
+
 ## What Was Removed From v2
 
 | Removed | Replaced By |

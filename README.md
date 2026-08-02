@@ -13,11 +13,45 @@ Self-hosted via Docker.
 
 ```bash
 cp .env.example .env
-# Edit .env — set GEMINI_API_KEY (free from aistudio.google.com)
+# Edit .env — set GEMINI_API_KEY + API_KEYS (and RENDER_SERVICE_KEY for Docker)
 docker compose up -d --build
 ```
 
-Open http://localhost:8000/docs for the API.
+Open http://localhost:8000 — the Tasbir Studio SPA (task list, HTML editor,
+PNG preview, re-render, QC) is served by the API itself. API docs at
+http://localhost:8000/docs.
+
+## Tasbir Studio
+
+A React + Vite + shadcn/ui SPA served same-origin by FastAPI:
+- Task list with status polling and delete
+- Per-format Monaco HTML editor + live PNG preview + QC report
+- **Re-render** (edit → render → deterministic QC) and **Audit** (opt-in vision QC)
+- One-time **Download PNG/HTML** (files are deleted after delivery)
+- API key stored in localStorage (`tasbir:apikey:v1`)
+
+Artifacts are **ephemeral**: files are served once then deleted, and an
+hourly sweep removes anything older than `OUTPUT_TTL_HOURS` (default 24h).
+
+## Hot Reload (Development)
+
+```bash
+# One-time: set API_KEYS + RENDER_SERVICE_KEY in .env
+cp .env.example .env   # then edit
+
+# Live-reload stack: uvicorn --reload (api/playwright),
+# watchfiles-restarted celery (worker/beat), Vite dev server (frontend)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
+# UI at http://localhost:5173 · API at http://localhost:8000
+```
+
+The dev overlay bind-mounts `./backend` and `./frontend` into the containers,
+so backend code, prompts, YAML design files, and React source all hot-reload.
+The Vite dev server proxies `/tasks` + `/generate` to the `api` service.
+Stop it with `docker compose -f docker-compose.yml -f docker-compose.dev.yml down`.
+
+For a normal (non-reload) deploy: `docker compose up -d --build`.
 
 ## Architecture
 
@@ -55,9 +89,9 @@ metadata, handle).
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| API | http://localhost:8000 | FastAPI (trigger generation, task status) |
+| API + Studio | http://localhost:8000 | FastAPI + Tasbir Studio SPA (same origin) |
 | API docs | http://localhost:8000/docs | OpenAPI/Swagger |
-| Playwright | http://localhost:4000 | Headless Chromium (HTML render + DOM extraction) |
+| Playwright | internal (`tasbir` network) | Headless Chromium (render + DOM extraction, key-authed) |
 
 ## Production
 
@@ -88,8 +122,9 @@ python -m pytest
 ## Stack
 
 - **Backend**: Python 3.12+ (FastAPI, LangGraph, Celery, Playwright)
-- **Rendering**: Playwright (headless Chromium, Docker)
-- **Queue**: Celery + Redis
-- **Storage**: SQLite (tasks) + `data/output/{task_id}/` (HTML, PNG)
+- **Frontend**: React 19 + Vite + shadcn/ui + SWR + Monaco (Tasbir Studio)
+- **Rendering**: Playwright (headless Chromium, Docker, internal-only)
+- **Queue**: Celery + Redis (worker + beat for retention sweep)
+- **Storage**: SQLite (tasks) + `data/output/{task_id}/` (HTML, PNG — ephemeral)
 - **AI**: Gemini 3.5 Flash Lite (free tier)
 - **Config**: YAML (brand, tokens, platforms, campaigns, design-instruction)

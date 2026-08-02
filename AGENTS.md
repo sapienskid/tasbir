@@ -58,30 +58,35 @@ renders to PNG for visual verification.
 ### Current State
 
 **What works**:
-- FastAPI (`POST /generate`, `GET /tasks/{id}`, `GET /health`)
-- Celery + Redis task queue
+- FastAPI (`POST /generate`, `GET /tasks/{id}`, `GET /health`, file delivery, re-render)
+- Celery + Redis task queue (+ hourly `retention.sweep_expired` beat)
 - SQLite task tracking (GenerationTask + AuditLog models)
 - LangGraph pipeline (strategist → copywriter → process_all_formats)
-- Playwright service (HTML rendering + DOM extraction + overflow detection)
+- Playwright service (HTML rendering + DOM extraction + overflow detection, internal-only + shared-secret auth)
 - YAML prompt configs (`config/prompts/*.yaml`)
 - YAML design system (`data/design_system/*.yaml`) — 3 type voices, layout archetypes
 - LLM client (Gemini 3.5 Flash Lite via OpenRouter fallback)
 - KaTeX automatic injection for math rendering
-- Image embedding (download, base64 encode, inject into HTML)
+- Image embedding (SSRF-guarded download, base64 encode, inject into HTML)
 - Campaign presets (tone, ground, language) + category taxonomy
 - Deterministic QC: emoji/hex/footer/category/display-face/canvas checks + DOM overflow
 - Deterministic font loading (auto-quoted families, `document.fonts.ready`)
+- Security hardening: fail-closed API keys, per-key Redis rate limit, SSRF guard, HTML sanitizer, input caps
+- Ephemeral artifact delivery (serve-and-delete + `OUTPUT_TTL_HOURS` sweep)
+- Manual edit → re-render endpoint (`POST /tasks/{id}/formats/{fmt}/rerender`)
+- **Tasbir Studio**: React + Vite + shadcn/ui SPA served by FastAPI (Monaco editor, PNG preview, QC report)
 
 ### Stack
 
 | Component | Technology |
 |-----------|-----------|
 | API | FastAPI (Python) |
-| Task Queue | Celery + Redis |
+| Task Queue | Celery + Redis (worker + beat) |
 | Pipeline | LangGraph (3 nodes + per-format chain) |
 | LLM | Gemini 3.5 Flash Lite (free tier) |
-| Rendering | Playwright (headless Chromium, slim image) |
+| Rendering | Playwright (headless Chromium, slim image, internal network) |
 | Database | SQLite (aiosqlite, create_all on boot) |
+| Frontend | React 19 + Vite + shadcn/ui + SWR + Monaco (Tasbir Studio) |
 | Workflow | n8n (triggers from Ghost CMS) |
 
 ### Cost Target
@@ -95,16 +100,19 @@ Zero API costs:
 
 - **Name**: Tasbir ("depiction" in Arabic)
 - **Purpose**: AI-powered social media asset pipeline that outputs HTML + PNG
-- **Stack**: Python (FastAPI, LangGraph, Celery) + Docker + Playwright
-- **Storage**: SQLite (tasks/audit) + `data/output/{task_id}/` (HTML, PNG)
+- **Stack**: Python (FastAPI, LangGraph, Celery) + React (Vite/shadcn) + Docker + Playwright
+- **Storage**: SQLite (tasks/audit) + `data/output/{task_id}/` (HTML, PNG, ephemeral)
 
 ## Architecture Overview
 
 ```
 n8n Webhook → FastAPI (POST /generate) → Celery Worker → LangGraph Pipeline → HTML + PNG
                   │                                                        │
-            GET /tasks/{id}                                     Files saved in data/output/{task_id}/
-            (n8n polls status)                                  (.html for review, .png for sharing)
+            GET /tasks/{id}                              Files saved in data/output/{task_id}/
+            (n8n polls status)                           (.html for review, .png for sharing)
+                  │                                        served once → deleted (one-time download)
+            Tasbir Studio (React SPA, same origin) ── POST /tasks/{id}/formats/{fmt}/rerender
+            edit HTML → re-render → preview + QC
 ```
 
 ### Pipeline (4 Agent Nodes)
@@ -436,13 +444,13 @@ tasbir/
 │   │
 │   ├── app/
 │   │   ├── __init__.py
-│   │   ├── main.py                      ← FastAPI app entry (create_all on boot)
+│   │   ├── main.py                      ← FastAPI app entry (create_all on boot, SPA mount)
 │   │   ├── config.py                    ← Pydantic Settings (env-based)
 │   │   │
 │   │   ├── api/
 │   │   │   ├── health.py                ← GET /health
 │   │   │   ├── generate.py              ← POST /generate
-│   │   │   └── tasks.py                 ← GET /tasks/{id}, DELETE
+│   │   │   └── tasks.py                 ← GET /tasks/{id}, DELETE, files (serve-and-delete), rerender
 │   │   │
 │   │   ├── agents/
 │   │   │   ├── orchestrator/
@@ -451,7 +459,7 @@ tasbir/
 │   │   │   │   └── nodes/
 │   │   │   │       ├── strategist.py    ← LLM node (category + ground)
 │   │   │   │       ├── copywriter.py    ← LLM node (parallel, length limits)
-│   │   │   │       ├── designer.py      ← LLM node (layout archetype)
+│   │   │   │       ├── designer.py      ← LLM node (layout archetype, sanitized output)
 │   │   │   │       ├── quality_check.py ← Verifier (deterministic + overflow + vision)
 │   │   │   │       └── renderer.py      ← HTML persistence (tokens/fonts/KateX/images)
 │   │   │   └── prompts/
@@ -461,11 +469,14 @@ tasbir/
 │   │   │   ├── llm.py                   ← Gemini/OpenRouter client
 │   │   │   ├── tokens.py                ← Token/brand/campaign/platform YAML loader + semantic vars
 │   │   │   ├── design_instruction.py    ← Swiss style loader + font link builder + archetypes
-│   │   │   ├── formats.py               ← Format dimension helper
-│   │   │   ├── image_loader.py          ← Image download + base64 embed
+│   │   │   ├── formats.py               ← Format dimension helper + platform validation
+│   │   │   ├── image_loader.py          ← SSRF-guarded image download + base64 embed
+│   │   │   ├── ssrf.py                  ← SSRF guard (private/loopback/metadata block, LAN allow)
+│   │   │   ├── sanitizer.py             ← HTML sanitizer (strict / preserve-system modes)
+│   │   │   ├── artifacts.py             ← Output path resolution + serve-and-delete helpers
 │   │   │   ├── dom_extractor.py         ← Playwright DOM extraction + overflow detection
 │   │   │   ├── renderer.py              ← Playwright PNG render client
-│   │   │   └── render_server.py         ← Playwright HTTP microservice (Docker)
+│   │   │   └── render_server.py         ← Playwright HTTP microservice (Docker, key-authed)
 │   │   │
 │   │   ├── models/
 │   │   │   ├── __init__.py              ← Base + model imports
@@ -479,19 +490,43 @@ tasbir/
 │   │   │       └── audit_logs.py
 │   │   │
 │   │   ├── tasks/
-│   │   │   ├── celery_app.py            ← Celery config
-│   │   │   └── generate.py              ← Celery task (loads config, runs pipeline)
+│   │   │   ├── celery_app.py            ← Celery config (+ hourly beat schedule)
+│   │   │   ├── generate.py              ← Celery task (loads config, runs pipeline)
+│   │   │   └── retention.py             ← TTL sweep (expired outputs + task rows)
 │   │   │
 │   │   └── core/
 │   │       ├── dependencies.py          ← FastAPI deps
-│   │       ├── security.py              ← API key verification
+│   │       ├── security.py              ← API key verification (fails closed)
+│   │       ├── ratelimit.py             ← Redis token-bucket rate limiter
 │   │       ├── errors.py                ← Error handling
 │   │       └── logging.py               ← Logging config
 │   │
 │   └── tests/
-│       ├── test_api/                    ← Route tests
+│       ├── test_api/                    ← Route tests (auth, files, rerender, rate limit)
 │       ├── test_agents/                 ← Graph & node tests
-│       └── test_services/               ← Service tests
+│       └── test_services/               ← Service tests (SSRF, sanitizer, retention, artifacts)
+│
+├── frontend/
+│   ├── Dockerfile                       ← Node build → static output (staged into volume)
+│   ├── components.json                  ← shadcn/ui config (new-york, neutral)
+│   ├── package.json / vite.config.ts
+│   ├── src/
+│   │   ├── main.tsx / App.tsx           ← Router + SWRConfig + ThemeProvider
+│   │   ├── lib/
+│   │   │   ├── api.ts                   ← Typed API client (API key header, fetch helpers)
+│   │   │   ├── theme.tsx                ← Light/dark/system theme provider
+│   │   │   └── utils.ts                 ← cn() from shadcn
+│   │   ├── hooks/
+│   │   │   └── use-task.ts              ← SWR polling hooks (task + files)
+│   │   ├── components/
+│   │   │   ├── ui/                      ← shadcn-generated components only
+│   │   │   ├── layout/                  ← AppShell, ThemeToggle
+│   │   │   ├── tasks/                   ← StatusBadge, NewTaskDialog, TaskListPage
+│   │   │   ├── editor/                  ← HtmlEditor (lazy Monaco), PreviewPane, QCReport
+│   │   │   └── settings/                ← ApiKeyDialog
+│   │   └── pages/
+│   │       ├── task-list.tsx            ← Task table (lazy)
+│   │       └── task-detail.tsx          ← Editor + preview + rerender + QC
 ```
 
 ## Common Tasks For AI Agents
@@ -556,8 +591,28 @@ containers at `/app/config/prompts`.)
 
 ### Testing
 ```bash
+# Backend (pytest)
 cd backend && .venv/bin/python -m pytest
+
+# Frontend (typecheck + build)
+cd frontend && npm run build
 ```
+
+### Running Tasbir Studio locally
+```bash
+cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
+cd frontend && npm run dev   # proxies /generate,/tasks,/health → :8000
+```
+The API requires `x-api-key`; set `API_KEYS=...` in `backend/.env`, then paste
+the key into the Studio header dialog (stored in localStorage under `tasbir:apikey:v1`).
+
+### Rebuilding for Docker
+```bash
+docker compose up -d --build
+```
+The `frontend` service builds the SPA and stages `dist/` into a shared volume
+that the `api` service mounts at `/app/static`. `beat` runs the hourly
+`retention.sweep_expired` sweep.
 
 ## API Endpoints
 
@@ -566,7 +621,6 @@ cd backend && .venv/bin/python -m pytest
 {
   "content": "Full article text...",
   "title": "Article Title",
-  "url": "https://example.com/article",
   "excerpt": "Short summary...",
   "tags": ["ai", "math"],
   "platforms": ["instagram-square", "linkedin-post"],
@@ -582,11 +636,12 @@ cd backend && .venv/bin/python -m pytest
       "description": "Place this near the headline",
       "placement": "auto"
     }
-  ],
-  "webhook_url": "https://n8n.yourdomain.com/callback"
+  ]
 }
 ```
 Response: `{"task_id": "uuid", "status": "pending"}`
+
+Requires `x-api-key` header. Rate-limited per key (default 30 req/min).
 
 ### GET /tasks/{id}
 Response:
@@ -620,6 +675,20 @@ Response:
 }
 ```
 
+### GET /tasks/{id}/files
+Lists remaining artifacts: `[{"format", "ext", "size", "filename"}, ...]`.
+
+### GET /tasks/{id}/files/{filename}
+Streams an artifact then **deletes it** (one-time download; second GET → 404).
+
+### POST /tasks/{id}/formats/{fmt}/rerender
+```json
+{ "html": "<!DOCTYPE html>…" }
+```
+Re-injects tokens/fonts/KaTeX/images, renders PNG, runs deterministic + overflow
+checks. `?audit=true` also runs the vision audit (opt-in to save quota). Skips
+the designer LLM. Response: `{"format", "pass", "quality": {"score", "issues", "critique"}, "png_b64"}`.
+
 ### GET /health
 Response: `{"status": "ok"}`
 
@@ -631,5 +700,15 @@ Response: `{"status": "ok"}`
 | `OPENROUTER_API_KEY` | No | — | Fallback LLM provider |
 | `REDIS_URL` | Yes | `redis://localhost:6379/0` | Celery broker |
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///data/tasbir.db` | SQLite for task tracking |
-| `API_KEYS` | No | — | Comma-separated API keys for auth |
+| `API_KEYS` | Yes* | — | Comma-separated API keys (auth fails closed if empty) |
+| `RATE_LIMIT_PER_MIN` | No | `30` | Per-key requests/minute |
+| `RENDER_SERVICE_KEY` | No* | — | Shared secret with the internal Playwright service (Docker) |
+| `IMAGE_ALLOW_HOSTS` | No | — | Extra trusted hosts for image fetch (SSRF opt-in) |
+| `IMAGE_MAX_BYTES` | No | `10485760` | Max bytes per downloaded image |
+| `IMAGE_MAX_REDIRECTS` | No | `2` | Max image-fetch redirects |
+| `OUTPUT_TTL_HOURS` | No | `24` | Artifact + task retention window (hours) |
+| `SKIP_VERIFY` | No | `false` | Dev only: auto-pass the vision verifier |
+| `CORS_ORIGINS` | No | `http://localhost:5173` | Allowed origins |
 | `LOG_LEVEL` | No | `info` | Logging level |
+
+\* Required for Docker deployments (`API_KEYS`, `RENDER_SERVICE_KEY`).
