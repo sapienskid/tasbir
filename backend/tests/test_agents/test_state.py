@@ -1,6 +1,6 @@
 """Tests for v3 GenerationState — state schema, initial_state factory, merge logic."""
 
-from app.agents.orchestrator.state import FormatTask, GenerationState, initial_state, merge_format_tasks
+from app.agents.orchestrator.state import FormatTask, initial_state, merge_format_tasks
 
 
 def test_initial_state_defaults():

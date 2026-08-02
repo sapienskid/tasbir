@@ -1,0 +1,167 @@
+"""Template library tests — catalog, selection, Jinja2 fill, slotize, promote."""
+
+
+from app.services.templates import (
+    build_template_context,
+    extract_slots,
+    format_family,
+    load_template_catalog,
+    render_template_file,
+    select_template,
+    slotize_html,
+)
+
+FOOTER = {"left": "SABIN POKHAREL", "right": "@SAPIENSKID"}
+COPY = {
+    "headline": "A Quiet Column of Type",
+    "subhead": "White space is not emptiness; it is the rhythm between ideas.",
+    "body": "A grid sets order; a measure sets pace. Constrain the line, free the reader.",
+    "tagline": "No. 12",
+    "badge": None,
+}
+DIMS = {
+    "square": (1080, 1080),
+    "portrait": (1080, 1350),
+    "story": (1080, 1920),
+    "landscape": (1200, 627),
+}
+
+
+def _render(tid, family, ground="white", copy=None, seed="test", has_image=False):
+    entry = load_template_catalog()["templates"][tid]
+    w, h = DIMS[family]
+    ctx = build_template_context(
+        copy or COPY, "WRITING", ground, FOOTER, w, h, has_image, seed=seed
+    )
+    return render_template_file(entry["file"], ctx)
+
+
+class TestCatalog:
+    def test_all_templates_render(self):
+        catalog = load_template_catalog()["templates"]
+        assert len(catalog) >= 10
+        for tid, entry in catalog.items():
+            family = entry["family"]
+            assert family in DIMS
+            html = _render(tid, family)
+            assert "<style" in html
+            assert "data-slot=" in html
+            assert "var(--color-" in html
+
+    def test_canvas_size_is_parametric(self):
+        html = _render("square-editorial-stack", "square")
+        assert "width: 1080px" in html
+        assert "height: 1080px" in html
+
+
+class TestSelection:
+    def test_family_filter(self):
+        selection = select_template("square", "white", "NOTE", "", "seed")
+        assert selection is not None
+        assert selection[0].startswith("square-")
+
+    def test_ground_filter(self):
+        selection = select_template("square", "black", "NOTE", "", "seed")
+        assert selection is not None
+        # NOTE + black should prefer index-numeral (weighted/category boost)
+        assert selection[0] == "square-index-numeral"
+
+    def test_no_match_for_unknown_family(self):
+        assert select_template("octagonal", "white", "", "", "seed") is None
+
+    def test_category_boost(self):
+        selection = select_template("landscape", "white", "PORTFOLIO", "", "seed")
+        assert selection[0] == "landscape-split"
+
+    def test_hint_boost(self):
+        selection = select_template("square", "white", "", "note-card", "seed")
+        assert selection[0] == "square-note-card"
+
+    def test_deterministic(self):
+        a = select_template("square", "white", "", "", "the-same-seed")
+        b = select_template("square", "white", "", "", "the-same-seed")
+        assert a == b
+
+    def test_excludes_recent(self):
+        first = select_template(
+            "square", "white", "", "", "seed", exclude={"square-editorial-stack"}
+        )
+        assert first is not None
+
+
+class TestRendering:
+    def test_copy_is_html_escaped(self):
+        html = _render(
+            "square-editorial-stack",
+            "square",
+            copy={**COPY, "headline": "<script>alert(1)</script>"},
+        )
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html
+
+    def test_optional_image_slot(self):
+        with_img = _render("portrait-index", "portrait", has_image=True)
+        assert "data-image-key=" in with_img
+        without_img = _render("portrait-index", "portrait", has_image=False)
+        assert "data-image-key=" not in without_img
+
+    def test_black_ground_attribute(self):
+        html = _render("square-note-card", "square", ground="black")
+        assert 'data-ground="black"' in html
+
+
+class TestPromotion:
+    def test_extract_slots(self):
+        html = _render("square-index-numeral", "square")
+        slots = extract_slots(html)
+        assert slots["headline"] == COPY["headline"]
+        assert slots["footer_left"] == "SABIN POKHAREL"
+
+    def test_slotize_roundtrip(self):
+        tid, family = "square-index-numeral", "square"
+        html = _render(tid, family, ground="black")
+        tpl = slotize_html(html)
+        assert "{{ headline }}" in tpl
+        assert 'data-slot="headline"' in tpl
+        assert "{% if ground" in tpl
+        assert "<!DOCTYPE html>" in tpl
+
+    def test_slotize_parameterizes_canvas(self):
+        html = _render("landscape-split", "landscape")
+        tpl = slotize_html(html)
+        assert "width: {{ width }}px" in tpl
+        assert "height: {{ height }}px" in tpl
+
+    def test_slotize_strips_injected_blocks(self):
+        html = _render("square-editorial-stack", "square")
+        injected = (
+            "<head><style>:root { --color-bg: #fff; }</style>"
+            '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter">'
+            '<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>'
+        )
+        combined = injected + html
+        tpl = slotize_html(combined)
+        assert ":root" not in tpl
+        assert "#fff" not in tpl
+        assert "fonts.googleapis" not in tpl
+        assert "cdn.jsdelivr.net" not in tpl
+
+    def test_render_promoted_template_roundtrip(self):
+        from jinja2 import Environment
+
+        html = _render("landscape-split", "landscape")
+        tpl = slotize_html(html)
+        env = Environment(autoescape=True)
+        w, h = DIMS["landscape"]
+        ctx = build_template_context(COPY, "WRITING", "white", FOOTER, w, h, False, seed="x")
+        out = env.from_string(tpl).render(**ctx)
+        assert COPY["headline"] in out
+        assert COPY["body"] in out
+
+
+def test_format_family_mapping():
+    assert format_family("instagram-square") == "square"
+    assert format_family("instagram-portrait") == "portrait"
+    assert format_family("instagram-story") == "story"
+    assert format_family("linkedin-post") == "landscape"
+    assert format_family("twitter-card") == "landscape"
