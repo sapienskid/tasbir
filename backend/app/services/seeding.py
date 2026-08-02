@@ -130,3 +130,94 @@ async def seed_default_design_system(pool: async_sessionmaker[AsyncSession]) -> 
         log.info(
             "[seed] Created default design system + %d templates", seeded
         )
+
+
+async def sync_seed_design_system(pool: async_sessionmaker[AsyncSession]) -> dict:
+    """Reconcile seed-source rows with the canonical YAML + template files.
+
+    The DB is the source of truth at runtime, but the YAML/template files are
+    the canonical seed. This upserts the ``default`` design system and every
+    ``source == "seed"`` template from those files so file edits are reflected.
+    User-created (manual/promoted/ai) rows and ``is_active`` state are preserved.
+    Returns a summary of what changed.
+    """
+    from app.db.repositories.design_systems import DesignSystemRepository
+    from app.db.repositories.templates import TemplateRepository
+
+    settings = get_settings()
+    summary = {"design_system": [], "templates_updated": [], "templates_created": []}
+
+    brand_data = load_brand(settings.brand_path)
+    brand_design = load_brand_design(settings.brand_path)
+    tokens = load_tokens(settings.tokens_path)
+    campaigns = _load_campaigns(settings.campaigns_path)
+    di_config = load_design_instruction(
+        Path(settings.design_system_dir) / "design-instruction.yaml"
+    )
+    categories = (
+        brand_design["categories"]
+        if isinstance(brand_design["categories"], list)
+        else DEFAULT_CATEGORIES
+    )
+
+    async with pool() as session:
+        ds_repo = DesignSystemRepository(session)
+        ds = await ds_repo.get_by_id(_DEFAULT_ID)
+        if ds is None:
+            await seed_default_design_system(pool)
+            summary["design_system"].append("created default")
+            return summary
+
+        desired = {
+            "name": "Default",
+            "brand": brand_data.get("brand", {}),
+            "footer": brand_design.get("footer", {"left": "", "right": ""}),
+            "categories": categories,
+            "overrides": brand_data.get("overrides") or {},
+            "tokens": tokens,
+            "token_roles": dict(SEMANTIC_VAR_ROLES),
+            "campaigns": campaigns,
+            "design_instruction": di_config,
+        }
+        changed = {k: v for k, v in desired.items() if getattr(ds, k) != v}
+        if changed:
+            await ds_repo.update(_DEFAULT_ID, changed)
+            summary["design_system"] = list(changed.keys())
+
+        tpl_repo = TemplateRepository(session)
+        catalog = load_template_catalog().get("templates", {})
+        for tid, entry in catalog.items():
+            rel_file = entry.get("file", "")
+            file_path = templates_dir() / rel_file
+            if not file_path.is_file():
+                continue
+            html = file_path.read_text(encoding="utf-8")
+            image_slots, has_logo = scan_template_features(html)
+            desired = {
+                "design_system_id": _DEFAULT_ID,
+                "family": entry.get("family", "square"),
+                "grounds": entry.get("grounds", ["white", "black"]),
+                "categories": entry.get("categories", []),
+                "hint_tags": entry.get("hint_tags", []),
+                "weight": float(entry.get("weight", 1.0)),
+                "description": entry.get("description", ""),
+                "html": html,
+                "image_slots": image_slots,
+                "has_logo_slot": has_logo,
+            }
+            row = await tpl_repo.get_by_id(tid)
+            if row is None:
+                await tpl_repo.create(
+                    {**desired, "id": tid, "name": tid, "source": "seed", "is_active": True}
+                )
+                summary["templates_created"].append(tid)
+                continue
+            # Only reconcile rows that came from the seed — never user rows.
+            if row.source != "seed":
+                continue
+            diff = {k: v for k, v in desired.items() if getattr(row, k) != v}
+            if diff:
+                await tpl_repo.update(tid, diff)
+                summary["templates_updated"].append(tid)
+
+    return summary
