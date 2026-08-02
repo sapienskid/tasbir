@@ -136,7 +136,16 @@ def family_of(platform_id: str) -> str:
     row = get_platform(platform_id)
     if row and row.get("family") in _VALID_FAMILIES:
         return row["family"]
-    dims = get_platform_dims(platform_id)
+    # Carousel slide ids (instagram-carousel-N / instagram-carousel-portrait-N)
+    # resolve to their base platform's family.
+    import re as _re
+
+    m = _re.match(r"^(.+)-(\d+)$", platform_id)
+    base = m.group(1) if m else platform_id
+    row = get_platform(base)
+    if row and row.get("family") in _VALID_FAMILIES:
+        return row["family"]
+    dims = get_platform_dims(base)
     if dims:
         w, h = dims
         return "square" if h <= w else "portrait"

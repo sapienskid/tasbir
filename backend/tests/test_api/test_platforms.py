@@ -25,7 +25,13 @@ async def test_platforms_crud(authed_client):
     r = await authed_client.post(
         "/api/platforms",
         headers=H,
-        json={"id": "mastodon-post", "name": "Mastodon", "width": 1200, "height": 630, "family": "landscape"},
+        json={
+            "id": "mastodon-post",
+            "name": "Mastodon",
+            "width": 1200,
+            "height": 630,
+            "family": "landscape",
+        },
     )
     assert r.status_code == 201, r.text
 
@@ -79,6 +85,9 @@ async def test_new_platform_usable_by_pipeline(authed_client):
 def test_format_family_uses_db_family():
     assert format_family("linkedin-post") == "landscape"
     assert format_family("instagram-carousel-portrait") == "portrait"
+    # Carousel slide ids resolve to their base platform's family.
+    assert format_family("instagram-carousel-1") == "square"
+    assert format_family("instagram-carousel-portrait-2") == "portrait"
 
 
 def test_platform_dims_resolve():
