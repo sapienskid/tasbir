@@ -25,6 +25,7 @@ from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
 from app.agents.prompts.registry import load_prompt
+from app.config import get_settings
 from app.services.design_instruction import (
     build_google_fonts_link,
     format_design_instruction_block,
@@ -32,9 +33,13 @@ from app.services.design_instruction import (
     load_design_instruction,
     substitute_image_keys,
 )
-from app.services.dom_extractor import render_to_png, detect_overflow
+from app.services.dom_extractor import detect_overflow, render_to_png
 from app.services.formats import get_format_info
-from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html, inject_katex_into_html
+from app.services.tokens import (
+    DEFAULT_TOKEN_VALUES,
+    inject_katex_into_html,
+    inject_tokens_into_html,
+)
 
 log = logging.getLogger(__name__)
 
@@ -95,23 +100,16 @@ async def _call_vision_llm(
     max_tokens: int = 1000,
 ) -> str:
     """Call Gemini Vision with an image + text prompt via langchain_google_genai."""
-    from app.config import get_settings
-
     settings = get_settings()
     api_key = settings.gemini_api_key
 
     if not api_key:
-        log.warning("[verifier] No Gemini API key — returning auto-pass")
-        return json.dumps({
-            "pass": True,
-            "score": 75,
-            "issues": ["Verification skipped — no API key"],
-            "critique": "Auto-passed: Gemini API key not configured.",
-        })
+        log.warning("[verifier] No Gemini API key — raising (no silent auto-pass)")
+        raise RuntimeError("Gemini API key not configured for visual verification")
 
     try:
-        from langchain_google_genai import ChatGoogleGenerativeAI
         from langchain_core.messages import HumanMessage, SystemMessage
+        from langchain_google_genai import ChatGoogleGenerativeAI
 
         llm = ChatGoogleGenerativeAI(
             model="gemini-3.5-flash-lite",
@@ -156,13 +154,7 @@ async def _call_vision_llm(
 
     except Exception as e:
         log.error("[verifier] Vision LLM call failed: %s", e)
-        # Return a pass on error to avoid blocking the pipeline
-        return json.dumps({
-            "pass": True,
-            "score": 60,
-            "issues": [f"Verification error: {str(e)[:100]}"],
-            "critique": f"Verification failed with error: {e}. Design was auto-passed.",
-        })
+        raise
 
 
 def _build_design_system_context(
@@ -328,9 +320,14 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     category = state.get("category", "")
     ground = state.get("ground", "white")
 
+    settings = get_settings()
+    skip_verify = settings.skip_verify
+
     if not html:
-        log.warning("[verifier] No HTML for %s, auto-passing", fmt_id)
-        return _auto_pass(state, fmt_id, task, "No HTML to verify")
+        log.warning("[verifier] No HTML for %s, marking failed", fmt_id)
+        if skip_verify:
+            return _auto_pass(state, fmt_id, task, "No HTML to verify")
+        return _fail(state, fmt_id, task, "No HTML to verify")
 
     # Step 0: Deterministic design-system checks (no LLM cost). Any violation
     # is a hard spec failure — fix and retry.
@@ -366,8 +363,6 @@ async def quality_check_node_single(state: GenerationState) -> dict:
 
     # Step 1: Inject tokens, fonts, KaTeX, and images into HTML
     log.info("[verifier] Rendering %s to PNG for visual audit", fmt_id)
-    from app.config import get_settings
-    settings = get_settings()
     images_list = state.get("images", [])
     html_with_tokens = inject_tokens_into_html(html, design_tokens)
     from pathlib import Path as _Path
@@ -380,10 +375,11 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     png_bytes = await render_to_png(html_with_tokens, fmt.width, fmt.height)
 
     if not png_bytes:
-        log.warning("[verifier] PNG render failed for %s — auto-passing", fmt_id)
-        # Save HTML for debugging
+        log.warning("[verifier] PNG render failed for %s", fmt_id)
         _save_html_preview(task_id, fmt_id, html_with_tokens)
-        return _auto_pass(state, fmt_id, task, "PNG render unavailable — auto-passed")
+        if skip_verify:
+            return _auto_pass(state, fmt_id, task, "PNG render unavailable — auto-passed")
+        return _fail(state, fmt_id, task, "PNG render unavailable")
 
     # Step 1b: Overflow check — content must never exceed the canvas
     overflow_issues = await detect_overflow(html_with_tokens, fmt.width, fmt.height)
@@ -428,13 +424,19 @@ async def quality_check_node_single(state: GenerationState) -> dict:
 
     # Step 3: Call Vision LLM
     log.info("[verifier] Auditing %s (attempt %d)", fmt_id, retry_count + 1)
-    raw = await _call_vision_llm(
-        system_prompt=prompt_cfg.system_prompt,
-        user_prompt=user_prompt,
-        image_bytes=png_bytes,
-        temperature=prompt_cfg.temperature,
-        max_tokens=prompt_cfg.max_tokens,
-    )
+    try:
+        raw = await _call_vision_llm(
+            system_prompt=prompt_cfg.system_prompt,
+            user_prompt=user_prompt,
+            image_bytes=png_bytes,
+            temperature=prompt_cfg.temperature,
+            max_tokens=prompt_cfg.max_tokens,
+        )
+    except Exception as e:
+        log.error("[verifier] Vision audit failed for %s: %s", fmt_id, e)
+        if skip_verify:
+            return _auto_pass(state, fmt_id, task, f"Vision audit unavailable: {e}")
+        return _fail(state, fmt_id, task, f"Vision audit failed: {e}")
 
     # Step 4: Parse and validate result
     try:
@@ -444,8 +446,10 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         issues = list(result.get("issues", []))
         critique = str(result.get("critique", ""))
     except Exception as e:
-        log.warning("[verifier] Parse failed: %s — auto-passing", e)
-        passed, score, issues, critique = True, 70, [], "Parse error — auto-passed"
+        log.warning("[verifier] Parse failed for %s: %s", fmt_id, e)
+        if skip_verify:
+            return _auto_pass(state, fmt_id, task, "Parse error — auto-passed")
+        return _fail(state, fmt_id, task, f"Could not parse verifier output: {e}")
 
     log.info("[verifier] %s — pass=%s score=%d", fmt_id, passed, score)
 
@@ -495,6 +499,30 @@ def _auto_pass(state: GenerationState, fmt_id: str, task: dict, reason: str) -> 
                 "quality_score": 40,
                 "quality_issues": [reason],
                 "status": "verified",
+            }
+        },
+        "verification": verification,
+    }
+
+
+def _fail(state: GenerationState, fmt_id: str, task: dict, reason: str) -> dict:
+    """Mark a format as failed when verification cannot run honestly."""
+    verification = dict(state.get("verification", {}))
+    verification[fmt_id] = {
+        "pass": False,
+        "score": 0,
+        "issues": [reason],
+        "critique": reason,
+        "error": reason,
+    }
+    return {
+        "format_tasks": {
+            fmt_id: {
+                **task,
+                "quality_score": 0,
+                "quality_issues": [reason],
+                "status": "failed",
+                "error": reason,
             }
         },
         "verification": verification,

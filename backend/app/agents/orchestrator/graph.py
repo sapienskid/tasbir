@@ -11,18 +11,18 @@ reducer race conditions that occur when many parallel Send branches write to
 nested dict state through a shared checkpointer.
 """
 
-from collections.abc import Awaitable, Callable
 import copy
 import logging
+from collections.abc import Awaitable, Callable
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph
 
-from app.agents.orchestrator.nodes.strategist import strategist_node
 from app.agents.orchestrator.nodes.copywriter import copywriter_node
 from app.agents.orchestrator.nodes.designer import designer_node_single
-from app.agents.orchestrator.nodes.quality_check import quality_check_node_single, MAX_RETRIES
+from app.agents.orchestrator.nodes.quality_check import MAX_RETRIES, quality_check_node_single
 from app.agents.orchestrator.nodes.renderer import renderer_node_single
+from app.agents.orchestrator.nodes.strategist import strategist_node
 from app.agents.orchestrator.state import GenerationState, initial_state
 
 log = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
 
         fmt_task = local.get("format_tasks", {}).get(fmt_id, {})
         status = fmt_task.get("status", "")
-        if status in ("verified", "error"):
+        if status in ("verified", "error", "failed"):
             break
         if status == "needs_retry" and _attempt >= MAX_RETRIES:
             break
