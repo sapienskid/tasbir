@@ -1,0 +1,94 @@
+# Curated Google Fonts pool for agentic + manual typeface selection.
+# The brand_tokens agent chooses display/serif/sans from here; the design-system
+# editor's font dropdowns read this too. All families are Google Fonts (free tier).
+
+fonts:
+  # ── Display (headline + wordmark) ──────────────────────────────────────
+  - family: "Space Grotesk"
+    role: display
+    weights: [500, 700]
+    style: geometric grotesque, tech editorial
+  - family: "Archivo"
+    role: display
+    weights: [500, 700]
+    style: grotesque, mechanical
+  - family: "Sora"
+    role: display
+    weights: [500, 700]
+    style: geometric, modern
+  - family: "Unbounded"
+    role: display
+    weights: [500, 700]
+    style: avant-garde, bold
+  - family: "Playfair Display"
+    role: display
+    weights: [500, 700]
+    style: high-contrast editorial serif
+  - family: "Cormorant Garamond"
+    role: display
+    weights: [500, 700]
+    style: elegant high-fashion serif
+  - family: "Oswald"
+    role: display
+    weights: [500, 700]
+    style: condensed, industrial
+  - family: "Bebas Neue"
+    role: display
+    weights: [400]
+    style: condensed poster caps
+
+  # ── Serif / editorial body ─────────────────────────────────────────────
+  - family: "Source Serif 4"
+    role: serif
+    weights: [400]
+    style: versatile text serif
+  - family: "Libre Caslon Text"
+    role: serif
+    weights: [400, 700]
+    style: classic bookish
+  - family: "Newsreader"
+    role: serif
+    weights: [400]
+    style: editorial news serif
+  - family: "Fraunces"
+    role: serif
+    weights: [400, 600]
+    style: soft experimental serif
+  - family: "Literata"
+    role: serif
+    weights: [400]
+    style: modern book serif
+
+  # ── Sans / interface ───────────────────────────────────────────────────
+  - family: "Inter"
+    role: sans
+    weights: [400, 500, 600]
+    style: neutral UI workhorse
+  - family: "Work Sans"
+    role: sans
+    weights: [400, 500]
+    style: friendly grotesque
+  - family: "IBM Plex Sans"
+    role: sans
+    weights: [400, 500]
+    style: technical, blueprint
+  - family: "Public Sans"
+    role: sans
+    weights: [400, 500]
+    style: governmental clean
+  - family: "DM Sans"
+    role: sans
+    weights: [400, 500]
+    style: geometric friendly
+  - family: "Manrope"
+    role: sans
+    weights: [400, 600]
+    style: modern rounded grotesque
+  - family: "Space Mono"
+    role: mono
+    weights: [400]
+    style: technical mono accent
+  - family: "IBM Plex Mono"
+    role: mono
+    weights: [400, 500]
+    style: blueprint mono
