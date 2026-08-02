@@ -240,6 +240,16 @@ def build_template_context(
     digest = int(hashlib.sha1(seed.encode("utf-8")).hexdigest()[:6], 16) if seed else 1
     loop_index = (digest % 27) + 1
 
+    # Deterministic decorative glyph texture — typographic, monochrome-safe, and
+    # reproducible per post (seeded), but varies across posts. Avoids hardcoding
+    # motifs into templates while staying within the no-illustration rule.
+    glyphs = ["+", "−", "×", "÷", "·", "•"]
+    digest2 = (hashlib.sha1(f"{seed}|decor".encode("utf-8")).hexdigest() * 2)[:48]
+    decor_pattern = [
+        glyphs[int(digest2[i : i + 2], 16) % len(glyphs)]
+        for i in range(0, 48, 2)
+    ]
+
     # Family-aware type scale: tall formats get larger type to fill the canvas.
     from app.config import get_settings
     from app.services.design_instruction import load_design_instruction
@@ -268,6 +278,7 @@ def build_template_context(
         "logo": logo,
         "meta": meta,
         "loop_index": loop_index,
+        "decor_pattern": decor_pattern,
         "tscale": tscale,
     }
 

@@ -26,26 +26,10 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   position: relative;
 }
 
-/* progress bar */
-.progress {
-  height: 4px;
-  background: var(--color-border);
-}
-body[data-ground="black"] .progress { background: var(--color-border-inverted); }
-.progress::after {
-  content: "";
-  display: block;
-  width: 38%;
-  height: 100%;
-  background: var(--color-text);
-}
-body[data-ground="black"] .progress::after { background: var(--color-text-inverted); }
-
 .brandrow {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-top: {{ (height * 0.035) | round | int }}px;
 }
 .mark {
   width: {{ (width * 0.045) | round | int }}px;
@@ -68,7 +52,7 @@ body[data-ground="black"] .mark { background: var(--color-text-inverted); color:
   text-transform: uppercase;
 }
 
-/* +/− texture grid — typographic decoration, monochrome */
+/* seeded typographic glyph texture — monochrome, varies per post */
 .grid {
   position: absolute;
   top: {{ (height * 0.2) | round | int }}px;
@@ -129,17 +113,13 @@ body[data-ground="black"] .headline {
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
   <div class="card">
-    <div class="progress"></div>
     <div class="brandrow">
       <span class="mark">{{ loop_index }}</span>
       <span class="brandname" data-slot="footer_left">{{ footer_left }}</span>
     </div>
 
     <div class="grid">
-      <span>+</span><span>+</span><span>+</span><span>+</span><span>+</span><span>+</span>
-      <span>+</span><span>−</span><span>+</span><span>+</span><span>−</span><span>+</span>
-      <span>−</span><span>+</span><span>+</span><span>+</span><span>+</span><span>−</span>
-      <span>+</span><span>+</span><span>+</span><span>−</span><span>+</span><span>+</span>
+      {% for g in decor_pattern %}<span>{{ g }}</span>{% endfor %}
     </div>
 
     <div class="kicker" data-slot="kicker">{{ kicker }}</div>

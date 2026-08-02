@@ -226,8 +226,8 @@ templates:
     - costs
     - badge
     weight: 1.0
-    description: 'Inherently dark story: progress bar, brand mark, +/- grid texture,
-      inverted-block headline badge.'
+    description: 'Inherently dark story: brand mark, seeded typographic glyph
+      texture, inverted-block headline badge.'
     file: story/story-costs.html
   square-quote-card:
     family: square
