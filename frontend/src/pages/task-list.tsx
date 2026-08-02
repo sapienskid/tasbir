@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +22,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/tasks/status-badge"
 import { preloadMonacoEditor } from "@/components/editor/html-editor"
-import { ExternalLink, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useTasks } from "@/hooks/use-task"
 import { apiRequest, ApiError } from "@/lib/api"
@@ -30,6 +30,7 @@ import { apiRequest, ApiError } from "@/lib/api"
 export function TaskListPage() {
   const { data, error, isLoading, mutate } = useTasks()
   const [deleting, setDeleting] = useState<string | null>(null)
+  const navigate = useNavigate()
 
   async function confirmDelete() {
     if (!deleting) return
@@ -89,9 +90,16 @@ export function TaskListPage() {
                 </TableRow>
               ))
             : data.map((task) => (
-                <TableRow key={task.id}>
+                <TableRow
+                  key={task.id}
+                  className="cursor-pointer"
+                  onClick={() => navigate(`/tasks/${task.id}`)}
+                  onPointerEnter={preloadMonacoEditor}
+                >
                   <TableCell className="max-w-xl truncate font-medium">
-                    {task.title || task.id.slice(0, 8)}
+                    <Link to={`/tasks/${task.id}`} className="hover:underline">
+                      {task.title || task.id.slice(0, 8)}
+                    </Link>
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={task.status} />
@@ -100,28 +108,17 @@ export function TaskListPage() {
                     {task.created_at ? new Date(task.created_at).toLocaleString() : "—"}
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        asChild
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Open"
-                        onPointerEnter={preloadMonacoEditor}
-                        onFocus={preloadMonacoEditor}
-                      >
-                        <Link to={`/tasks/${task.id}`}>
-                          <ExternalLink className="size-4" />
-                        </Link>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Delete"
-                        onClick={() => setDeleting(task.id)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Delete"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDeleting(task.id)
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}

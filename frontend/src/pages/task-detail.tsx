@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { HtmlEditor } from "@/components/editor/html-editor"
-import { PreviewPane } from "@/components/editor/preview-pane"
-import { QCReport } from "@/components/editor/qc-report"
+import { VisualEditor } from "@/components/editor/visual-editor"
+import { useDebouncedValue } from "@/components/editor/use-debounce"
+import { ZoomableFrame, formatDims } from "@/components/tasks/preview-frame"
+import { InspectorRail, type QcState } from "@/components/tasks/inspector-rail"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +22,17 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StatusBadge } from "@/components/tasks/status-badge"
 import { SaveTemplateDialog } from "@/components/tasks/save-template-dialog"
-import { ArrowLeft, Eye, FileCode2, FileImage, FilePlus, RefreshCw, Trash2 } from "lucide-react"
+import {
+  ArrowLeft,
+  Archive,
+  Eye,
+  FileCode2,
+  FileImage,
+  FilePlus,
+  PanelRight,
+  RefreshCw,
+  Trash2,
+} from "lucide-react"
 import { toast } from "sonner"
 import { useTask } from "@/hooks/use-task"
 import {
@@ -32,13 +44,6 @@ import {
   type RerenderResponse,
 } from "@/lib/api"
 
-interface QCState {
-  score?: number
-  issues: string[]
-  critique: string
-  status?: string
-}
-
 export default function TaskDetailPage() {
   const { taskId = "" } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
@@ -46,9 +51,10 @@ export default function TaskDetailPage() {
 
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null)
   const [draft, setDraft] = useState("")
-  const [previewSrc, setPreviewSrc] = useState<string | undefined>(undefined)
-  const [qc, setQc] = useState<QCState | null>(null)
+  const [qc, setQc] = useState<QcState | null>(null)
   const [rerendering, setRerendering] = useState(false)
+  const [mode, setMode] = useState<"code" | "visual">("code")
+  const [inspectorOpen, setInspectorOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [templateOpen, setTemplateOpen] = useState(false)
 
@@ -71,6 +77,9 @@ export default function TaskDetailPage() {
   }, [task, files])
 
   const platform = selectedFormat ? task?.result?.platforms?.[selectedFormat] : undefined
+  const dims = formatDims(selectedFormat ?? "")
+  const livePreviewHtml = useDebouncedValue(draft, 300)
+  const hasQcIssues = Boolean(qc && (qc.issues.length > 0 || (qc.score ?? 100) < 100))
 
   useEffect(() => {
     if (formats.length > 0 && !formats.includes(selectedFormat ?? "")) {
@@ -86,7 +95,7 @@ export default function TaskDetailPage() {
       const pngFile = files.find((f) => f.format === fmt && f.ext === "png")
 
       // Fetch HTML and PNG in parallel — no serial waterfall.
-      const [html, previewSrc] = await Promise.all([
+      const [html] = await Promise.all([
         cachedHtml !== undefined
           ? Promise.resolve(cachedHtml)
           : htmlFile
@@ -111,7 +120,6 @@ export default function TaskDetailPage() {
       ])
 
       setDraft(html)
-      setPreviewSrc(previewSrc)
 
       const platform = taskRef.current?.result?.platforms?.[fmt]
       setQc(
@@ -148,7 +156,6 @@ export default function TaskDetailPage() {
           { method: "POST", body: JSON.stringify({ html: draft }) }
         )
         const dataUri = `data:image/png;base64,${res.png_b64}`
-        setPreviewSrc(dataUri)
         pngRef.current.set(selectedFormat, dataUri)
         draftsRef.current.set(selectedFormat, draft)
         setQc({
@@ -168,16 +175,15 @@ export default function TaskDetailPage() {
     [selectedFormat, taskId, draft, mutate]
   )
 
+  const applyHtml = useCallback((html: string) => {
+    if (!selectedFormat) return
+    setDraft(html)
+    draftsRef.current.set(selectedFormat, html)
+    toast.success("Applied — hit Re-render to validate")
+  }, [selectedFormat])
+
   const downloadPng = useCallback(() => {
     if (!selectedFormat) return
-    const src = previewSrc
-    if (src?.startsWith("data:")) {
-      const a = document.createElement("a")
-      a.href = src
-      a.download = `${selectedFormat}.png`
-      a.click()
-      return
-    }
     const file = files.find((f) => f.format === selectedFormat && f.ext === "png")
     if (!file) {
       toast.error("No PNG available — render this format first")
@@ -187,12 +193,11 @@ export default function TaskDetailPage() {
       try {
         const blob = await fetchBlob(`/tasks/${taskId}/files/${file.filename}`)
         downloadBlob(blob, file.filename)
-        void mutate()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Download failed")
       }
     })()
-  }, [selectedFormat, previewSrc, files, taskId, mutate])
+  }, [selectedFormat, files, taskId])
 
   const downloadHtml = useCallback(() => {
     if (!selectedFormat) return
@@ -210,12 +215,21 @@ export default function TaskDetailPage() {
       try {
         const text = await fetchText(`/tasks/${taskId}/files/${file.filename}`)
         downloadBlob(new Blob([text], { type: "text/html" }), file.filename)
-        void mutate()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Download failed")
       }
     })()
-  }, [selectedFormat, files, taskId, mutate])
+  }, [selectedFormat, files, taskId])
+
+  const downloadAll = useCallback(async () => {
+    try {
+      const blob = await fetchBlob(`/tasks/${taskId}/files/archive`)
+      downloadBlob(blob, `${taskId}.zip`)
+      toast.success("All assets downloaded")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Archive download failed")
+    }
+  }, [taskId])
 
   const deleteTask = useCallback(async () => {
     try {
@@ -298,12 +312,16 @@ export default function TaskDetailPage() {
                 ))}
               </TabsList>
             </Tabs>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {platform?.template_id ? (
                 <Badge variant="outline" className="font-mono text-xs">
                   {platform.template_id}
                 </Badge>
               ) : null}
+              <Button variant="outline" size="sm" onClick={downloadAll} disabled={!selectedFormat}>
+                <Archive className="size-4" />
+                All
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -334,26 +352,78 @@ export default function TaskDetailPage() {
                 <FileCode2 className="size-4" />
                 HTML
               </Button>
+              <Button
+                variant={inspectorOpen ? "default" : "outline"}
+                size="sm"
+                onClick={() => setInspectorOpen((o) => !o)}
+                disabled={!selectedFormat}
+              >
+                <PanelRight className="size-4" />
+                Inspector
+                {hasQcIssues && !inspectorOpen ? (
+                  <span className="ml-1 inline-block size-1.5 rounded-full bg-destructive" />
+                ) : null}
+              </Button>
             </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="grid gap-4">
-              <div className="h-[65vh] overflow-hidden rounded-md border">
-                <HtmlEditor value={draft} onChange={setDraft} />
+          <div className="flex items-stretch gap-4">
+            <div className="grid min-w-0 flex-1 gap-4 lg:grid-cols-2">
+              <div className="grid gap-2">
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant={mode === "code" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setMode("code")}
+                  >
+                    <FileCode2 className="size-3.5" />
+                    Code
+                  </Button>
+                  <Button
+                    variant={mode === "visual" ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setMode("visual")}
+                  >
+                    Visual
+                  </Button>
+                </div>
+                <div className="h-[65vh] overflow-hidden rounded-md border">
+                  {mode === "code" ? (
+                    <HtmlEditor value={draft} onChange={setDraft} />
+                  ) : (
+                    <VisualEditor
+                      html={draft}
+                      width={dims.width}
+                      height={dims.height}
+                      onExport={applyHtml}
+                    />
+                  )}
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Live preview — updates as you edit ({dims.width}×{dims.height}).
+                </p>
+                <div className="h-[65vh] overflow-hidden rounded-md border">
+                  <ZoomableFrame html={livePreviewHtml} width={dims.width} height={dims.height} />
+                </div>
               </div>
             </div>
-            <div className="grid gap-4">
-              <div className="h-[45vh]">
-                <PreviewPane src={previewSrc} loading={rerendering} width={1080} height={1080} />
-              </div>
-              <QCReport
-                score={qc?.score}
-                issues={qc?.issues}
-                critique={qc?.critique}
-                status={qc?.status}
-              />
-            </div>
+
+            {inspectorOpen ? (
+              <aside className="h-[65vh] w-[360px] shrink-0">
+                <InspectorRail
+                  onClose={() => setInspectorOpen(false)}
+                  qc={qc}
+                  taskId={taskId}
+                  format={selectedFormat ?? ""}
+                  currentHtml={draft}
+                  onApplyHtml={applyHtml}
+                />
+              </aside>
+            ) : null}
           </div>
         </>
       )}

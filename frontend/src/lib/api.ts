@@ -178,6 +178,45 @@ export interface SaveTemplateResponse {
   file: string
 }
 
+// ─── Agent chat ────────────────────────────────────────────────────────────
+
+export interface ChatMessage {
+  id: string
+  role: "user" | "assistant" | "system"
+  content: string
+  html: string | null
+  created_at: string | null
+}
+
+export interface ChatThread {
+  thread_id: string
+  format: string
+  messages: ChatMessage[]
+}
+
+export interface ChatReply {
+  reply: string
+  html: string | null
+  qc: { ok: boolean; issues: string[] } | null
+  thread_id: string
+}
+
+export function getChat(taskId: string, format: string): Promise<ChatThread> {
+  return apiRequest(`/tasks/${taskId}/chat?format=${encodeURIComponent(format)}`)
+}
+
+export function sendChat(
+  taskId: string,
+  format: string,
+  message: string,
+  html?: string
+): Promise<ChatReply> {
+  return apiRequest(`/tasks/${taskId}/chat`, {
+    method: "POST",
+    body: JSON.stringify({ format, message, html }),
+  })
+}
+
 // ─── Design systems ───────────────────────────────────────────────────────
 
 export interface DesignSystem {
