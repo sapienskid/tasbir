@@ -1,5 +1,11 @@
 import useSWR from "swr"
-import type { OutputFile, TaskDetail, TaskSummary } from "@/lib/api"
+import type {
+  OutputFile,
+  TaskDetail,
+  TaskProgress,
+  TaskSummary,
+} from "@/lib/api"
+import { getTaskProgress } from "@/lib/api"
 
 export function useTasks(status?: string) {
   return useSWR<TaskSummary[]>(`/tasks${status ? `?status=${encodeURIComponent(status)}` : ""}`)
@@ -25,4 +31,13 @@ export function useTask(taskId: string) {
     files: filesSwr.data ?? [],
     filesError: filesSwr.error,
   }
+}
+
+/** Live pipeline progress for a task; polls while the task is running. */
+export function useTaskProgress(taskId: string, active: boolean) {
+  return useSWR<TaskProgress>(
+    active ? `/tasks/${taskId}/progress` : null,
+    () => getTaskProgress(taskId),
+    { refreshInterval: active ? 2500 : 0 }
+  )
 }

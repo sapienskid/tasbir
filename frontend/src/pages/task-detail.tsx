@@ -48,7 +48,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
-import { useTask } from "@/hooks/use-task"
+import { useTask, useTaskProgress } from "@/hooks/use-task"
 import {
   apiRequest,
   ApiError,
@@ -153,6 +153,25 @@ export default function TaskDetailPage() {
   }, [task])
 
   const [, startTransition] = useTransition()
+
+  // Hooks must run before the early returns below.
+  const running = task?.status === "pending" || task?.status === "running"
+  const { data: progress } = useTaskProgress(taskId, running)
+
+  const postPlan = (task?.result?.post_plan ?? {}) as {
+    post_type?: string
+    ratio?: string
+    slides?: number
+  }
+  const planLabel =
+    postPlan.post_type === "carousel"
+      ? `Carousel · ${postPlan.slides ?? "?"} slides · ${postPlan.ratio ?? "square"}`
+      : postPlan.post_type === "story"
+        ? "Story · portrait"
+        : postPlan.post_type
+          ? "Single"
+          : null
+  const seqWarnings = ((task?.result?.sequence_check ?? {}) as { warnings?: string[] }).warnings ?? []
 
   const formats = useMemo(() => {
     const fromResult = Object.keys(task?.result?.platforms ?? {})
@@ -366,8 +385,6 @@ export default function TaskDetailPage() {
     )
   }
 
-  const running = task.status === "pending" || task.status === "running"
-
   return (
     <div className="grid gap-4">
       <div className="flex items-center justify-between">
@@ -403,9 +420,28 @@ export default function TaskDetailPage() {
           <CardHeader>
             <CardTitle className="text-sm">Pipeline running</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Progress value={45} />
-            <p className="mt-2 text-sm text-muted-foreground">Rendering & verifying…</p>
+          <CardContent className="space-y-3">
+            <Progress value={progress?.pct ?? 10} />
+            <p className="text-sm text-muted-foreground">
+              {progress?.node ?? "Analyzing content..."}
+              {progress && progress.total > 0
+                ? ` · ${progress.done}/${progress.total} formats verified`
+                : ""}
+            </p>
+            {progress && progress.total > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {Object.entries(progress.per_format).map(([fmt, v]) => (
+                  <span
+                    key={fmt}
+                    className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs"
+                  >
+                    <StepDot status={v.status} />
+                    {formatTabLabel(fmt)}
+                    <span className="text-muted-foreground">{v.step ?? v.status}</span>
+                  </span>
+                ))}
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       ) : (
@@ -484,6 +520,19 @@ export default function TaskDetailPage() {
             </div>
           </div>
 
+          <div className="flex items-center gap-2">
+            {planLabel ? (
+              <Badge variant="outline" className="font-mono text-xs">
+                {planLabel}
+              </Badge>
+            ) : null}
+            {seqWarnings.length > 0 ? (
+              <span className="text-xs text-amber-600 dark:text-amber-400">
+                Sequence: {seqWarnings[0]}
+              </span>
+            ) : null}
+          </div>
+
           <div className="flex items-stretch gap-4">
             <div className="grid min-w-0 flex-1 gap-4 lg:grid-cols-2">
               <div className="grid gap-2">
@@ -547,6 +596,7 @@ export default function TaskDetailPage() {
                   onApplyAndRender={applyAndRender}
                   onAudit={() => void handleRerender(true)}
                   auditing={rerendering}
+                  running={running}
                 />
               </aside>
             ) : null}
@@ -578,4 +628,15 @@ export default function TaskDetailPage() {
       />
     </div>
   )
+}
+
+/** Step status dot: green = verified, amber = running/queued, red = failed. */
+function StepDot({ status }: { status: string }) {
+  const color =
+    status === "verified"
+      ? "bg-emerald-500"
+      : status === "failed" || status === "error"
+        ? "bg-destructive"
+        : "bg-amber-400 animate-pulse"
+  return <span className={`inline-block size-2 rounded-full ${color}`} />
 }

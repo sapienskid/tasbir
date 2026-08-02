@@ -12,7 +12,8 @@ import {
   type NodeProps,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { ArrowRight } from "lucide-react"
+import { ArrowRight, Activity } from "lucide-react"
+import useSWR from "swr"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,12 +30,15 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAgentGraph, useAgents } from "@/hooks/use-library"
 import {
+  getTaskProgress,
+  listTasks,
   promptPreview,
   resetAgent,
   updateAgent,
   type AgentConfig,
   type AgentGraphSpec,
   type PromptPreview,
+  type TaskProgress,
 } from "@/lib/api"
 import { useTheme } from "@/lib/theme"
 import { cn } from "@/lib/utils"
@@ -42,7 +46,13 @@ import { cn } from "@/lib/utils"
 const NODE_WIDTH = 220
 const NODE_HEIGHT = 88
 
-type FlowNodeData = { label: string; kind: string; persona?: string; model?: string }
+type FlowNodeData = {
+  label: string
+  kind: string
+  persona?: string
+  model?: string
+  state?: "done" | "running" | "pending"
+}
 type FlowNode = Node<FlowNodeData>
 
 function layoutNodes(nodes: FlowNode[], edges: Edge[]): FlowNode[] {
@@ -91,23 +101,34 @@ function AgentNodeCard({
   dimmed,
   onClick,
 }: {
-  data: { label: string; persona?: string; model?: string }
+  data: { label: string; persona?: string; model?: string; state?: "done" | "running" | "pending" }
   selected: boolean
   dimmed?: boolean
   onClick: () => void
 }) {
+  const state = data.state ?? "pending"
+  const stateRing =
+    state === "running"
+      ? "border-amber-400 ring-2 ring-amber-400/30"
+      : state === "done"
+        ? "border-emerald-500/60"
+        : ""
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "h-full w-full rounded-md border bg-card px-3 py-2 text-left shadow-sm transition-colors",
+        "relative h-full w-full rounded-md border bg-card px-3 py-2 text-left shadow-sm transition-colors",
         selected
           ? "border-primary ring-2 ring-primary/30"
           : "border-border hover:border-primary/50",
-        dimmed ? "opacity-60" : ""
+        dimmed ? "opacity-60" : "",
+        stateRing
       )}
     >
+      {state === "running" ? (
+        <span className="absolute right-1.5 top-1.5 inline-block size-2 animate-pulse rounded-full bg-amber-400" />
+      ) : null}
       <span className="block text-sm font-semibold">{data.label}</span>
       {data.persona ? (
         <span className="mt-0.5 block truncate text-xs text-muted-foreground">{data.persona}</span>
@@ -167,7 +188,24 @@ export function AgentsPage() {
   const { resolved } = useTheme()
   const dark = resolved === "dark"
 
+  // Live pipeline state — poll the newest task, then its progress.
+  const { data: newest } = useSWR("/tasks?limit=1", () => listTasks(1), {
+    refreshInterval: 3000,
+  })
+  const liveTaskId = newest?.[0]?.id
+  const liveStatus = newest?.[0]?.status
+  const live = liveStatus === "pending" || liveStatus === "running"
+  const { data: liveProgress } = useSWR(
+    liveTaskId && live ? `/tasks/${liveTaskId}/progress` : null,
+    () => getTaskProgress(liveTaskId as string),
+    { refreshInterval: live ? 3000 : 0 }
+  )
+
   const { nodes, edges } = useMemo(() => (spec ? buildGraph(spec) : { nodes: [], edges: [] }), [spec])
+  const liveNodes = useMemo(
+    () => applyLiveState(nodes, liveProgress),
+    [nodes, liveProgress]
+  )
 
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [showSubflow, setShowSubflow] = useState(false)
@@ -278,6 +316,11 @@ export function AgentsPage() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px]">
       <div className="space-y-4">
+        <LiveRunCard
+          taskId={liveTaskId}
+          status={liveStatus}
+          progress={liveProgress}
+        />
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Pipeline graph</CardTitle>
@@ -286,7 +329,7 @@ export function AgentsPage() {
             <div className="h-[380px] overflow-hidden rounded-md border">
               <ReactFlow
                 key={`pipeline-${nodes.length}`}
-                nodes={nodes}
+                nodes={liveNodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
                 fitView
@@ -501,5 +544,100 @@ function PromptBlock({ title, text }: { title: string; text: string }) {
         </pre>
       </ScrollArea>
     </div>
+  )
+}
+
+// ─── Live pipeline overlay ─────────────────────────────────────────────────
+
+/** Map a pipeline node id to its runtime state from the progress %.
+ *
+ * Progress lands at 10 (strategist) → 25 (copywriter) → 50+ (per-format
+ * chain) → 100 (done). A node is "done" once a later threshold is reached.
+ */
+function nodeStateFor(id: string, pct: number): "done" | "running" | "pending" {
+  switch (id) {
+    case "strategist":
+      return pct >= 25 ? "done" : pct >= 10 ? "running" : "pending"
+    case "copywriter":
+      return pct >= 50 ? "done" : pct >= 25 ? "running" : "pending"
+    case "process_all_formats":
+      return pct >= 100 ? "done" : pct >= 50 ? "running" : "pending"
+    default:
+      return "pending"
+  }
+}
+
+function applyLiveState(
+  nodes: FlowNode[],
+  progress: TaskProgress | undefined
+): FlowNode[] {
+  if (!progress) return nodes
+  return nodes.map((n) => ({
+    ...n,
+    data: { ...n.data, state: nodeStateFor(n.id, progress.pct) },
+  }))
+}
+
+function LiveRunCard({
+  taskId,
+  status,
+  progress,
+}: {
+  taskId?: string
+  status?: string
+  progress?: TaskProgress
+}) {
+  const live = status === "pending" || status === "running"
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-1.5 text-sm">
+          <Activity className="size-3.5" />
+          Pipeline status
+          {live ? (
+            <span className="inline-block size-2 animate-pulse rounded-full bg-amber-400" />
+          ) : null}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 text-xs">
+        {!taskId ? (
+          <p className="text-muted-foreground">No tasks yet — run a generation to watch the agents live.</p>
+        ) : (
+          <>
+            <p className="font-mono text-muted-foreground">
+              {taskId} · <span className="text-foreground">{status}</span>
+            </p>
+            {progress ? (
+              <>
+                <p>
+                  {progress.pct}% — {progress.node}
+                  {progress.total > 0 ? ` · ${progress.done}/${progress.total} formats verified` : ""}
+                </p>
+                {progress.total > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(progress.per_format).map(([fmt, v]) => (
+                      <span
+                        key={fmt}
+                        className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5"
+                      >
+                        <span
+                          className={cn(
+                            "inline-block size-2 rounded-full",
+                            v.status === "verified" ? "bg-emerald-500" : "bg-amber-400 animate-pulse"
+                          )}
+                        />
+                        {fmt} · {v.status}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <p className="text-muted-foreground">Waiting for the pipeline to report…</p>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   )
 }

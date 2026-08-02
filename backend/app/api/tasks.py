@@ -1,5 +1,6 @@
 import base64
 import io
+import logging
 import os
 import re
 import zipfile
@@ -20,6 +21,8 @@ from app.services.artifacts import (
     resolve_output_file,
 )
 from app.services.formats import get_format_info, validate_platforms
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -56,9 +59,71 @@ async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
         "source_data": task.source_data,
         "result": task.result,
         "edited_html": task.edited_html,
+        "progress": task.progress,
         "error": task.error,
         "created_at": iso_utc(task.created_at),
         "updated_at": iso_utc(task.updated_at),
+    }
+
+
+@router.get("/{task_id}/progress")
+async def get_task_progress(task_id: str, db: AsyncSession = Depends(get_db)):
+    """Live pipeline progress: {pct, node, per_format, done, total}.
+
+    While running, per-format state is derived from the audit timeline; once
+    settled, it comes from the stored result.
+    """
+    repo = TaskRepository(db)
+    task = await repo.get_by_id(task_id)
+    if not task:
+        raise NotFoundError(f"Task {task_id} not found")
+
+    progress = task.progress or {}
+    pct = int(progress.get("pct", 0))
+    node = str(progress.get("node", "pending"))
+
+    if task.status in ("completed", "failed"):
+        platforms = (
+            ((task.result or {}).get("platforms") or {})
+            if task.status == "completed"
+            else {}
+        )
+        per_format = {
+            fmt: {"status": str(p.get("status", "unknown"))}
+            for fmt, p in platforms.items()
+        }
+        pct = 100 if task.status == "completed" else pct
+        return {
+            "pct": pct,
+            "node": node,
+            "per_format": per_format,
+            "done": sum(1 for v in per_format.values() if v["status"] == "verified"),
+            "total": len(per_format),
+        }
+
+    from app.db.repositories.audit_logs import AuditLogRepository
+
+    rows = await AuditLogRepository(db).list_by_task(task_id)
+    per_format: dict[str, dict] = {}
+    for r in rows:
+        dec = r.decision or {}
+        fmt = dec.get("format")
+        if not fmt:
+            continue
+        per_format[fmt] = {
+            "step": r.agent_name,
+            "status": str(dec.get("status") or "running"),
+        }
+    total = len(per_format)
+    done = sum(1 for v in per_format.values() if v["status"] == "verified")
+    if total:
+        pct = max(pct, 50 + int(50 * done / total))
+    return {
+        "pct": pct,
+        "node": node,
+        "per_format": per_format,
+        "done": done,
+        "total": total,
     }
 
 
@@ -197,7 +262,6 @@ async def rerender_format(
     from app.services.design_instruction import (
         build_google_fonts_link,
         inject_fonts_into_html,
-        load_design_instruction,
         substitute_image_keys,
     )
     from app.services.dom_extractor import detect_overflow, render_to_png
@@ -206,8 +270,6 @@ async def rerender_format(
         DEFAULT_TOKEN_VALUES,
         inject_katex_into_html,
         inject_tokens_into_html,
-        load_brand_design,
-        load_tokens,
     )
 
     repo = TaskRepository(db)
@@ -222,12 +284,26 @@ async def rerender_format(
     fmt = get_format_info(fmt_id)
 
     settings = get_settings()
-    tokens = load_tokens(settings.tokens_path) or dict(DEFAULT_TOKEN_VALUES)
-    design_instruction = load_design_instruction(
-        os.path.join(settings.design_system_dir, "design-instruction.yaml")
-    )
-    brand_design = load_brand_design(settings.brand_path)
-    footer = brand_design["footer"]
+    # Resolve the design system the task was built with (DB first, YAML
+    # fallback for legacy rows) so re-render + QC use the right tokens/brand.
+    ds_id = (task.source_data or {}).get("design_system_id") or "default"
+    payload: dict = {}
+    try:
+        from app.db.repositories.design_systems import DesignSystemRepository
+        from app.services.design_systems import build_pipeline_payload
+
+        ds = await DesignSystemRepository(db).get_by_id(ds_id)
+        if ds is not None:
+            payload = build_pipeline_payload(ds)
+    except Exception as e:
+        log.warning("[rerender] Design-system payload failed (%s) — default DS", e)
+    if not payload:
+        from app.services.design_systems import default_design_system_payload
+
+        payload = await default_design_system_payload()
+    tokens = payload.get("design_tokens") or dict(DEFAULT_TOKEN_VALUES)
+    design_instruction = payload.get("design_instruction") or {}
+    footer = payload.get("footer") or {"left": "", "right": ""}
     brief = ((task.result or {}).get("strategic_brief") or {})
     category = (task.source_data or {}).get("category") or brief.get("category") or ""
     ground = brief.get("ground", "white")
@@ -424,6 +500,10 @@ async def save_as_template(
 
     # Validate before committing: render with the extracted copy, then check
     # overflow. Nothing is persisted on failure.
+    from app.db.repositories.design_systems import DesignSystemRepository
+
+    ds_row = await DesignSystemRepository(db).get_by_id(design_system_id)
+    di_config = (ds_row.design_instruction or {}) if ds_row else {}
     copy = {
         "headline": slots.get("headline", ""),
         "subhead": slots.get("subhead", ""),
@@ -440,6 +520,7 @@ async def save_as_template(
         fmt.height,
         False,
         seed=template_id,
+        di_config=di_config,
     )
     from app.services.dom_extractor import detect_overflow
 

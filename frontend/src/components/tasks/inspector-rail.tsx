@@ -26,6 +26,8 @@ interface InspectorRailProps {
   /** Runs the vision audit on the current format. */
   onAudit: () => void
   auditing: boolean
+  /** When true, the Trace tab polls live while the pipeline is running. */
+  running?: boolean
 }
 
 export function InspectorRail({
@@ -38,11 +40,13 @@ export function InspectorRail({
   onApplyAndRender,
   onAudit,
   auditing,
+  running = false,
 }: InspectorRailProps) {
   const [tab, setTab] = useState<"quality" | "agent" | "trace">("quality")
   const { data: audit } = useSWR(
     tab === "trace" ? `/tasks/${taskId}/audit` : null,
-    () => getTaskAudit(taskId)
+    () => getTaskAudit(taskId),
+    { refreshInterval: tab === "trace" && running ? 2500 : 0 }
   )
 
   return (

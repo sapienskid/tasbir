@@ -72,3 +72,17 @@ class TaskRepository:
         res = await self.session.execute(stmt)
         await self.session.commit()
         return res.scalar_one_or_none()
+
+    async def save_progress(
+        self, task_id: str, progress: dict
+    ) -> GenerationTask | None:
+        """Persist live pipeline progress ({pct, node, ...})."""
+        stmt = (
+            update(GenerationTask)
+            .where(GenerationTask.id == task_id)
+            .values(progress=progress)
+            .returning(GenerationTask)
+        )
+        res = await self.session.execute(stmt)
+        await self.session.commit()
+        return res.scalar_one_or_none()
