@@ -197,6 +197,7 @@ export function VisualEditor({ html, width, height, onExport }: VisualEditorProp
 
   return (
     <div data-visual-editor className="flex h-full w-full flex-col overflow-hidden rounded-md border">
+      <style>{`[data-visual-editor] { --gjs-left-width: max(260px, 38%); }`}</style>
       <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-muted/20 px-2 py-1">
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon" aria-label="Zoom out" onClick={zoomOut} className="h-7 w-7">

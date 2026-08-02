@@ -20,17 +20,24 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { StatusBadge } from "@/components/tasks/status-badge"
 import { SaveTemplateDialog } from "@/components/tasks/save-template-dialog"
 import {
   ArrowLeft,
   Archive,
+  ChevronDown,
   Eye,
   FileCode2,
   FileImage,
   FilePlus,
   PanelRight,
-  RefreshCw,
+  Save,
   Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -147,24 +154,25 @@ export default function TaskDetailPage() {
   }, [])
 
   const handleRerender = useCallback(
-    async (audit: boolean) => {
+    async (audit: boolean, htmlOverride?: string) => {
       if (!selectedFormat) return
+      const html = htmlOverride ?? draft
       setRerendering(true)
       try {
         const res = await apiRequest<RerenderResponse>(
           `/tasks/${taskId}/formats/${selectedFormat}/rerender${audit ? "?audit=true" : ""}`,
-          { method: "POST", body: JSON.stringify({ html: draft }) }
+          { method: "POST", body: JSON.stringify({ html }) }
         )
         const dataUri = `data:image/png;base64,${res.png_b64}`
         pngRef.current.set(selectedFormat, dataUri)
-        draftsRef.current.set(selectedFormat, draft)
+        draftsRef.current.set(selectedFormat, html)
         setQc({
           score: res.quality.score,
           issues: res.quality.issues,
           critique: res.quality.critique,
           status: res.pass ? "verified" : "needs_review",
         })
-        toast.success(audit ? "Audit complete" : "Re-rendered")
+        toast.success(res.pass ? "Saved & rendered" : "Saved — review the issues")
         void mutate()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Re-render failed")
@@ -179,8 +187,17 @@ export default function TaskDetailPage() {
     if (!selectedFormat) return
     setDraft(html)
     draftsRef.current.set(selectedFormat, html)
-    toast.success("Applied — hit Re-render to validate")
+    toast.success("Applied to editor")
   }, [selectedFormat])
+
+  const applyAndRender = useCallback(
+    async (html: string) => {
+      if (!selectedFormat) return
+      applyHtml(html)
+      await handleRerender(false, html)
+    },
+    [selectedFormat, applyHtml, handleRerender]
+  )
 
   const downloadPng = useCallback(() => {
     if (!selectedFormat) return
@@ -318,10 +335,6 @@ export default function TaskDetailPage() {
                   {platform.template_id}
                 </Badge>
               ) : null}
-              <Button variant="outline" size="sm" onClick={downloadAll} disabled={!selectedFormat}>
-                <Archive className="size-4" />
-                All
-              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -329,28 +342,47 @@ export default function TaskDetailPage() {
                 disabled={!selectedFormat}
               >
                 <FilePlus className="size-4" />
-                Save as Template
+                Template
               </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" disabled={!selectedFormat}>
+                    <Archive className="size-4" />
+                    Download
+                    <ChevronDown className="size-3.5 opacity-70" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuItem onClick={downloadPng} disabled={!selectedFormat}>
+                    <FileImage className="size-4" />
+                    PNG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadHtml} disabled={!selectedFormat}>
+                    <FileCode2 className="size-4" />
+                    HTML
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void downloadAll()} disabled={!selectedFormat}>
+                    <Archive className="size-4" />
+                    All assets (ZIP)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => handleRerender(false)}
+                onClick={() => handleRerender(true)}
                 disabled={rerendering || !selectedFormat}
               >
-                <RefreshCw className={rerendering ? "size-4 animate-spin" : "size-4"} />
-                Re-render
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => handleRerender(true)} disabled={rerendering || !selectedFormat}>
                 <Eye className="size-4" />
                 Audit
               </Button>
-              <Button variant="outline" size="sm" onClick={downloadPng} disabled={!selectedFormat}>
-                <FileImage className="size-4" />
-                PNG
-              </Button>
-              <Button variant="outline" size="sm" onClick={downloadHtml} disabled={!selectedFormat}>
-                <FileCode2 className="size-4" />
-                HTML
+              <Button
+                size="sm"
+                onClick={() => void handleRerender(false)}
+                disabled={rerendering || !selectedFormat}
+              >
+                <Save className="size-4" />
+                {rerendering ? "Saving…" : "Save & Render"}
               </Button>
               <Button
                 variant={inspectorOpen ? "default" : "outline"}
@@ -359,7 +391,7 @@ export default function TaskDetailPage() {
                 disabled={!selectedFormat}
               >
                 <PanelRight className="size-4" />
-                Inspector
+                Chat
                 {hasQcIssues && !inspectorOpen ? (
                   <span className="ml-1 inline-block size-1.5 rounded-full bg-destructive" />
                 ) : null}
@@ -421,6 +453,7 @@ export default function TaskDetailPage() {
                   format={selectedFormat ?? ""}
                   currentHtml={draft}
                   onApplyHtml={applyHtml}
+                  onApplyAndRender={applyAndRender}
                 />
               </aside>
             ) : null}

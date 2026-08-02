@@ -19,6 +19,7 @@ interface InspectorRailProps {
   format: string
   currentHtml: string
   onApplyHtml: (html: string) => void
+  onApplyAndRender: (html: string) => void
 }
 
 export function InspectorRail({
@@ -28,6 +29,7 @@ export function InspectorRail({
   format,
   currentHtml,
   onApplyHtml,
+  onApplyAndRender,
 }: InspectorRailProps) {
   const [tab, setTab] = useState<"quality" | "agent">("quality")
 
@@ -70,6 +72,7 @@ export function InspectorRail({
             format={format}
             currentHtml={currentHtml}
             onApplyHtml={onApplyHtml}
+            onApplyAndRender={onApplyAndRender}
           />
         )}
       </div>
