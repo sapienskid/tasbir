@@ -41,10 +41,18 @@ Thumbs.db
 *.log
 logs/
 
+# ── Frontend ──────────────────────────────────────────────────────────────
+node_modules/
+frontend/dist/
+
 # ── Databases (runtime data) ─────────────────────────────────────────────
 *.db
 *.sqlite3
 backend/data/tasbir.db
+
+# ── Celery runtime state ─────────────────────────────────────────────────
+celerybeat-schedule*
+backend/celerybeat-schedule*
 
 # ── Generated output (designs) ───────────────────────────────────────────
 backend/data/output/
