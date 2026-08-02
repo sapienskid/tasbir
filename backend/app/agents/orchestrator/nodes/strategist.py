@@ -41,6 +41,7 @@ class StrategicBrief(BaseModel):
     visual_direction: str
     category: str = ""
     ground: str = ""
+    template_hint: str = ""
     platform_notes: dict[str, str] = {}
 
     @field_validator("tone")
@@ -127,6 +128,24 @@ async def strategist_node(state: GenerationState) -> dict:
             cat_lines.append(f"  {name} — {desc}{ground_note}")
         categories_block = "APPROVED CATEGORY LABELS (choose exactly one):\n" + "\n".join(cat_lines) + "\n"
 
+    # Template library — the strategist can hint at a composition style.
+    from app.services.templates import load_template_catalog
+
+    template_catalog = load_template_catalog().get("templates", {})
+    template_block = ""
+    if template_catalog:
+        tpl_lines = []
+        for tid, e in template_catalog.items():
+            fam = e.get("family", "?")
+            desc = e.get("description", "")
+            tpl_lines.append(f"  {tid} ({fam}) — {desc}")
+        template_block = (
+            "AVAILABLE TEMPLATES (choose the closest id for the visual direction, "
+            "or leave template_hint empty for free-form):\n"
+            + "\n".join(tpl_lines)
+            + "\n"
+        )
+
     # Tags & excerpt
     tags_str = ", ".join(state.get("tags", []))
     excerpt_str = state.get("excerpt", "")
@@ -136,6 +155,7 @@ async def strategist_node(state: GenerationState) -> dict:
         f"{brand_block}\n"
         f"{campaign_block}\n"
         f"{categories_block}\n"
+        f"{template_block}\n"
         f"TARGET PLATFORMS: {', '.join(platforms)}\n"
         f"TAGS: {tags_str}\n"
         f"EXCERPT: {excerpt_str}\n\n"
