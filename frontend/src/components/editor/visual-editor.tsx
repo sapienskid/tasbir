@@ -60,12 +60,21 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
   const wrapperRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Editor | null>(null)
   const originalRef = useRef<Document | null>(null)
-  const frameHandlersRef = useRef<{
-    win: Window | null
-    doc: Document | null
-    onKey: (e: KeyboardEvent) => void
-    onWheel: (e: WheelEvent) => void
-  } | null>(null)
+  const frameHandlersRef = useRef<
+    Array<{
+      el: Window | Document
+      type: string
+      listener: EventListener
+      opts: boolean | AddEventListenerOptions
+    }>
+  >([])
+  const frameObserverRef = useRef<MutationObserver | null>(null)
+  const attachedFrameElRef = useRef<HTMLIFrameElement | null>(null)
+  // The zoom the user asked for (toolbar/keys/wheel) vs the browser's own
+  // page zoom (which we try to prevent, but compensate for if it slips through).
+  const intendedZoomRef = useRef(100)
+  const pageZoomRef = useRef(1)
+  const baselineDprRef = useRef(1)
   const [ready, setReady] = useState(false)
   const [zoomPct, setZoomPct] = useState(100)
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -157,59 +166,105 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
 
       ed.setDevice("canvas")
       centerFrame(ed)
-      const fitPct = fitPctFor(ed)
-      ed.Canvas.setZoom(fitPct)
-      // setZoom may reset the origin — enforce center after it.
-      ed.Canvas.getFramesEl().style.transformOrigin = "center"
 
       editor = ed
       editorRef.current = ed
 
-      // Attach zoom handlers DIRECTLY on the canvas frame window/document.
-      // The browser applies page zoom (Ctrl± keyboard, Ctrl+wheel, pinch) at
-      // the browser level, and with focus/pointer inside the GrapesJS iframe
-      // a parent-only handler isn't reliably honored. preventDefault inside
-      // the frame stops the page zoom; we tag the event so the parent skips
-      // its own (single zoom). Cleaned up on destroy.
-      const frameWin = ed.Canvas.getWindow()
-      const frameDoc = ed.Canvas.getDocument()
-      const tag = (e: Event) => {
-        ;(e as unknown as { __tasbirZoomHandled?: boolean }).__tasbirZoomHandled = true
+      // Zoom handlers live ON the canvas frame (window AND document, keydown
+      // AND wheel). The browser applies page zoom (Ctrl±, Ctrl+wheel, pinch)
+      // at the browser level, and with focus/pointer inside the GrapesJS
+      // iframe a parent-only handler isn't reliably honored. preventDefault
+      // inside the frame stops the page zoom; symmetric dedupe (check + set a
+      // tag) means whichever handler runs first zooms exactly once.
+      // GrapesJS reloads the iframe on various operations, so we re-attach on
+      // every frame-load event AND observe the frames container for iframe
+      // replacement.
+      const detachFrameHandlers = () => {
+        for (const r of frameHandlersRef.current) {
+          const opts = typeof r.opts === "boolean" ? r.opts : r.opts.capture
+          r.el.removeEventListener(r.type, r.listener, opts)
+        }
+        frameHandlersRef.current = []
       }
-      const onFrameKey = (e: KeyboardEvent) => {
-        if (!(e.ctrlKey || e.metaKey)) return
-        const k = e.key.toLowerCase()
-        if (k !== "-" && k !== "+" && k !== "=" && k !== "0") return
-        e.preventDefault()
-        tag(e)
-        if (k === "-") setZoom(ed.Canvas.getZoom() / 1.2)
-        else if (k === "+" || k === "=") setZoom(ed.Canvas.getZoom() * 1.2)
-        else setZoom(fitPctFor(ed))
+      const attachFrameHandlers = () => {
+        detachFrameHandlers()
+        const win = ed.Canvas.getWindow()
+        const doc = ed.Canvas.getDocument()
+        if (!win && !doc) return
+        attachedFrameElRef.current = ed.Canvas.getFrameEl()
+        const onKey = (e: Event) => {
+          const ev = e as KeyboardEvent
+          if (!(ev.ctrlKey || ev.metaKey)) return
+          const k = ev.key.toLowerCase()
+          let dir: "in" | "out" | "fit" | null = null
+          if (k === "-") dir = "out"
+          else if (k === "+" || k === "=") dir = "in"
+          else if (k === "0") dir = "fit"
+          else return
+          ev.preventDefault()
+          const evt = ev as unknown as { __tasbirZoomHandled?: boolean }
+          if (evt.__tasbirZoomHandled) return
+          evt.__tasbirZoomHandled = true
+          if (dir === "fit") setZoom(fitPctFor(ed))
+          else setZoom(intendedZoomRef.current * (dir === "out" ? 1 / 1.2 : 1.2))
+        }
+        const onWheel = (e: Event) => {
+          const ev = e as WheelEvent
+          if (!ev.ctrlKey) return
+          ev.preventDefault()
+          const evt = ev as unknown as { __tasbirZoomHandled?: boolean }
+          if (evt.__tasbirZoomHandled) return
+          evt.__tasbirZoomHandled = true
+          setZoom(intendedZoomRef.current * (ev.deltaY > 0 ? 1 / 1.2 : 1.2))
+        }
+        const regs: Array<{
+          el: Window | Document
+          type: string
+          listener: EventListener
+          opts: boolean | AddEventListenerOptions
+        }> = []
+        for (const el of [win, doc]) {
+          if (!el) continue
+          regs.push({ el, type: "keydown", listener: onKey, opts: true })
+          regs.push({ el, type: "wheel", listener: onWheel, opts: { passive: false, capture: true } })
+        }
+        for (const r of regs) r.el.addEventListener(r.type, r.listener, r.opts)
+        frameHandlersRef.current = regs
       }
-      const onFrameWheel = (e: WheelEvent) => {
-        if (!e.ctrlKey) return
-        e.preventDefault()
-        tag(e)
-        const factor = e.deltaY > 0 ? 1 / 1.2 : 1.2
-        setZoom(ed.Canvas.getZoom() * factor)
-      }
-      frameWin?.addEventListener("keydown", onFrameKey, true)
-      frameDoc?.addEventListener("wheel", onFrameWheel, { passive: false, capture: true })
-      frameHandlersRef.current = { win: frameWin ?? null, doc: frameDoc ?? null, onKey: onFrameKey, onWheel: onFrameWheel }
+      ed.on("canvas:frame:load", attachFrameHandlers)
+      ed.on("canvas:frame:load:head", attachFrameHandlers)
+      ed.on("canvas:frame:load:body", attachFrameHandlers)
+      attachFrameHandlers()
 
-      setZoomPct(fitPct)
+      // Safety net: re-attach if the iframe element is replaced without a
+      // frame-load event we subscribed to.
+      const framesEl = ed.Canvas.getFramesEl()
+      if (framesEl && !frameObserverRef.current) {
+        let obsTimer: number | undefined
+        const observer = new MutationObserver(() => {
+          const frameEl = ed.Canvas.getFrameEl()
+          if (frameEl === attachedFrameElRef.current) return
+          window.clearTimeout(obsTimer)
+          obsTimer = window.setTimeout(attachFrameHandlers, 60)
+        })
+        observer.observe(framesEl, { childList: true, subtree: true })
+        frameObserverRef.current = observer
+      }
+
+      setZoom(fitPctFor(ed))
       setReady(true)
     }
 
     void init()
     return () => {
       cancelled = true
-      const fh = frameHandlersRef.current
-      if (fh) {
-        fh.win?.removeEventListener("keydown", fh.onKey, true)
-        fh.doc?.removeEventListener("wheel", fh.onWheel, { capture: true })
-        frameHandlersRef.current = null
+      for (const r of frameHandlersRef.current) {
+        const opts = typeof r.opts === "boolean" ? r.opts : r.opts.capture
+        r.el.removeEventListener(r.type, r.listener, opts)
       }
+      frameHandlersRef.current = []
+      frameObserverRef.current?.disconnect()
+      frameObserverRef.current = null
       try {
         editor?.destroy()
       } catch {
@@ -222,35 +277,57 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const setZoom = useCallback(
-    (pct: number) => {
-      const editor = editorRef.current
-      if (!editor) return
-      centerFrame(editor)
-      editor.Canvas.setZoom(pct)
-      editor.Canvas.getFramesEl().style.transformOrigin = "center"
-      setZoomPct(editor.Canvas.getZoom())
+  // Apply the user's intended zoom, compensating for any browser page zoom
+  // that slipped through (pageZoom). The canvas renders at intendedZoom visual
+  // size regardless of the browser's zoom level.
+  const applyCanvasZoom = useCallback(
+    (ed: Editor) => {
+      centerFrame(ed)
+      ed.Canvas.setZoom(intendedZoomRef.current / pageZoomRef.current)
+      ed.Canvas.getFramesEl().style.transformOrigin = "center"
+      setZoomPct(Math.round(intendedZoomRef.current))
     },
     [centerFrame]
   )
 
+  const setZoom = useCallback(
+    (pct: number) => {
+      intendedZoomRef.current = pct
+      const editor = editorRef.current
+      if (!editor) return
+      applyCanvasZoom(editor)
+    },
+    [applyCanvasZoom]
+  )
+
+  // Compensate if the browser zooms the page despite our preventDefault.
+  useEffect(() => {
+    baselineDprRef.current = window.devicePixelRatio || 1
+    const onResize = () => {
+      const dpr = window.devicePixelRatio || 1
+      const next = dpr / baselineDprRef.current
+      if (Math.abs(next - pageZoomRef.current) > 0.01) {
+        pageZoomRef.current = next
+        const editor = editorRef.current
+        if (editor) applyCanvasZoom(editor)
+      }
+    }
+    window.addEventListener("resize", onResize)
+    window.visualViewport?.addEventListener("resize", onResize)
+    return () => {
+      window.removeEventListener("resize", onResize)
+      window.visualViewport?.removeEventListener("resize", onResize)
+    }
+  }, [applyCanvasZoom])
+
   const fit = useCallback(() => {
     const editor = editorRef.current
     if (!editor) return
-    centerFrame(editor)
     setZoom(fitPctFor(editor))
-  }, [centerFrame, fitPctFor, setZoom])
+  }, [fitPctFor, setZoom])
 
-  const zoomOut = useCallback(() => {
-    const editor = editorRef.current
-    if (!editor) return
-    setZoom(editor.Canvas.getZoom() / 1.2)
-  }, [setZoom])
-  const zoomIn = useCallback(() => {
-    const editor = editorRef.current
-    if (!editor) return
-    setZoom(editor.Canvas.getZoom() * 1.2)
-  }, [setZoom])
+  const zoomOut = useCallback(() => setZoom(intendedZoomRef.current / 1.2), [setZoom])
+  const zoomIn = useCallback(() => setZoom(intendedZoomRef.current * 1.2), [setZoom])
   const oneToOne = useCallback(() => setZoom(100), [setZoom])
 
   // Ctrl/Cmd ± zooming is intercepted in the task detail page (capture phase,
@@ -276,11 +353,7 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
     ref,
     () => ({
       exportHtml: () => (ready ? buildDocument() : null),
-      zoomBy: (factor: number) => {
-        const editor = editorRef.current
-        if (!editor) return
-        setZoom(editor.Canvas.getZoom() * factor)
-      },
+      zoomBy: (factor: number) => setZoom(intendedZoomRef.current * factor),
       zoomToFit: () => {
         if (ready) fit()
       },

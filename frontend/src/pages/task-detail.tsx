@@ -81,33 +81,56 @@ export default function TaskDetailPage() {
         else previewFrameRef.current?.zoomBy(dir === "out" ? 1 / 1.25 : 1.25)
       }
     }
-    const alreadyHandled = (e: Event) =>
-      (e as unknown as { __tasbirZoomHandled?: boolean }).__tasbirZoomHandled === true
+    // The GrapesJS canvas lives in an iframe whose own handlers own zoom for
+    // events inside it. A tag can't dedupe across the frame boundary (the
+    // event object is copied), so skip any event whose composed path includes
+    // the canvas iframe. For parent-origin events, dedupe window vs document
+    // with a tag (same document → same event object).
+    const fromCanvasFrame = (e: Event) => {
+      if (mode !== "visual") return false
+      const frame = document.querySelector("[data-visual-editor] .gjs-frame")
+      return !!frame && e.composedPath().includes(frame)
+    }
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return
-      const k = e.key.toLowerCase()
+    const onKeyDown = (e: Event) => {
+      const ev = e as KeyboardEvent
+      if (!(ev.ctrlKey || ev.metaKey)) return
+      const k = ev.key.toLowerCase()
       let dir: "in" | "out" | "fit" | null = null
       if (k === "-") dir = "out"
       else if (k === "+" || k === "=") dir = "in"
       else if (k === "0") dir = "fit"
       else return
-      e.preventDefault()
-      if (alreadyHandled(e)) return
+      ev.preventDefault()
+      if (fromCanvasFrame(e)) return
+      const tag = ev as unknown as { __tasbirZoomHandled?: boolean }
+      if (tag.__tasbirZoomHandled) return
+      tag.__tasbirZoomHandled = true
       applyZoom(dir)
     }
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return
-      e.preventDefault()
-      if (alreadyHandled(e)) return
-      applyZoom(e.deltaY > 0 ? "out" : "in")
+    const onWheel = (e: Event) => {
+      const ev = e as WheelEvent
+      if (!ev.ctrlKey) return
+      ev.preventDefault()
+      if (fromCanvasFrame(e)) return
+      const tag = ev as unknown as { __tasbirZoomHandled?: boolean }
+      if (tag.__tasbirZoomHandled) return
+      tag.__tasbirZoomHandled = true
+      applyZoom(ev.deltaY > 0 ? "out" : "in")
     }
 
-    document.addEventListener("keydown", onKeyDown, true)
-    document.addEventListener("wheel", onWheel, { passive: false, capture: true })
+    // Attach on both window and document (capture): if frame-origin events
+    // don't reach `document`, the `window` capture listener still catches
+    // them and prevents the browser page zoom.
+    for (const target of [window, document]) {
+      target.addEventListener("keydown", onKeyDown, true)
+      target.addEventListener("wheel", onWheel, { passive: false, capture: true })
+    }
     return () => {
-      document.removeEventListener("keydown", onKeyDown, true)
-      document.removeEventListener("wheel", onWheel, { capture: true })
+      for (const target of [window, document]) {
+        target.removeEventListener("keydown", onKeyDown, true)
+        target.removeEventListener("wheel", onWheel, { capture: true })
+      }
     }
   }, [mode])
 
@@ -216,8 +239,10 @@ export default function TaskDetailPage() {
           `/tasks/${taskId}/formats/${selectedFormat}/rerender${audit ? "?audit=true" : ""}`,
           { method: "POST", body: JSON.stringify({ html }) }
         )
-        const dataUri = `data:image/png;base64,${res.png_b64}`
-        pngRef.current.set(selectedFormat, dataUri)
+        const dataUri = res.png_b64 ? `data:image/png;base64,${res.png_b64}` : undefined
+        if (dataUri) {
+          pngRef.current.set(selectedFormat, dataUri)
+        }
         draftsRef.current.set(selectedFormat, html)
         // Keep the editor/preview in sync with what was actually saved.
         if (html !== draft) {
@@ -244,7 +269,7 @@ export default function TaskDetailPage() {
     if (!selectedFormat) return
     setDraft(html)
     draftsRef.current.set(selectedFormat, html)
-    toast.success("Applied to editor")
+    toast.success("Applied to editor — click Save & Render to persist")
   }, [selectedFormat])
 
   const applyAndRender = useCallback(
