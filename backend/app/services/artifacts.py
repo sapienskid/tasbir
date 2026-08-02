@@ -1,8 +1,9 @@
-"""Output artifact helpers — safe path resolution + ephemeral delivery.
+"""Output artifact helpers — safe path resolution + delivery.
 
 Artifacts (per-format HTML/PNG) live under ``data/output/{task_id}/``. Files
-are served on demand and deleted immediately after delivery (one-time
-download), and a TTL sweep removes anything that was never fetched.
+persist until the hourly TTL sweep deletes the task's output directory.
+Downloading does not remove them unless the consumer opts in (?consume=true)
+or ``DELETE_ON_DOWNLOAD`` is set.
 """
 
 from __future__ import annotations

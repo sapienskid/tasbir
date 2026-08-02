@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     # Retention
     output_ttl_hours: int = 24
 
+    # If true, a downloaded artifact is deleted after delivery (old one-time
+    # behavior). Default keeps files until the TTL sweep; per-request
+    # ?consume=true overrides.
+    delete_on_download: bool = False
+
     # Verification
     skip_verify: bool = False
 

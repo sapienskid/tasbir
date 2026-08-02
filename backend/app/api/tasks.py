@@ -67,23 +67,39 @@ async def list_task_files(task_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{task_id}/files/{filename}")
-async def download_task_file(task_id: str, filename: str, db: AsyncSession = Depends(get_db)):
-    """Stream an artifact, then delete it (one-time download)."""
+async def download_task_file(
+    task_id: str,
+    filename: str,
+    consume: bool | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Stream an artifact. Files persist until the TTL sweep by default.
+
+    ``?consume=true`` streams then deletes (one-time download); the
+    ``DELETE_ON_DOWNLOAD`` env flips the default.
+    """
+    from app.config import get_settings
+
     repo = TaskRepository(db)
     if not await repo.get_by_id(task_id):
         raise NotFoundError(f"Task {task_id} not found")
     try:
         path = resolve_output_file(task_id, filename)
     except FileNotFoundError:
-        raise NotFoundError(f"File {filename!r} not found (or already downloaded)")
+        raise NotFoundError(f"File {filename!r} not found")
 
-    media_type = "image/png" if path.suffix.lower() == ".png" else "text/html; charset=utf-8"
-    return FileResponse(
-        path,
-        media_type=media_type,
-        filename=path.name,
-        background=BackgroundTask(os.unlink, str(path)),
+    delete_after = (
+        consume if consume is not None else get_settings().delete_on_download
     )
+    media_type = "image/png" if path.suffix.lower() == ".png" else "text/html; charset=utf-8"
+    if delete_after:
+        return FileResponse(
+            path,
+            media_type=media_type,
+            filename=path.name,
+            background=BackgroundTask(os.unlink, str(path)),
+        )
+    return FileResponse(path, media_type=media_type, filename=path.name)
 
 
 @router.delete("/{task_id}", status_code=204)
