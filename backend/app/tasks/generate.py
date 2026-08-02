@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 from app.agents.orchestrator.graph import run_pipeline
+from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.tasks import TaskRepository
 from app.db.session import get_shared_session_factory
 from app.tasks.celery_app import celery_app
@@ -22,43 +23,70 @@ def generate_task(self, task_id: str, source_data: dict):
             await repo.update_status(task_id=task_id, status="running")
 
         from app.config import get_settings
+        from app.services.design_systems import build_pipeline_payload, load_ds_templates
         from app.services.image_loader import prepare_images
-        from app.services.tokens import (
-            DEFAULT_TOKEN_VALUES,
-            load_brand,
-            load_brand_design,
-            load_campaign,
-            load_tokens,
-        )
+        from app.services.tokens import DEFAULT_TOKEN_VALUES
 
         settings = get_settings()
+
+        # Design system drives tokens, brand, footer, categories, campaigns,
+        # design-instruction, and the logo. Defaults to the seeded system.
+        ds_id = source_data.get("design_system_id") or "default"
+        async with pool() as session:
+            ds = await DesignSystemRepository(session).get_by_id(ds_id)
+            if ds is None:
+                log.warning(
+                    "[generate_task] Design system %r not found — falling back to default",
+                    ds_id,
+                )
+                async with pool() as s2:
+                    ds = await DesignSystemRepository(s2).get_by_id("default")
+            if ds is None:
+                raise RuntimeError("No design system available (seed failed)")
+
+        payload = build_pipeline_payload(ds)
 
         # Setup pipeline input
         pipeline_input = dict(source_data)
         pipeline_input["_task_id"] = task_id
-        pipeline_input["design_tokens"] = load_tokens(settings.tokens_path) or dict(DEFAULT_TOKEN_VALUES)
+        pipeline_input.update(
+            {
+                "design_system_id": ds.id,
+                "design_tokens": payload["design_tokens"]
+                or dict(DEFAULT_TOKEN_VALUES),
+                "token_roles": payload["token_roles"],
+                "brand_info": payload["brand_info"],
+                "footer": payload["footer"],
+                "categories": payload["categories"],
+                "design_instruction": payload["design_instruction"],
+                "logo": payload["logo"],
+            }
+        )
 
-        # Load brand profile
-        brand_data = load_brand(settings.brand_path)
-        pipeline_input["brand_info"] = brand_data.get("brand", {})
-        pipeline_input["overrides"] = {**brand_data.get("overrides", {}), **source_data.get("overrides", {})}
+        # Overrides: brand/system-level, then API request (highest priority)
+        request_overrides = source_data.get("overrides", {}) or {}
+        pipeline_input["overrides"] = {
+            **(payload.get("overrides") or {}),
+            **request_overrides,
+        }
 
-        # Load brand footer + category taxonomy
-        brand_design = load_brand_design(settings.brand_path)
-        pipeline_input["footer"] = brand_design["footer"]
-        pipeline_input["categories"] = brand_design["categories"]
+        # Campaign preset from this design system's campaigns map.
+        campaign_name = source_data.get("campaign", "default")
+        campaigns = payload.get("campaigns") or {}
+        pipeline_input["campaign"] = campaigns.get(
+            campaign_name, campaigns.get("default", {})
+        )
+        pipeline_input["campaign_name"] = campaign_name
 
         # Category override from API request (highest priority)
         if source_data.get("category"):
             pipeline_input["category"] = source_data["category"]
 
-        # Load campaign preset by name (string) — fallback to "default"
-        campaign_name = source_data.get("campaign", "default")
-        campaign = load_campaign(campaign_name, settings.campaigns_path)
-        pipeline_input["campaign"] = campaign
-        pipeline_input["campaign_name"] = campaign_name
+        # The design system's active template library (selection input).
+        pipeline_input["ds_templates"] = await load_ds_templates(pool, ds.id)
+        pipeline_input["template_id"] = source_data.get("template_id") or ""
 
-        # Download and prepare images
+        # Download URL images / pass through uploaded base64 media.
         raw_images = source_data.get("images", [])
         pipeline_input["images"] = await prepare_images(raw_images) if raw_images else []
 
