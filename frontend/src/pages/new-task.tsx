@@ -26,28 +26,12 @@ import {
   type Template,
 } from "@/lib/api"
 import { useDesignSystems, useTemplates } from "@/hooks/use-library"
+import { usePlatforms } from "@/hooks/use-platforms"
+import { familyOfPlatform } from "@/lib/platforms"
 import { PreviewFrame, FAMILY_DIMS } from "@/components/tasks/preview-frame"
 
-const KNOWN_PLATFORMS = [
-  "instagram-square",
-  "instagram-carousel",
-  "instagram-portrait",
-  "instagram-story",
-  "linkedin-post",
-  "twitter-card",
-  "facebook-post",
-  "pinterest-pin",
-]
-
-const FAMILY_OF_PLATFORM: Record<string, string> = {
-  "instagram-square": "square",
-  "instagram-carousel": "square",
-  "instagram-portrait": "portrait",
-  "instagram-story": "story",
-  "linkedin-post": "landscape",
-  "twitter-card": "landscape",
-  "facebook-post": "landscape",
-  "pinterest-pin": "portrait",
+function isCarouselPlatform(p: string): boolean {
+  return p === "instagram-carousel" || p === "instagram-carousel-portrait"
 }
 
 const STEPS = ["Design System", "Content", "Template", "Media"]
@@ -62,6 +46,7 @@ interface MediaEntry {
 export default function NewTaskPage() {
   const navigate = useNavigate()
   const { data: systems, isLoading: dsLoading } = useDesignSystems()
+  const { platforms: dbPlatforms } = usePlatforms()
 
   const [step, setStep] = useState(0)
   const [dsId, setDsId] = useState<string>("")
@@ -71,6 +56,8 @@ export default function NewTaskPage() {
   const [campaign, setCampaign] = useState("default")
   const [platforms, setPlatforms] = useState<string[]>(["instagram-square"])
   const [slides, setSlides] = useState(3)
+  const [ratio, setRatio] = useState<"square" | "portrait" | "auto">("square")
+  const [sequenceAudit, setSequenceAudit] = useState(false)
   const [templateId, setTemplateId] = useState<string>("")
   const [media, setMedia] = useState<Record<string, MediaEntry>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -91,7 +78,7 @@ export default function NewTaskPage() {
   }, [activeSystems, dsId])
 
   const families = useMemo(
-    () => [...new Set(platforms.map((p) => FAMILY_OF_PLATFORM[p]).filter(Boolean))],
+    () => [...new Set(platforms.map((p) => familyOfPlatform(p)).filter(Boolean))],
     [platforms]
   )
   const gallery = useMemo(
@@ -128,6 +115,7 @@ export default function NewTaskPage() {
           description: "",
           placement: "auto",
         }))
+      const hasCarousel = platforms.some(isCarouselPlatform)
       const res = await apiRequest<GenerateResponse>("/generate", {
         method: "POST",
         body: JSON.stringify({
@@ -136,7 +124,9 @@ export default function NewTaskPage() {
           category: category || undefined,
           campaign,
           platforms,
-          slides: platforms.includes("instagram-carousel") ? slides : undefined,
+          slides: hasCarousel ? slides : undefined,
+          ratio,
+          sequence_audit: sequenceAudit,
           design_system_id: dsId,
           template_id: templateId,
           images,
@@ -293,29 +283,66 @@ export default function NewTaskPage() {
             <div className="grid gap-2">
               <Label>Platforms</Label>
               <div className="grid grid-cols-2 gap-2">
-                {KNOWN_PLATFORMS.map((p) => (
-                  <div key={p} className="flex items-center gap-2 text-sm">
-                    <Checkbox id={`nt-${p}`} checked={platforms.includes(p)} onCheckedChange={(c) => togglePlatform(p, c === true)} />
-                    <Label htmlFor={`nt-${p}`} className="font-normal">
-                      {p}
+                {dbPlatforms.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2 text-sm">
+                    <Checkbox id={`nt-${p.id}`} checked={platforms.includes(p.id)} onCheckedChange={(c) => togglePlatform(p.id, c === true)} />
+                    <Label htmlFor={`nt-${p.id}`} className="font-normal">
+                      {p.name || p.id}
                     </Label>
                   </div>
                 ))}
-              </div>
-              {platforms.includes("instagram-carousel") ? (
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                  <Label htmlFor="nt-slides" className="shrink-0">
-                    Slides
-                  </Label>
-                  <Input
-                    id="nt-slides"
-                    type="number"
-                    min={2}
-                    max={10}
-                    className="w-20"
-                    value={slides}
-                    onChange={(e) => setSlides(Math.min(10, Math.max(2, Number(e.target.value) || 3)))}
+                <div className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    id="nt-auto"
+                    checked={platforms.includes("auto")}
+                    onCheckedChange={(c) => togglePlatform("auto", c === true)}
                   />
+                  <Label htmlFor="nt-auto" className="font-normal">
+                    auto — planner decides
+                  </Label>
+                </div>
+              </div>
+              {platforms.some(isCarouselPlatform) ? (
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="nt-slides" className="shrink-0">
+                      Slides
+                    </Label>
+                    <Input
+                      id="nt-slides"
+                      type="number"
+                      min={2}
+                      max={10}
+                      className="w-20"
+                      value={slides}
+                      onChange={(e) => setSlides(Math.min(10, Math.max(2, Number(e.target.value) || 3)))}
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="nt-ratio" className="shrink-0">
+                      Ratio
+                    </Label>
+                    <Select value={ratio} onValueChange={(v) => setRatio(v as typeof ratio)}>
+                      <SelectTrigger id="nt-ratio" className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="square">square 1:1</SelectItem>
+                        <SelectItem value="portrait">portrait 4:5</SelectItem>
+                        <SelectItem value="auto">auto</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="nt-seqaudit"
+                      checked={sequenceAudit}
+                      onCheckedChange={(c) => setSequenceAudit(c === true)}
+                    />
+                    <Label htmlFor="nt-seqaudit" className="font-normal">
+                      sequence audit (vision)
+                    </Label>
+                  </div>
                 </div>
               ) : null}
             </div>

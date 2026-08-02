@@ -27,7 +27,6 @@ import json
 import logging
 import re
 from html import escape
-from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
 from app.services.agents import get_agent_config
@@ -35,7 +34,6 @@ from app.services.design_instruction import (
     build_google_fonts_link,
     format_design_instruction_block,
     format_format_layout_block,
-    load_design_instruction,
 )
 from app.services.formats import get_format_info
 from app.services.llm import call_llm
@@ -87,29 +85,30 @@ def _parse_copy(copy_json: str) -> dict:
         }
 
 
-def _ground_css_vars(ground: str) -> str:
-    """Map the resolved ground to the correct token variables (no hex)."""
-    if ground == "black":
-        return (
-            "GROUND VARIABLES (black-ground):\n"
-            "  background → var(--color-bg-inverted)\n"
-            "  primary text → var(--color-text-inverted)\n"
-            "  hairline rules → var(--color-border-inverted)\n"
-            "  secondary text → var(--color-text-secondary) (same on both grounds)"
-        )
+def _ground_css_vars(
+    ground: str,
+    tokens: dict | None = None,
+    roles: dict | None = None,
+) -> str:
+    """Map the resolved ground to the design system's token variables.
+
+    Resolved through ``resolve_ground_vars`` (the token service) so no token
+    names are hardcoded here — a custom design system's variables win.
+    """
+    from app.services.tokens import resolve_ground_vars
+
+    v = resolve_ground_vars(ground, tokens or {}, roles or {})
     return (
-        "GROUND VARIABLES (white-ground):\n"
-        "  background → var(--color-bg)\n"
-        "  primary text → var(--color-text)\n"
-        "  hairline rules → var(--color-border)\n"
-        "  secondary text → var(--color-text-secondary) (same on both grounds)"
+        f"GROUND VARIABLES ({ground}-ground):\n"
+        f"  background → var({v['background']})\n"
+        f"  primary text → var({v['text']})\n"
+        f"  hairline rules → var({v['border']})\n"
+        f"  secondary text → var({v['secondary']}) (same on both grounds)"
     )
 
 
 async def designer_node_single(state: GenerationState) -> dict:
     """Create HTML layout for a single platform."""
-    from app.config import get_settings
-
     prompt_cfg = await get_agent_config("designer")
     fmt_id = state.get("_processing_format_id", "")
     fmt = get_format_info(fmt_id)
@@ -124,18 +123,22 @@ async def designer_node_single(state: GenerationState) -> dict:
     critique = fmt_verification.get("critique", "")
     retry_count = state.get("retry_count", {}).get(fmt_id, 0)
 
-    # Load design-instruction — per-design-system (state) with YAML fallback.
-    settings = get_settings()
+    # Load design-instruction — per-design-system (state); empty-state (tests /
+    # edge) falls back to the DB default design system.
     di_config = state.get("design_instruction") or {}
+    design_tokens = state.get("design_tokens", {})
+    token_roles = state.get("token_roles", {})
     if not di_config:
-        di_path = Path(settings.design_system_dir) / "design-instruction.yaml"
-        di_config = load_design_instruction(di_path)
+        from app.services.design_systems import default_design_system_payload
+
+        payload = await default_design_system_payload()
+        di_config = payload.get("design_instruction") or {}
+        design_tokens = payload.get("design_tokens") or design_tokens
+        token_roles = payload.get("token_roles") or token_roles
     di_block = format_design_instruction_block(di_config)
     layout_block = format_format_layout_block(di_config, fmt_id, fmt.width, fmt.height)
 
     # Design tokens (variable names + semantic roles only — never values)
-    design_tokens = state.get("design_tokens", {})
-    token_roles = state.get("token_roles", {})
     css_var_reference = build_css_var_reference(design_tokens, token_roles or None)
 
     # Layout archetype — deterministic per post so designs vary across runs
@@ -186,7 +189,7 @@ async def designer_node_single(state: GenerationState) -> dict:
             f"LANGUAGE: {language}\n"
         )
 
-    ground_block = _ground_css_vars(ground)
+    ground_block = _ground_css_vars(ground, design_tokens, token_roles)
 
     # Carousel slide context — this frame's position in a swipeable sequence.
     slide_block = ""
@@ -197,7 +200,7 @@ async def designer_node_single(state: GenerationState) -> dict:
         cover_note = " This is the COVER — make the headline the strongest hook." if i == 1 else ""
         slide_block = (
             f"CAROUSEL SLIDE {i} of {n} — this is ONE frame of a swipeable "
-            f"multi-slide post (square).{cover_note} Make this frame self-contained "
+            f"multi-slide post ({fmt.width}x{fmt.height}).{cover_note} Make this frame self-contained "
             f"(readable on its own) while continuing the sequence: give it a clear "
             f"mini-headline in the display voice, keep the body short, and NEVER let "
             f"text clip at the canvas edge. Include a small '{i}/{n}' counter in "
@@ -215,7 +218,7 @@ async def designer_node_single(state: GenerationState) -> dict:
         footer_block += (
             f"  Left (SIGNATURE WORDMARK): {footer_left} — display face "
             "(var(--font-display)), ~24px, weight 500, tight tracking, uppercase\n"
-            f"  Right: {footer_right} — metadata style (Inter, tracked uppercase, secondary gray)\n"
+            f"  Right: {footer_right} — metadata style (var(--font-sans), tracked uppercase, secondary gray)\n"
             "  1px hairline rule above, then 24px gap, bottom-anchored\n"
         )
     else:
@@ -345,6 +348,9 @@ TAGLINE: {tagline}"""
             category=category,
             footer_left=footer_left,
             footer_right=footer_right,
+            design_tokens=design_tokens,
+            token_roles=token_roles,
+            di_config=di_config,
         )
         return {
             "format_tasks": {
@@ -365,12 +371,45 @@ def _build_fallback_html(
     category: str = "",
     footer_left: str = "",
     footer_right: str = "",
+    design_tokens: dict | None = None,
+    token_roles: dict | None = None,
+    di_config: dict | None = None,
 ) -> str:
     """Build a minimal Swiss-style fallback HTML when the LLM fails.
 
-    Uses only var(--color-*) references — the pipeline injects the token
-    block before rendering, so no hex values live in this code.
+    Fully design-system-driven — the Google Fonts link, type sizes, margins,
+    and ground variables all come from the active design system (tokens +
+    design-instruction), never from literals. Uses only var(--color-*) /
+    var(--font-*) references so the pipeline injects real values at render.
     """
+    from app.services.design_instruction import scaled_type_sizes
+    from app.services.tokens import resolve_ground_vars
+
+    tokens = design_tokens or {}
+    di = di_config or {}
+    v = resolve_ground_vars(ground, tokens, token_roles or {})
+    scaled = scaled_type_sizes(di, fmt.width)
+    ts_category = scaled.get("category", {}).get("size", 22)
+    ts_headline = scaled.get("headline", {}).get("size", 76)
+    ts_subhead = scaled.get("subhead", {}).get("size", 36)
+    ts_body = scaled.get("body", {}).get("size", 28)
+    ts_metadata = scaled.get("metadata", {}).get("size", 20)
+    wm = di.get("footer", {}).get("wordmark", {})
+    wm_size = wm.get("size", 24)
+    wm_tracking = wm.get("tracking", "-0.01em")
+    wm_weight = wm.get("weight", 500)
+    spacing = di.get("spacing", {})
+    margin = spacing.get("margin", 64)
+    gap = spacing.get("gap_headline_body", 32)
+    is_story = fmt.width == 1080 and fmt.height == 1920
+    pad_vertical = spacing.get("margin_story_vertical", 160) if is_story else margin
+    measure = (
+        scaled.get("subhead", {}).get("measure_px")
+        or scaled.get("body", {}).get("measure_px")
+        or 600
+    )
+    fonts_link = build_google_fonts_link(tokens, di)
+
     headline = escape(copy_data.get("headline", "Untitled"))
     subhead = escape(copy_data.get("subhead", ""))
     body = escape(copy_data.get("body", ""))
@@ -379,8 +418,6 @@ def _build_fallback_html(
     footer_left = escape(footer_left)
     footer_right = escape(footer_right)
 
-    is_story = fmt.width == 1080 and fmt.height == 1920
-    pad_vertical = 160 if is_story else 64
     body_block = f'<div class="body-text">{body}</div>' if body else ""
     subhead_block = f'<div class="subhead">{subhead}</div>' if subhead else ""
     tagline_block = f'<div class="tagline">{tagline}</div>' if tagline else ""
@@ -398,9 +435,7 @@ def _build_fallback_html(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500&family=Space+Grotesk:wght@500;700&family=Source+Serif+4:wght@400&display=swap" rel="stylesheet">
+{fonts_link}
 <style>
 * {{ box-sizing: border-box; margin: 0; padding: 0; }}
 body {{
@@ -408,73 +443,74 @@ body {{
   height: {fmt.height}px;
   overflow: hidden;
   margin: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
+  background: var({v['background']});
+  color: var({v['text']});
   font-family: var(--font-sans);
-  padding: {pad_vertical}px 64px;
+  padding: {pad_vertical}px {margin}px;
   display: flex;
   flex-direction: column;
 }}
 .kicker {{
-  font-size: 22px;
+  font-size: {ts_category}px;
   font-weight: 500;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  margin-bottom: 24px;
+  color: var({v['secondary']});
+  margin-bottom: {spacing.get('gap_category_label', 24)}px;
 }}
 .headline {{
   font-family: var(--font-display);
-  font-size: 76px;
+  font-size: {ts_headline}px;
   font-weight: 700;
   letter-spacing: -0.01em;
   line-height: 1.0;
-  margin-bottom: 32px;
+  margin-bottom: {gap}px;
 }}
 .subhead {{
   font-family: var(--font-serif);
-  font-size: 36px;
+  font-size: {ts_subhead}px;
   font-weight: 400;
   line-height: 1.3;
-  margin-bottom: 32px;
-  max-width: 600px;
+  margin-bottom: {gap}px;
+  max-width: {measure}px;
 }}
 .body-text {{
   font-family: var(--font-serif);
-  font-size: 28px;
+  font-size: {ts_body}px;
   font-weight: 400;
   line-height: 1.4;
-  margin-bottom: 32px;
-  max-width: 600px;
+  margin-bottom: {gap}px;
+  max-width: {measure}px;
 }}
 .tagline {{
-  font-size: 20px;
+  font-size: {ts_metadata}px;
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-text-secondary);
-  margin-bottom: 32px;
+  color: var({v['secondary']});
+  margin-bottom: {gap}px;
 }}
 .spacer {{ flex: 1; }}
-.rule {{ border-top: 1px solid var(--color-border); }}
+.rule {{ border-top: 1px solid var({v['border']}); }}
 .footer {{
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding-top: 24px;
+  padding-top: {spacing.get('gap_footer_rule', 24)}px;
 }}
 .wordmark {{
   font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
+  font-size: {wm_size}px;
+  font-weight: {wm_weight};
+  letter-spacing: {wm_tracking};
   text-transform: uppercase;
 }}
 .handle {{
-  font-size: 20px;
+  font-size: {ts_metadata}px;
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--color-text-secondary);
+  color: var({v['secondary']});
 }}
 </style>
 </head>

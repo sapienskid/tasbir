@@ -93,6 +93,7 @@ async def build_layout_spec(image_bytes: bytes, mime: str = "image/png") -> dict
         image_bytes,
         temperature=prompt_cfg.temperature,
         max_tokens=prompt_cfg.max_tokens,
+        model=prompt_cfg.model,
     )
     return extract_json(raw)
 
@@ -183,6 +184,7 @@ async def validate_template_html(
         seed="validate",
         family=family,
         logo=logo,
+        di_config=ds.design_instruction or {},
     )
     try:
         rendered = render_template_html(html, context)
@@ -205,8 +207,8 @@ async def validate_template_html(
     except Exception:
         pass
 
-    display_family = tokens.get(
-        "--font-display", "Space Grotesk, Inter, sans-serif"
+    display_family = (
+        tokens.get("--font-display") or DEFAULT_TOKEN_VALUES["--font-display"]
     ).split(",")[0].strip()
     issues = _run_deterministic_checks(
         rendered, footer, "WRITING", width, height, display_family

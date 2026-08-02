@@ -154,6 +154,21 @@ async def _build_user_prompt(name: str, payload: dict) -> str:
             f"SOURCE CONTENT (excerpt):\n{_SAMPLE_CONTENT[:2000]}"
         )
 
+    if name == "planner":
+        from app.services.platforms import list_platforms
+
+        known = sorted(r["id"] for r in list_platforms(include_inactive=True))
+        return (
+            f"STRATEGIC ANGLE: {brief.get('angle', '')}\n"
+            f"AUDIENCE: {brief.get('audience', '')}\n"
+            f"VISUAL DIRECTION: {brief.get('visual_direction', '')}\n\n"
+            "PLATFORMS: auto — choose the best 1-3 from these:\n"
+            f"  {', '.join(known)}\n"
+            "RATIO: auto — choose square or portrait\n"
+            f"SOURCE TITLE: {_SAMPLE_TITLE}\n"
+            f"SOURCE CONTENT (excerpt):\n{_SAMPLE_CONTENT[:1500]}"
+        )
+
     if name == "designer":
         from app.agents.orchestrator.nodes.designer import _ground_css_vars
 
@@ -202,7 +217,7 @@ async def _build_user_prompt(name: str, payload: dict) -> str:
             f"VISUAL DIRECTION: {brief.get('visual_direction', 'clean editorial')}\n"
             f"TONE: {brief.get('tone', 'professional')}\n\n"
             f"{archetype_block}\n\n"
-            f"{_ground_css_vars(ground)}\n\n"
+            f"{_ground_css_vars(ground, tokens, payload.get('token_roles') or {})}\n\n"
             f"{category_block}\n{footer_block}\n"
             f"COPY TO USE:\n{copy_block}\n\n"
             f"GOOGLE FONTS LINK (include in <head>):\n{fonts_link}\n\n"
@@ -249,12 +264,13 @@ async def _build_user_prompt(name: str, payload: dict) -> str:
         )
 
     if name == "brand_tokens":
+        from app.services.fonts import font_pool_for_prompt
+
         brief_payload = {"name": brand.get("name", "Sample Brand"), "style": "Swiss editorial"}
         return (
             f"BRAND BRIEF:\n{json.dumps(brief_payload, indent=2)}\n\n"
             "AVAILABLE FONTS (choose ONLY from these):\n"
-            "  sans-serif: Inter, Roboto, Open Sans\n  serif: Source Serif 4, Georgia\n"
-            "  display: Space Grotesk, Archivo\n  monospace: JetBrains Mono, IBM Plex Mono\n"
+            f"{await font_pool_for_prompt()}\n"
             "Return the token + token_roles + design-instruction overlay JSON."
         )
 

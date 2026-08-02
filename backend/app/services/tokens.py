@@ -58,6 +58,75 @@ DEFAULT_CATEGORIES: list[dict] = [
 DEFAULT_FOOTER: dict[str, str] = {"left": "", "right": ""}
 
 
+# Ground → semantic-role variable convention. Lives here in the design-system
+# service layer (NOT in any agent node): the designer/verifier never hardcode
+# token names — they resolve them through this map, verified against the
+# design system's actual token set + role descriptions.
+_DEFAULT_GROUND_VARS: dict[str, dict[str, str]] = {
+    "white": {
+        "background": "--color-bg",
+        "text": "--color-text",
+        "border": "--color-border",
+        "secondary": "--color-text-secondary",
+    },
+    "black": {
+        "background": "--color-bg-inverted",
+        "text": "--color-text-inverted",
+        "border": "--color-border-inverted",
+        "secondary": "--color-text-secondary",
+    },
+}
+
+
+def _find_role_var(role: str, ground: str, roles: dict[str, str]) -> str:
+    """Derive a ground-role variable from role descriptions (custom systems).
+
+    Matches by the semantic words the roles already carry (e.g. ``background``
+    + ``light`` for white ground, ``ink`` + ``black`` for text on black).
+    Returns "" when nothing matches.
+    """
+    ground_words = {"white": ("light", "white"), "black": ("black", "inverted")}
+    gw = ground_words.get(ground, ("light", "white"))
+    role_words = {
+        "background": ("background",),
+        "text": ("ink", "text"),
+        "border": ("border", "hairline"),
+        "secondary": ("secondary",),
+    }
+    rw = role_words.get(role, ())
+    for var, desc in roles.items():
+        d = (desc or "").lower()
+        if not rw or not all(w in d for w in rw):
+            continue
+        if any(w in d for w in gw):
+            return var
+    return ""
+
+
+def resolve_ground_vars(
+    ground: str,
+    tokens: dict[str, str] | None = None,
+    roles: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Resolve {background, text, border, secondary} variable names for a ground.
+
+    Resolution order per role: the design-system convention name (when the
+    token actually exists) → a variable derived from the DS ``token_roles``
+    descriptions → the convention name as the last resort. Agents receive
+    variable NAMES only — never values — and nothing is hardcoded in them.
+    """
+    ground = ground if ground in ("white", "black") else "white"
+    tokens = tokens or {}
+    roles = roles or {}
+    out: dict[str, str] = {}
+    for role, convention in _DEFAULT_GROUND_VARS[ground].items():
+        if convention in tokens:
+            out[role] = convention
+        else:
+            out[role] = _find_role_var(role, ground, roles) or convention
+    return out
+
+
 def build_css_var_reference(
     tokens: dict[str, str], roles: dict[str, str] | None = None
 ) -> str:

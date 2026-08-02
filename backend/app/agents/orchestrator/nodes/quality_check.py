@@ -28,7 +28,6 @@ from app.services.design_instruction import (
     build_google_fonts_link,
     format_design_instruction_block,
     inject_fonts_into_html,
-    load_design_instruction,
     substitute_image_keys,
     substitute_logo,
 )
@@ -43,6 +42,10 @@ from app.services.tokens import (
 log = logging.getLogger(__name__)
 
 MAX_RETRIES = 2  # Max verifier retry loops
+
+# Fallback display family, derived from the design-system seed — never a
+# hardcoded face name in agent code.
+_DEFAULT_DISPLAY_FAMILY = DEFAULT_TOKEN_VALUES["--font-display"].split(",")[0].strip()
 
 # Decorative/emoji Unicode ranges to scan for — excludes mathematical operators
 # (U+2200–U+22FF) so KaTeX/$...$ math content never false-positives.
@@ -128,12 +131,18 @@ async def _call_vision_llm(
     image_bytes: bytes,
     temperature: float = 0.3,
     max_tokens: int = 1000,
+    model: str | None = None,
 ) -> str:
     """Call Gemini Vision with an image + text prompt (shared helper)."""
     from app.services.vision import call_vision_llm as _shared
 
     return await _shared(
-        system_prompt, user_prompt, image_bytes, temperature=temperature, max_tokens=max_tokens
+        system_prompt,
+        user_prompt,
+        image_bytes,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        model=model,
     )
 
 
@@ -201,7 +210,7 @@ def _run_deterministic_checks(
     category: str,
     canvas_width: int = 1080,
     canvas_height: int = 1080,
-    display_family: str = "Space Grotesk",
+    display_family: str = _DEFAULT_DISPLAY_FAMILY,
 ) -> list[str]:
     """Check for hard design-system violations WITHOUT an LLM.
 
@@ -311,7 +320,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
 
     # Step 0: Deterministic design-system checks (no LLM cost). Any violation
     # is a hard spec failure — fix and retry.
-    display_value = design_tokens.get("--font-display", "Space Grotesk, Inter, sans-serif")
+    display_value = design_tokens.get("--font-display") or DEFAULT_TOKEN_VALUES["--font-display"]
     display_family = display_value.split(",")[0].strip()
     check_issues = _run_deterministic_checks(
         html, footer, category, fmt.width, fmt.height, display_family
@@ -346,10 +355,13 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     images_list = state.get("images", [])
     logo = state.get("logo", "")
     html_with_tokens = inject_tokens_into_html(html, design_tokens)
-    from pathlib import Path as _Path
     di_config = state.get("design_instruction") or {}
     if not di_config:
-        di_config = load_design_instruction(_Path(settings.design_system_dir) / "design-instruction.yaml")
+        from app.services.design_systems import default_design_system_payload
+
+        payload = await default_design_system_payload()
+        di_config = payload.get("design_instruction") or {}
+        design_tokens = payload.get("design_tokens") or design_tokens
     html_with_tokens = inject_fonts_into_html(
         html_with_tokens, build_google_fonts_link(design_tokens, di_config)
     )
@@ -421,10 +433,12 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # Save PNG and HTML for output
     _save_png(task_id, fmt_id, png_bytes)
     _save_html_preview(task_id, fmt_id, html_with_tokens)
-    di_path = _Path(settings.design_system_dir) / "design-instruction.yaml"
     design_instruction = state.get("design_instruction") or {}
     if not design_instruction:
-        design_instruction = load_design_instruction(di_path)
+        from app.services.design_systems import default_design_system_payload
+
+        payload = await default_design_system_payload()
+        design_instruction = payload.get("design_instruction") or {}
     ds_context = _build_design_system_context(design_tokens, design_instruction, footer, category, ground)
     user_prompt = (
         f"TARGET PLATFORM: {fmt_id} ({fmt.width}x{fmt.height}px)\n"
@@ -443,6 +457,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
             image_bytes=png_bytes,
             temperature=prompt_cfg.temperature,
             max_tokens=prompt_cfg.max_tokens,
+            model=prompt_cfg.model,
         )
     except Exception as e:
         log.error("[verifier] Vision audit failed for %s: %s", fmt_id, e)

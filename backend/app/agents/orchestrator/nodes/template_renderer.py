@@ -101,6 +101,7 @@ async def template_node_single(state: GenerationState) -> dict:
             seed=seed,
             family=family,
             logo=state.get("logo", ""),
+            di_config=state.get("design_instruction") or {},
         )
         html = render_template_html(entry.get("html", ""), context)
     except Exception as e:

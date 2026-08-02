@@ -87,7 +87,8 @@ async def strategist_node(state: GenerationState) -> dict:
     prompt_cfg = await get_agent_config("strategist")
     content = state.get("content", "")
     title = state.get("title", "")
-    platforms = state.get("platforms", [])
+    # "auto" is resolved by the planner downstream — keep only concrete platforms.
+    platforms = [p for p in state.get("platforms", []) if p != "auto"]
     categories = state.get("categories", [])
 
     # Build brand + campaign context

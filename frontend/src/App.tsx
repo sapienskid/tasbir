@@ -1,9 +1,10 @@
-import { lazy, Suspense } from "react"
+import { lazy, Suspense, useEffect } from "react"
 import { BrowserRouter, Route, Routes } from "react-router-dom"
 import { AppShell } from "@/components/layout/app-shell"
 import { ApiKeyPrompt } from "@/components/settings/api-key-prompt"
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/lib/theme"
+import { loadPlatforms } from "@/lib/platforms"
 
 // Route-level code splitting: every page ships in its own chunk so the shell
 // and dashboard paint without pulling in page-specific code.
@@ -17,6 +18,7 @@ const DesignSystemsPage = lazy(() => import("@/pages/design-systems"))
 const AgentsPage = lazy(() =>
   import("@/pages/agents").then((m) => ({ default: m.AgentsPage }))
 )
+const SettingsPage = lazy(() => import("@/pages/settings"))
 
 function FullPageSkeleton() {
   return (
@@ -28,6 +30,11 @@ function FullPageSkeleton() {
 }
 
 export default function App() {
+  // Warm the DB-backed platform dimension cache on boot.
+  useEffect(() => {
+    void loadPlatforms().catch(() => {})
+  }, [])
+
   return (
     <ThemeProvider>
       <BrowserRouter>
@@ -78,6 +85,14 @@ export default function App() {
               element={
                 <Suspense fallback={<FullPageSkeleton />}>
                   <AgentsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="settings"
+              element={
+                <Suspense fallback={<FullPageSkeleton />}>
+                  <SettingsPage />
                 </Suspense>
               }
             />

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,13 +19,11 @@ from app.agents.orchestrator.nodes.quality_check import (
     _call_vision_llm,
     _run_deterministic_checks,
 )
-from app.config import get_settings
 from app.db.repositories.chat import ChatRepository
 from app.services.agents import get_agent_config
 from app.services.design_instruction import (
     build_google_fonts_link,
     inject_fonts_into_html,
-    load_design_instruction,
 )
 from app.services.dom_extractor import detect_overflow, render_to_png
 from app.services.formats import get_format_info, validate_platforms
@@ -36,7 +33,6 @@ from app.services.tokens import (
     DEFAULT_TOKEN_VALUES,
     inject_katex_into_html,
     inject_tokens_into_html,
-    load_tokens,
 )
 
 log = logging.getLogger(__name__)
@@ -45,7 +41,7 @@ _HTML_CAP = 80_000  # chars of current HTML shown to the model
 
 
 async def _resolve_payload(db: AsyncSession, task: object) -> dict:
-    """Design-system payload for the task — DB first, YAML fallback."""
+    """Design-system payload for the task — DB first, default-DS fallback."""
     source_data = task.source_data or {}
     ds_id = source_data.get("design_system_id") or "default"
 
@@ -58,28 +54,11 @@ async def _resolve_payload(db: AsyncSession, task: object) -> dict:
             if ds is not None:
                 return build_pipeline_payload(ds)
     except Exception as e:
-        log.warning("[chat] Design-system load failed, using YAML fallback: %s", e)
+        log.warning("[chat] Design-system load failed, using default: %s", e)
 
-    settings = get_settings()
-    tokens = load_tokens(settings.tokens_path) or dict(DEFAULT_TOKEN_VALUES)
-    di = load_design_instruction(
-        os.path.join(settings.design_system_dir, "design-instruction.yaml")
-    )
-    brand = {}
-    footer = {"left": "", "right": ""}
-    try:
-        from app.services.tokens import load_brand_design
-        brand = load_brand_design(settings.brand_path)
-        footer = brand.get("footer") or footer
-    except Exception:
-        pass
-    return {
-        "design_system_id": ds_id or "default",
-        "design_tokens": tokens,
-        "design_instruction": di,
-        "footer": footer,
-        "categories": [],
-    }
+    from app.services.design_systems import default_design_system_payload
+
+    return await default_design_system_payload()
 
 
 async def _current_html(task: object, fmt_id: str) -> str | None:
@@ -109,7 +88,7 @@ async def _precheck_html(
     clean = inject_tokens_into_html(clean, tokens)
     clean = inject_fonts_into_html(clean, build_google_fonts_link(tokens, di))
 
-    display_value = tokens.get("--font-display", "Space Grotesk, Inter, sans-serif")
+    display_value = tokens.get("--font-display") or DEFAULT_TOKEN_VALUES["--font-display"]
     display_family = display_value.split(",")[0].strip()
     issues = _run_deterministic_checks(
         clean, footer, category, fmt.width, fmt.height, display_family
@@ -173,8 +152,11 @@ async def run_chat_turn(
     prompt_cfg = await get_agent_config("editor_chat")
 
     html_excerpt = current
-    if len(html_excerpt) > _HTML_CAP:
-        html_excerpt = html_excerpt[:_HTML_CAP] + "\n<!-- …truncated… -->"
+    from app.services.settings import get_runtime_setting
+
+    html_cap = int(await get_runtime_setting("chat.html_cap_chars", _HTML_CAP))
+    if len(html_excerpt) > html_cap:
+        html_excerpt = html_excerpt[:html_cap] + "\n<!-- …truncated… -->"
     user_prompt = (
         f"TARGET PLATFORM: {fmt_id} ({fmt.width}x{fmt.height}px)\n"
         f"EXPECTED GROUND: {ground}\n"
@@ -208,6 +190,7 @@ async def run_chat_turn(
                 image_bytes=png_bytes,
                 temperature=prompt_cfg.temperature,
                 max_tokens=prompt_cfg.max_tokens,
+                model=prompt_cfg.model,
             )
         else:
             raw = await call_llm(

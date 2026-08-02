@@ -30,8 +30,21 @@ from app.services.llm import call_llm
 
 log = logging.getLogger(__name__)
 
-# Semaphore: max 2 concurrent LLM calls (Gemini free tier limit)
-_COPY_SEMAPHORE = asyncio.Semaphore(2)
+# Copywriter concurrency (Gemini free tier limit) — from runtime settings,
+# created lazily so a Studio edit takes effect without a restart.
+_copy_semaphore: asyncio.Semaphore | None = None
+_copy_semaphore_size = 0
+
+
+async def _get_copy_semaphore() -> asyncio.Semaphore:
+    from app.services.settings import get_runtime_setting
+
+    global _copy_semaphore, _copy_semaphore_size
+    size = int(await get_runtime_setting("copywriter.concurrency", 2))
+    if _copy_semaphore is None or _copy_semaphore_size != size:
+        _copy_semaphore = asyncio.Semaphore(size)
+        _copy_semaphore_size = size
+    return _copy_semaphore
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +208,7 @@ async def _write_copy_for_platform(
     carousel_block = ""
     if is_carousel:
         carousel_block = (
-            f"CAROUSEL: {slides_count} slides — square (1080x1080), swipeable, "
+            f"CAROUSEL: {slides_count} slides — {fmt.width}x{fmt.height}, swipeable, "
             f"one frame per slide.\n"
             f"Produce EXACTLY {slides_count} entries in the 'slides' array. "
             f"Slide 1 is the COVER — a strong standalone headline + hook. "
@@ -217,7 +230,8 @@ async def _write_copy_for_platform(
         f"SOURCE CONTENT (excerpt):\n{content[:2000]}"
     )
 
-    async with _COPY_SEMAPHORE:
+    sem = await _get_copy_semaphore()
+    async with sem:
         log.info("[copywriter] Writing copy for %s", platform_id)
         raw = await call_llm(
             agent_role="copywriter",

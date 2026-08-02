@@ -9,6 +9,7 @@ design_instruction, logo).
 from __future__ import annotations
 
 import logging
+import os
 import re
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -130,6 +131,45 @@ async def get_or_create_default(pool: async_sessionmaker[AsyncSession]) -> str:
 
         await seed_default_design_system(pool)
     return DEFAULT_ID
+
+
+async def default_design_system_payload(pool=None) -> dict:
+    """The ``default`` design system payload from the DB.
+
+    Used by runtime fallback paths (rerender, chat, renderer/designer/
+    verifier empty-state) so nothing reads the YAML files at runtime. The
+    YAML seed is only consulted before the default row exists (pre-seed).
+    """
+    from app.db.session import get_shared_session_factory
+
+    pool = pool or (await get_shared_session_factory())
+    async with pool() as session:
+        ds = await DesignSystemRepository(session).get_by_id(DEFAULT_ID)
+    if ds is not None:
+        return build_pipeline_payload(ds)
+
+    from app.config import get_settings
+    from app.services.design_instruction import load_design_instruction
+    from app.services.tokens import DEFAULT_TOKEN_VALUES, load_brand_design, load_tokens
+
+    settings = get_settings()
+    tokens = load_tokens(settings.tokens_path) or dict(DEFAULT_TOKEN_VALUES)
+    di = load_design_instruction(
+        os.path.join(settings.design_system_dir, "design-instruction.yaml")
+    )
+    brand_design = load_brand_design(settings.brand_path)
+    return {
+        "design_system_id": DEFAULT_ID,
+        "design_tokens": tokens,
+        "token_roles": {},
+        "brand_info": {},
+        "footer": brand_design.get("footer", {"left": "", "right": ""}),
+        "categories": brand_design.get("categories", []),
+        "overrides": {},
+        "campaigns": {},
+        "design_instruction": di,
+        "logo": "",
+    }
 
 
 async def load_ds_templates(

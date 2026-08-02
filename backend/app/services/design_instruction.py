@@ -169,9 +169,9 @@ def scaled_type_sizes(config: dict, canvas_width: int) -> dict[str, dict]:
 
 
 _FAMILY_LABEL = {
-    "display": "var(--font-display) — Space Grotesk (signature display voice)",
-    "serif": "var(--font-serif) — Source Serif 4 (editorial serif text voice)",
-    "sans": "var(--font-sans) — Inter (interface sans voice)",
+    "display": "var(--font-display) (signature display voice)",
+    "serif": "var(--font-serif) (editorial text voice)",
+    "sans": "var(--font-sans) (interface voice)",
 }
 
 
@@ -263,7 +263,7 @@ def format_design_instruction_block(config: dict) -> str:
         "--- PALETTE (STRICTLY MONOCHROME) ---",
         f"  Palette: {st.get('palette', 'monochrome')} — pure black/white/gray only, NO hue ever",
         f"  Allowed grounds: {', '.join(st.get('allowed_grounds', ['white', 'black']))}",
-        f"  Max weights per family: {st.get('max_weights_per_family', 2)} (Space Grotesk 500+700, Source Serif 4 400, Inter 500)",
+        f"  Max weights per family: {st.get('max_weights_per_family', 2)}",
         f"  Shadows: {_yn(st.get('shadows', False))}",
         f"  Border radius: {st.get('border_radius', '0px')} — no rounded corners",
         f"  Illustrations/icons: {_yn(st.get('illustrations', False))}",
@@ -310,7 +310,7 @@ def format_design_instruction_block(config: dict) -> str:
         f"  {ft.get('rule', '1px hairline')} above footer, {ft.get('gap', 24)}px gap",
         "  Left: brand NAME as a signature wordmark — display face, tight tracking,",
         f"        {wm.get('size', 24)}px · weight {wm.get('weight', 500)} · tracking {wm.get('tracking', '-0.01em')} · uppercase",
-        "  Right: @handle in metadata style (Inter, tracked uppercase, secondary gray)",
+        "  Right: @handle in metadata style (var(--font-sans), tracked uppercase, secondary gray)",
         "  No logo, no mark, no icon — typography is the signature.",
         "",
         "--- DO ---",

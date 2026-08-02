@@ -140,7 +140,7 @@ def test_fallback_html_is_monochrome_and_swiss():
 
 def test_fallback_html_uses_three_family_system():
     """Fallback must use display face (headline + wordmark), serif body, Inter
-    metadata, and a constrained body measure."""
+    metadata, and a constrained body measure — driven by the design system."""
     fmt = type("F", (), {"width": 1080, "height": 1080})()
     fb = _build_fallback_html(
         fmt,
@@ -148,12 +148,16 @@ def test_fallback_html_uses_three_family_system():
         category="WRITING",
         footer_left="SABIN POKHAREL",
         footer_right="@SAPIENSKID",
+        design_tokens=DEFAULT_TOKEN_VALUES,
+        di_config=di_mod.load_design_instruction(
+            "data/design_system/design-instruction.yaml"
+        ),
     )
     assert "var(--font-display)" in fb
     assert "var(--font-serif)" in fb
     assert ".headline" in fb and ".wordmark" in fb
     assert "max-width: 600px" in fb
-    # All three families in the fonts link
+    # All three families come from the design system's tokens, not literals.
     assert "Space+Grotesk" in fb
     assert "Source+Serif+4" in fb
     assert "Inter:wght@500" in fb
@@ -196,12 +200,13 @@ def test_pick_layout_archetype_is_deterministic_and_varies():
 def test_design_instruction_formatter_has_family_and_measure():
     cfg = di_mod.load_design_instruction("data/design_system/design-instruction.yaml")
     block = di_mod.format_design_instruction_block(cfg)
+    # Faces come from the design system's type_voice (DS data), not agent code.
     assert "Space Grotesk" in block and "var(--font-display)" in block
     assert "Source Serif 4" in block and "var(--font-serif)" in block
     assert "max-width 600px" in block
     assert "wordmark" in block.lower()
     layout = di_mod.format_format_layout_block(cfg, "linkedin-post", 1200, 627)
-    assert "HEADLINE" in layout and "Space Grotesk" in layout
+    assert "HEADLINE" in layout and "var(--font-display)" in layout
     assert "max-width 667px" in layout  # 600 scaled by 1200/1080
 
 

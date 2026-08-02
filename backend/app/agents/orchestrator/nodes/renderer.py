@@ -16,7 +16,6 @@ from app.agents.orchestrator.state import GenerationState
 from app.services.design_instruction import (
     build_google_fonts_link,
     inject_fonts_into_html,
-    load_design_instruction,
     substitute_image_keys,
     substitute_logo,
 )
@@ -59,12 +58,15 @@ async def renderer_node_single(state: GenerationState) -> dict:
     # 1. Inject CSS tokens
     html = inject_tokens_into_html(html, design_tokens)
 
-    # 1b. Guarantee the Google Fonts link (system-controlled, not left to LLM)
+    # 1b. Guarantee the Google Fonts link (system-controlled, not left to LLM).
+    #     Empty-state (tests / edge) falls back to the DB default design system.
     di_config = state.get("design_instruction") or {}
     if not di_config:
-        di_config = load_design_instruction(
-            Path(get_settings().design_system_dir) / "design-instruction.yaml"
-        )
+        from app.services.design_systems import default_design_system_payload
+
+        payload = await default_design_system_payload()
+        di_config = payload.get("design_instruction") or {}
+        design_tokens = payload.get("design_tokens") or design_tokens
     html = inject_fonts_into_html(html, build_google_fonts_link(design_tokens, di_config))
 
     # 2. Inject KaTeX for math rendering

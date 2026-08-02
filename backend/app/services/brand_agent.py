@@ -19,7 +19,7 @@ from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.templates import TemplateRepository
 from app.services import design_systems as ds_service
 from app.services.agents import get_agent_config
-from app.services.design_instruction import _deep_merge, load_design_instruction
+from app.services.design_instruction import _deep_merge
 from app.services.fonts import font_pool_for_prompt
 from app.services.llm import call_llm
 from app.services.template_author import (
@@ -115,6 +115,7 @@ async def _brand_vision(payload: dict) -> dict:
             base64.b64decode(image_b64),
             temperature=prompt_cfg.temperature,
             max_tokens=prompt_cfg.max_tokens,
+            model=prompt_cfg.model,
         )
     else:
         raw = await call_llm(
@@ -133,7 +134,7 @@ async def _brand_tokens(brief: dict) -> dict:
     user_prompt = (
         f"BRAND BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         "AVAILABLE FONTS (choose ONLY from these):\n"
-        f"{font_pool_for_prompt()}\n\n"
+        f"{await font_pool_for_prompt()}\n\n"
         "Produce the token map, token_roles, and a partial design_instruction overlay."
     )
     raw = await call_llm(
@@ -163,14 +164,12 @@ async def _brand_campaigns(brief: dict) -> dict:
     return extract_json(raw)
 
 
-def _build_design_instruction(brief: dict, tokens_out: dict) -> dict:
-    """Deep-merge the agent's DI overlay over the base Swiss config."""
-    from app.config import get_settings
+async def _build_design_instruction(brief: dict, tokens_out: dict) -> dict:
+    """Deep-merge the agent's DI overlay over the default design system's rules."""
+    from app.services.design_systems import default_design_system_payload
 
-    base = load_design_instruction(
-        __import__("pathlib").Path(get_settings().design_system_dir)
-        / "design-instruction.yaml"
-    )
+    payload = await default_design_system_payload()
+    base = payload.get("design_instruction") or {}
     overlay = tokens_out.get("design_instruction") or {}
     if isinstance(overlay, dict):
         base = _deep_merge(base, overlay)
@@ -214,7 +213,7 @@ async def create_design_system_from_input(
     )
     tokens = _build_tokens(brief, tokens_out)
     token_roles = tokens_out.get("token_roles") or {}
-    di = _build_design_instruction(brief, tokens_out)
+    di = await _build_design_instruction(brief, tokens_out)
     campaigns = campaigns_out.get("campaigns") or {
         "default": {
             "label": "Default",

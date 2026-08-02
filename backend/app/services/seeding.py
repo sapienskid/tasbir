@@ -25,6 +25,7 @@ from app.services.tokens import (
     SEMANTIC_VAR_ROLES,
     load_brand,
     load_brand_design,
+    load_platforms,
     load_tokens,
 )
 
@@ -221,3 +222,66 @@ async def sync_seed_design_system(pool: async_sessionmaker[AsyncSession]) -> dic
                 summary["templates_updated"].append(tid)
 
     return summary
+
+
+async def seed_platforms(pool: async_sessionmaker[AsyncSession]) -> int:
+    """Seed the platforms table from platforms.yaml (seed-once).
+
+    Family comes from the design-instruction ``format_families`` map (e.g.
+    landscape for linkedin) with an aspect heuristic fallback. Only missing
+    rows are created; the Studio owns the rows afterward.
+    """
+    from app.db.repositories.platforms import PlatformRepository
+    from app.services.platforms import refresh_platforms
+
+    settings = get_settings()
+    dims = load_platforms(settings.platforms_path)
+    di = load_design_instruction(
+        Path(settings.design_system_dir) / "design-instruction.yaml"
+    )
+    families = di.get("format_families", {}) if isinstance(di, dict) else {}
+
+    created = 0
+    async with pool() as session:
+        repo = PlatformRepository(session)
+        for i, (pid, (w, h)) in enumerate(sorted(dims.items())):
+            if await repo.get_by_id(pid) is not None:
+                continue
+            fam = families.get(pid)
+            if fam not in ("square", "portrait", "story", "landscape"):
+                fam = "square" if h <= w else "portrait"
+            await repo.create(
+                {
+                    "id": pid,
+                    "name": pid.replace("-", " ").title(),
+                    "width": w,
+                    "height": h,
+                    "family": fam,
+                    "is_active": True,
+                    "sort_order": i,
+                }
+            )
+            created += 1
+    if created:
+        log.info("[seed] Created %d platform row(s)", created)
+    await refresh_platforms(pool)
+    return created
+
+
+async def seed_fonts(pool: async_sessionmaker[AsyncSession]) -> int:
+    """Seed the curated font pool from fonts.yaml (seed-once)."""
+    from app.db.repositories.fonts import FontRepository
+    from app.services.fonts import _yaml_seed, refresh_font_pool
+
+    created = 0
+    async with pool() as session:
+        repo = FontRepository(session)
+        for i, f in enumerate(_yaml_seed()):
+            if await repo.get_by_family(f["family"]) is not None:
+                continue
+            await repo.create({**f, "sort_order": i})
+            created += 1
+    if created:
+        log.info("[seed] Created %d font row(s)", created)
+    await refresh_font_pool(pool)
+    return created

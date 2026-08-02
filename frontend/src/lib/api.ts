@@ -136,6 +136,8 @@ export interface PlatformResult {
 export interface TaskResult {
   output_paths?: Record<string, Record<string, string>>
   strategic_brief?: Record<string, unknown>
+  post_plan?: Record<string, unknown>
+  sequence_check?: Record<string, unknown>
   platforms?: Record<string, PlatformResult>
 }
 
@@ -228,6 +230,29 @@ export interface AuditEntry {
   decision: Record<string, unknown>
   critique: string | null
   created_at: string | null
+}
+
+// ─── Live pipeline progress ────────────────────────────────────────────────
+
+export interface TaskProgressFormat {
+  step?: string
+  status: string
+}
+
+export interface TaskProgress {
+  pct: number
+  node: string
+  per_format: Record<string, TaskProgressFormat>
+  done: number
+  total: number
+}
+
+export function getTaskProgress(taskId: string): Promise<TaskProgress> {
+  return apiRequest(`/tasks/${taskId}/progress`)
+}
+
+export function listTasks(limit = 1): Promise<TaskSummary[]> {
+  return apiRequest(`/tasks?limit=${limit}`)
 }
 
 // ─── Design systems ───────────────────────────────────────────────────────
@@ -415,6 +440,93 @@ export function promptPreview(name: string, designSystemId = "default"): Promise
 
 export function getAgentGraph(): Promise<AgentGraphSpec> {
   return apiRequest("/agents/graph")
+}
+
+// ─── Platforms (DB-backed) ─────────────────────────────────────────────────
+
+export interface PlatformInfo {
+  id: string
+  name: string
+  width: number
+  height: number
+  family: "square" | "portrait" | "story" | "landscape"
+  is_active: boolean
+  sort_order: number
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type PlatformCreate = Omit<PlatformInfo, "created_at" | "updated_at">
+export type PlatformUpdate = Partial<Omit<PlatformInfo, "id" | "created_at" | "updated_at">>
+
+export function listPlatforms(includeInactive = false): Promise<PlatformInfo[]> {
+  return apiRequest(`/platforms${includeInactive ? "?include_inactive=true" : ""}`)
+}
+
+export function createPlatform(body: PlatformCreate): Promise<PlatformInfo> {
+  return apiRequest("/platforms", { method: "POST", body: JSON.stringify(body) })
+}
+
+export function updatePlatform(id: string, patch: PlatformUpdate): Promise<PlatformInfo> {
+  return apiRequest(`/platforms/${id}`, { method: "PUT", body: JSON.stringify(patch) })
+}
+
+export function deletePlatform(id: string): Promise<void> {
+  return apiRequest(`/platforms/${id}`, { method: "DELETE" })
+}
+
+// ─── Curated font pool (DB-backed) ─────────────────────────────────────────
+
+export interface PoolFont {
+  family: string
+  role: string
+  weights: number[]
+  style: string
+  is_active: boolean
+  sort_order: number
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export type PoolFontCreate = Omit<PoolFont, "created_at" | "updated_at">
+export type PoolFontUpdate = Partial<Omit<PoolFont, "family" | "created_at" | "updated_at">>
+
+export function listFontPool(includeInactive = false): Promise<PoolFont[]> {
+  return apiRequest(`/fonts/pool${includeInactive ? "?include_inactive=true" : ""}`)
+}
+
+export function createPoolFont(body: PoolFontCreate): Promise<PoolFont> {
+  return apiRequest("/fonts/pool", { method: "POST", body: JSON.stringify(body) })
+}
+
+export function updatePoolFont(family: string, patch: PoolFontUpdate): Promise<PoolFont> {
+  return apiRequest(`/fonts/pool/${encodeURIComponent(family)}`, {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  })
+}
+
+export function deletePoolFont(family: string): Promise<void> {
+  return apiRequest(`/fonts/pool/${encodeURIComponent(family)}`, { method: "DELETE" })
+}
+
+// ─── Runtime settings (DB-backed knobs) ────────────────────────────────────
+
+export interface RuntimeSettingsResponse {
+  defaults: Record<string, { value: unknown; description: string }>
+  values: Record<string, unknown>
+}
+
+export function getRuntimeSettings(): Promise<RuntimeSettingsResponse> {
+  return apiRequest("/settings")
+}
+
+export function updateRuntimeSettings(values: Record<string, unknown>): Promise<RuntimeSettingsResponse> {
+  return apiRequest("/settings", { method: "PUT", body: JSON.stringify({ values }) })
+}
+
+export function resetRuntimeSettings(): Promise<RuntimeSettingsResponse> {
+  return apiRequest("/settings/reset", { method: "POST" })
 }
 
 // ─── Design system API helpers ─────────────────────────────────────────────

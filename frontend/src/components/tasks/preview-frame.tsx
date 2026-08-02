@@ -1,28 +1,10 @@
 import { memo, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Maximize2, Minus, Plus } from "lucide-react"
-
-export const FAMILY_DIMS: Record<string, { width: number; height: number }> = {
-  square: { width: 1080, height: 1080 },
-  portrait: { width: 1080, height: 1350 },
-  story: { width: 1080, height: 1920 },
-  landscape: { width: 1200, height: 627 },
-}
-
-/** Pixel dimensions per platform format (mirrors platforms.yaml). */
-export const FORMAT_DIMS: Record<string, { width: number; height: number }> = {
-  "instagram-square": { width: 1080, height: 1080 },
-  "instagram-portrait": { width: 1080, height: 1350 },
-  "instagram-story": { width: 1080, height: 1920 },
-  "linkedin-post": { width: 1200, height: 627 },
-  "twitter-card": { width: 1200, height: 675 },
-  "facebook-post": { width: 1200, height: 630 },
-  "pinterest-pin": { width: 1000, height: 1500 },
-}
-
-export function formatDims(format: string): { width: number; height: number } {
-  return FORMAT_DIMS[format] ?? FAMILY_DIMS.square
-}
+// Platform dimensions are DB-backed — re-export the live module caches so
+// existing imports (FAMILY_DIMS / FORMAT_DIMS / formatDims) keep working.
+export { FAMILY_DIMS, FORMAT_DIMS, formatDims } from "@/lib/platforms"
+import { FAMILY_DIMS } from "@/lib/platforms"
 
 const CARD_WIDTH = 264
 const MAX_CARD_HEIGHT = 340

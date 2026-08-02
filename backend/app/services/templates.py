@@ -126,19 +126,15 @@ def template_to_dict(row) -> dict:
 
 
 def format_family(format_id: str) -> str:
-    """Map a platform id to its format family (square/portrait/story/landscape)."""
-    from app.services.design_instruction import load_design_instruction
-    from app.services.tokens import load_platforms
+    """Map a platform id to its format family (square/portrait/story/landscape).
 
-    settings = get_settings()
-    di = load_design_instruction(Path(settings.design_system_dir) / "design-instruction.yaml")
-    families = di.get("format_families", {})
-    if format_id in families:
-        return families[format_id]
-    platforms = load_platforms(settings.platforms_path)
-    if format_id in platforms:
-        return "square" if platforms[format_id][1] <= platforms[format_id][0] else "portrait"
-    return "square"
+    Resolved from the DB platforms table (family stored at seed from the
+    design-instruction format_families map, aspect heuristic fallback).
+    """
+    from app.services.platforms import family_of
+
+    fam = family_of(format_id)
+    return fam if fam in ("square", "portrait", "story", "landscape") else "square"
 
 
 def _hint_overlap(hint: str, entry: dict, tid: str) -> bool:
@@ -234,6 +230,7 @@ def build_template_context(
     seed: str = "",
     family: str = "square",
     logo: str = "",
+    di_config: dict | None = None,
 ) -> dict:
     """Build the Jinja2 render context from typed copy + design decisions."""
     # Deterministic index numeral (editorial device, varies per post).
@@ -251,14 +248,11 @@ def build_template_context(
     ]
 
     # Family-aware type scale: tall formats get larger type to fill the canvas.
-    from app.config import get_settings
-    from app.services.design_instruction import load_design_instruction
-
+    # The DI comes from the caller (task's design system) — no YAML read here.
     base = 1080
-    di = load_design_instruction(
-        Path(get_settings().design_system_dir) / "design-instruction.yaml"
-    )
-    fam_scale = (di.get("type_scale", {}).get("family_scale") or {}).get(family, 1.0)
+    fam_scale = (
+        (di_config or {}).get("type_scale", {}).get("family_scale") or {}
+    ).get(family, 1.0)
     tscale = float(fam_scale) * (width / base)
     tscale = max(0.6, min(tscale, 2.0))
 
@@ -470,10 +464,18 @@ _RECENT_KEY = "tpl:recent"
 _RECENT_LIMIT = 8
 
 
-async def get_recent_template_ids(limit: int = _RECENT_LIMIT) -> set[str]:
+async def _recent_limit() -> int:
+    from app.services.settings import get_runtime_setting
+
+    return int(await get_runtime_setting("templates.recent_limit", _RECENT_LIMIT))
+
+
+async def get_recent_template_ids(limit: int | None = None) -> set[str]:
     """Return template ids used on the most recent posts (anti-repetition)."""
     from redis.asyncio import Redis
 
+    if limit is None:
+        limit = await _recent_limit()
     redis = Redis.from_url(get_settings().redis_url, decode_responses=True)
     try:
         return set(await redis.lrange(_RECENT_KEY, 0, limit))
@@ -490,8 +492,9 @@ async def push_recent_template_id(template_id: str) -> None:
 
     redis = Redis.from_url(get_settings().redis_url, decode_responses=True)
     try:
+        limit = await _recent_limit()
         await redis.lpush(_RECENT_KEY, template_id)
-        await redis.ltrim(_RECENT_KEY, 0, _RECENT_LIMIT - 1)
+        await redis.ltrim(_RECENT_KEY, 0, limit - 1)
         await redis.expire(_RECENT_KEY, 7 * 24 * 3600)
     except Exception as e:
         log.debug("[templates] Recent-list write failed: %s", e)

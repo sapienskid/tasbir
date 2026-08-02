@@ -11,12 +11,17 @@ from app.api import (
     agents,
     chat,
     design_systems,
+    font_pool,
     fonts,
     generate,
     health,
+    platforms,
     tasks,
     templates,
     uploads,
+)
+from app.api import (
+    settings as settings_api,
 )
 from app.config import get_settings
 from app.core.ratelimit import close_redis, rate_limiter
@@ -56,6 +61,7 @@ async def lifespan(app: FastAPI):
         # SQLite create_all does not add columns to existing tables — apply
         # idempotent column migrations here.
         await conn.run_sync(_ensure_column, "generation_tasks", "edited_html", "JSON")
+        await conn.run_sync(_ensure_column, "generation_tasks", "progress", "JSON")
     await engine.dispose()
     log.info("[startup] SQLite tables created/verified")
 
@@ -72,6 +78,19 @@ async def lifespan(app: FastAPI):
         await seed_agents(pool)
     except Exception as e:
         log.warning("[startup] Agent seed failed: %s", e)
+
+    # Seed platforms / curated fonts / runtime settings (all seed-once).
+    try:
+        from app.services.seeding import seed_fonts, seed_platforms
+        await seed_platforms(pool)
+        await seed_fonts(pool)
+    except Exception as e:
+        log.warning("[startup] Platform/font seed failed: %s", e)
+    try:
+        from app.services.settings import seed_app_settings
+        await seed_app_settings(pool)
+    except Exception as e:
+        log.warning("[startup] Runtime settings seed failed: %s", e)
 
     yield
     await close_shared_engine()
@@ -133,6 +152,18 @@ app.include_router(
 )
 app.include_router(
     agents.router, prefix="/api/agents", tags=["agents"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    platforms.router, prefix="/api/platforms", tags=["platforms"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    font_pool.router, prefix="/api/fonts/pool", tags=["fonts"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    settings_api.router, prefix="/api/settings", tags=["settings"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 

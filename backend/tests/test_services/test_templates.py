@@ -46,8 +46,16 @@ def _catalog_templates() -> list[dict]:
 
 
 def test_family_type_scale():
+    import asyncio
+
+    from app.services.design_systems import default_design_system_payload
+
+    di_config = asyncio.run(default_design_system_payload()).get("design_instruction") or {}
+
     def scale(family, w, h):
-        ctx = build_template_context({"headline": "x"}, "", "white", {}, w, h, False, family=family)
+        ctx = build_template_context(
+            {"headline": "x"}, "", "white", {}, w, h, False, family=family, di_config=di_config
+        )
         return ctx["tscale"]
 
     assert scale("square", 1080, 1080) == 1.0
