@@ -1,5 +1,4 @@
 import { lazy, Suspense, useMemo, useState } from "react"
-import dagre from "@dagrejs/dagre"
 import {
   ReactFlow,
   Background,
@@ -54,12 +53,15 @@ import {
 import { useTheme } from "@/lib/theme"
 import { cn } from "@/lib/utils"
 
-const NODE_WIDTH = 220
+const NODE_WIDTH = 190
 const NODE_HEIGHT = 88
+const GAP_X = 56
+const GAP_Y = 140
 
 const HANDLE_CLS = "!h-2.5 !w-2.5 !border-0 !bg-border"
 
 type FlowNodeData = {
+  id: string
   label: string
   kind: string
   persona?: string
@@ -68,18 +70,83 @@ type FlowNodeData = {
 }
 type FlowNode = Node<FlowNodeData>
 
-function layoutNodes(nodes: FlowNode[], edges: Edge[]): FlowNode[] {
-  const g = new dagre.graphlib.Graph()
-  g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: "LR", nodesep: 48, ranksep: 72 })
-  nodes.forEach((n) => g.setNode(n.id, { width: NODE_WIDTH, height: NODE_HEIGHT }))
-  edges.forEach((e) => g.setEdge(e.source, e.target))
-  dagre.layout(g)
-  return nodes.map((n) => {
-    const pos = g.node(n.id)
+// Two-row boustrophedon layout so the whole pipeline fits the canvas at a
+// readable zoom: row 0 flows left→right, row 1 (the per-format chain) flows
+// back right→left. Handles are explicit per node so every edge anchors where
+// the row direction demands.
+const PIPELINE_GRID: Record<string, { c: number; r: 0 | 1 }> = {
+  start: { c: 0, r: 0 },
+  strategist: { c: 1, r: 0 },
+  planner: { c: 2, r: 0 },
+  copywriter: { c: 3, r: 0 },
+  end: { c: 0, r: 1 },
+  verifier: { c: 1, r: 1 },
+  renderer: { c: 2, r: 1 },
+  designer: { c: 3, r: 1 },
+  template: { c: 4, r: 1 },
+}
+
+const NODE_HANDLES: Record<string, { id: string; type: "source" | "target"; pos: Position }[]> = {
+  start: [{ id: "sr", type: "source", pos: Position.Right }],
+  strategist: [
+    { id: "tl", type: "target", pos: Position.Left },
+    { id: "sr", type: "source", pos: Position.Right },
+  ],
+  planner: [
+    { id: "tl", type: "target", pos: Position.Left },
+    { id: "sr", type: "source", pos: Position.Right },
+  ],
+  copywriter: [
+    { id: "tl", type: "target", pos: Position.Left },
+    { id: "sb", type: "source", pos: Position.Bottom },
+  ],
+  template: [
+    { id: "tt", type: "target", pos: Position.Top },
+    { id: "sl", type: "source", pos: Position.Left },
+  ],
+  designer: [
+    { id: "tr", type: "target", pos: Position.Right },
+    { id: "sl", type: "source", pos: Position.Left },
+  ],
+  renderer: [
+    { id: "tr", type: "target", pos: Position.Right },
+    { id: "sl", type: "source", pos: Position.Left },
+  ],
+  verifier: [
+    { id: "tr", type: "target", pos: Position.Right },
+    { id: "sl", type: "source", pos: Position.Left },
+  ],
+  end: [{ id: "tr", type: "target", pos: Position.Right }],
+}
+
+function NodeHandles({ nodeId }: { nodeId: string }) {
+  const defs = NODE_HANDLES[nodeId] ?? []
+  return (
+    <>
+      {defs.map((h) => (
+        <Handle key={h.id} type={h.type} position={h.pos} id={h.id} className={HANDLE_CLS} />
+      ))}
+    </>
+  )
+}
+
+/** Pick source/target handle ids for an edge based on the row direction. */
+function handlesForEdge(source: string, target: string): { s: string; t: string } {
+  const a = PIPELINE_GRID[source]
+  const b = PIPELINE_GRID[target]
+  if (a && b && a.r === b.r) return a.r === 0 ? { s: "sr", t: "tl" } : { s: "sl", t: "tr" }
+  return { s: "sb", t: "tt" }
+}
+
+function layoutPipeline(nodes: FlowNode[], edges: Edge[]): { nodes: FlowNode[]; edges: Edge[] } {
+  const placed = nodes.map((n) => {
+    const cell = PIPELINE_GRID[n.id] ?? { c: 0, r: 0 }
     return {
       ...n,
-      position: { x: pos.x - NODE_WIDTH / 2, y: pos.y - NODE_HEIGHT / 2 },
+      position: {
+        x: cell.c * (NODE_WIDTH + GAP_X),
+        y: cell.r * (NODE_HEIGHT + GAP_Y),
+      },
       // Explicit size: React Flow routes edges from these bounds immediately
       // (no waiting on DOM measurement), so connections always render.
       width: NODE_WIDTH,
@@ -87,14 +154,19 @@ function layoutNodes(nodes: FlowNode[], edges: Edge[]): FlowNode[] {
       style: { width: NODE_WIDTH, height: NODE_HEIGHT },
     }
   })
+  const routed = edges.map((e) => {
+    const h = handlesForEdge(e.source, e.target)
+    return { ...e, sourceHandle: h.s, targetHandle: h.t }
+  })
+  return { nodes: placed, edges: routed }
 }
 
 function buildGraph(spec: AgentGraphSpec): { nodes: FlowNode[]; edges: Edge[] } {
   const nodes: FlowNode[] = spec.nodes.map((n) => ({
     id: n.id,
-    type: n.kind === "agent" ? "agent" : n.kind === "group" ? "group" : "term",
+    type: n.kind === "agent" ? "agent" : "term",
     position: { x: 0, y: 0 },
-    data: { label: n.label, kind: n.kind, persona: n.persona, model: n.model },
+    data: { id: n.id, label: n.label, kind: n.kind, persona: n.persona, model: n.model },
   }))
   const edges: Edge[] = spec.edges.map((e) => ({
     id: e.id,
@@ -105,7 +177,7 @@ function buildGraph(spec: AgentGraphSpec): { nodes: FlowNode[]; edges: Edge[] } 
     markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
     style: { strokeWidth: 2.5 },
   }))
-  return { nodes: layoutNodes(nodes, edges), edges }
+  return layoutPipeline(nodes, edges)
 }
 
 function AgentNodeCard({
@@ -156,26 +228,21 @@ function AgentNodeCard({
 }
 
 function TermNode({ data }: NodeProps) {
+  const kind = data?.kind as string
+  const tone =
+    kind === "start"
+      ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+      : kind === "end"
+        ? "border-blue-500/50 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+        : "border-border bg-muted"
   return (
     <div className="relative flex h-full w-full items-center justify-center">
-      <Handle type="target" position={Position.Left} className={HANDLE_CLS} />
-      <div className="flex h-full w-full items-center justify-center rounded-full border bg-muted px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">
+      <NodeHandles nodeId={String(data?.id ?? "")} />
+      <div
+        className={`flex h-full w-full items-center justify-center rounded-full border px-4 py-1.5 text-xs font-semibold uppercase tracking-wider ${tone}`}
+      >
         {String(data?.label ?? "")}
       </div>
-      <Handle type="source" position={Position.Right} className={HANDLE_CLS} />
-    </div>
-  )
-}
-
-function GroupNode({ data }: NodeProps) {
-  return (
-    <div className="relative flex h-full w-full items-center justify-center">
-      <Handle type="target" position={Position.Left} className={HANDLE_CLS} />
-      <div className="flex h-full w-full flex-col items-center justify-center rounded-md border-2 border-dashed border-primary/40 bg-primary/5 px-4 py-2 text-center text-sm font-semibold transition-colors hover:border-primary">
-        {String(data?.label ?? "")}
-        <span className="mt-0.5 text-[10px] font-normal text-muted-foreground">expand →</span>
-      </div>
-      <Handle type="source" position={Position.Right} className={HANDLE_CLS} />
     </div>
   )
 }
@@ -183,7 +250,7 @@ function GroupNode({ data }: NodeProps) {
 function AgentNode({ data, selected }: NodeProps) {
   return (
     <div className="relative h-full w-full">
-      <Handle type="target" position={Position.Left} className={HANDLE_CLS} />
+      <NodeHandles nodeId={String(data?.id ?? "")} />
       <AgentNodeCard
         data={data as FlowNodeData}
         selected={Boolean(selected)}
@@ -191,14 +258,12 @@ function AgentNode({ data, selected }: NodeProps) {
           /* selection handled via onNodeClick on the canvas */
         }}
       />
-      <Handle type="source" position={Position.Right} className={HANDLE_CLS} />
     </div>
   )
 }
 
 const nodeTypes = {
   agent: AgentNode,
-  group: GroupNode,
   term: TermNode,
 }
 
@@ -235,7 +300,6 @@ export function AgentsPage() {
   )
 
   const [selectedName, setSelectedName] = useState<string | null>(null)
-  const [showSubflow, setShowSubflow] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<PromptPreview | null>(null)
@@ -264,22 +328,6 @@ export function AgentsPage() {
   if (!spec || !agents) {
     return <div className="text-sm text-muted-foreground">Failed to load agent graph.</div>
   }
-
-  const subflowNodes: FlowNode[] = spec.subflow.nodes.map((n) => ({
-    id: n.id,
-    type: n.kind === "agent" ? "agent" : "term",
-    position: { x: 0, y: 0 },
-    data: { label: n.label, kind: n.kind, persona: n.persona, model: n.model },
-  }))
-  const subflowEdges: Edge[] = spec.subflow.edges.map((e) => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    label: e.label,
-    markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-    style: { strokeWidth: 2.5 },
-  }))
-  const layoutedSubflow = layoutNodes(subflowNodes, subflowEdges)
 
   const minimapColors = {
     backgroundColor: dark ? "#18181b" : "#ffffff",
@@ -354,21 +402,19 @@ export function AgentsPage() {
             <CardTitle className="text-sm">Pipeline graph</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="h-[380px] overflow-hidden rounded-md border">
+            <div className="h-[560px] overflow-hidden rounded-md border">
               <ReactFlow
                 key={`pipeline-${nodes.length}`}
                 nodes={liveNodes}
                 edges={edges}
                 nodeTypes={nodeTypes}
                 fitView
-                fitViewOptions={{ padding: 0.25 }}
+                fitViewOptions={{ padding: 0.15 }}
+                minZoom={0.15}
+                maxZoom={2}
                 onNodeClick={(_, node) => {
                   const agentName = spec.nodes.find((n) => n.id === node.id)?.agent
-                  if (node.id === "process_all_formats") {
-                    setShowSubflow((v) => !v)
-                  } else if (agentName) {
-                    selectAgent(agentName)
-                  }
+                  if (agentName) selectAgent(agentName)
                 }}
               >
                 <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
@@ -386,33 +432,6 @@ export function AgentsPage() {
             </div>
           </CardContent>
         </Card>
-
-        {showSubflow && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">{spec.subflow.label}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[260px] overflow-hidden rounded-md border">
-                <ReactFlow
-                  key={`subflow-${layoutedSubflow.length}`}
-                  nodes={layoutedSubflow}
-                  edges={subflowEdges}
-                  nodeTypes={nodeTypes}
-                  fitView
-                  fitViewOptions={{ padding: 0.25 }}
-                  onNodeClick={(_, node) => {
-                    const agentName = spec.subflow.nodes.find((n) => n.id === node.id)?.agent
-                    if (agentName) selectAgent(agentName)
-                  }}
-                >
-                  <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-                  <Controls />
-                </ReactFlow>
-              </div>
-            </CardContent>
-          </Card>
-        )}
 
         <Card>
           <CardHeader className="pb-2">
@@ -617,10 +636,14 @@ function PromptBlock({ title, text }: { title: string; text: string }) {
 function nodeStateFor(id: string, pct: number): "done" | "running" | "pending" {
   switch (id) {
     case "strategist":
+    case "planner":
       return pct >= 25 ? "done" : pct >= 10 ? "running" : "pending"
     case "copywriter":
       return pct >= 50 ? "done" : pct >= 25 ? "running" : "pending"
-    case "process_all_formats":
+    case "template":
+    case "designer":
+    case "renderer":
+    case "verifier":
       return pct >= 100 ? "done" : pct >= 50 ? "running" : "pending"
     default:
       return "pending"

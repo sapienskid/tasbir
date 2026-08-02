@@ -42,37 +42,28 @@ GRAPH_SPEC: dict = {
         {"id": "strategist", "label": "Strategist", "kind": "agent", "agent": "strategist"},
         {"id": "planner", "label": "Planner", "kind": "agent", "agent": "planner"},
         {"id": "copywriter", "label": "Copywriter", "kind": "agent", "agent": "copywriter"},
-        {"id": "process_all_formats", "label": "Process All Formats", "kind": "group"},
+        {"id": "template", "label": "Template", "kind": "pipeline"},
+        {"id": "designer", "label": "Designer", "kind": "agent", "agent": "designer"},
+        {"id": "renderer", "label": "Renderer", "kind": "pipeline"},
+        {"id": "verifier", "label": "Verifier", "kind": "agent", "agent": "verifier"},
         {"id": "end", "label": "End", "kind": "end"},
     ],
     "edges": [
         {"id": "e-start->strategist", "source": "start", "target": "strategist"},
         {"id": "e-strategist->planner", "source": "strategist", "target": "planner"},
         {"id": "e-planner->copywriter", "source": "planner", "target": "copywriter"},
-        {"id": "e-copywriter->process", "source": "copywriter", "target": "process_all_formats"},
-        {"id": "e-process->end", "source": "process_all_formats", "target": "end"},
+        {"id": "e-copywriter->template", "source": "copywriter", "target": "template"},
+        {"id": "e-template->designer", "source": "template", "target": "designer"},
+        {"id": "e-designer->renderer", "source": "designer", "target": "renderer"},
+        {"id": "e-renderer->verifier", "source": "renderer", "target": "verifier"},
+        {"id": "e-verifier->end", "source": "verifier", "target": "end"},
+        {
+            "id": "e-verifier->designer",
+            "source": "verifier",
+            "target": "designer",
+            "label": "retry",
+        },
     ],
-    "subflow": {
-        "id": "process_all_formats",
-        "label": "Per-format chain (runs in parallel)",
-        "nodes": [
-            {"id": "template", "label": "Template", "kind": "pipeline"},
-            {"id": "designer", "label": "Designer", "kind": "agent", "agent": "designer"},
-            {"id": "renderer", "label": "Renderer", "kind": "pipeline"},
-            {"id": "verifier", "label": "Verifier", "kind": "agent", "agent": "verifier"},
-        ],
-        "edges": [
-            {"id": "se-template->designer", "source": "template", "target": "designer"},
-            {"id": "se-designer->renderer", "source": "designer", "target": "renderer"},
-            {"id": "se-renderer->verifier", "source": "renderer", "target": "verifier"},
-            {
-                "id": "se-verifier->designer",
-                "source": "verifier",
-                "target": "designer",
-                "label": "retry",
-            },
-        ],
-    },
     # Non-pipeline agent lanes — the brand builder, template author, and
     # editor-chat chains. Rendered as clickable lanes in the Studio.
     "aux_lanes": [
@@ -115,10 +106,6 @@ async def agent_graph(db: AsyncSession = Depends(get_db)):
     spec = {
         "nodes": [_enrich_node(n, config) for n in GRAPH_SPEC["nodes"]],
         "edges": GRAPH_SPEC["edges"],
-        "subflow": {
-            **GRAPH_SPEC["subflow"],
-            "nodes": [_enrich_node(n, config) for n in GRAPH_SPEC["subflow"]["nodes"]],
-        },
         "aux_lanes": [
             {
                 **lane,

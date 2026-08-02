@@ -409,12 +409,6 @@ export interface AgentGraphLane {
 export interface AgentGraphSpec {
   nodes: AgentGraphNode[]
   edges: AgentGraphEdge[]
-  subflow: {
-    id: string
-    label: string
-    nodes: AgentGraphNode[]
-    edges: AgentGraphEdge[]
-  }
   aux_lanes: AgentGraphLane[]
 }
 
