@@ -162,6 +162,67 @@ async def call_llm(
     raise last_error or RuntimeError("LLM call failed")
 
 
+async def call_llm_for_tool(
+    agent_role: str,
+    system_prompt: str,
+    user_prompt: str,
+    tool: dict,
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
+) -> dict:
+    """Call the LLM with one function-calling tool bound; return the args dict.
+
+    Walks the same per-agent fallback model chain as :func:`call_llm`. The
+    model is expected to emit a single ``generate_illustration``-style tool
+    call; its ``args`` are returned. Raises if no tool call comes back.
+    """
+    import logging
+
+    from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    log = logging.getLogger(__name__)
+
+    from app.services.agents import get_agent_config
+
+    cfg = await get_agent_config(agent_role)
+    models = [m for m in ([cfg.model] + list(cfg.fallback_models or [])) if m]
+    if not models:
+        models = [DEFAULT_MODEL]
+
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    last_error: Exception | None = None
+    for model in models:
+        llm = ChatGoogleGenerativeAI(
+            model=model,
+            api_key=get_settings().gemini_api_key or None,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_retries=0,
+        )
+        try:
+            bound = llm.bind_tools([tool])
+            response = await call_llm_with_retry(bound, messages)
+            tool_calls = getattr(response, "tool_calls", None) or []
+            if not tool_calls:
+                raise RuntimeError("model returned no tool call")
+            args = tool_calls[0].get("args")
+            if not isinstance(args, dict):
+                raise RuntimeError(f"unexpected tool args: {args!r}")
+            log.info("[llm] tool %r args=%r (model %s)", tool["function"]["name"], args, model)
+            return dict(args)
+        except Exception as e:  # noqa: BLE001
+            last_error = e
+            log.warning(
+                "[LLM] model %s tool call failed for %r (%s) — trying next", model, agent_role, e
+            )
+
+    settings = get_settings()
+    if settings.openrouter_api_key:
+        log.warning("[LLM] tool-calling has no OpenRouter fallback; skipping (agent %s)", agent_role)
+    raise last_error or RuntimeError("LLM tool call failed")
+
+
 def _response_text(response) -> str:
     """Extract text from a LangChain AIMessage content (str or blocks)."""
     if isinstance(response.content, str):

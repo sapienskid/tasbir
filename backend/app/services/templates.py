@@ -25,6 +25,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from app.config import get_settings
+from app.services.illustration import generate_illustration_svg
 
 log = logging.getLogger(__name__)
 
@@ -231,6 +232,7 @@ def build_template_context(
     family: str = "square",
     logo: str = "",
     di_config: dict | None = None,
+    illustration: str | None = None,
 ) -> dict:
     """Build the Jinja2 render context from typed copy + design decisions."""
     # Deterministic index numeral (editorial device, varies per post).
@@ -256,6 +258,14 @@ def build_template_context(
     tscale = float(fam_scale) * (width / base)
     tscale = max(0.6, min(tscale, 2.0))
 
+    # Procedural Anthropic-style illustration. Seeded from the post title alone
+    # (not per-format) so every format of a post shares one piece of art. Only
+    # templates that reference {{ illustration }} render it. A caller-provided
+    # ``illustration`` (e.g. an LLM tool result) wins over the deterministic one.
+    if illustration is None:
+        ill_seed = f"{seed.split('|')[0]}|illustration" if seed else "illustration"
+        illustration = generate_illustration_svg(ill_seed, ground)
+
     return {
         "kicker": category,
         "headline": copy.get("headline", ""),
@@ -273,6 +283,7 @@ def build_template_context(
         "meta": meta,
         "loop_index": loop_index,
         "decor_pattern": decor_pattern,
+        "illustration": illustration,
         "tscale": tscale,
     }
 

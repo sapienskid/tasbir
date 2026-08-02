@@ -12,6 +12,7 @@ ground, falling back to normal selection for other families (auto-fallback).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 
@@ -37,6 +38,47 @@ def _parse_copy(copy_json: str) -> dict:
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
+
+
+_ILLUSTRATION_LOCK_KEY = "_illustration_lock"
+_ILLUSTRATION_CACHE_KEY = "_post_illustration_svg"
+
+
+async def _get_post_illustration(state: GenerationState, ground: str, seed: str) -> str:
+    """Return the post's shared illustration (LLM tool once, then cached).
+
+    Runs the illustration director (the generator as an LLM tool) a single
+    time per post and caches the SVG in state so every format reuses it. If the
+    tool fails, falls back to the deterministic render. An ``asyncio.Lock`` in
+    state guards concurrent per-format branches from calling the LLM twice.
+    """
+    cached = state.get(_ILLUSTRATION_CACHE_KEY)
+    if cached:
+        return cached
+
+    lock: asyncio.Lock = state.get(_ILLUSTRATION_LOCK_KEY)
+    if lock is None:
+        lock = asyncio.Lock()
+        state[_ILLUSTRATION_LOCK_KEY] = lock
+    async with lock:
+        if state.get(_ILLUSTRATION_CACHE_KEY):
+            return state[_ILLUSTRATION_CACHE_KEY]
+        title = state.get("title", "")
+        task = (state.get("format_tasks") or {}).get(state.get("_processing_format_id", ""), {})
+        copy = _parse_copy(task.get("copy", ""))
+        category = state.get("category", "")
+        from app.services.illustration import illustration_via_tool
+
+        svg = await illustration_via_tool(
+            agent_role="designer",
+            title=title,
+            headline=copy.get("headline", ""),
+            category=category,
+            ground=ground,
+            seed=f"{title or ''}|illustration",
+        )
+        state[_ILLUSTRATION_CACHE_KEY] = svg
+        return svg
 
 
 async def template_node_single(state: GenerationState) -> dict:
@@ -89,7 +131,13 @@ async def template_node_single(state: GenerationState) -> dict:
         return {}
 
     tid, entry = selected
+    html = entry.get("html", "")
     try:
+        # Templates that opt in to the illustration slot get an LLM-directed
+        # illustration (generator as a tool); everything else stays static.
+        illustration: str | None = None
+        if "{{ illustration" in html:
+            illustration = await _get_post_illustration(state, ground, seed)
         context = build_template_context(
             copy,
             category,
@@ -102,21 +150,25 @@ async def template_node_single(state: GenerationState) -> dict:
             family=family,
             logo=state.get("logo", ""),
             di_config=state.get("design_instruction") or {},
+            illustration=illustration,
         )
-        html = render_template_html(entry.get("html", ""), context)
+        rendered = render_template_html(html, context)
     except Exception as e:
         log.warning("[template] Render failed for %s (%s): %s", fmt_id, tid, e)
         return {}
 
     await push_recent_template_id(tid)
     log.info("[template] Filled %s for %s (%s×%s)", tid, fmt_id, fmt.width, fmt.height)
-    return {
+    update: dict = {
         "format_tasks": {
             fmt_id: {
                 **task,
-                "html": html,
+                "html": rendered,
                 "status": "html_ready",
                 "template_id": tid,
             }
         }
     }
+    if illustration is not None:
+        update[_ILLUSTRATION_CACHE_KEY] = illustration
+    return update
