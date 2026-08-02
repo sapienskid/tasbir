@@ -136,21 +136,6 @@ templates:
     description: Headline in the upper third clearing platform UI; content + footer
       in a designed lower-third band.
     file: story/story-lower-third.html
-  story-poster:
-    family: story
-    grounds:
-    - white
-    - black
-    categories:
-    - PROJECT
-    hint_tags:
-    - story
-    - poster
-    - bold
-    weight: 1.0
-    description: Poster-scale headline floating high on a mostly empty canvas; thin
-      meta band at the bottom.
-    file: story/story-poster.html
   landscape-split:
     family: landscape
     grounds:
@@ -197,22 +182,6 @@ templates:
     description: 'Product ad card: category + wordmark row, display headline, serif sub,
       monochrome line-art, footer row with handle + url.'
     file: landscape/ad-card.html
-  portrait-blog-card:
-    family: portrait
-    grounds:
-    - white
-    - black
-    categories:
-    - WRITING
-    - NOTE
-    hint_tags:
-    - blog
-    - date
-    - numeral
-    weight: 1.1
-    description: 'Blog preview: doc icon, oversized day numeral + month, display title,
-      byline row.'
-    file: portrait/blog-card.html
   story-costs:
     family: story
     grounds:

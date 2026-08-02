@@ -86,9 +86,10 @@ async def test_agent_graph_topology(authed_client):
     assert r.status_code == 200, r.text
     spec = r.json()
     ids = {n["id"] for n in spec["nodes"]}
-    assert {"start", "strategist", "copywriter", "process_all_formats", "end"} <= ids
-    sub_ids = {n["id"] for n in spec["subflow"]["nodes"]}
-    assert {"template", "designer", "renderer", "verifier"} <= sub_ids
+    assert {"start", "strategist", "planner", "copywriter", "end"} <= ids
+    # the per-format chain is inlined on the same canvas
+    assert {"template", "designer", "renderer", "verifier"} <= ids
+    assert "subflow" not in spec
     # enrichment: agent nodes carry live persona/model
     strategist = next(n for n in spec["nodes"] if n["id"] == "strategist")
     assert strategist["persona"] == "Aura Vance"

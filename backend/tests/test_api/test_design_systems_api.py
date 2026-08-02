@@ -17,7 +17,7 @@ async def test_list_and_default(authed_client):
     rows = r.json()
     assert any(row["id"] == "default" for row in rows)
     default = next(row for row in rows if row["id"] == "default")
-    assert default["template_count"] >= 16
+    assert default["template_count"] >= 14
 
 
 async def test_crud_and_validation(authed_client):
