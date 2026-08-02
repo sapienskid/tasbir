@@ -5,8 +5,10 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  Handle,
   MiniMap,
   MarkerType,
+  Position,
   type Edge,
   type Node,
   type NodeProps,
@@ -54,6 +56,8 @@ import { cn } from "@/lib/utils"
 
 const NODE_WIDTH = 220
 const NODE_HEIGHT = 88
+
+const HANDLE_CLS = "!h-2.5 !w-2.5 !border-0 !bg-border"
 
 type FlowNodeData = {
   label: string
@@ -153,30 +157,42 @@ function AgentNodeCard({
 
 function TermNode({ data }: NodeProps) {
   return (
-    <div className="flex h-full w-full items-center justify-center rounded-full border bg-muted px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">
-      {String(data?.label ?? "")}
+    <div className="relative flex h-full w-full items-center justify-center">
+      <Handle type="target" position={Position.Left} className={HANDLE_CLS} />
+      <div className="flex h-full w-full items-center justify-center rounded-full border bg-muted px-4 py-1.5 text-xs font-semibold uppercase tracking-wider">
+        {String(data?.label ?? "")}
+      </div>
+      <Handle type="source" position={Position.Right} className={HANDLE_CLS} />
     </div>
   )
 }
 
 function GroupNode({ data }: NodeProps) {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center rounded-md border-2 border-dashed border-primary/40 bg-primary/5 px-4 py-2 text-center text-sm font-semibold transition-colors hover:border-primary">
-      {String(data?.label ?? "")}
-      <span className="mt-0.5 text-[10px] font-normal text-muted-foreground">expand →</span>
+    <div className="relative flex h-full w-full items-center justify-center">
+      <Handle type="target" position={Position.Left} className={HANDLE_CLS} />
+      <div className="flex h-full w-full flex-col items-center justify-center rounded-md border-2 border-dashed border-primary/40 bg-primary/5 px-4 py-2 text-center text-sm font-semibold transition-colors hover:border-primary">
+        {String(data?.label ?? "")}
+        <span className="mt-0.5 text-[10px] font-normal text-muted-foreground">expand →</span>
+      </div>
+      <Handle type="source" position={Position.Right} className={HANDLE_CLS} />
     </div>
   )
 }
 
 function AgentNode({ data, selected }: NodeProps) {
   return (
-    <AgentNodeCard
-      data={data as FlowNodeData}
-      selected={Boolean(selected)}
-      onClick={() => {
-        /* selection handled via onNodeClick on the canvas */
-      }}
-    />
+    <div className="relative h-full w-full">
+      <Handle type="target" position={Position.Left} className={HANDLE_CLS} />
+      <AgentNodeCard
+        data={data as FlowNodeData}
+        selected={Boolean(selected)}
+        onClick={() => {
+          /* selection handled via onNodeClick on the canvas */
+        }}
+      />
+      <Handle type="source" position={Position.Right} className={HANDLE_CLS} />
+    </div>
   )
 }
 
