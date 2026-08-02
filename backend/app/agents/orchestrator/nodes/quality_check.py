@@ -92,6 +92,43 @@ def _extract_json(text: str) -> dict:
     raise ValueError(f"Could not extract JSON from verifier output: {text[:200]}")
 
 
+def _salvage_verifier_json(text: str) -> dict | None:
+    """Recover pass/score/issues/critique from truncated or corrupted JSON.
+
+    Gemini occasionally truncates the JSON object at max_tokens mid-response.
+    Rather than failing a verified design, salvage the fields we can read.
+    Returns None when nothing usable is found.
+    """
+    if not text:
+        return None
+    passed_m = re.search(r'"pass"\s*:\s*(true|false)', text)
+    score_m = re.search(r'"score"\s*:\s*(\d+)', text)
+    if not passed_m or not score_m:
+        return None
+
+    issues = []
+    issues_m = re.search(r'"issues"\s*:\s*(\[[^\]]*\])', text)
+    if issues_m:
+        try:
+            issues = json.loads(issues_m.group(1))
+        except Exception:
+            issues = []
+
+    critique = ""
+    crit_m = re.search(r'"critique"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    if crit_m:
+        critique = crit_m.group(1)
+    elif '"critique"' in text:
+        critique = text.split('"critique"', 1)[1].split(":", 1)[-1].strip().strip('"')
+
+    return {
+        "pass": passed_m.group(1) == "true",
+        "score": int(score_m.group(1)),
+        "issues": issues if isinstance(issues, list) else [],
+        "critique": critique,
+    }
+
+
 async def _call_vision_llm(
     system_prompt: str,
     user_prompt: str,
@@ -408,6 +445,32 @@ async def quality_check_node_single(state: GenerationState) -> dict:
             "retry_count": new_retry_count,
         }
 
+    # Designer-authored templates are pre-approved: deterministic + overflow
+    # checks are the hard gate; the subjective vision audit is skipped.
+    if task.get("template_id"):
+        _save_png(task_id, fmt_id, png_bytes)
+        _save_html_preview(task_id, fmt_id, html_with_tokens)
+        verification = dict(state.get("verification", {}))
+        verification[fmt_id] = {
+            "pass": True,
+            "score": 100,
+            "issues": [],
+            "critique": "Designer-authored template — deterministic + overflow checks passed.",
+            "preapproved": True,
+        }
+        log.info("[verifier] %s — template pre-approved (%s)", fmt_id, task["template_id"])
+        return {
+            "format_tasks": {
+                fmt_id: {
+                    **task,
+                    "quality_score": 100,
+                    "quality_issues": [],
+                    "status": "verified",
+                }
+            },
+            "verification": verification,
+        }
+
     # Save PNG and HTML for output
     _save_png(task_id, fmt_id, png_bytes)
     _save_html_preview(task_id, fmt_id, html_with_tokens)
@@ -441,15 +504,20 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # Step 4: Parse and validate result
     try:
         result = _extract_json(raw)
-        passed = bool(result.get("pass", True))
-        score = int(result.get("score", 75))
-        issues = list(result.get("issues", []))
-        critique = str(result.get("critique", ""))
     except Exception as e:
-        log.warning("[verifier] Parse failed for %s: %s", fmt_id, e)
-        if skip_verify:
-            return _auto_pass(state, fmt_id, task, "Parse error — auto-passed")
-        return _fail(state, fmt_id, task, f"Could not parse verifier output: {e}")
+        salvaged = _salvage_verifier_json(raw)
+        if salvaged is None:
+            log.warning("[verifier] Parse failed for %s: %s", fmt_id, e)
+            if skip_verify:
+                return _auto_pass(state, fmt_id, task, "Parse error — auto-passed")
+            return _fail(state, fmt_id, task, f"Could not parse verifier output: {e}")
+        log.warning("[verifier] Salvaged truncated verifier JSON for %s", fmt_id)
+        result = salvaged
+
+    passed = bool(result.get("pass", True))
+    score = int(result.get("score", 75))
+    issues = list(result.get("issues", []))
+    critique = str(result.get("critique", ""))
 
     log.info("[verifier] %s — pass=%s score=%d", fmt_id, passed, score)
 
