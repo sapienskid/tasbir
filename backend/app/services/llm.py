@@ -11,9 +11,9 @@ from app.config import get_settings
 
 # Single source of truth for the default model. All MODEL_ROUTES entries and
 # the vision path fall back to this when no DB agent row provides a model.
-# Verified against the Google Generative Language API (gemini-3.5-flash-lite
-# is not an accepted model id there — it hangs instead of erroring).
-DEFAULT_MODEL = "gemini-2.5-flash"
+# Pacing/serialization that keeps this model within its rate limits is handled
+# by the global llm_gate (llm.min_interval_seconds knob).
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 
 MODEL_ROUTES = {
     "strategist": DEFAULT_MODEL,
@@ -105,6 +105,10 @@ async def call_llm(
     Falls back to OpenRouter if Gemini fails and a key is configured.
     """
     from langchain_core.messages import HumanMessage, SystemMessage
+
+    from app.services.llm_gate import llm_gate
+
+    await llm_gate()
 
     llm = get_llm(agent_role=agent_role, temperature=temperature, max_tokens=max_tokens)
     messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]

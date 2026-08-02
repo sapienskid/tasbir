@@ -1,12 +1,12 @@
 """Shared Gemini Vision helper — multimodal (image + text) LLM calls.
 
-Used by the verifier and the template/brand authoring agents. Serializes
-vision calls and spaces them out to respect the free-tier rate limit.
+Used by the verifier and the template/brand authoring agents. Pacing and
+serialization are handled by the global ``llm_gate`` (shared with text calls)
+so the whole pipeline respects the provider's rate limits.
 """
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import logging
 
@@ -14,10 +14,6 @@ from app.config import get_settings
 from app.services.llm import DEFAULT_MODEL
 
 log = logging.getLogger(__name__)
-
-_VISION_LOCK = asyncio.Lock()
-_VISION_LAST_CALL = 0.0
-_VISION_MIN_INTERVAL = 5.0  # seconds between vision LLM calls
 
 
 async def call_vision_llm(
@@ -34,11 +30,10 @@ async def call_vision_llm(
     ``prompt_cfg.model`` so the Agents UI model selection actually drives the
     vision call. Defaults to the shared route default.
     """
-    from app.services.settings import get_runtime_setting
+    from app.services.llm_gate import llm_gate
 
-    min_interval = float(
-        await get_runtime_setting("vision.min_interval_seconds", _VISION_MIN_INTERVAL)
-    )
+    await llm_gate()
+
     settings = get_settings()
     api_key = settings.gemini_api_key
 
@@ -68,14 +63,7 @@ async def call_vision_llm(
             ]),
         ]
 
-        global _VISION_LAST_CALL
-        loop = asyncio.get_event_loop()
-        async with _VISION_LOCK:
-            elapsed = loop.time() - _VISION_LAST_CALL
-            if elapsed < min_interval:
-                await asyncio.sleep(min_interval - elapsed)
-            _VISION_LAST_CALL = loop.time()
-            response = await llm.ainvoke(messages)
+        response = await llm.ainvoke(messages)
 
         content = response.content or ""
         if isinstance(content, list):

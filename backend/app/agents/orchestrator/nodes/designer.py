@@ -62,27 +62,35 @@ def _clean_html(raw: str) -> str:
     return raw.strip()
 
 
-def _parse_copy(copy_json: str) -> dict:
-    """Parse the copy JSON string from FormatTask.copy."""
+def _parse_copy(copy_json: str, fallback_headline: str = "") -> dict:
+    """Parse the copy JSON string from FormatTask.copy.
+
+    When copy is missing/empty (e.g. a failed copywriter step), falls back to
+    the post title so the design never renders a bare "Untitled".
+    """
+    fallback = fallback_headline.strip() or "Untitled"
     if not copy_json:
         return {
-            "headline": "Untitled",
+            "headline": fallback,
             "subhead": "",
             "body": "",
             "tagline": "",
             "badge": None,
         }
     try:
-        return json.loads(copy_json)
+        data = json.loads(copy_json)
+        if isinstance(data, dict):
+            return data
     except Exception:
-        stripped = copy_json.strip().strip("'\"")
-        return {
-            "headline": "Untitled",
-            "subhead": "",
-            "body": stripped[:300] if stripped else "No body copy available",
-            "tagline": "",
-            "badge": None,
-        }
+        pass
+    stripped = copy_json.strip().strip("'\"")
+    return {
+        "headline": fallback,
+        "subhead": "",
+        "body": stripped[:300] if stripped else "No body copy available",
+        "tagline": "",
+        "badge": None,
+    }
 
 
 def _ground_css_vars(
@@ -115,7 +123,7 @@ async def designer_node_single(state: GenerationState) -> dict:
 
     format_tasks = state.get("format_tasks", {})
     task = format_tasks.get(fmt_id, {})
-    copy_data = _parse_copy(task.get("copy", ""))
+    copy_data = _parse_copy(task.get("copy", ""), state.get("title", ""))
     brief = state.get("strategic_brief", {})
 
     verification = state.get("verification", {})

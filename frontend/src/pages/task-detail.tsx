@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { HtmlEditor } from "@/components/editor/html-editor"
 import { VisualEditor, type VisualEditorHandle } from "@/components/editor/visual-editor"
@@ -27,7 +27,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -151,8 +150,6 @@ export default function TaskDetailPage() {
   useEffect(() => {
     taskRef.current = task
   }, [task])
-
-  const [, startTransition] = useTransition()
 
   // Hooks must run before the early returns below.
   const running = task?.status === "pending" || task?.status === "running"
@@ -446,19 +443,7 @@ export default function TaskDetailPage() {
         </Card>
       ) : (
         <>
-          <div className="flex items-center justify-between gap-2">
-            <Tabs
-              value={selectedFormat ?? undefined}
-              onValueChange={(v) => startTransition(() => setSelectedFormat(v))}
-            >
-              <TabsList className="flex-wrap">
-                {formats.map((fmt) => (
-                  <TabsTrigger key={fmt} value={fmt}>
-                    {formatTabLabel(fmt)}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <div className="flex flex-wrap items-center gap-2">
               {platform?.template_id ? (
                 <Badge variant="outline" className="font-mono text-xs">
@@ -534,6 +519,13 @@ export default function TaskDetailPage() {
           </div>
 
           <div className="flex items-stretch gap-4">
+            <FormatRail
+              formats={formats}
+              selected={selectedFormat}
+              onSelect={(f) => setSelectedFormat(f)}
+              platformStatus={(f) => task?.result?.platforms?.[f]?.status}
+              platformScore={(f) => task?.result?.platforms?.[f]?.quality_score}
+            />
             <div className="grid min-w-0 flex-1 gap-4 lg:grid-cols-2">
               <div className="grid gap-2">
                 <div className="flex items-center gap-1">
@@ -639,4 +631,82 @@ function StepDot({ status }: { status: string }) {
         ? "bg-destructive"
         : "bg-amber-400 animate-pulse"
   return <span className={`inline-block size-2 rounded-full ${color}`} />
+}
+
+function groupFormats(formats: string[]): { group: string; items: string[] }[] {
+  const squareSlides = formats.filter((f) => /^instagram-carousel-\d+$/.test(f))
+  const portraitSlides = formats.filter(
+    (f) => /^instagram-carousel-portrait-\d+$/.test(f)
+  )
+  const singles = formats.filter(
+    (f) => !squareSlides.includes(f) && !portraitSlides.includes(f)
+  )
+  const groups: { group: string; items: string[] }[] = []
+  if (singles.length) groups.push({ group: "Posts", items: singles })
+  if (squareSlides.length) groups.push({ group: "Carousel · square", items: squareSlides })
+  if (portraitSlides.length) groups.push({ group: "Carousel · portrait", items: portraitSlides })
+  return groups
+}
+
+/**
+ * Left rail listing every artifact/format for the task. Replaces the horizontal
+ * tabs — scales to many formats (single + carousel slides) without overflowing.
+ */
+function FormatRail({
+  formats,
+  selected,
+  onSelect,
+  platformStatus,
+  platformScore,
+}: {
+  formats: string[]
+  selected: string | null
+  onSelect: (fmt: string) => void
+  platformStatus: (fmt: string) => string | undefined
+  platformScore: (fmt: string) => number | undefined
+}) {
+  const groups = groupFormats(formats)
+  return (
+    <aside className="hidden w-56 shrink-0 overflow-y-auto rounded-md border bg-card sm:block">
+      <div className="sticky top-0 border-b bg-card px-3 py-2">
+        <p className="text-xs font-medium text-muted-foreground">
+          Artifacts · {formats.length}
+        </p>
+      </div>
+      <div className="p-2">
+        {groups.map((g) => (
+          <div key={g.group} className="mb-3">
+            <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {g.group}
+            </p>
+            <div className="space-y-1">
+              {g.items.map((fmt) => {
+                const status = platformStatus(fmt)
+                const score = platformScore(fmt)
+                const active = selected === fmt
+                return (
+                  <button
+                    key={fmt}
+                    type="button"
+                    onClick={() => onSelect(fmt)}
+                    className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors ${
+                      active
+                        ? "border-primary bg-primary/5"
+                        : "border-transparent hover:border-border hover:bg-muted/40"
+                    }`}
+                  >
+                    <StepDot status={status ?? "pending"} />
+                    <span className="flex-1 truncate text-sm">{formatTabLabel(fmt)}</span>
+                    {typeof score === "number" ? (
+                      <span className="text-xs tabular-nums text-muted-foreground">{score}</span>
+                    ) : null}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </aside>
+  )
 }

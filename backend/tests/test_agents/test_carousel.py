@@ -274,3 +274,61 @@ def test_portrait_carousel_expands_under_portrait_base():
     # Slides resolve to the portrait dims (1080x1350).
     assert get_format_info("instagram-carousel-portrait-1").height == 1350
     assert get_format_info("instagram-carousel-portrait-1").width == 1080
+
+
+# ─── Copywriter resilience (never drop a platform) ──────────────────────────
+
+
+def test_fallback_copy_uses_title_not_untitled():
+    from app.agents.orchestrator.nodes.copywriter import _fallback_copy
+
+    c = _fallback_copy("Some real body text.", "My Great Title", 0, False)
+    assert c.headline == "My Great Title"
+    assert "real body" in c.body
+
+    c2 = _fallback_copy("", "Title only", 0, False)
+    assert c2.headline == "Title only"
+
+    car = _fallback_copy("Body", "Title", 3, True)
+    assert len(car.slides) == 3
+    assert car.slides[0].headline == "Title"
+
+
+async def test_copywriter_keeps_platform_when_llm_fails():
+    """A failed copywriter LLM call yields title-based copy, not a dropped format."""
+    from unittest.mock import AsyncMock, patch
+
+    from app.agents.orchestrator.nodes.copywriter import copywriter_node
+
+    async def boom(**kw):
+        raise RuntimeError("quota exhausted")
+
+    state = initial_state(
+        title="The Measure",
+        content="A grid sets order and a measure sets pace.",
+        platforms=["instagram-square", "linkedin-post"],
+        _task_id="",
+        design_tokens={},
+        brand_info={},
+        campaign={},
+        overrides={},
+        images=[],
+        footer={},
+        categories=[{"name": "WRITING"}],
+        category="WRITING",
+        ground="white",
+    )
+    state["strategic_brief"] = {"angle": "A", "platform_notes": {}}
+
+    with patch(
+        "app.agents.orchestrator.nodes.copywriter.call_llm",
+        new=AsyncMock(side_effect=boom),
+    ):
+        out = await copywriter_node(state)
+
+    ft = out["format_tasks"]
+    assert set(ft.keys()) == {"instagram-square", "linkedin-post"}
+    for fmt, task in ft.items():
+        copy = json.loads(task["copy"])
+        assert copy["headline"] == "The Measure"
+        assert copy["body"]

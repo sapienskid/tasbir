@@ -24,12 +24,12 @@ DEFAULT_APP_SETTINGS: dict[str, dict] = {
         "description": "Max verifier retry loops per format before failing",
     },
     "copywriter.concurrency": {
-        "value": 2,
-        "description": "Max concurrent copywriter LLM calls (Gemini free tier)",
+        "value": 1,
+        "description": "Max concurrent copywriter LLM calls (serialized by the global gate)",
     },
-    "vision.min_interval_seconds": {
-        "value": 5.0,
-        "description": "Min seconds between vision LLM calls (rate limit)",
+    "llm.min_interval_seconds": {
+        "value": 4.0,
+        "description": "Min seconds between ANY two LLM calls (global serialized gate)",
     },
     "chat.html_cap_chars": {
         "value": 80000,

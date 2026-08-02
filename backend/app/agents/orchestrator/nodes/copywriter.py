@@ -231,15 +231,27 @@ async def _write_copy_for_platform(
     )
 
     sem = await _get_copy_semaphore()
+    raw = None
     async with sem:
         log.info("[copywriter] Writing copy for %s", platform_id)
-        raw = await call_llm(
-            agent_role="copywriter",
-            system_prompt=prompt_cfg.system_prompt,
-            user_prompt=user_prompt,
-            temperature=prompt_cfg.temperature,
-            max_tokens=prompt_cfg.max_tokens,
-        )
+        try:
+            raw = await call_llm(
+                agent_role="copywriter",
+                system_prompt=prompt_cfg.system_prompt,
+                user_prompt=user_prompt,
+                temperature=prompt_cfg.temperature,
+                max_tokens=prompt_cfg.max_tokens,
+            )
+        except Exception as e:
+            # Never drop a platform — a failed call falls back to title-based
+            # copy so the format still renders real content (no "Untitled").
+            log.warning(
+                "[copywriter] LLM failed for %s: %s — using fallback", platform_id, e
+            )
+            raw = None
+
+    if raw is None:
+        return platform_id, _fallback_copy(content, title, slides_count, is_carousel)
 
     try:
         data = _extract_json(raw)
@@ -278,18 +290,7 @@ async def _write_copy_for_platform(
         return platform_id, copy
     except Exception as e:
         log.warning("[copywriter] Parse failed for %s: %s — using fallback", platform_id, e)
-        fallback_body = content[:300].strip() if content else "No content available"
-        fallback = PlatformCopy(
-            headline=title[:50],
-            subhead="",
-            body=fallback_body,
-            tagline="",
-            badge=None,
-            slides=_finalize_slides(_fallback_slides(content, title, slides_count), title)
-            if is_carousel
-            else [],
-        )
-        return platform_id, fallback
+        return platform_id, _fallback_copy(content, title, slides_count, is_carousel)
 
 
 def _split_sentences(text: str, n: int) -> list[str]:
@@ -335,6 +336,21 @@ def _finalize_slides(slides: list[SlideCopy], title: str, body_cap: int = 160) -
             body = body[:idx] if idx > 0 else body[:body_cap]
         out.append(s.model_copy(update={"headline": headline, "body": body}))
     return out
+
+
+def _fallback_copy(content: str, title: str, slides_count: int, is_carousel: bool) -> PlatformCopy:
+    """Title-based fallback copy when the LLM call fails — never empty."""
+    fallback_body = content[:300].strip() if content else "No content available"
+    return PlatformCopy(
+        headline=title[:50],
+        subhead="",
+        body=fallback_body,
+        tagline="",
+        badge=None,
+        slides=_finalize_slides(_fallback_slides(content, title, slides_count), title)
+        if is_carousel
+        else [],
+    )
 
 
 def _fallback_slides(content: str, title: str, n: int) -> list[SlideCopy]:
