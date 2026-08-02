@@ -109,11 +109,16 @@ async def extract_dom_tree(
         "height": height,
     }
 
+    headers = {}
+    if settings.render_service_key:
+        headers["X-Render-Key"] = settings.render_service_key
+
     try:
         async with httpx.AsyncClient(timeout=RENDER_TIMEOUT) as client:
             response = await client.post(
                 f"{renderer_url}/extract-dom",
                 json=payload,
+                headers=headers,
             )
             response.raise_for_status()
             data = response.json()
@@ -155,11 +160,16 @@ async def render_to_png(
         payload["wait_for_selector"] = "body[data-mermaid-ready='true']"
         payload["wait_for_timeout"] = 3000
 
+    headers = {}
+    if settings.render_service_key:
+        headers["X-Render-Key"] = settings.render_service_key
+
     try:
         async with httpx.AsyncClient(timeout=RENDER_TIMEOUT) as client:
             response = await client.post(
                 f"{renderer_url}/render",
                 json=payload,
+                headers=headers,
             )
             response.raise_for_status()
             return response.content
@@ -184,11 +194,16 @@ async def detect_overflow(
 
     payload = {"html": html, "width": width, "height": height}
 
+    headers = {}
+    if settings.render_service_key:
+        headers["X-Render-Key"] = settings.render_service_key
+
     try:
         async with httpx.AsyncClient(timeout=RENDER_TIMEOUT) as client:
             response = await client.post(
                 f"{renderer_url}/extract-dom",
                 json=payload,
+                headers=headers,
             )
             response.raise_for_status()
             data = response.json()

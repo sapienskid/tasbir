@@ -48,11 +48,16 @@ async def render_html(
         payload["wait_for_selector"] = "body[data-mermaid-ready='true']"
         payload["wait_for_timeout"] = 3000  # max 3s extra after selector found
 
+    headers = {}
+    if settings.render_service_key:
+        headers["X-Render-Key"] = settings.render_service_key
+
     try:
         async with httpx.AsyncClient(timeout=45.0) as client:
             response = await client.post(
                 f"{renderer_url}/render",
                 json=payload,
+                headers=headers,
             )
             response.raise_for_status()
             return response.content

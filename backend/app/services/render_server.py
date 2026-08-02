@@ -9,12 +9,9 @@ Run via: uvicorn render_server:app --host 0.0.0.0 --port 4000
 """
 
 import asyncio
-import base64
-import json
-import re
-from typing import Any
+import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -22,6 +19,18 @@ app = FastAPI(title="Playwright DOM Extraction Service")
 
 _browser = None
 _lock = asyncio.Lock()
+
+# Shared-secret auth between the worker and this service. When set, /render
+# and /extract-dom require the X-Render-Key header. /health stays public so
+# the container healthcheck can run.
+_RENDER_SERVICE_KEY = os.environ.get("RENDER_SERVICE_KEY", "")
+
+
+def _require_key(auth_header: str | None) -> None:
+    if not _RENDER_SERVICE_KEY:
+        return
+    if auth_header != _RENDER_SERVICE_KEY:
+        raise HTTPException(status_code=401, detail="Invalid render key")
 
 
 async def get_browser():
@@ -38,7 +47,6 @@ async def get_browser():
                 args=[
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
-                    "--disable-web-security",
                     "--font-render-hinting=none",
                 ],
             )
@@ -67,8 +75,12 @@ async def health():
 
 
 @app.post("/render")
-async def render(req: RenderRequest):
+async def render(
+    req: RenderRequest,
+    x_render_key: str | None = Header(default=None),
+):
     """Render HTML to PNG and return image bytes."""
+    _require_key(x_render_key)
     browser = await get_browser()
     page = await browser.new_page(viewport={"width": req.width, "height": req.height})
 
@@ -102,8 +114,12 @@ async def render(req: RenderRequest):
 
 
 @app.post("/extract-dom")
-async def extract_dom(req: DOMExtractionRequest):
+async def extract_dom(
+    req: DOMExtractionRequest,
+    x_render_key: str | None = Header(default=None),
+):
     """Render HTML and extract the computed DOM tree with CSS properties."""
+    _require_key(x_render_key)
     browser = await get_browser()
     page = await browser.new_page(viewport={"width": req.width, "height": req.height})
 
