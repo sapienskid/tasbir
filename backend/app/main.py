@@ -1,19 +1,25 @@
-from contextlib import asynccontextmanager
 import logging
+from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Depends
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
 
+from app.api import generate, health, tasks
 from app.config import get_settings
-from app.api import health, generate, tasks
+from app.core.ratelimit import close_redis, rate_limiter
 from app.core.security import verify_api_key
 
 log = logging.getLogger(__name__)
 
+# Optional built frontend (Tasbir Studio) — served when present.
+_STATIC_DIR = Path("/app/static")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.db.session import get_shared_session_factory, close_shared_engine
+    from app.db.session import close_shared_engine, get_shared_session_factory
     from app.models import Base
 
     pool = await get_shared_session_factory()
@@ -30,6 +36,7 @@ async def lifespan(app: FastAPI):
 
     yield
     await close_shared_engine()
+    await close_redis()
 
 
 settings = get_settings()
@@ -55,9 +62,32 @@ app.include_router(health.router, tags=["health"])
 # Protected
 app.include_router(
     generate.router, prefix="/generate", tags=["generate"],
-    dependencies=[Depends(verify_api_key)]
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 app.include_router(
     tasks.router, prefix="/tasks", tags=["tasks"],
-    dependencies=[Depends(verify_api_key)]
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
+
+
+def _has_frontend() -> bool:
+    return _STATIC_DIR.is_dir() and any(_STATIC_DIR.iterdir())
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_fallback(full_path: str):
+    """Serve the built SPA (with index.html fallback for client routes)."""
+    if not _has_frontend():
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+    if full_path:
+        candidate = (_STATIC_DIR / full_path).resolve()
+        try:
+            candidate.relative_to(_STATIC_DIR.resolve())
+        except ValueError:
+            candidate = _STATIC_DIR / "index.html"
+        if candidate.is_file():
+            return FileResponse(candidate)
+    index = _STATIC_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(index)
+    return JSONResponse({"detail": "Not found"}, status_code=404)
