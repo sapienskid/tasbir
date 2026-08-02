@@ -20,6 +20,7 @@ MODEL_ROUTES = {
     "brand_vision": "gemini-3.5-flash-lite",
     "brand_tokens": "gemini-3.5-flash-lite",
     "brand_campaigns": "gemini-3.5-flash-lite",
+    "editor_chat": "gemini-3.5-flash-lite",
 }
 
 

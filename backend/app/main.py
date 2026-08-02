@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.api import (
     agent_jobs,
+    chat,
     design_systems,
     generate,
     health,
@@ -97,6 +98,10 @@ app.include_router(
 )
 app.include_router(
     uploads.router, prefix="/api/uploads", tags=["uploads"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    chat.router, prefix="/api/tasks", tags=["chat"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 
