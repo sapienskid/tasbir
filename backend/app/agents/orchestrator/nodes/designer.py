@@ -26,6 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from html import escape
 from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
@@ -38,6 +39,7 @@ from app.services.design_instruction import (
 )
 from app.services.formats import get_format_info
 from app.services.llm import call_llm
+from app.services.sanitizer import sanitize_html
 from app.services.tokens import build_css_var_reference
 
 log = logging.getLogger(__name__)
@@ -276,6 +278,10 @@ TAGLINE: {tagline}"""
 
         html = _clean_html(raw)
 
+        # Sanitize LLM output before it can reach the renderer — strips any
+        # script/frame/event-handler the model was steered into emitting.
+        html = sanitize_html(html, mode="strict")
+
         # Validate it's a real HTML document
         if len(html) < 100 or "<body" not in html.lower():
             raise ValueError(f"Invalid HTML output: {html[:100]}")
@@ -334,10 +340,13 @@ def _build_fallback_html(
     Uses only var(--color-*) references — the pipeline injects the token
     block before rendering, so no hex values live in this code.
     """
-    headline = copy_data.get("headline", "Untitled")
-    subhead = copy_data.get("subhead", "")
-    body = copy_data.get("body", "")
-    tagline = copy_data.get("tagline", "")
+    headline = escape(copy_data.get("headline", "Untitled"))
+    subhead = escape(copy_data.get("subhead", ""))
+    body = escape(copy_data.get("body", ""))
+    tagline = escape(copy_data.get("tagline", ""))
+    category = escape(category)
+    footer_left = escape(footer_left)
+    footer_right = escape(footer_right)
 
     is_story = fmt.width == 1080 and fmt.height == 1920
     pad_vertical = 160 if is_story else 64
