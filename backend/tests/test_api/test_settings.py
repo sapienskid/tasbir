@@ -8,8 +8,8 @@ async def test_settings_seeded_with_defaults(authed_client):
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["values"]["verifier.max_retries"] == 2
-    assert data["values"]["copywriter.concurrency"] == 1
-    assert data["values"]["llm.min_interval_seconds"] == 4.0
+    assert data["values"]["copywriter.concurrency"] == 2
+    assert data["values"]["vision.min_interval_seconds"] == 5.0
     assert data["values"]["chat.html_cap_chars"] == 80000
     assert data["values"]["templates.recent_limit"] == 8
 

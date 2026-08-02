@@ -11,8 +11,8 @@ from app.config import get_settings
 
 # Single source of truth for the default model. All MODEL_ROUTES entries and
 # the vision path fall back to this when no DB agent row provides a model.
-# Pacing/serialization that keeps this model within its rate limits is handled
-# by the global llm_gate (the llm.min_interval_seconds runtime knob).
+# Parallelism/pacing is per-path (copywriter semaphore, vision lock) — see the
+# runtime-settings knobs.
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
 
 # Hard per-call timeout so a stalled model request becomes an exception instead
@@ -63,11 +63,13 @@ def get_llm(agent_role: str = "strategist", temperature: float = 0.7, max_tokens
     )
 
 
-async def call_llm_with_retry(llm, messages, max_retries=5, agent_role: str = ""):
-    """Call an LLM with retry on 429 rate limit errors (exponential backoff & retry delay parsing).
+async def call_llm_with_retry(llm, messages, max_retries=3, agent_role: str = ""):
+    """Call an LLM with retry on 429 rate limit errors (server retryDelay).
 
     Raises on final failure — the OpenRouter fallback lives in ``call_llm``
     (single fallback point, so agent temperature/max_tokens are honored).
+    Retries are capped (default 3) so a heavily throttled key fails forward
+    instead of sitting in backoff for minutes (the "stalled pipeline" symptom).
     """
     import logging
     import re
@@ -89,11 +91,11 @@ async def call_llm_with_retry(llm, messages, max_retries=5, agent_role: str = ""
             is_429 = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Quota exceeded" in err_str
             if is_429 and attempt < max_retries - 1:
                 match = re.search(r'(?:retry(?:Delay)?\s*[:in]\s*)(\d+)(?:\.\d+)?s', err_str, re.IGNORECASE)
-                if match:
-                    wait = int(match.group(1)) + 2
-                else:
-                    wait = (2 ** (attempt + 2)) + 5
-                log.warning(f"[LLM RateLimit] Received 429 / RESOURCE_EXHAUSTED. Retrying attempt {attempt+1}/{max_retries} in {wait}s...")
+                wait = (int(match.group(1)) + 2) if match else (2 ** (attempt + 2)) + 5
+                log.warning(
+                    f"[LLM RateLimit] 429 / RESOURCE_EXHAUSTED. "
+                    f"Retrying attempt {attempt + 1}/{max_retries} in {wait}s..."
+                )
                 last_error = e
                 await asyncio.sleep(wait)
                 continue
@@ -117,10 +119,6 @@ async def call_llm(
     Falls back to OpenRouter if Gemini fails and a key is configured.
     """
     from langchain_core.messages import HumanMessage, SystemMessage
-
-    from app.services.llm_gate import llm_gate
-
-    await llm_gate()
 
     llm = get_llm(agent_role=agent_role, temperature=temperature, max_tokens=max_tokens)
     messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]

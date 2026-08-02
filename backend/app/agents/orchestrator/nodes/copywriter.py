@@ -447,13 +447,15 @@ async def copywriter_node(state: GenerationState) -> dict:
 
     task_id = state.get("_task_id", "")
     if task_id:
+        # One audit row per platform so the trace + progress endpoint show
+        # each format as its copy is produced (not one opaque row).
         from app.services.audit import record_audit
 
-        await record_audit(
-            task_id,
-            "copywriter",
-            decision={"platforms": list(format_tasks.keys())},
-            critique="",
-        )
+        for platform_id in format_tasks:
+            await record_audit(
+                task_id,
+                "copywriter",
+                decision={"format": platform_id, "status": "copy_ready"},
+            )
 
     return {"format_tasks": format_tasks}
