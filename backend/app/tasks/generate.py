@@ -22,8 +22,14 @@ def generate_task(self, task_id: str, source_data: dict):
             await repo.update_status(task_id=task_id, status="running")
 
         from app.config import get_settings
-        from app.services.tokens import load_tokens, load_brand, load_campaign, load_brand_design, DEFAULT_TOKEN_VALUES
         from app.services.image_loader import prepare_images
+        from app.services.tokens import (
+            DEFAULT_TOKEN_VALUES,
+            load_brand,
+            load_brand_design,
+            load_campaign,
+            load_tokens,
+        )
 
         settings = get_settings()
 
@@ -87,6 +93,7 @@ def generate_task(self, task_id: str, source_data: dict):
                 "quality_score": ft.get("quality_score", 0),
                 "quality_issues": ft.get("quality_issues", []),
                 "html_path": ft.get("html_path", ""),
+                "template_id": ft.get("template_id"),
                 "error": ft.get("error"),
             }
             for fmt_id, ft in format_tasks.items()

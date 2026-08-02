@@ -23,6 +23,7 @@ from app.agents.orchestrator.nodes.designer import designer_node_single
 from app.agents.orchestrator.nodes.quality_check import MAX_RETRIES, quality_check_node_single
 from app.agents.orchestrator.nodes.renderer import renderer_node_single
 from app.agents.orchestrator.nodes.strategist import strategist_node
+from app.agents.orchestrator.nodes.template_renderer import template_node_single
 from app.agents.orchestrator.state import GenerationState, initial_state
 
 log = logging.getLogger(__name__)
@@ -61,16 +62,26 @@ def _apply_updates(state: dict, updates: dict) -> None:
 
 
 async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
-    """Run designer → renderer → verifier (with retries) for one format.
+    """Run template → renderer → verifier, falling back to the LLM designer.
 
-    Works on an isolated deep copy so parallel branches never share mutable
-    state. Returns the per-format updates to merge into the parent state.
+    Templates are the first choice. If none matches, or the chosen template
+    fails QC (e.g. overflow), the chain falls back to the designer on the
+    next attempt. Works on an isolated deep copy so parallel branches never
+    share mutable state. Returns the per-format updates to merge.
     """
     local = copy.deepcopy(base_state)
     local["_processing_format_id"] = fmt_id
 
+    use_template = True
     for _attempt in range(MAX_RETRIES + 1):
-        _apply_updates(local, await designer_node_single(local))
+        if use_template:
+            _apply_updates(local, await template_node_single(local))
+
+        fmt_task = local.get("format_tasks", {}).get(fmt_id, {})
+        if not fmt_task.get("html"):
+            # No template matched (or copy missing) → LLM designer.
+            _apply_updates(local, await designer_node_single(local))
+
         _apply_updates(local, await renderer_node_single(local))
         _apply_updates(local, await quality_check_node_single(local))
 
@@ -78,8 +89,15 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
         status = fmt_task.get("status", "")
         if status in ("verified", "error", "failed"):
             break
-        if status == "needs_retry" and _attempt >= MAX_RETRIES:
-            break
+        if status == "needs_retry":
+            if use_template:
+                # Chosen template failed QC (e.g. overflow) → LLM designer.
+                use_template = False
+                fmt_task["html"] = None
+                fmt_task.pop("template_id", None)
+                continue
+            if _attempt >= MAX_RETRIES:
+                break
 
     return {
         "format_tasks": {fmt_id: local["format_tasks"].get(fmt_id, {})},

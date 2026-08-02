@@ -38,6 +38,7 @@ class FormatTask(TypedDict):
     quality_issues: list[str]
     refinement_count: int
     error: str | None
+    template_id: str | None
 
 
 def merge_format_tasks(
@@ -117,6 +118,7 @@ def initial_state(
             quality_issues=[],
             refinement_count=0,
             error=None,
+            template_id=None,
         )
 
     return {
