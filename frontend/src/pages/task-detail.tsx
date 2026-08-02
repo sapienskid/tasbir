@@ -5,6 +5,14 @@ import { VisualEditor, type VisualEditorHandle } from "@/components/editor/visua
 import { useDebouncedValue } from "@/components/editor/use-debounce"
 import { ZoomableFrame, formatDims, type PreviewZoomHandle } from "@/components/tasks/preview-frame"
 import { InspectorRail, type QcState } from "@/components/tasks/inspector-rail"
+
+/** Friendly tab labels: instagram-carousel-2 → "Slide 2". */
+function formatTabLabel(fmt: string): string {
+  const m = /^instagram-carousel-(\d+)$/.exec(fmt)
+  if (m) return `Slide ${m[1]}`
+  if (fmt === "instagram-carousel") return "Carousel"
+  return fmt
+}
 import {
   AlertDialog,
   AlertDialogAction,
@@ -410,7 +418,7 @@ export default function TaskDetailPage() {
               <TabsList className="flex-wrap">
                 {formats.map((fmt) => (
                   <TabsTrigger key={fmt} value={fmt}>
-                    {fmt}
+                    {formatTabLabel(fmt)}
                   </TabsTrigger>
                 ))}
               </TabsList>

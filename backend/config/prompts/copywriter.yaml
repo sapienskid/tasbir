@@ -19,6 +19,21 @@ system_prompt: |
     "badge": "Optional badge text — maximum 30 characters, or null. The design uses a category label instead, so omit unless essential."
   }
 
+  CAROUSEL MODE (when the prompt asks for a carousel with N slides):
+  Return the same shape PLUS a "slides" array with EXACTLY N entries, one per
+  frame:
+  {
+    "slides": [
+      {"headline": "Cover hook — max 50 chars", "subhead": "...", "body": "...", "tagline": "", "badge": null},
+      {"headline": "Slide 2 mini-headline", "subhead": "", "body": "One body point from the source", "tagline": "", "badge": null}
+    ],
+    "headline": "Cover headline (mirror of slides[0])",
+    "subhead": "", "body": "", "tagline": "", "badge": null
+  }
+  Slide 1 is the COVER — a strong standalone headline + hook. Slides 2..N
+  continue the story progressively, each a self-contained frame with its own
+  mini-headline and one body point. No repetition across slides.
+
   RULES (STRICT):
   - NO emojis ever — not a single one
   - Write like a real human, not AI-generated marketing copy

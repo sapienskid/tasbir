@@ -30,6 +30,7 @@ import { PreviewFrame, FAMILY_DIMS } from "@/components/tasks/preview-frame"
 
 const KNOWN_PLATFORMS = [
   "instagram-square",
+  "instagram-carousel",
   "instagram-portrait",
   "instagram-story",
   "linkedin-post",
@@ -40,6 +41,7 @@ const KNOWN_PLATFORMS = [
 
 const FAMILY_OF_PLATFORM: Record<string, string> = {
   "instagram-square": "square",
+  "instagram-carousel": "square",
   "instagram-portrait": "portrait",
   "instagram-story": "story",
   "linkedin-post": "landscape",
@@ -68,6 +70,7 @@ export default function NewTaskPage() {
   const [category, setCategory] = useState("")
   const [campaign, setCampaign] = useState("default")
   const [platforms, setPlatforms] = useState<string[]>(["instagram-square"])
+  const [slides, setSlides] = useState(3)
   const [templateId, setTemplateId] = useState<string>("")
   const [media, setMedia] = useState<Record<string, MediaEntry>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -133,6 +136,7 @@ export default function NewTaskPage() {
           category: category || undefined,
           campaign,
           platforms,
+          slides: platforms.includes("instagram-carousel") ? slides : undefined,
           design_system_id: dsId,
           template_id: templateId,
           images,
@@ -298,6 +302,22 @@ export default function NewTaskPage() {
                   </div>
                 ))}
               </div>
+              {platforms.includes("instagram-carousel") ? (
+                <div className="mt-2 flex items-center gap-2 text-sm">
+                  <Label htmlFor="nt-slides" className="shrink-0">
+                    Slides
+                  </Label>
+                  <Input
+                    id="nt-slides"
+                    type="number"
+                    min={2}
+                    max={10}
+                    className="w-20"
+                    value={slides}
+                    onChange={(e) => setSlides(Math.min(10, Math.max(2, Number(e.target.value) || 3)))}
+                  />
+                </div>
+              ) : null}
             </div>
             <div className="flex justify-between">
               <Button variant="ghost" onClick={() => setStep(0)}>

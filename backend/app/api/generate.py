@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.db.repositories.tasks import TaskRepository
-from app.services.formats import validate_platforms
+from app.services.formats import CAROUSEL_FORMAT, validate_platforms
 from app.tasks.generate import generate_task
 
 router = APIRouter()
@@ -25,6 +25,7 @@ class GenerateRequest(BaseModel):
     excerpt: str = Field(default="", max_length=2000)
     tags: list[str] = Field(default_factory=list, max_length=20)
     platforms: list[str] = Field(default_factory=lambda: ["instagram-square"], max_length=12)
+    slides: int | None = Field(default=None, ge=2, le=10)
     campaign: str = Field(default="default", max_length=64)
     category: str | None = Field(default=None, max_length=64)
     design_system_id: str = Field(default="default", max_length=64)
@@ -49,6 +50,19 @@ class GenerateRequest(BaseModel):
     @classmethod
     def _validate_platforms(cls, v: list[str]) -> list[str]:
         return validate_platforms(v)
+
+    @model_validator(mode="after")
+    def _apply_carousel_slides(self) -> "GenerateRequest":
+        platforms = self.platforms or []
+        has_carousel = CAROUSEL_FORMAT in platforms
+        if self.slides is not None and not has_carousel:
+            raise HTTPException(
+                status_code=422,
+                detail="'slides' is only valid when 'instagram-carousel' is in platforms",
+            )
+        if has_carousel and self.slides is None:
+            self.slides = 3  # sensible default for a carousel
+        return self
 
 
 class GenerateResponse(BaseModel):

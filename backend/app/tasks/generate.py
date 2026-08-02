@@ -115,6 +115,8 @@ def generate_task(self, task_id: str, source_data: dict):
         brief = state.get("strategic_brief", {})
         format_tasks = state.get("format_tasks", {})
 
+        from app.services.formats import CAROUSEL_FORMAT
+
         platform_results = {
             fmt_id: {
                 "status": ft.get("status", "unknown"),
@@ -125,6 +127,9 @@ def generate_task(self, task_id: str, source_data: dict):
                 "error": ft.get("error"),
             }
             for fmt_id, ft in format_tasks.items()
+            # The base carousel entry only holds the slide copy — the slides
+            # themselves (instagram-carousel-1..N) are the real outputs.
+            if not (fmt_id == CAROUSEL_FORMAT and not ft.get("html_path"))
         }
 
         async with pool() as session:

@@ -188,6 +188,22 @@ async def designer_node_single(state: GenerationState) -> dict:
 
     ground_block = _ground_css_vars(ground)
 
+    # Carousel slide context — this frame's position in a swipeable sequence.
+    slide_block = ""
+    slide_ctx = (state.get("slide_context") or {}).get(fmt_id)
+    if slide_ctx:
+        i = slide_ctx.get("index", 1)
+        n = slide_ctx.get("total", 1)
+        cover_note = " This is the COVER — make the headline the strongest hook." if i == 1 else ""
+        slide_block = (
+            f"CAROUSEL SLIDE {i} of {n} — this is ONE frame of a swipeable "
+            f"multi-slide post (square).{cover_note} Make this frame self-contained "
+            f"(readable on its own) while continuing the sequence: give it a clear "
+            f"mini-headline in the display voice, keep the body short, and NEVER let "
+            f"text clip at the canvas edge. Include a small '{i}/{n}' counter in "
+            f"metadata style at a bottom corner or beside the tagline.\n\n"
+        )
+
     category_block = (
         f"CATEGORY LABEL (EXACT — tracked uppercase, category role size): {category}\n"
         if category
@@ -255,6 +271,7 @@ TAGLINE: {tagline}"""
     fonts_link = build_google_fonts_link(design_tokens, di_config)
 
     user_prompt = (
+        f"{slide_block}"
         f"{brand_prefix}{campaign_block}"
         f"PLATFORM: {fmt_id}\n"
         f"CANVAS: {fmt.width}px × {fmt.height}px\n"

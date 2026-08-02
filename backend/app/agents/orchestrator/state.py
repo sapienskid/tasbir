@@ -60,6 +60,8 @@ class GenerationState(TypedDict):
     excerpt: Annotated[str, _keep_first]
     tags: Annotated[list[str], _keep_first_list]
     platforms: Annotated[list[str], _keep_first_list]
+    # Slide count for instagram-carousel (0 = not a carousel)
+    slides: Annotated[int, _keep_first]
 
     # Configuration
     _task_id: Annotated[str, _keep_first]
@@ -91,6 +93,9 @@ class GenerationState(TypedDict):
 
     verification: Annotated[dict[str, dict], _merge_dicts]
     retry_count: Annotated[dict[str, int], _merge_dicts]
+    # Carousel slides: {slide_id: {"index": i, "total": n}} (populated by
+    # process_all_formats when expanding instagram-carousel).
+    slide_context: Annotated[dict[str, dict], _merge_dicts]
 
     # Output
     output_paths: Annotated[dict[str, str], _merge_dicts]
@@ -101,6 +106,7 @@ def initial_state(
     content: str,
     platforms: list[str],
     _task_id: str = "",
+    slides: int = 0,
     design_tokens: dict[str, Any] | None = None,
     brand_info: dict[str, Any] | None = None,
     campaign: dict[str, Any] | None = None,
@@ -141,6 +147,7 @@ def initial_state(
         "excerpt": excerpt or kwargs.get("excerpt", ""),
         "tags": tags or kwargs.get("tags", []),
         "platforms": platforms,
+        "slides": int(slides or kwargs.get("slides", 0)),
         "_task_id": _task_id,
         "design_system_id": design_system_id,
         "design_tokens": design_tokens or {},
@@ -163,5 +170,6 @@ def initial_state(
         "_processing_format_id": "",
         "verification": {},
         "retry_count": {},
+        "slide_context": {},
         "output_paths": {},
     }

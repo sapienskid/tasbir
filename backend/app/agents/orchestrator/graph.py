@@ -138,31 +138,84 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
 async def process_all_formats_node(state: GenerationState) -> dict:
     """Run the full per-format chain for every platform in parallel.
 
-    Each branch is isolated and merges its slice back deterministically,
-    so the final state always reflects every format's real status.
+    Carousels (instagram-carousel) are expanded into one chain per slide
+    (instagram-carousel-1..N), each carrying that slide's copy. Each branch is
+    isolated and merges its slice back deterministically, so the final state
+    always reflects every format's real status.
     """
     import asyncio
+    import json
+
+    from app.services.formats import carousel_slide_id, is_carousel
 
     platforms = state.get("platforms", [])
-    log.info("[graph] Processing %d format(s) in parallel", len(platforms))
+    format_tasks = dict(state.get("format_tasks", {}))
+    slide_context: dict[str, dict] = {}
+    runnable: list[str] = []
+
+    for fmt_id in platforms:
+        if is_carousel(fmt_id):
+            copy = format_tasks.get(fmt_id, {}).get("copy", "")
+            slides = _extract_slides(copy)
+            if not slides:
+                # No slide copy produced — fall back to a single-frame design.
+                runnable.append(fmt_id)
+                continue
+            base_meta = {
+                k: v for k, v in format_tasks[fmt_id].items() if k not in ("copy", "status")
+            }
+            for i, slide_copy in enumerate(slides, start=1):
+                sid = carousel_slide_id(fmt_id, i)
+                format_tasks[sid] = {
+                    **base_meta,
+                    "status": "waiting",
+                    "copy": json.dumps(slide_copy),
+                }
+                slide_context[sid] = {"index": i, "total": len(slides)}
+                runnable.append(sid)
+            format_tasks.pop(fmt_id, None)  # base carousel entry is not an output
+        else:
+            runnable.append(fmt_id)
+
+    log.info("[graph] Processing %d format(s)/slide(s) in parallel", len(runnable))
+
+    base_state = dict(state)
+    base_state["format_tasks"] = format_tasks
+    base_state["slide_context"] = slide_context
 
     results = await asyncio.gather(
-        *(_run_format_chain(state, fmt_id) for fmt_id in platforms)
+        *(_run_format_chain(base_state, fmt_id) for fmt_id in runnable)
     )
 
-    format_tasks = {}
+    merged_tasks = {}
     verification = {}
     retry_count = {}
     for r in results:
-        format_tasks.update(r.get("format_tasks", {}))
+        merged_tasks.update(r.get("format_tasks", {}))
         verification.update(r.get("verification", {}))
         retry_count.update(r.get("retry_count", {}))
 
     return {
-        "format_tasks": format_tasks,
+        "format_tasks": merged_tasks,
         "verification": verification,
         "retry_count": retry_count,
     }
+
+
+def _extract_slides(copy_json: str) -> list[dict]:
+    """Parse a carousel copy JSON string into its slides list."""
+    import json
+
+    if not copy_json:
+        return []
+    try:
+        data = json.loads(copy_json)
+    except Exception:
+        return []
+    slides = data.get("slides") if isinstance(data, dict) else None
+    if isinstance(slides, list):
+        return [s for s in slides if isinstance(s, dict)]
+    return []
 
 
 def build_pipeline() -> StateGraph:

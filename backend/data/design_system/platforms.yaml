@@ -1,5 +1,6 @@
 # Platform dimensions [width, height] in pixels
 instagram-square: [1080, 1080]
+instagram-carousel: [1080, 1080]
 instagram-portrait: [1080, 1350]
 instagram-story: [1080, 1920]
 linkedin-post: [1200, 627]
