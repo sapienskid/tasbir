@@ -84,7 +84,9 @@ class TestSelection:
 
     def test_category_boost(self):
         selection = select_template("landscape", "white", "PORTFOLIO", "", "seed")
-        assert selection[0] == "landscape-split"
+        # PORTFOLIO maps to both landscape-split and landscape-ad-card.
+        assert selection is not None
+        assert selection[0] in {"landscape-split", "landscape-ad-card"}
 
     def test_hint_boost(self):
         selection = select_template("square", "white", "", "note-card", "seed")
