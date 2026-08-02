@@ -1,5 +1,6 @@
 import base64
 import os
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
@@ -98,6 +99,11 @@ async def delete_task(task_id: str, db: AsyncSession = Depends(get_db)):
 
 class RerenderRequest(BaseModel):
     html: str = Field(min_length=50, max_length=500_000)
+
+
+class SaveTemplateRequest(BaseModel):
+    name: str = Field(default="", max_length=64)
+    mode: str = Field(default="new", pattern="^(new|update)$")
 
 
 @router.post("/{task_id}/formats/{fmt_id}/rerender")
@@ -245,3 +251,130 @@ async def rerender_format(
         "quality": {"score": score, "issues": issues, "critique": critique},
         "png_b64": base64.b64encode(png_bytes).decode("ascii"),
     }
+
+
+@router.post("/{task_id}/formats/{fmt_id}/template")
+async def save_as_template(
+    task_id: str,
+    fmt_id: str,
+    request: SaveTemplateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Promote a rendered/edited post into the template library.
+
+    Reads the current [data-slot] content from the saved HTML, converts it to
+    a Jinja2 template, validates it (render + overflow), and writes it to the
+    library — as a new template (mode=new) or an update of the source template
+    the post was built from (mode=update).
+    """
+    from app.services.artifacts import resolve_output_file
+    from app.services.formats import get_format_info, validate_platforms
+    from app.services.templates import (
+        build_template_context,
+        extract_slots,
+        format_family,
+        load_template_catalog,
+        render_template_file,
+        save_template,
+        save_template_catalog,
+        slotize_html,
+    )
+
+    repo = TaskRepository(db)
+    task = await repo.get_by_id(task_id)
+    if not task:
+        raise NotFoundError(f"Task {task_id} not found")
+    if task.status in ("pending", "running"):
+        raise HTTPException(status_code=409, detail="Task is still processing")
+
+    validated = validate_platforms([fmt_id])
+    fmt_id = validated[0]
+    fmt = get_format_info(fmt_id)
+
+    try:
+        html_path = resolve_output_file(task_id, f"{fmt_id}.html")
+    except FileNotFoundError:
+        raise NotFoundError(f"No HTML for {fmt_id} — render it first")
+
+    with open(html_path, encoding="utf-8") as f:
+        html = f.read()
+
+    platform = ((task.result or {}).get("platforms") or {}).get(fmt_id, {})
+    source_template = platform.get("template_id") or ""
+    family = format_family(fmt_id)
+
+    if request.mode == "update":
+        if not source_template:
+            raise HTTPException(status_code=422, detail="This post was not built from a template")
+        template_id = source_template
+        catalog = load_template_catalog()
+        entry = (catalog.get("templates") or {}).get(template_id)
+        if not entry:
+            raise HTTPException(
+                status_code=422, detail=f"Source template {template_id!r} not found"
+            )
+        file = entry["file"]
+    else:
+        slug = re.sub(r"[^a-z0-9]+", "-", (request.name or fmt_id).strip().lower())
+        slug = slug.strip("-")
+        if not slug:
+            raise HTTPException(status_code=422, detail="Provide a template name")
+        template_id = f"{family}-{slug}"
+        file = f"{family}/{slug}.html"
+
+    slots = extract_slots(html)
+    if not slots:
+        raise HTTPException(status_code=422, detail="No data-slot elements found in the HTML")
+
+    template_html = slotize_html(html)
+
+    # Validate before committing to the catalog: write the file, render it with
+    # the extracted copy, and check overflow. Roll back the file on failure.
+    saved_path = save_template(file, template_html)
+    copy = {
+        "headline": slots.get("headline", ""),
+        "subhead": slots.get("subhead", ""),
+        "body": slots.get("body", ""),
+        "tagline": slots.get("tagline", ""),
+        "badge": None,
+    }
+    context = build_template_context(
+        copy,
+        slots.get("kicker", ""),
+        "black" if "data-ground=\"black\"" in html else "white",
+        {"left": slots.get("footer_left", ""), "right": slots.get("footer_right", "")},
+        fmt.width,
+        fmt.height,
+        False,
+        seed=template_id,
+    )
+    from app.services.dom_extractor import detect_overflow
+
+    try:
+        rendered = render_template_file(file, context)
+        overflow = await detect_overflow(rendered, fmt.width, fmt.height)
+    except Exception as e:
+        saved_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=422, detail=f"Template render failed: {e}")
+    if overflow:
+        saved_path.unlink(missing_ok=True)
+        raise HTTPException(
+            status_code=422,
+            detail="Template overflows the canvas: " + "; ".join(overflow),
+        )
+
+    grounds = ["white", "black"] if "data-ground=\"black\"" in html else ["white"]
+    catalog = load_template_catalog()
+    catalog.setdefault("templates", {})
+    catalog["templates"][template_id] = {
+        "family": family,
+        "grounds": grounds,
+        "categories": [slots.get("kicker", "").upper()] if slots.get("kicker") else [],
+        "hint_tags": [slots.get("kicker", "").lower()] if slots.get("kicker") else [],
+        "weight": 1.0,
+        "description": f"Promoted from task {task_id[:8]} ({fmt_id}).",
+        "file": file,
+    }
+    save_template_catalog(catalog)
+
+    return {"template_id": template_id, "mode": request.mode, "file": file}
