@@ -18,6 +18,16 @@ def generate_task(self, task_id: str, source_data: dict):
     async def _run():
         pool = await get_shared_session_factory()
 
+        # Workers don't run the FastAPI lifespan — refresh config caches so
+        # DB edits (platforms/fonts/settings) apply without a restart.
+        from app.services.fonts import refresh_font_pool
+        from app.services.platforms import refresh_platforms
+        from app.services.settings import refresh_runtime_settings
+
+        await refresh_platforms(pool)
+        await refresh_font_pool(pool)
+        await refresh_runtime_settings(pool)
+
         async with pool() as session:
             repo = TaskRepository(session)
             await repo.update_status(task_id=task_id, status="running")
@@ -91,7 +101,23 @@ def generate_task(self, task_id: str, source_data: dict):
         pipeline_input["images"] = await prepare_images(raw_images) if raw_images else []
 
         try:
-            state = await run_pipeline(pipeline_input)
+            last_pct = {"value": -1}
+
+            async def _on_progress(pct: int, label: str) -> None:
+                if pct == last_pct["value"]:
+                    return
+                last_pct["value"] = pct
+                try:
+                    async with pool() as session:
+                        await TaskRepository(session).save_progress(
+                            task_id, {"pct": pct, "node": label}
+                        )
+                except Exception as e:  # noqa: BLE001
+                    log.warning("[generate_task] progress write failed: %s", e)
+
+            state = await run_pipeline(
+                pipeline_input, progress_callback=_on_progress
+            )
         except Exception as e:
             log.error("[generate_task] Pipeline failed for task %s: %s", task_id, e, exc_info=True)
             async with pool() as session:
@@ -115,7 +141,7 @@ def generate_task(self, task_id: str, source_data: dict):
         brief = state.get("strategic_brief", {})
         format_tasks = state.get("format_tasks", {})
 
-        from app.services.formats import CAROUSEL_FORMAT
+        from app.services.formats import is_carousel_base
 
         platform_results = {
             fmt_id: {
@@ -127,9 +153,9 @@ def generate_task(self, task_id: str, source_data: dict):
                 "error": ft.get("error"),
             }
             for fmt_id, ft in format_tasks.items()
-            # The base carousel entry only holds the slide copy — the slides
-            # themselves (instagram-carousel-1..N) are the real outputs.
-            if not (fmt_id == CAROUSEL_FORMAT and not ft.get("html_path"))
+            # Carousel base entries only hold the slide copy — the slides
+            # themselves (instagram-carousel-N / -portrait-N) are the outputs.
+            if not (is_carousel_base(fmt_id) and not ft.get("html_path"))
         }
 
         async with pool() as session:
@@ -139,6 +165,8 @@ def generate_task(self, task_id: str, source_data: dict):
                 result={
                     "output_paths": output_paths,
                     "strategic_brief": brief,
+                    "post_plan": state.get("post_plan", {}),
+                    "sequence_check": state.get("sequence_check", {}),
                     "platforms": platform_results,
                 },
             )

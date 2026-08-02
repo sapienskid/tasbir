@@ -20,22 +20,26 @@ from langgraph.graph import END, StateGraph
 
 from app.agents.orchestrator.nodes.copywriter import copywriter_node
 from app.agents.orchestrator.nodes.designer import designer_node_single
+from app.agents.orchestrator.nodes.planner import planner_node
 from app.agents.orchestrator.nodes.quality_check import MAX_RETRIES, quality_check_node_single
 from app.agents.orchestrator.nodes.renderer import renderer_node_single
 from app.agents.orchestrator.nodes.strategist import strategist_node
 from app.agents.orchestrator.nodes.template_renderer import template_node_single
 from app.agents.orchestrator.state import GenerationState, initial_state
+from app.services.settings import get_runtime_setting
 
 log = logging.getLogger(__name__)
 
 NODE_PROGRESS: dict[str, int] = {
     "strategist": 10,
+    "planner": 18,
     "copywriter": 25,
     "process_all_formats": 50,
 }
 
 NODE_LABELS: dict[str, str] = {
     "strategist": "Analyzing content...",
+    "planner": "Planning post structure...",
     "copywriter": "Writing copy...",
     "process_all_formats": "Designing & verifying...",
 }
@@ -81,7 +85,10 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
         await record_audit(task_id, agent_name, decision=decision, critique=critique)
 
     use_template = True
-    for _attempt in range(MAX_RETRIES + 1):
+    max_retries = int(
+        await get_runtime_setting("verifier.max_retries", MAX_RETRIES)
+    )
+    for _attempt in range(max_retries + 1):
         if use_template:
             _apply_updates(local, await template_node_single(local))
             used_template = bool(local.get("format_tasks", {}).get(fmt_id, {}).get("html"))
@@ -125,7 +132,7 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
                 fmt_task["html"] = None
                 fmt_task.pop("template_id", None)
                 continue
-            if _attempt >= MAX_RETRIES:
+            if _attempt >= max_retries:
                 break
 
     return {
@@ -195,11 +202,136 @@ async def process_all_formats_node(state: GenerationState) -> dict:
         verification.update(r.get("verification", {}))
         retry_count.update(r.get("retry_count", {}))
 
+    merged_state = dict(base_state)
+    merged_state["format_tasks"] = merged_tasks
+    merged_state["verification"] = verification
+
+    sequence = await _run_sequence_check(merged_state)
     return {
         "format_tasks": merged_tasks,
         "verification": verification,
         "retry_count": retry_count,
+        "sequence_check": sequence,
     }
+
+
+async def _run_sequence_check(state: GenerationState) -> dict:
+    """Carousel sequence check — deterministic always, vision set-pass opt-in.
+
+    Deterministic (no LLM): every slide of a carousel must share the same
+    canvas dims and carry its ``i/N`` counter (soft warning if missing).
+    ``sequence_audit`` also renders the whole slide set as one grid and sends
+    it to the vision verifier once (cohesion / repetition / flow).
+    """
+    from collections import defaultdict
+
+    from app.services.formats import get_format_info, parse_carousel_slide
+
+    slide_context = state.get("slide_context") or {}
+    if not slide_context:
+        return {}
+
+    by_base: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for sid, ctx in slide_context.items():
+        parsed = parse_carousel_slide(sid)
+        if parsed:
+            by_base[parsed[0]].append((sid, int(ctx.get("index", 1))))
+
+    issues: list[str] = []
+    warnings: list[str] = []
+    for base, slides in by_base.items():
+        slides.sort(key=lambda s: s[1])
+        dims = {get_format_info(sid).width for sid, _ in slides}
+        if len(dims) > 1:
+            issues.append(f"{base}: slides have inconsistent canvas widths")
+        total = len(slides)
+        for sid, idx in slides:
+            html = (state.get("format_tasks", {}).get(sid) or {}).get("html", "") or ""
+            if f"{idx}/{total}" not in html:
+                warnings.append(f"{sid}: no '{idx}/{total}' slide counter found")
+
+    result: dict = {
+        "ok": not issues,
+        "issues": issues,
+        "warnings": warnings,
+    }
+
+    if state.get("sequence_audit") and by_base:
+        vision = await _sequence_vision_audit(state, by_base)
+        if vision:
+            result["vision"] = vision
+            result["ok"] = result["ok"] and bool(vision.get("pass", True))
+
+    task_id = state.get("_task_id", "")
+    if task_id:
+        from app.services.audit import record_audit
+
+        await record_audit(
+            task_id,
+            "sequence_check",
+            decision={"ok": result["ok"], "issues": issues, "warnings": warnings},
+            critique=result.get("vision", {}).get("critique", ""),
+        )
+    return result
+
+
+async def _sequence_vision_audit(
+    state: GenerationState, by_base: dict
+) -> dict | None:
+    """Render all carousel slide PNGs as one grid and audit once via vision."""
+    import base64
+    from pathlib import Path
+
+    from app.config import get_settings
+    from app.services.dom_extractor import render_to_png
+
+    settings = get_settings()
+    out_dir = Path(settings.output_dir) / (state.get("_task_id") or "")
+    imgs: list[str] = []
+    for base, slides in sorted(by_base.items()):
+        for sid, _ in sorted(slides, key=lambda s: s[1]):
+            png_path = out_dir / f"{sid}.png"
+            if not png_path.is_file():
+                continue
+            b64 = base64.b64encode(png_path.read_bytes()).decode("ascii")
+            imgs.append(
+                f'<img src="data:image/png;base64,{b64}" '
+                'style="height:280px;width:auto;border:1px solid #ddd">'
+            )
+    if not imgs:
+        return None
+
+    grid_html = (
+        "<!DOCTYPE html><html><head><style>body{display:flex;flex-wrap:wrap;"
+        "gap:12px;background:#fff;margin:0;padding:12px}</style></head>"
+        f"<body>{''.join(imgs)}</body></html>"
+    )
+    rows = max(1, (len(imgs) + 2) // 3)
+    composite = await render_to_png(grid_html, width=960, height=min(rows * 292 + 24, 6000))
+    if not composite:
+        return None
+
+    from app.agents.orchestrator.nodes.quality_check import _call_vision_llm, _extract_json
+    from app.services.agents import get_agent_config
+
+    cfg = await get_agent_config("verifier")
+    try:
+        raw = await _call_vision_llm(
+            cfg.system_prompt,
+            "These are all the slides of ONE Instagram carousel post, shown as a "
+            "set. Audit the SEQUENCE as a whole: is it cohesive, non-repetitive, "
+            "and does it tell one story in order? "
+            'Return ONLY valid JSON: {"pass": bool, "score": int, '
+            '"issues": [...], "critique": "..."}',
+            composite,
+            temperature=cfg.temperature,
+            max_tokens=cfg.max_tokens,
+            model=cfg.model,
+        )
+        return _extract_json(raw)
+    except Exception as e:
+        log.warning("[sequence] vision audit failed: %s", e)
+        return None
 
 
 def _extract_slides(copy_json: str) -> list[dict]:
@@ -222,11 +354,13 @@ def build_pipeline() -> StateGraph:
     workflow = StateGraph(GenerationState)
 
     workflow.add_node("strategist", strategist_node)
+    workflow.add_node("planner", planner_node)
     workflow.add_node("copywriter", copywriter_node)
     workflow.add_node("process_all_formats", process_all_formats_node)
 
     workflow.set_entry_point("strategist")
-    workflow.add_edge("strategist", "copywriter")
+    workflow.add_edge("strategist", "planner")
+    workflow.add_edge("planner", "copywriter")
     workflow.add_edge("copywriter", "process_all_formats")
     workflow.add_edge("process_all_formats", END)
 

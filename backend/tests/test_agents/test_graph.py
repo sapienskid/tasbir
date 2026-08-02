@@ -13,19 +13,21 @@ from app.agents.orchestrator.state import initial_state
 
 
 def test_graph_has_required_nodes():
-    """Pipeline must have strategist, copywriter, and process_all_formats nodes."""
+    """Pipeline must have strategist, planner, copywriter, and process_all_formats nodes."""
     graph = build_pipeline()
     nodes = graph.nodes
     assert "strategist" in nodes
+    assert "planner" in nodes
     assert "copywriter" in nodes
     assert "process_all_formats" in nodes
 
 
 def test_graph_edges():
-    """strategist → copywriter → process_all_formats → END."""
+    """strategist → planner → copywriter → process_all_formats → END."""
     edges = build_pipeline().builder.edges
     assert ("__start__", "strategist") in edges
-    assert ("strategist", "copywriter") in edges
+    assert ("strategist", "planner") in edges
+    assert ("planner", "copywriter") in edges
     assert ("copywriter", "process_all_formats") in edges
     assert ("process_all_formats", "__end__") in edges
 

@@ -6,6 +6,8 @@ Per-format streaming via FormatTask dict + Send fan-out.
 
 from typing import Annotated, Any, TypedDict
 
+from pydantic import BaseModel, Field, field_validator
+
 
 def _keep_first(a: str, b: str) -> str:
     return a if a else b
@@ -53,6 +55,46 @@ def merge_format_tasks(
     return merged
 
 
+class SlideOutline(BaseModel):
+    """One frame of a planned carousel — what it should say and hook with."""
+
+    focus: str = ""
+    headline_hint: str = ""
+
+
+class PostPlan(BaseModel):
+    """Structural plan for a post (Planner node output).
+
+    ``post_type`` single|carousel|story; ``ratio`` square|portrait (meaningful
+    for carousels); ``slides`` 2-10 for carousels (0 otherwise);
+    ``platforms`` the concrete platforms to build (resolved from "auto");
+    ``slides_outline`` a per-frame outline for carousels.
+    """
+
+    post_type: str = "single"
+    ratio: str = "square"
+    slides: int = 0
+    platforms: list[str] = Field(default_factory=list)
+    slides_outline: list[SlideOutline] = Field(default_factory=list)
+
+    @field_validator("post_type")
+    @classmethod
+    def _vt(cls, v: str) -> str:
+        return v if v in ("single", "carousel", "story") else "single"
+
+    @field_validator("ratio")
+    @classmethod
+    def _vr(cls, v: str) -> str:
+        return v if v in ("square", "portrait") else "square"
+
+    @field_validator("slides")
+    @classmethod
+    def _vs(cls, v: int) -> int:
+        if v == 0:
+            return 0
+        return max(2, min(int(v), 10))
+
+
 class GenerationState(TypedDict):
     # Input
     content: Annotated[str, _keep_first]
@@ -60,8 +102,13 @@ class GenerationState(TypedDict):
     excerpt: Annotated[str, _keep_first]
     tags: Annotated[list[str], _keep_first_list]
     platforms: Annotated[list[str], _keep_first_list]
-    # Slide count for instagram-carousel (0 = not a carousel)
+    # Slide count for instagram-carousel (0 = not a carousel / undecided)
     slides: Annotated[int, _keep_first]
+    # Carousel aspect: "square" (1080x1080) or "portrait" (1080x1350);
+    # "auto" leaves the choice to the planner.
+    ratio: Annotated[str, _keep_first]
+    # Opt-in: run the sequence vision audit on a carousel's slide set
+    sequence_audit: Annotated[bool, _keep_first]
 
     # Configuration
     _task_id: Annotated[str, _keep_first]
@@ -87,6 +134,11 @@ class GenerationState(TypedDict):
     # Agent Outputs
     strategic_brief: Annotated[dict[str, Any], _keep_first_dict]
 
+    # Planner output — structural plan (post_type / ratio / slides / outline)
+    post_plan: Annotated[dict[str, Any], _keep_first_dict]
+    # Deterministic (always) + opt-in vision (sequence_audit) carousel check
+    sequence_check: Annotated[dict[str, Any], _keep_first_dict]
+
     format_tasks: Annotated[dict[str, FormatTask], merge_format_tasks]
 
     _processing_format_id: Annotated[str, _keep_first]
@@ -107,6 +159,8 @@ def initial_state(
     platforms: list[str],
     _task_id: str = "",
     slides: int = 0,
+    ratio: str = "auto",
+    sequence_audit: bool = False,
     design_tokens: dict[str, Any] | None = None,
     brand_info: dict[str, Any] | None = None,
     campaign: dict[str, Any] | None = None,
@@ -148,6 +202,8 @@ def initial_state(
         "tags": tags or kwargs.get("tags", []),
         "platforms": platforms,
         "slides": int(slides or kwargs.get("slides", 0)),
+        "ratio": ratio or kwargs.get("ratio", "auto"),
+        "sequence_audit": bool(sequence_audit or kwargs.get("sequence_audit", False)),
         "_task_id": _task_id,
         "design_system_id": design_system_id,
         "design_tokens": design_tokens or {},
@@ -166,6 +222,8 @@ def initial_state(
         "template_id": template_id,
         "ds_templates": ds_templates or [],
         "strategic_brief": {},
+        "post_plan": {},
+        "sequence_check": {},
         "format_tasks": format_tasks,
         "_processing_format_id": "",
         "verification": {},

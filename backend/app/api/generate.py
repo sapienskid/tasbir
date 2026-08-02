@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.db.repositories.tasks import TaskRepository
-from app.services.formats import CAROUSEL_FORMAT, validate_platforms
+from app.services.formats import CAROUSEL_BASES, validate_platforms
 from app.tasks.generate import generate_task
 
 router = APIRouter()
@@ -26,6 +26,12 @@ class GenerateRequest(BaseModel):
     tags: list[str] = Field(default_factory=list, max_length=20)
     platforms: list[str] = Field(default_factory=lambda: ["instagram-square"], max_length=12)
     slides: int | None = Field(default=None, ge=2, le=10)
+    # Carousel aspect: "square" | "portrait" | "auto" (planner decides).
+    # Default "square" keeps the common carousel pick deterministic; the
+    # planner runs when the user opts into "auto" (or "auto" platforms).
+    ratio: str = Field(default="square", max_length=16)
+    # Opt-in vision audit of the whole carousel sequence (one vision call).
+    sequence_audit: bool = False
     campaign: str = Field(default="default", max_length=64)
     category: str | None = Field(default=None, max_length=64)
     design_system_id: str = Field(default="default", max_length=64)
@@ -49,19 +55,28 @@ class GenerateRequest(BaseModel):
     @field_validator("platforms")
     @classmethod
     def _validate_platforms(cls, v: list[str]) -> list[str]:
-        return validate_platforms(v)
+        """Validate known platform ids; allow the literal "auto" (planner)."""
+        cleaned: list[str] = []
+        for p in v:
+            if p == "auto":
+                cleaned.append(p)
+                continue
+            cleaned.extend(validate_platforms([p]))
+        return cleaned
 
     @model_validator(mode="after")
     def _apply_carousel_slides(self) -> "GenerateRequest":
         platforms = self.platforms or []
-        has_carousel = CAROUSEL_FORMAT in platforms
+        has_carousel = any(p in CAROUSEL_BASES for p in platforms)
         if self.slides is not None and not has_carousel:
             raise HTTPException(
                 status_code=422,
-                detail="'slides' is only valid when 'instagram-carousel' is in platforms",
+                detail="'slides' is only valid when a carousel platform is in platforms",
             )
-        if has_carousel and self.slides is None:
-            self.slides = 3  # sensible default for a carousel
+        if has_carousel:
+            if self.slides is None:
+                # Pinned ratio → deterministic default; "auto" → planner decides.
+                self.slides = 3 if self.ratio in ("square", "portrait") else 0
         return self
 
 

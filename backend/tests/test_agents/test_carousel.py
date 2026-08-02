@@ -4,7 +4,7 @@ import asyncio
 import json
 from contextlib import ExitStack
 
-from app.agents.orchestrator.graph import _extract_slides, process_all_formats_node
+from app.agents.orchestrator.graph import _extract_slides, _run_sequence_check, process_all_formats_node
 from app.agents.orchestrator.nodes.copywriter import _fallback_slides, _split_sentences
 from app.agents.orchestrator.state import initial_state
 from app.services.formats import (
@@ -184,3 +184,93 @@ def test_carousel_expansion_assigns_slide_context():
     assert out["retry_count"]  # merged deterministically
     for sid in ("instagram-carousel-1", "instagram-carousel-3"):
         assert sid in out["verification"]
+
+
+# ─── Sequence check (deterministic, no vision) ──────────────────────────────
+
+
+def _seq_state(slides: list[str], htmls: dict[str, str]) -> dict:
+    state = initial_state(
+        title="T", content="C", platforms=["instagram-carousel"], _task_id="",
+        slides=len(slides), ratio="square",
+    )
+    state["slide_context"] = {
+        sid: {"index": i, "total": len(slides)} for i, sid in enumerate(slides, start=1)
+    }
+    state["format_tasks"] = {
+        sid: {"html": htmls.get(sid, ""), "status": "verified"} for sid in slides
+    }
+    return state
+
+
+async def test_sequence_check_detects_missing_counter():
+    state = _seq_state(
+        ["instagram-carousel-1", "instagram-carousel-2"],
+        {
+            "instagram-carousel-1": "<html><body>1/2</body></html>",
+            "instagram-carousel-2": "<html><body>no counter</body></html>",
+        },
+    )
+    out = await _run_sequence_check(state)
+    assert out["ok"]
+    assert any("no '2/2' slide counter" in w for w in out["warnings"])
+
+
+async def test_sequence_check_skips_non_carousel():
+    state = initial_state(
+        title="T", content="C", platforms=["instagram-square"], _task_id="",
+    )
+    assert await _run_sequence_check(state) == {}
+
+
+def test_process_all_formats_includes_sequence_check():
+    state = _carousel_state()
+    with ExitStack() as stack:
+        for p in _patches():
+            stack.enter_context(p)
+        out = asyncio.run(process_all_formats_node(state))
+
+    seq = out["sequence_check"]
+    # Sequence check ran because slide_context was populated.
+    assert isinstance(seq, dict)
+    # Designer output has no "i/N" counter → soft warnings, not failures.
+    assert seq["ok"] is True
+    assert any("slide counter" in w for w in seq["warnings"])
+
+
+def test_portrait_carousel_expands_under_portrait_base():
+    state = initial_state(
+        title="T",
+        content="C",
+        platforms=["instagram-carousel-portrait"],
+        slides=2,
+        _task_id="test-portrait-carousel",
+        design_tokens={
+            "--color-bg": "#FFFFFF",
+            "--color-text": "#000000",
+            "--color-border": "#D9D9D9",
+            "--font-sans": "Inter",
+            "--font-display": "Space Grotesk",
+        },
+        footer={"left": "A", "right": "@B"},
+        categories=[{"name": "WRITING"}],
+    )
+    state["format_tasks"]["instagram-carousel-portrait"]["copy"] = json.dumps({
+        "slides": [
+            {"headline": "P1", "subhead": "", "body": "B1", "tagline": "", "badge": None},
+            {"headline": "P2", "subhead": "", "body": "B2", "tagline": "", "badge": None},
+        ]
+    })
+
+    with ExitStack() as stack:
+        for p in _patches():
+            stack.enter_context(p)
+        out = asyncio.run(process_all_formats_node(state))
+
+    assert set(out["format_tasks"].keys()) == {
+        "instagram-carousel-portrait-1",
+        "instagram-carousel-portrait-2",
+    }
+    # Slides resolve to the portrait dims (1080x1350).
+    assert get_format_info("instagram-carousel-portrait-1").height == 1350
+    assert get_format_info("instagram-carousel-portrait-1").width == 1080

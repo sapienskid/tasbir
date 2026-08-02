@@ -39,13 +39,15 @@ GRAPH_SPEC: dict = {
     "nodes": [
         {"id": "start", "label": "Start", "kind": "start"},
         {"id": "strategist", "label": "Strategist", "kind": "agent", "agent": "strategist"},
+        {"id": "planner", "label": "Planner", "kind": "agent", "agent": "planner"},
         {"id": "copywriter", "label": "Copywriter", "kind": "agent", "agent": "copywriter"},
         {"id": "process_all_formats", "label": "Process All Formats", "kind": "group"},
         {"id": "end", "label": "End", "kind": "end"},
     ],
     "edges": [
         {"id": "e-start->strategist", "source": "start", "target": "strategist"},
-        {"id": "e-strategist->copywriter", "source": "strategist", "target": "copywriter"},
+        {"id": "e-strategist->planner", "source": "strategist", "target": "planner"},
+        {"id": "e-planner->copywriter", "source": "planner", "target": "copywriter"},
         {"id": "e-copywriter->process", "source": "copywriter", "target": "process_all_formats"},
         {"id": "e-process->end", "source": "process_all_formats", "target": "end"},
     ],
