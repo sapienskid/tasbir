@@ -24,7 +24,9 @@ def _mock_chat_llm(monkeypatch):
     async def fake_overflow(html, width, height):
         return []
 
-    async def fake_vision(system_prompt, user_prompt, image_bytes, temperature, max_tokens):
+    async def fake_vision(
+        system_prompt, user_prompt, image_bytes, temperature, max_tokens, model=None
+    ):
         return (
             '{"reply": "Done — headline tightened.", "changed": true, '
             '"html": "<!DOCTYPE html><html><head><style>body{width:1080px;'

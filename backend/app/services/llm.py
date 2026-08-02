@@ -9,17 +9,22 @@ from collections.abc import AsyncIterator
 
 from app.config import get_settings
 
+# Single source of truth for the default model. All MODEL_ROUTES entries and
+# the vision path fall back to this when no DB agent row provides a model.
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
+
 MODEL_ROUTES = {
-    "strategist": "gemini-3.5-flash-lite",
-    "copywriter": "gemini-3.5-flash-lite",
-    "designer": "gemini-3.5-flash-lite",
-    "verifier": "gemini-3.5-flash-lite",
-    "template_vision": "gemini-3.5-flash-lite",
-    "template_author": "gemini-3.5-flash-lite",
-    "brand_vision": "gemini-3.5-flash-lite",
-    "brand_tokens": "gemini-3.5-flash-lite",
-    "brand_campaigns": "gemini-3.5-flash-lite",
-    "editor_chat": "gemini-3.5-flash-lite",
+    "strategist": DEFAULT_MODEL,
+    "planner": DEFAULT_MODEL,
+    "copywriter": DEFAULT_MODEL,
+    "designer": DEFAULT_MODEL,
+    "verifier": DEFAULT_MODEL,
+    "template_vision": DEFAULT_MODEL,
+    "template_author": DEFAULT_MODEL,
+    "brand_vision": DEFAULT_MODEL,
+    "brand_tokens": DEFAULT_MODEL,
+    "brand_campaigns": DEFAULT_MODEL,
+    "editor_chat": DEFAULT_MODEL,
 }
 
 
@@ -54,7 +59,8 @@ def get_llm(agent_role: str = "strategist", temperature: float = 0.7, max_tokens
 async def call_llm_with_retry(llm, messages, max_retries=5, agent_role: str = ""):
     """Call an LLM with retry on 429 rate limit errors (exponential backoff & retry delay parsing).
 
-    Falls back to OpenRouter if Gemini fails and a key is configured.
+    Raises on final failure — the OpenRouter fallback lives in ``call_llm``
+    (single fallback point, so agent temperature/max_tokens are honored).
     """
     import logging
     import re
@@ -79,26 +85,6 @@ async def call_llm_with_retry(llm, messages, max_retries=5, agent_role: str = ""
                 continue
             last_error = e
             break
-
-    # Fallback to OpenRouter when Gemini fails and OpenRouter key is configured
-    settings = get_settings()
-    if settings.openrouter_api_key:
-        log.warning("[LLM] Gemini failed, falling back to OpenRouter")
-        last_msg = messages[-1].content if hasattr(messages[-1], "content") else str(messages[-1])
-        sys_msg = messages[0].content if len(messages) > 0 and hasattr(messages[0], "content") else ""
-        try:
-            text = await _call_openrouter(
-                api_key=settings.openrouter_api_key,
-                model=_model_for(agent_role),
-                system_prompt=sys_msg,
-                user_prompt=last_msg,
-                temperature=0.7,
-                max_tokens=4096,
-            )
-            from langchain_core.messages import AIMessage
-            return AIMessage(content=text)
-        except Exception as or_err:
-            log.error("[LLM] OpenRouter fallback also failed: %s", or_err)
 
     raise last_error or RuntimeError("LLM call failed")
 

@@ -25,7 +25,7 @@ from app.core.time import iso_utc
 from app.db.repositories.agents import AgentRepository
 from app.db.session import get_shared_session_factory
 from app.models.agent import Agent
-from app.services.llm import MODEL_ROUTES
+from app.services.llm import DEFAULT_MODEL, MODEL_ROUTES
 
 log = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def resolve_model(agent_role: str) -> str:
         model = cached[1].model
         if model:
             return model
-    return MODEL_ROUTES.get(agent_role, "gemini-2.0-flash")
+    return MODEL_ROUTES.get(agent_role, DEFAULT_MODEL)
 
 
 def agent_to_dict(agent: Agent) -> dict:

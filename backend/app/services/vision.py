@@ -11,6 +11,7 @@ import base64
 import logging
 
 from app.config import get_settings
+from app.services.llm import DEFAULT_MODEL
 
 log = logging.getLogger(__name__)
 
@@ -25,8 +26,19 @@ async def call_vision_llm(
     image_bytes: bytes,
     temperature: float = 0.3,
     max_tokens: int = 1200,
+    model: str | None = None,
 ) -> str:
-    """Call Gemini Vision with an image + text prompt."""
+    """Call a multimodal LLM with an image + text prompt.
+
+    ``model`` is optional — callers with a DB-backed agent config pass
+    ``prompt_cfg.model`` so the Agents UI model selection actually drives the
+    vision call. Defaults to the shared route default.
+    """
+    from app.services.settings import get_runtime_setting
+
+    min_interval = float(
+        await get_runtime_setting("vision.min_interval_seconds", _VISION_MIN_INTERVAL)
+    )
     settings = get_settings()
     api_key = settings.gemini_api_key
 
@@ -39,7 +51,7 @@ async def call_vision_llm(
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         llm = ChatGoogleGenerativeAI(
-            model="gemini-3.5-flash-lite",
+            model=model or DEFAULT_MODEL,
             google_api_key=api_key,
             max_output_tokens=max_tokens,
         )
@@ -60,8 +72,8 @@ async def call_vision_llm(
         loop = asyncio.get_event_loop()
         async with _VISION_LOCK:
             elapsed = loop.time() - _VISION_LAST_CALL
-            if elapsed < _VISION_MIN_INTERVAL:
-                await asyncio.sleep(_VISION_MIN_INTERVAL - elapsed)
+            if elapsed < min_interval:
+                await asyncio.sleep(min_interval - elapsed)
             _VISION_LAST_CALL = loop.time()
             response = await llm.ainvoke(messages)
 
