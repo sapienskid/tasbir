@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Check, Maximize2, Minus, Plus, RotateCcw } from "lucide-react"
+import { Check, Maximize2, Minus, PanelRight, PanelRightClose, Plus, RotateCcw } from "lucide-react"
 import type { Editor } from "grapesjs"
 
 interface VisualEditorProps {
@@ -46,10 +46,13 @@ function rebuildDocument(original: Document, bodyHtml: string, css: string): str
  */
 export function VisualEditor({ html, width, height, onExport }: VisualEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Editor | null>(null)
   const originalRef = useRef<Document | null>(null)
   const [ready, setReady] = useState(false)
   const [zoomPct, setZoomPct] = useState(100)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarWidth, setSidebarWidth] = useState(280)
 
   /**
    * Size the frames container to the device canvas and anchor it so its
@@ -195,11 +198,80 @@ export function VisualEditor({ html, width, height, onExport }: VisualEditorProp
     onExport(rebuildDocument(original, bodyHtml, css))
   }, [onExport])
 
+  // Drive the GrapesJS sidebar width via the CSS variable on the wrapper.
+  useEffect(() => {
+    const el = wrapperRef.current
+    if (!el) return
+    el.style.setProperty("--gjs-left-width", sidebarOpen ? `${sidebarWidth}px` : "0px")
+  }, [sidebarOpen, sidebarWidth])
+
+  const toggleSidebar = useCallback(() => setSidebarOpen((o) => !o), [])
+
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null)
+
+  const refit = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    centerFrame(editor)
+    setZoom(fitPctFor(editor))
+  }, [centerFrame, fitPctFor, setZoom])
+
+  const onResizeStart = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      // Capture the pointer so the drag stays on the handle even when it
+      // moves over the canvas iframe (cross-frame coordinates would otherwise
+      // be scrambled).
+      e.currentTarget.setPointerCapture(e.pointerId)
+      dragRef.current = { startX: e.clientX, startW: sidebarWidth }
+    },
+    [sidebarWidth]
+  )
+
+  const onResizeMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current
+    if (!drag) return
+    const dx = drag.startX - e.clientX // drag left → wider
+    setSidebarWidth(Math.min(520, Math.max(140, drag.startW + dx)))
+  }, [])
+
+  const onResizeEnd = useCallback(() => {
+    dragRef.current = null
+    window.setTimeout(refit, 50)
+  }, [refit])
+
+  // Re-fit the canvas when the sidebar opens/closes (the viewport resizes).
+  useEffect(() => {
+    if (!ready) return
+    const t = window.setTimeout(refit, 60)
+    return () => window.clearTimeout(t)
+  }, [sidebarOpen, ready, refit])
+
   return (
-    <div data-visual-editor className="flex h-full w-full flex-col overflow-hidden rounded-md border">
-      <style>{`[data-visual-editor] { --gjs-left-width: max(260px, 38%); }`}</style>
+    <div
+      data-visual-editor
+      data-sidebar={sidebarOpen ? "open" : "closed"}
+      ref={wrapperRef}
+      className="flex h-full w-full flex-col overflow-hidden rounded-md border"
+    >
+      <style>{`
+        [data-visual-editor] { --gjs-left-width: 280px; }
+        [data-visual-editor][data-sidebar="closed"] .gjs-pn-views,
+        [data-visual-editor][data-sidebar="closed"] .gjs-pn-views-container { overflow: hidden; }
+      `}</style>
       <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-muted/20 px-2 py-1">
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            onClick={toggleSidebar}
+            className="h-7 w-7"
+          >
+            {sidebarOpen ? <PanelRightClose className="size-3.5" /> : <PanelRight className="size-3.5" />}
+          </Button>
+          <span className="mx-1 h-4 w-px bg-border" />
           <Button variant="ghost" size="icon" aria-label="Zoom out" onClick={zoomOut} className="h-7 w-7">
             <Minus className="size-3.5" />
           </Button>
@@ -228,8 +300,19 @@ export function VisualEditor({ html, width, height, onExport }: VisualEditorProp
           </Button>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-hidden bg-neutral-100 dark:bg-neutral-900">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-neutral-100 dark:bg-neutral-900">
         <div ref={containerRef} className="h-full w-full" />
+        {sidebarOpen ? (
+          <div
+            onPointerDown={onResizeStart}
+            onPointerMove={onResizeMove}
+            onPointerUp={onResizeEnd}
+            onPointerCancel={onResizeEnd}
+            aria-hidden
+            className="absolute inset-y-0 z-30 w-1.5 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/40"
+            style={{ left: "calc(100% - var(--gjs-left-width) - 3px)" }}
+          />
+        ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2 border-t bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground">
         <RotateCcw className="size-3" />
