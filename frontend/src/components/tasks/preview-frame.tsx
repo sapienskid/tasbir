@@ -81,11 +81,13 @@ export const FitScaledFrame = memo(function FitScaledFrame({
   width,
   height,
   gap = 8,
+  bordered = true,
 }: {
   html: string
   width: number
   height: number
   gap?: number
+  bordered?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
@@ -110,7 +112,7 @@ export const FitScaledFrame = memo(function FitScaledFrame({
   return (
     <div ref={ref} className="flex h-full w-full items-center justify-center">
       <div
-        className="overflow-hidden rounded-md border bg-white"
+        className={`overflow-hidden bg-white ${bordered ? "rounded-md border" : "rounded-sm"}`}
         style={{ width: boxWidth, height: boxHeight }}
       >
         <iframe

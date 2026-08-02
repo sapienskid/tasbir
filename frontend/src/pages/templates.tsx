@@ -31,14 +31,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import { Dropzone } from "@/components/tasks/dropzone"
-import { PreviewFrame, ZoomableFrame, FAMILY_DIMS } from "@/components/tasks/preview-frame"
+import { FAMILY_DIMS, FitScaledFrame, ZoomableFrame } from "@/components/tasks/preview-frame"
 import {
   createTemplateFromImage,
   createTemplate,
@@ -197,9 +191,9 @@ export default function TemplatesPage() {
       </div>
 
       {isLoading || !templates ? (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="h-72 w-full" />
+            <Skeleton key={i} className="aspect-[1/1.1] w-full rounded-lg" />
           ))}
         </div>
       ) : templates.length === 0 ? (
@@ -209,7 +203,7 @@ export default function TemplatesPage() {
             : "No active templates — tick “Show inactive” to see deactivated ones, or create one from an image."}
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
           {templates.map((t) => (
             <TemplateCard
               key={t.id}
@@ -292,77 +286,113 @@ function TemplateCard({
   onDelete: () => void
 }) {
   const { data: preview, failed, retry } = useTemplatePreview(t.id)
+  const dims = FAMILY_DIMS[t.family] ?? FAMILY_DIMS.square
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && onOpen()}
-      className={`grid cursor-pointer gap-2 rounded-md border p-2 transition-colors hover:border-primary/50 ${t.is_active ? "" : "opacity-60"}`}
+      className={`group flex cursor-pointer flex-col gap-2 rounded-lg border bg-card p-2 transition-colors hover:border-primary/50 hover:shadow-sm ${t.is_active ? "" : "opacity-60"}`}
     >
-      <div className="flex justify-center rounded-md border bg-muted/10">
+      <div
+        className="relative w-full overflow-hidden rounded-md border bg-muted/10"
+        style={{ aspectRatio: `${dims.width}/${dims.height}` }}
+      >
         {preview ? (
-          <PreviewFrame html={preview.html} family={t.family} />
+          <FitScaledFrame html={preview.html} width={dims.width} height={dims.height} gap={4} bordered={false} />
         ) : failed ? (
           <button
             onClick={(e) => {
               e.stopPropagation()
               retry()
             }}
-            className="flex h-40 w-full items-center justify-center text-xs text-muted-foreground hover:underline"
+            className="flex h-full w-full items-center justify-center text-xs text-muted-foreground hover:underline"
           >
             Preview failed — retry
           </button>
         ) : (
-          <div className="flex h-40 items-center justify-center">
+          <div className="flex h-full w-full items-center justify-center">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
           </div>
         )}
+        <div className="absolute inset-x-0 bottom-0 hidden items-center justify-end gap-0.5 bg-gradient-to-t from-black/60 to-transparent p-1.5 group-hover:flex">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Edit HTML"
+            className="size-7 text-white hover:bg-white/20 hover:text-white"
+            onClick={(e) => {
+              e.stopPropagation()
+              onEdit()
+            }}
+          >
+            <PenLine className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Duplicate"
+            className="size-7 text-white hover:bg-white/20 hover:text-white"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDuplicate()
+            }}
+          >
+            <Copy className="size-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={t.is_active ? "Deactivate template" : "Activate template"}
+            className="size-7 text-white hover:bg-white/20 hover:text-white"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggle()
+            }}
+          >
+            {t.is_active ? <Power className="size-3.5 text-emerald-300" /> : <PowerOff className="size-3.5" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Delete"
+            className="size-7 text-white hover:bg-red-500/40 hover:text-white"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
       </div>
       <div className="px-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="truncate text-sm font-medium">{t.id}</span>
+          <span className="truncate text-sm font-semibold">{t.name || t.id}</span>
           <Badge variant="outline" className="shrink-0 text-[10px]">
             {t.family}
           </Badge>
         </div>
         <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{t.description || "—"}</p>
-        <div className="mt-2 flex items-center justify-between">
-          <span className={`text-[10px] uppercase tracking-wide ${t.is_active ? "text-emerald-600" : "text-muted-foreground"}`}>
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {(t.grounds ?? []).map((g) => (
+            <span key={g} className="rounded bg-muted px-1.5 py-0.5 text-[10px]">
+              {g}
+            </span>
+          ))}
+          {(t.categories ?? []).slice(0, 2).map((c) => (
+            <span key={c} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              {c}
+            </span>
+          ))}
+          <span
+            className={`ml-auto text-[10px] font-medium uppercase tracking-wide ${
+              t.is_active ? "text-emerald-600" : "text-muted-foreground"
+            }`}
+          >
             {t.is_active ? "active" : "inactive"}
           </span>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" aria-label="Edit HTML" onClick={(e) => { e.stopPropagation(); onEdit() }}>
-              <PenLine className="size-3.5" />
-            </Button>
-            <Button variant="ghost" size="icon" aria-label="Duplicate" onClick={(e) => { e.stopPropagation(); onDuplicate() }}>
-              <Copy className="size-3.5" />
-            </Button>
-            <TooltipProvider delayDuration={200}>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={t.is_active ? "Deactivate template" : "Activate template"}
-                    onClick={(e) => { e.stopPropagation(); onToggle() }}
-                  >
-                    {t.is_active ? (
-                      <Power className="size-3.5 text-emerald-600" />
-                    ) : (
-                      <PowerOff className="size-3.5 text-muted-foreground" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {t.is_active ? "Active — used by the pipeline. Click to deactivate." : "Inactive. Click to activate."}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <Button variant="ghost" size="icon" aria-label="Delete" onClick={(e) => { e.stopPropagation(); onDelete() }}>
-              <Trash2 className="size-3.5 text-destructive" />
-            </Button>
-          </div>
         </div>
       </div>
     </div>
