@@ -20,9 +20,10 @@ ADR-0012 (design systems + templates → DB).
 - **`agents` table** — global, shared, keyed by the role name (the string
   used everywhere as `agent_role`): `persona`, `role`, `system_prompt`,
   `model`, `temperature`, `max_tokens`, `source` (`seed`|`manual`),
-  `is_active`. Covers all ten roles (strategist, copywriter, designer,
-  verifier, editor_chat, brand_vision, brand_tokens, brand_campaigns,
-  template_vision, template_author). Single editable row — no versioning.
+  `is_active`. Covers all eleven roles (strategist, planner, copywriter,
+  designer, verifier, editor_chat, brand_vision, brand_tokens,
+  brand_campaigns, template_vision, template_author). Single editable row —
+  no versioning.
 - **Runtime loader** (`services/agents.py`): `get_agent_config(name)` resolves
   **DB row → YAML seed → hardcoded fallback**, with a ~5s TTL cache and
   `invalidate_agent_config()` on update so edits apply without a worker

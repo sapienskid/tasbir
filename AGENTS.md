@@ -38,8 +38,9 @@ output. After a deep grilling session, we identified the root causes:
 The LLM never sees them. The pipeline generates HTML files that Playwright
 renders to PNG for visual verification.
 
-**Four-agent LangGraph pipeline**:
+**Five-agent LangGraph pipeline**:
 - **Strategist** (Aura Vance): content analysis → structured brief
+- **Planner** (Aria Sol): post structure (single/carousel/story, ratio, slide count) — hybrid: LLM only when structure is undecided (`platforms:["auto"]` or unpinned carousel slides/ratio), else deterministic
 - **Copywriter** (Julian Sterling): per-platform copy (typed JSON output)
 - **Designer** (Marcus Chen): HTML with CSS variables (var(--color-*)), no brand colors
 - **Verifier** (Victoria Thorne): injects tokens/KateX/images, renders to PNG,
@@ -49,8 +50,10 @@ renders to PNG for visual verification.
 1. LLMs output **typed JSON** (not markdown). Pydantic models at every stage.
 2. **Each agent gets only what it needs** — no context flooding.
 3. **Design tokens are NEVER in LLM prompts** — injected programmatically after design.
-4. **YAML is the single source of truth** — brand profile, design tokens, platform
-   dimensions, and campaign presets all in `data/design_system/*.yaml`.
+4. **The database is the single source of truth** — brand, tokens, campaigns,
+   design-instruction, platforms, curated fonts, templates, agents, and runtime
+   tuning knobs are all DB-backed and Studio-editable. The `data/design_system/*.yaml`
+   files only **seed** first boot (seed-once; the Studio owns the rows after).
 5. **No Tailwind, no CSS frameworks** — Designer writes clean CSS with `var(--color-*)` variables.
 6. **Verifier actually sees the design** — Gemini Vision on rendered PNG with design system context.
 7. **Human-editable output** — `.html` files open in any browser; `.png` files ready to share.
@@ -61,11 +64,15 @@ renders to PNG for visual verification.
 - FastAPI (`POST /generate`, `GET /tasks/{id}`, `GET /health`, file delivery, re-render)
 - Celery + Redis task queue (+ hourly `retention.sweep_expired` beat)
 - SQLite task tracking (GenerationTask + AuditLog models)
-- LangGraph pipeline (strategist → copywriter → process_all_formats)
+- LangGraph pipeline (strategist → planner → copywriter → process_all_formats)
 - Playwright service (HTML rendering + DOM extraction + overflow detection, internal-only + shared-secret auth)
 - YAML prompt configs (`config/prompts/*.yaml`)
 - **DB-backed design systems** (v0.5): brand, footer, categories, campaigns,
   tokens, design-instruction, logo — fully editable in the Studio
+- **DB-backed platforms / curated fonts / runtime settings** (v3.6): platform
+  dimensions, the Google Fonts pool, and pipeline tuning knobs (verifier
+  retries, copywriter concurrency, vision interval, chat cap, template
+  anti-repeat) are all seed-once tables editable in the Studio Settings page
 - **DB-backed template library** (v0.5): 16 seeded templates + AI-generated
   ones, scoped per design system, template-first pipeline with LLM fallback
 - **Brand Builder agent**: form + optional reference/logo images → complete
@@ -132,7 +139,7 @@ n8n Webhook → FastAPI (POST /generate) → Celery Worker → LangGraph Pipelin
             edit HTML → re-render → preview + QC
 ```
 
-### Pipeline (4 Agent Nodes)
+### Pipeline (5 Agent Nodes)
 
 ```
 START
@@ -140,6 +147,10 @@ START
   ▼
 Strategist → analyzes content, produces structured brief + category + ground (1 LLM call)
   │
+  ▼
+Planner → post structure (single/carousel/story, ratio, slides) — LLM only when
+  │        undecided ("auto" platforms / unpinned carousel slides+ratio),
+  │        else deterministic PostPlan (0 extra calls)
   ▼
 Copywriter → per-platform parallel (asyncio.gather + Semaphore), structured copy
   │
@@ -165,6 +176,9 @@ process_all_formats → per-platform, in parallel via asyncio.gather:
   │            [fail + retry < 2] → loop back to Designer with critique
   │
   ▼
+sequence_check → carousels: deterministic (same dims, i/N counter) + opt-in
+  │             vision set-pass (sequence_audit)
+  ▼
 END (success, HTML + PNG per format ready)
 ```
 
@@ -178,6 +192,7 @@ All agent prompts are stored in `backend/config/prompts/*.yaml`. Each agent outp
 | Agent | Persona | What It Does | What It DOESN'T See |
 |-------|---------|-------------|---------------------|
 | **Strategist** | Aura Vance | Analyzes source content + target platforms → structured strategic brief | Brand colors, design tokens, format dimensions |
+| **Planner** | Aria Sol | Decides post structure (single/carousel/story, ratio, slides, per-slide outline) — hybrid gating, user intent wins | Brand colors, design tokens, raw content |
 | **Copywriter** | Julian Sterling | Per-platform structured copy (headline, subhead, body, tagline, badge) | Brand colors, design tokens, raw content |
 | **Designer** | Marcus Chen | Creates HTML document with CSS variables (var(--color-*)), clean layout | Brand hex values, token names — just CSS variables |
 | **Verifier** | Victoria Thorne | Injects tokens/KateX/images, renders to PNG, multimodal audit | Nothing — sees everything (image + tokens) for informed critique |
@@ -304,6 +319,8 @@ the designer only ever sees variable NAMES + semantic roles.
 
 ```yaml
 instagram-square: [1080, 1080]
+instagram-carousel: [1080, 1080]
+instagram-carousel-portrait: [1080, 1350]
 instagram-portrait: [1080, 1350]
 instagram-story: [1080, 1920]
 linkedin-post: [1200, 627]
@@ -446,6 +463,7 @@ tasbir/
 │   ├── config/
 │   │   └── prompts/
 │   │       ├── strategist.yaml          ← Aura Vance prompt
+│   │       ├── planner.yaml             ← Aria Sol prompt
 │   │       ├── copywriter.yaml          ← Julian Sterling prompt
 │   │       ├── designer.yaml            ← Marcus Chen prompt
 │   │       └── verifier.yaml            ← Victoria Thorne prompt
@@ -571,20 +589,24 @@ tasbir/
 │   │       ├── task-detail.tsx          ← Code/Visual edit + live preview + inspector (QC + agent chat) + ZIP
 │   │       ├── new-task.tsx             ← /new wizard (design system → content → template → media)
 │   │       ├── templates.tsx            ← Template library management (+ from-image job)
-│   │       └── design-systems.tsx       ← Design system editor (+ from-input job)
-│   └── routes: `/`, `/new`, `/tasks/:taskId`, `/templates`, `/design-systems`
+│   │       ├── design-systems.tsx       ← Design system editor (+ from-input job)
+│   │       ├── agents.tsx               ← Agent configs + pipeline graph
+│   │       └── settings.tsx             ← Platforms / curated fonts / runtime knobs
+│   └── routes: `/`, `/new`, `/tasks/:taskId`, `/templates`, `/design-systems`,
+│              `/agents`, `/settings`
 ```
 
 ## Common Tasks For AI Agents
 
 ### Adding a new platform (format)
-1. Add `platform-id: [width, height]` to `data/design_system/platforms.yaml`
-2. No code changes needed — dimensions are loaded dynamically
+1. Add it in the Studio **Settings → Platforms** (or `POST /api/platforms`)
+   — `id`, name, width × height, family. No YAML edit or restart needed.
+2. The pipeline and Studio derive dims + family from the `platforms` table.
 
 ### Adding a new campaign preset
-1. Add a new key to `data/design_system/campaigns.yaml`
-2. Set tone, ground (`white` | `black`), and a verbal `language` hint
-3. Reference by name in API: `"campaign": "educational"`
+1. Edit the design system's campaigns in the Studio (per-design-system, DB)
+   — tone, ground (`white` | `black`), and a verbal `language` hint.
+2. Reference by name in API: `"campaign": "educational"`
 
 ### Adding a new agent
 1. Create YAML prompt in `backend/config/prompts/{agent}.yaml`
@@ -593,9 +615,10 @@ tasbir/
 4. Register in `backend/app/agents/orchestrator/graph.py`
 
 ### Editing agent prompts
-Edit the YAML files in `backend/config/prompts/`. No code changes needed.
-Restart the worker to pick up changes. (Prompt files are bind-mounted into the
-containers at `/app/config/prompts`.)
+Edit them in the Studio **Agents** page (persona, system prompt, model,
+temperature, max_tokens) — prompts are DB-backed and apply within ~5s, no
+restart needed. `Reset to seed` restores the YAML seed; the YAML files in
+`backend/config/prompts/` only seed first boot.
 
 ### Adding a new token variable
 1. Add `--variable-name: "value"` to `data/design_system/tokens.yaml`
@@ -701,6 +724,8 @@ that the `api` service mounts at `/app/static`. `beat` runs the hourly
   },
   "design_system_id": "default",
   "template_id": "square-editorial-stack",
+  "ratio": "square",
+  "sequence_audit": false,
   "images": [
     {
       "url": "https://example.com/image.png",
@@ -718,6 +743,12 @@ Requires `x-api-key` header. Rate-limited per key (default 30 req/min).
 locks a template for matching families (auto-fallback otherwise). Images may
 also be pre-embedded: `{data, mime, alt, description, placement}` (uploaded via
 `POST /uploads`).
+
+**Planner & carousels**: `platforms: ["auto"]` lets the planner choose the
+platform set and structure. For carousels, `slides` (2-10) and `ratio`
+(`square` | `portrait` | `auto`) set the frame count/aspect; `ratio: "auto"`
+or an unpinned `slides` delegates to the planner. `sequence_audit: true`
+runs an opt-in vision audit of the whole slide set (one call).
 
 ### Design systems API
 - `GET /design-systems` · `POST /design-systems` · `GET/PUT/DELETE /design-systems/{id}`
