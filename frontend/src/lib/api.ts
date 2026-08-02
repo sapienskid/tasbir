@@ -106,6 +106,7 @@ export interface PlatformResult {
   quality_score: number
   quality_issues: string[]
   html_path?: string
+  template_id?: string | null
   error?: string | null
   rerendered_at?: string | null
 }
@@ -147,6 +148,12 @@ export interface RerenderResponse {
 export interface GenerateResponse {
   task_id: string
   status: string
+}
+
+export interface SaveTemplateResponse {
+  template_id: string
+  mode: "new" | "update"
+  file: string
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

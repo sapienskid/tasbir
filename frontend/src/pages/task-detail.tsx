@@ -14,11 +14,13 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StatusBadge } from "@/components/tasks/status-badge"
-import { ArrowLeft, Eye, FileCode2, FileImage, RefreshCw, Trash2 } from "lucide-react"
+import { SaveTemplateDialog } from "@/components/tasks/save-template-dialog"
+import { ArrowLeft, Eye, FileCode2, FileImage, FilePlus, RefreshCw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useTask } from "@/hooks/use-task"
 import {
@@ -48,6 +50,7 @@ export default function TaskDetailPage() {
   const [qc, setQc] = useState<QCState | null>(null)
   const [rerendering, setRerendering] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [templateOpen, setTemplateOpen] = useState(false)
 
   // Per-format caches so tab switches don't lose edits or consume files twice.
   const draftsRef = useRef(new Map<string, string>())
@@ -58,6 +61,8 @@ export default function TaskDetailPage() {
     const fromFiles = files.map((f) => f.format)
     return [...new Set([...fromResult, ...fromFiles])]
   }, [task, files])
+
+  const platform = selectedFormat ? task?.result?.platforms?.[selectedFormat] : undefined
 
   useEffect(() => {
     if (formats.length > 0 && !formats.includes(selectedFormat ?? "")) {
@@ -287,6 +292,20 @@ export default function TaskDetailPage() {
               </TabsList>
             </Tabs>
             <div className="flex items-center gap-2">
+              {platform?.template_id ? (
+                <Badge variant="outline" className="font-mono text-xs">
+                  {platform.template_id}
+                </Badge>
+              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setTemplateOpen(true)}
+                disabled={!selectedFormat}
+              >
+                <FilePlus className="size-4" />
+                Save as Template
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -346,6 +365,14 @@ export default function TaskDetailPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <SaveTemplateDialog
+        taskId={taskId}
+        format={selectedFormat ?? ""}
+        sourceTemplateId={platform?.template_id}
+        open={templateOpen}
+        onOpenChange={setTemplateOpen}
+      />
     </div>
   )
 }
