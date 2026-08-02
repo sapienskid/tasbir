@@ -8,6 +8,11 @@ const MonacoEditor = lazy(() =>
   import("@monaco-editor/react").then((m) => ({ default: m.default }))
 )
 
+/** Warm up the Monaco chunk so the editor is ready before it mounts. */
+export function preloadMonacoEditor(): void {
+  void import("@monaco-editor/react")
+}
+
 interface HtmlEditorProps {
   value: string
   onChange: (value: string) => void

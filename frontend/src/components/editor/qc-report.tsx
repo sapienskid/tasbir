@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 
+const EMPTY_ISSUES: string[] = []
+
 interface QCReportProps {
   score?: number
   issues?: string[]
@@ -12,7 +14,7 @@ interface QCReportProps {
 
 export const QCReport = memo(function QCReport({
   score,
-  issues = [],
+  issues = EMPTY_ISSUES,
   critique,
   status,
 }: QCReportProps) {

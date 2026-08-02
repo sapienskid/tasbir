@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/tasks/status-badge"
+import { preloadMonacoEditor } from "@/components/editor/html-editor"
 import { ExternalLink, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useTasks } from "@/hooks/use-task"
@@ -100,7 +101,14 @@ export function TaskListPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
-                      <Button asChild variant="ghost" size="icon" aria-label="Open">
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Open"
+                        onPointerEnter={preloadMonacoEditor}
+                        onFocus={preloadMonacoEditor}
+                      >
                         <Link to={`/tasks/${task.id}`}>
                           <ExternalLink className="size-4" />
                         </Link>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { HtmlEditor } from "@/components/editor/html-editor"
 import { PreviewPane } from "@/components/editor/preview-pane"
@@ -55,6 +55,14 @@ export default function TaskDetailPage() {
   // Per-format caches so tab switches don't lose edits or consume files twice.
   const draftsRef = useRef(new Map<string, string>())
   const pngRef = useRef(new Map<string, string>())
+  // Mirror the latest task so `loadFormat` stays stable across SWR polls
+  // (the polling object identity would otherwise re-run the effect every tick).
+  const taskRef = useRef(task)
+  useEffect(() => {
+    taskRef.current = task
+  }, [task])
+
+  const [, startTransition] = useTransition()
 
   const formats = useMemo(() => {
     const fromResult = Object.keys(task?.result?.platforms ?? {})
@@ -73,43 +81,39 @@ export default function TaskDetailPage() {
   const loadFormat = useCallback(
     async (fmt: string) => {
       const cachedHtml = draftsRef.current.get(fmt)
-      if (cachedHtml !== undefined) {
-        setDraft(cachedHtml)
-      } else {
-        const htmlFile = files.find((f) => f.format === fmt && f.ext === "html")
-        if (htmlFile) {
-          try {
-            const text = await fetchText(`/tasks/${taskId}/files/${htmlFile.filename}`)
-            draftsRef.current.set(fmt, text)
-            setDraft(text)
-          } catch {
-            setDraft("")
-          }
-        } else {
-          setDraft("")
-        }
-      }
-
       const cachedPng = pngRef.current.get(fmt)
-      if (cachedPng !== undefined) {
-        setPreviewSrc(cachedPng)
-      } else {
-        const pngFile = files.find((f) => f.format === fmt && f.ext === "png")
-        if (pngFile) {
-          try {
-            const blob = await fetchBlob(`/tasks/${taskId}/files/${pngFile.filename}`)
-            const url = URL.createObjectURL(blob)
-            pngRef.current.set(fmt, url)
-            setPreviewSrc(url)
-          } catch {
-            setPreviewSrc(undefined)
-          }
-        } else {
-          setPreviewSrc(undefined)
-        }
-      }
+      const htmlFile = files.find((f) => f.format === fmt && f.ext === "html")
+      const pngFile = files.find((f) => f.format === fmt && f.ext === "png")
 
-      const platform = task?.result?.platforms?.[fmt]
+      // Fetch HTML and PNG in parallel — no serial waterfall.
+      const [html, previewSrc] = await Promise.all([
+        cachedHtml !== undefined
+          ? Promise.resolve(cachedHtml)
+          : htmlFile
+            ? fetchText(`/tasks/${taskId}/files/${htmlFile.filename}`)
+                .then((t) => {
+                  draftsRef.current.set(fmt, t)
+                  return t
+                })
+                .catch(() => "")
+            : Promise.resolve(""),
+        cachedPng !== undefined
+          ? Promise.resolve(cachedPng)
+          : pngFile
+            ? fetchBlob(`/tasks/${taskId}/files/${pngFile.filename}`)
+                .then((blob) => {
+                  const url = URL.createObjectURL(blob)
+                  pngRef.current.set(fmt, url)
+                  return url
+                })
+                .catch(() => undefined)
+            : Promise.resolve(undefined),
+      ])
+
+      setDraft(html)
+      setPreviewSrc(previewSrc)
+
+      const platform = taskRef.current?.result?.platforms?.[fmt]
       setQc(
         platform
           ? {
@@ -121,7 +125,7 @@ export default function TaskDetailPage() {
           : null
       )
     },
-    [files, taskId, task]
+    [files, taskId]
   )
 
   useEffect(() => {
@@ -282,7 +286,10 @@ export default function TaskDetailPage() {
       ) : (
         <>
           <div className="flex items-center justify-between gap-2">
-            <Tabs value={selectedFormat ?? undefined} onValueChange={setSelectedFormat}>
+            <Tabs
+              value={selectedFormat ?? undefined}
+              onValueChange={(v) => startTransition(() => setSelectedFormat(v))}
+            >
               <TabsList className="flex-wrap">
                 {formats.map((fmt) => (
                   <TabsTrigger key={fmt} value={fmt}>
