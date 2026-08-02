@@ -6,6 +6,10 @@ import type { Editor } from "grapesjs"
 export interface VisualEditorHandle {
   /** Rebuild the current canvas into a full HTML document (null before ready). */
   exportHtml: () => string | null
+  /** Multiply the current canvas zoom. */
+  zoomBy: (factor: number) => void
+  /** Reset to fit. */
+  zoomToFit: () => void
 }
 
 interface VisualEditorProps {
@@ -55,7 +59,6 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
   const containerRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Editor | null>(null)
-  const frameWinRef = useRef<Window | null>(null)
   const originalRef = useRef<Document | null>(null)
   const [ready, setReady] = useState(false)
   const [zoomPct, setZoomPct] = useState(100)
@@ -155,12 +158,6 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
 
       editor = ed
       editorRef.current = ed
-      // Also catch Ctrl± when focus is inside the canvas iframe.
-      const frameWin = ed.Canvas.getWindow()
-      if (frameWin) {
-        frameWin.addEventListener("keydown", handleZoomKey)
-        frameWinRef.current = frameWin
-      }
       setZoomPct(fitPct)
       setReady(true)
     }
@@ -168,10 +165,6 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
     void init()
     return () => {
       cancelled = true
-      if (frameWinRef.current) {
-        frameWinRef.current.removeEventListener("keydown", handleZoomKey)
-        frameWinRef.current = null
-      }
       try {
         editor?.destroy()
       } catch {
@@ -215,39 +208,10 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
   }, [setZoom])
   const oneToOne = useCallback(() => setZoom(100), [setZoom])
 
-  // Ctrl/Cmd ± zoom the canvas (not the page); Ctrl/Cmd 0 fits it. The
-  // handler must also be attached to the GrapesJS canvas iframe window —
-  // when focus is inside the canvas, key events go to the iframe, not the
-  // parent page, so a parent-only listener lets the browser zoom the page.
-  const handleZoomKey = useCallback(
-    (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey)) return
-      const target = e.target as HTMLElement | null
-      if (
-        target &&
-        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
-      ) {
-        return
-      }
-      const k = e.key.toLowerCase()
-      if (k === "-") {
-        e.preventDefault()
-        zoomOut()
-      } else if (k === "+" || k === "=") {
-        e.preventDefault()
-        zoomIn()
-      } else if (k === "0") {
-        e.preventDefault()
-        fit()
-      }
-    },
-    [zoomOut, zoomIn, fit]
-  )
-
-  useEffect(() => {
-    window.addEventListener("keydown", handleZoomKey)
-    return () => window.removeEventListener("keydown", handleZoomKey)
-  }, [handleZoomKey])
+  // Ctrl/Cmd ± zooming is intercepted in the task detail page (capture phase,
+  // parent document) so it never zooms the browser page — even when focus is
+  // inside the canvas iframe. This component exposes the zoom via its
+  // imperative handle; the toolbar buttons below call it directly.
 
   const buildDocument = useCallback((): string | null => {
     const editor = editorRef.current
@@ -267,8 +231,16 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
     ref,
     () => ({
       exportHtml: () => (ready ? buildDocument() : null),
+      zoomBy: (factor: number) => {
+        const editor = editorRef.current
+        if (!editor) return
+        setZoom(editor.Canvas.getZoom() * factor)
+      },
+      zoomToFit: () => {
+        if (ready) fit()
+      },
     }),
-    [ready, buildDocument]
+    [ready, buildDocument, setZoom, fit]
   )
 
   // Drive the GrapesJS sidebar width via the CSS variable on the wrapper.

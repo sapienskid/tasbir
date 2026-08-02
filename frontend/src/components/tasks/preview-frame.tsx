@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react"
+import { memo, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Maximize2, Minus, Plus } from "lucide-react"
 
@@ -144,6 +144,11 @@ export const PreviewFrame = memo(function PreviewFrame({
   return <ScaledFrame html={html} width={dims.width} height={dims.height} />
 })
 
+export interface PreviewZoomHandle {
+  zoomBy: (factor: number) => void
+  fit: () => void
+}
+
 /**
  * Interactive live preview with zoom controls. Defaults to "fit" (auto-scales
  * to the pane); ± zooms around fit, "Fit" resets, "100%" shows natural pixels
@@ -154,11 +159,13 @@ export const ZoomableFrame = memo(function ZoomableFrame({
   width,
   height,
   gap = 8,
+  ref,
 }: {
   html: string
   width: number
   height: number
   gap?: number
+  ref?: React.Ref<PreviewZoomHandle>
 }) {
   const areaRef = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState({ w: 0, h: 0 })
@@ -196,6 +203,15 @@ export const ZoomableFrame = memo(function ZoomableFrame({
   function oneToOne() {
     if (fitScale > 0) setZoomMul(1 / fitScale)
   }
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      zoomBy: (factor: number) => setZoomMul((z) => Math.min(20, Math.max(0.08, z * factor))),
+      fit: () => setZoomMul(1),
+    }),
+    []
+  )
 
   return (
     <div className="flex h-full w-full flex-col">

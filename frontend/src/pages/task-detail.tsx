@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { HtmlEditor } from "@/components/editor/html-editor"
 import { VisualEditor, type VisualEditorHandle } from "@/components/editor/visual-editor"
 import { useDebouncedValue } from "@/components/editor/use-debounce"
-import { ZoomableFrame, formatDims } from "@/components/tasks/preview-frame"
+import { ZoomableFrame, formatDims, type PreviewZoomHandle } from "@/components/tasks/preview-frame"
 import { InspectorRail, type QcState } from "@/components/tasks/inspector-rail"
 import {
   AlertDialog,
@@ -65,6 +65,31 @@ export default function TaskDetailPage() {
   const [templateOpen, setTemplateOpen] = useState(false)
 
   const visualEditorRef = useRef<VisualEditorHandle>(null)
+  const previewFrameRef = useRef<PreviewZoomHandle>(null)
+
+  // Ctrl/Cmd ± / 0 zoom the editing surface (visual canvas or live preview),
+  // never the browser page. Capture phase on the parent document so it fires
+  // before the browser's page-zoom handler — even when focus is inside the
+  // GrapesJS canvas iframe.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const k = e.key.toLowerCase()
+      if (k !== "-" && k !== "+" && k !== "=" && k !== "0") return
+      e.preventDefault()
+      if (mode === "visual") {
+        if (k === "-") visualEditorRef.current?.zoomBy(1 / 1.2)
+        else if (k === "+" || k === "=") visualEditorRef.current?.zoomBy(1.2)
+        else visualEditorRef.current?.zoomToFit()
+      } else {
+        if (k === "-") previewFrameRef.current?.zoomBy(1 / 1.25)
+        else if (k === "+" || k === "=") previewFrameRef.current?.zoomBy(1.25)
+        else previewFrameRef.current?.fit()
+      }
+    }
+    document.addEventListener("keydown", onKeyDown, true)
+    return () => document.removeEventListener("keydown", onKeyDown, true)
+  }, [mode])
 
   // Per-format caches so tab switches don't lose edits or consume files twice.
   const draftsRef = useRef(new Map<string, string>())
@@ -443,7 +468,12 @@ export default function TaskDetailPage() {
                   Live preview — updates as you edit ({dims.width}×{dims.height}).
                 </p>
                 <div className="h-[65vh] overflow-hidden rounded-md border">
-                  <ZoomableFrame html={livePreviewHtml} width={dims.width} height={dims.height} />
+                  <ZoomableFrame
+                    ref={previewFrameRef}
+                    html={livePreviewHtml}
+                    width={dims.width}
+                    height={dims.height}
+                  />
                 </div>
               </div>
             </div>
