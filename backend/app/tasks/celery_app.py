@@ -8,7 +8,7 @@ celery_app = Celery(
     "tasbir",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks.generate"],
+    include=["app.tasks.generate", "app.tasks.retention"],
 )
 
 celery_app.conf.update(
@@ -20,4 +20,10 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
+    beat_schedule={
+        "sweep-expired-outputs": {
+            "task": "retention.sweep_expired",
+            "schedule": 3600.0,  # hourly
+        },
+    },
 )
