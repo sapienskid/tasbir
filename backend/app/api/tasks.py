@@ -1,9 +1,11 @@
 import base64
+import io
 import os
 import re
+import zipfile
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.background import BackgroundTask
@@ -64,6 +66,37 @@ async def list_task_files(task_id: str, db: AsyncSession = Depends(get_db)):
     if not await repo.get_by_id(task_id):
         raise NotFoundError(f"Task {task_id} not found")
     return list_output_files(task_id)
+
+
+@router.get("/{task_id}/files/archive")
+async def download_task_archive(task_id: str, db: AsyncSession = Depends(get_db)):
+    """Download every remaining artifact (HTML + PNG) as a ZIP."""
+    from app.services.artifacts import task_output_dir
+
+    repo = TaskRepository(db)
+    if not await repo.get_by_id(task_id):
+        raise NotFoundError(f"Task {task_id} not found")
+
+    base = task_output_dir(task_id)
+    files = list_output_files(task_id)
+    if not files:
+        raise NotFoundError(f"No output files remain for task {task_id}")
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in files:
+            path = base / f["filename"]
+            if path.is_file():
+                zf.write(path, arcname=f["filename"])
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{task_id}.zip"',
+        },
+    )
 
 
 @router.get("/{task_id}/files/{filename}")

@@ -1,6 +1,8 @@
 """Auth (fail-closed) + serve-and-delete endpoint tests."""
 
+import io
 import uuid
+import zipfile
 from pathlib import Path
 
 from httpx import AsyncClient
@@ -98,4 +100,40 @@ class TestServeAndDelete:
         assert not out_dir.exists()
 
         res = await authed_client.get(f"/api/tasks/{task_id}", headers={"x-api-key": "test-key"})
+        assert res.status_code == 404
+
+
+class TestArchive:
+    async def test_archive_zips_all_files(self, authed_client: AsyncClient):
+        task_id = str(uuid.uuid4())
+        await seed_task(task_id)
+        await _write_output(task_id)
+        await _write_output(task_id, fmt="linkedin-post")
+        headers = {"x-api-key": "test-key"}
+
+        res = await authed_client.get(f"/api/tasks/{task_id}/files/archive", headers=headers)
+        assert res.status_code == 200
+        assert res.headers["content-type"].startswith("application/zip")
+        assert f'filename="{task_id}.zip"' in res.headers["content-disposition"]
+
+        with zipfile.ZipFile(io.BytesIO(res.content)) as zf:
+            names = sorted(zf.namelist())
+            assert names == sorted(
+                ["instagram-square.html", "instagram-square.png",
+                 "linkedin-post.html", "linkedin-post.png"]
+            )
+            assert zf.read("instagram-square.png") == b"PNGDATA"
+
+    async def test_archive_missing_task_404(self, authed_client: AsyncClient):
+        res = await authed_client.get(
+            f"/api/tasks/{uuid.uuid4()}/files/archive", headers={"x-api-key": "test-key"}
+        )
+        assert res.status_code == 404
+
+    async def test_archive_empty_task_404(self, authed_client: AsyncClient):
+        task_id = str(uuid.uuid4())
+        await seed_task(task_id)
+        res = await authed_client.get(
+            f"/api/tasks/{task_id}/files/archive", headers={"x-api-key": "test-key"}
+        )
         assert res.status_code == 404
