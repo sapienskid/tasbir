@@ -14,6 +14,9 @@ const TaskDetailPage = lazy(() => import("@/pages/task-detail"))
 const NewTaskPage = lazy(() => import("@/pages/new-task"))
 const TemplatesPage = lazy(() => import("@/pages/templates"))
 const DesignSystemsPage = lazy(() => import("@/pages/design-systems"))
+const AgentsPage = lazy(() =>
+  import("@/pages/agents").then((m) => ({ default: m.AgentsPage }))
+)
 
 function FullPageSkeleton() {
   return (
@@ -67,6 +70,14 @@ export default function App() {
               element={
                 <Suspense fallback={<FullPageSkeleton />}>
                   <DesignSystemsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="agents"
+              element={
+                <Suspense fallback={<FullPageSkeleton />}>
+                  <AgentsPage />
                 </Suspense>
               }
             />

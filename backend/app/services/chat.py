@@ -20,9 +20,9 @@ from app.agents.orchestrator.nodes.quality_check import (
     _call_vision_llm,
     _run_deterministic_checks,
 )
-from app.agents.prompts.registry import load_prompt
 from app.config import get_settings
 from app.db.repositories.chat import ChatRepository
+from app.services.agents import get_agent_config
 from app.services.design_instruction import (
     build_google_fonts_link,
     inject_fonts_into_html,
@@ -170,7 +170,7 @@ async def run_chat_turn(
     ds_context = _build_design_system_context(
         tokens, design_instruction, footer, category, ground
     )
-    prompt_cfg = load_prompt("editor_chat")
+    prompt_cfg = await get_agent_config("editor_chat")
 
     html_excerpt = current
     if len(html_excerpt) > _HTML_CAP:

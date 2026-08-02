@@ -22,7 +22,7 @@ import re
 from pydantic import BaseModel, field_validator
 
 from app.agents.orchestrator.state import GenerationState
-from app.agents.prompts.registry import load_prompt
+from app.services.agents import get_agent_config
 from app.services.llm import call_llm
 from app.services.tokens import category_matches, resolve_ground
 
@@ -84,7 +84,7 @@ def _extract_json(text: str) -> dict:
 
 async def strategist_node(state: GenerationState) -> dict:
     """Analyze content and produce a structured strategic brief."""
-    prompt_cfg = load_prompt("strategist")
+    prompt_cfg = await get_agent_config("strategist")
     content = state.get("content", "")
     title = state.get("title", "")
     platforms = state.get("platforms", [])
@@ -199,6 +199,21 @@ async def strategist_node(state: GenerationState) -> dict:
         ground = resolve_ground(campaign, category, categories, default="white")
         brief.category = category
         brief.ground = ground
+
+        task_id = state.get("_task_id", "")
+        if task_id:
+            from app.services.audit import record_audit
+
+            await record_audit(
+                task_id,
+                "strategist",
+                decision={
+                    "category": category,
+                    "ground": ground,
+                    "template_hint": brief.template_hint or "",
+                },
+                critique=brief.angle,
+            )
 
         return {
             "strategic_brief": brief.model_dump(),

@@ -218,6 +218,18 @@ export function sendChat(
   })
 }
 
+export function getTaskAudit(taskId: string): Promise<AuditEntry[]> {
+  return apiRequest(`/tasks/${taskId}/audit`)
+}
+
+export interface AuditEntry {
+  id: number
+  agent_name: string
+  decision: Record<string, unknown>
+  critique: string | null
+  created_at: string | null
+}
+
 // ─── Design systems ───────────────────────────────────────────────────────
 
 export interface DesignSystem {
@@ -306,6 +318,103 @@ export interface AgentJob {
   error: string | null
   created_at: string | null
   updated_at: string | null
+}
+
+// ─── Agents (DB-backed agent configs) ──────────────────────────────────────
+
+export interface AgentConfig {
+  name: string
+  persona: string
+  role: string
+  system_prompt: string
+  model: string
+  temperature: number
+  max_tokens: number
+  source: "seed" | "manual"
+  is_active: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface AgentGraphNode {
+  id: string
+  label: string
+  kind: "start" | "agent" | "group" | "end" | "pipeline"
+  agent?: string
+  persona?: string
+  model?: string
+  is_active?: boolean
+}
+
+export interface AgentGraphEdge {
+  id: string
+  source: string
+  target: string
+  label?: string
+}
+
+export interface AgentGraphAuxAgent {
+  name: string
+  persona: string
+  model: string
+  is_active: boolean
+}
+
+export interface AgentGraphLane {
+  id: string
+  label: string
+  agents: AgentGraphAuxAgent[]
+}
+
+export interface AgentGraphSpec {
+  nodes: AgentGraphNode[]
+  edges: AgentGraphEdge[]
+  subflow: {
+    id: string
+    label: string
+    nodes: AgentGraphNode[]
+    edges: AgentGraphEdge[]
+  }
+  aux_lanes: AgentGraphLane[]
+}
+
+export function listAgents(includeInactive = false): Promise<AgentConfig[]> {
+  return apiRequest(`/agents${includeInactive ? "?include_inactive=true" : ""}`)
+}
+
+export function getAgent(name: string): Promise<AgentConfig> {
+  return apiRequest(`/agents/${name}`)
+}
+
+export function updateAgent(
+  name: string,
+  patch: Partial<Pick<
+    AgentConfig,
+    "persona" | "role" | "system_prompt" | "model" | "temperature" | "max_tokens" | "is_active"
+  >>
+): Promise<AgentConfig> {
+  return apiRequest(`/agents/${name}`, { method: "PUT", body: JSON.stringify(patch) })
+}
+
+export function resetAgent(name: string): Promise<AgentConfig> {
+  return apiRequest(`/agents/${name}/reset`, { method: "POST" })
+}
+
+export interface PromptPreview {
+  agent: string
+  system_prompt: string
+  user_prompt: string
+}
+
+export function promptPreview(name: string, designSystemId = "default"): Promise<PromptPreview> {
+  return apiRequest(`/agents/${name}/prompt-preview`, {
+    method: "POST",
+    body: JSON.stringify({ design_system_id: designSystemId }),
+  })
+}
+
+export function getAgentGraph(): Promise<AgentGraphSpec> {
+  return apiRequest("/agents/graph")
 }
 
 // ─── Design system API helpers ─────────────────────────────────────────────

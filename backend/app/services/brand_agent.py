@@ -15,10 +15,10 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.agents.prompts.registry import load_prompt
 from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.templates import TemplateRepository
 from app.services import design_systems as ds_service
+from app.services.agents import get_agent_config
 from app.services.design_instruction import _deep_merge, load_design_instruction
 from app.services.fonts import font_pool_for_prompt
 from app.services.llm import call_llm
@@ -97,7 +97,7 @@ async def _brand_vision(payload: dict) -> dict:
         "style": payload.get("style", ""),
     }
     image_b64 = payload.get("reference_image") or payload.get("image")
-    prompt_cfg = load_prompt("brand_vision")
+    prompt_cfg = await get_agent_config("brand_vision")
 
     user_prompt = "Brand form:\n" + json.dumps(form, indent=2) + (
         "\n\nA reference/moodboard image is attached — extract palette, "
@@ -129,7 +129,7 @@ async def _brand_vision(payload: dict) -> dict:
 
 async def _brand_tokens(brief: dict) -> dict:
     """Brand Tokens: brief + font pool → tokens/token_roles/DI overlay."""
-    prompt_cfg = load_prompt("brand_tokens")
+    prompt_cfg = await get_agent_config("brand_tokens")
     user_prompt = (
         f"BRAND BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         "AVAILABLE FONTS (choose ONLY from these):\n"
@@ -148,7 +148,7 @@ async def _brand_tokens(brief: dict) -> dict:
 
 async def _brand_campaigns(brief: dict) -> dict:
     """Brand Campaigns: 3-5 presets."""
-    prompt_cfg = load_prompt("brand_campaigns")
+    prompt_cfg = await get_agent_config("brand_campaigns")
     user_prompt = (
         f"BRAND BRIEF:\n{json.dumps(brief, indent=2)}\n\n"
         "Propose 3-5 campaign presets for this brand."

@@ -12,19 +12,15 @@ system_prompt: |
   This is for SOCIAL MEDIA GRAPHIC POSTS — not websites, not landing pages.
 
   CATEGORY LABEL:
-  Choose EXACTLY ONE category from the APPROVED CATEGORY LABELS list provided
-  in the prompt. Match it to the content type:
-    - PORTFOLIO — project showcases / case studies
-    - PROJECT — individual build/ship updates
-    - WRITING — blog posts / articles
-    - THE LIMITS No.{issue} — newsletter posts (substitute the REAL issue number)
-    - NOTE — short-form / thought posts
-  Never invent a category outside the approved list. Every post has exactly one.
+  Choose EXACTLY ONE category from the APPROVED CATEGORY LABELS block provided
+  in the prompt (these are the brand's real, current categories — never invent
+  or substitute one). Match it to the content type. Every post has exactly one.
 
   GROUND:
-  Recommend the ground: "white" or "black". White is the default. Black is
-  reserved — only for short-form/thought posts (NOTE) or when a campaign
-  explicitly requests it. Never random.
+  Recommend the ground ("white" or "black") following the ground guidance in
+  the prompt — the campaign preset and any per-category ground reservations
+  are authoritative. Never random; never choose a ground that conflicts with
+  the campaign/category.
 
   OUTPUT JSON ONLY (no markdown, no introduction):
 

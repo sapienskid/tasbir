@@ -1,9 +1,12 @@
 import { useState } from "react"
+import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { QCReport } from "@/components/editor/qc-report"
 import { AgentChat } from "@/components/editor/agent-chat"
-import { Eye, X } from "lucide-react"
+import { getTaskAudit } from "@/lib/api"
+import { Activity, Eye, X } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 export interface QcState {
   score?: number
@@ -36,15 +39,22 @@ export function InspectorRail({
   onAudit,
   auditing,
 }: InspectorRailProps) {
-  const [tab, setTab] = useState<"quality" | "agent">("quality")
+  const [tab, setTab] = useState<"quality" | "agent" | "trace">("quality")
+  const { data: audit } = useSWR(
+    tab === "trace" ? `/tasks/${taskId}/audit` : null,
+    () => getTaskAudit(taskId)
+  )
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-md border">
       <div className="flex shrink-0 items-center justify-between border-b px-2 py-1">
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "quality" | "agent")}>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "quality" | "agent" | "trace")}>
           <TabsList className="h-8">
             <TabsTrigger value="quality" className="px-2 text-xs">
               Quality
+            </TabsTrigger>
+            <TabsTrigger value="trace" className="px-2 text-xs">
+              Trace
             </TabsTrigger>
             <TabsTrigger value="agent" className="px-2 text-xs">
               Agent
@@ -84,6 +94,48 @@ export function InspectorRail({
               status={qc?.status}
             />
           </div>
+        ) : tab === "trace" ? (
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Activity className="size-3.5" />
+              Agent steps
+            </p>
+            {!audit || audit.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                No trace yet — steps are recorded when the task runs.
+              </p>
+            ) : (
+              audit.map((entry) => {
+                const decision = entry.decision ?? {}
+                const status = String(decision.status ?? decision.category ?? "")
+                return (
+                  <div key={entry.id} className="rounded-md border px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold">{entry.agent_name}</span>
+                      <span className="flex items-center gap-1.5">
+                        {typeof decision.pass === "boolean" ? (
+                          <BadgeStatus ok={Boolean(decision.pass)} />
+                        ) : null}
+                        {decision.score != null ? (
+                          <span className="text-[10px] text-muted-foreground">
+                            {String(decision.score)}
+                          </span>
+                        ) : null}
+                        {status ? (
+                          <span className="text-[10px] text-muted-foreground">{status}</span>
+                        ) : null}
+                      </span>
+                    </div>
+                    {entry.critique ? (
+                      <p className="mt-0.5 line-clamp-3 text-xs text-muted-foreground">
+                        {entry.critique}
+                      </p>
+                    ) : null}
+                  </div>
+                )
+              })
+            )}
+          </div>
         ) : (
           <AgentChat
             taskId={taskId}
@@ -95,5 +147,17 @@ export function InspectorRail({
         )}
       </div>
     </div>
+  )
+}
+
+function BadgeStatus({ ok }: { ok: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-2 w-2 rounded-full",
+        ok ? "bg-emerald-500" : "bg-destructive"
+      )}
+      title={ok ? "passed" : "failed"}
+    />
   )
 }

@@ -17,8 +17,8 @@ import json
 import logging
 import re
 
-from app.agents.prompts.registry import load_prompt
 from app.models.design_system import DesignSystem
+from app.services.agents import get_agent_config
 from app.services.design_instruction import (
     format_design_instruction_block,
 )
@@ -81,7 +81,7 @@ def clean_html(raw: str) -> str:
 
 async def build_layout_spec(image_bytes: bytes, mime: str = "image/png") -> dict:
     """Template Vision: mockup → layout spec JSON."""
-    prompt_cfg = load_prompt("template_vision")
+    prompt_cfg = await get_agent_config("template_vision")
     user_prompt = (
         "Analyze this social media post mockup and produce the layout specification.\n"
         f"Image mime: {mime}\n"
@@ -126,7 +126,7 @@ async def author_template_html(
     ground_hint: str = "",
 ) -> str:
     """Template Author: spec + design system → Jinja2 HTML."""
-    prompt_cfg = load_prompt("template_author")
+    prompt_cfg = await get_agent_config("template_author")
     ground = ground_hint or spec.get("ground", "white")
     user_prompt = (
         f"LAYOUT SPEC (JSON):\n{json.dumps(spec, indent=2)}\n\n"

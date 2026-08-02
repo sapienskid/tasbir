@@ -1,8 +1,12 @@
 import useSWR from "swr"
 import {
+  getAgentGraph,
+  listAgents,
   getAgentJob,
   listDesignSystems,
   listTemplates,
+  type AgentConfig,
+  type AgentGraphSpec,
   type AgentJob,
   type DesignSystem,
   type Template,
@@ -51,4 +55,22 @@ export function useAgentJob(jobId: string | null): {
 
 export function isJobDone(job: AgentJob | undefined): boolean {
   return Boolean(job && (job.status === "completed" || job.status === "failed"))
+}
+
+export function useAgents(): {
+  data: AgentConfig[] | undefined
+  error: unknown
+  isLoading: boolean
+  mutate: () => Promise<unknown>
+} {
+  return useSWR("/agents", () => listAgents())
+}
+
+export function useAgentGraph(): {
+  data: AgentGraphSpec | undefined
+  error: unknown
+  isLoading: boolean
+  mutate: () => Promise<unknown>
+} {
+  return useSWR("/agents/graph", () => getAgentGraph())
 }

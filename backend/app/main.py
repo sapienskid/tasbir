@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.api import (
     agent_jobs,
+    agents,
     chat,
     design_systems,
     fonts,
@@ -65,6 +66,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.warning("[startup] Design system seed failed: %s", e)
 
+    # Seed agent configs (personas/prompts/models) from YAML on first boot.
+    try:
+        from app.services.agents import seed_agents
+        await seed_agents(pool)
+    except Exception as e:
+        log.warning("[startup] Agent seed failed: %s", e)
+
     yield
     await close_shared_engine()
     await close_redis()
@@ -121,6 +129,10 @@ app.include_router(
 )
 app.include_router(
     fonts.router, prefix="/api/fonts", tags=["fonts"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    agents.router, prefix="/api/agents", tags=["agents"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 

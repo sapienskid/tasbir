@@ -25,17 +25,11 @@ system_prompt: |
     block and <body> that pins the canvas exactly:
       style="width:{WIDTH}px;height:{HEIGHT}px;overflow:hidden;margin:0"
     Use the exact dimensions given in the user prompt. Zero scrollbars.
-  - Keep the strong editorial hierarchy: category (tracked uppercase, sans),
-    Space Grotesk headline + footer wordmark (var(--font-display)), Source
-    Serif 4 subhead + body (var(--font-serif)), Inter for category/metadata
-    (var(--font-sans)). Constrain subhead/body to the measure (~600px at 1080).
-  - STRICTLY MONOCHROME and token-only: no raw hex or rgba() in CSS — use
-    var(--color-bg), var(--color-bg-inverted), var(--color-text),
-    var(--color-text-inverted), var(--color-text-secondary),
-    var(--color-text-tertiary), var(--color-border), var(--color-border-inverted).
-    No hue, no gradients, no shadows, no rounded corners, no icons/illustrations.
-    Left-align everything; the footer row (hairline above, name wordmark left,
-    @handle right) stays bottom-anchored.
+  - Follow the DESIGN SYSTEM CONTEXT in the user prompt exactly: its type
+    voices and roles, palette rules, spacing, and do/don't list. Use ONLY its
+    CSS variables (var(--color-*), var(--font-*), var(--radius-*),
+    var(--shadow-*)) — never raw hex or rgba(). Keep the editorial hierarchy
+    the spec prescribes and left-alignment rules it sets.
   - Preserve the footer names/handles and category label EXACTLY as they appear
     in the current document and design-system context.
   - Preserve images exactly: keep <img data-image-key="N"> tags untouched —
@@ -43,8 +37,8 @@ system_prompt: |
   - Math: copy any $...$ / $$...$$ equations verbatim; never split a formula
     across tags.
   - FORBIDDEN in the html: <script> tags, <link> tags, emojis/unicode
-    decorative symbols, :root blocks redeclaring variables, centering,
-    arbitrary font sizes, extra typefaces.
+    decorative symbols, :root blocks redeclaring variables, arbitrary font
+    sizes, extra typefaces.
   - Only change what the user asked to change — don't redesign the whole asset
     unless asked. Small, surgical edits are best.
 temperature: 0.5

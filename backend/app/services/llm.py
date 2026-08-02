@@ -7,7 +7,6 @@ integration (with tool binding support) and a simple call_llm() helper.
 import asyncio
 from collections.abc import AsyncIterator
 
-from httpx import HTTPStatusError
 from app.config import get_settings
 
 MODEL_ROUTES = {
@@ -24,6 +23,13 @@ MODEL_ROUTES = {
 }
 
 
+def _model_for(agent_role: str) -> str:
+    """Resolve the model for a role — DB agent row first, MODEL_ROUTES fallback."""
+    from app.services.agents import resolve_model
+
+    return resolve_model(agent_role)
+
+
 def get_llm(agent_role: str = "strategist", temperature: float = 0.7, max_tokens: int | None = None):
     """Get a LangChain ChatGoogleGenerativeAI instance for the given role.
 
@@ -33,7 +39,7 @@ def get_llm(agent_role: str = "strategist", temperature: float = 0.7, max_tokens
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     settings = get_settings()
-    model = MODEL_ROUTES.get(agent_role, "gemini-2.0-flash")
+    model = _model_for(agent_role)
     api_key = settings.gemini_api_key or None
 
     return ChatGoogleGenerativeAI(
@@ -50,8 +56,8 @@ async def call_llm_with_retry(llm, messages, max_retries=5, agent_role: str = ""
 
     Falls back to OpenRouter if Gemini fails and a key is configured.
     """
-    import re
     import logging
+    import re
     log = logging.getLogger(__name__)
 
     last_error = None
@@ -83,7 +89,7 @@ async def call_llm_with_retry(llm, messages, max_retries=5, agent_role: str = ""
         try:
             text = await _call_openrouter(
                 api_key=settings.openrouter_api_key,
-                model=MODEL_ROUTES.get(agent_role, "gemini-2.0-flash"),
+                model=_model_for(agent_role),
                 system_prompt=sys_msg,
                 user_prompt=last_msg,
                 temperature=0.7,
@@ -133,7 +139,7 @@ async def call_llm(
         if settings.openrouter_api_key:
             return await _call_openrouter(
                 api_key=settings.openrouter_api_key,
-                model=MODEL_ROUTES.get(agent_role, "gemini-2.0-flash"),
+                model=_model_for(agent_role),
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 temperature=temperature,
@@ -171,7 +177,7 @@ async def call_llm_stream(
         if settings.openrouter_api_key:
             async for chunk in _call_openrouter_stream(
                 api_key=settings.openrouter_api_key,
-                model=MODEL_ROUTES.get(agent_role, "gemini-2.0-flash"),
+                model=_model_for(agent_role),
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 temperature=temperature,

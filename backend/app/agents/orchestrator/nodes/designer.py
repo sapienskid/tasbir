@@ -30,7 +30,7 @@ from html import escape
 from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
-from app.agents.prompts.registry import load_prompt
+from app.services.agents import get_agent_config
 from app.services.design_instruction import (
     build_google_fonts_link,
     format_design_instruction_block,
@@ -110,7 +110,7 @@ async def designer_node_single(state: GenerationState) -> dict:
     """Create HTML layout for a single platform."""
     from app.config import get_settings
 
-    prompt_cfg = load_prompt("designer")
+    prompt_cfg = await get_agent_config("designer")
     fmt_id = state.get("_processing_format_id", "")
     fmt = get_format_info(fmt_id)
 

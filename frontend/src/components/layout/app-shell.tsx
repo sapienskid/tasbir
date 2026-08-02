@@ -8,6 +8,7 @@ const NAV = [
   { to: "/", label: "Tasks", match: /^\/$/ },
   { to: "/templates", label: "Templates", match: /^\/templates/ },
   { to: "/design-systems", label: "Design Systems", match: /^\/design-systems/ },
+  { to: "/agents", label: "Agents", match: /^\/agents/ },
 ]
 
 export function AppShell() {

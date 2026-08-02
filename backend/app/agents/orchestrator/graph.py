@@ -71,22 +71,51 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
     """
     local = copy.deepcopy(base_state)
     local["_processing_format_id"] = fmt_id
+    task_id = local.get("_task_id", "")
+
+    async def _audit(agent_name: str, decision: dict, critique: str = "") -> None:
+        if not task_id:
+            return
+        from app.services.audit import record_audit
+
+        await record_audit(task_id, agent_name, decision=decision, critique=critique)
 
     use_template = True
     for _attempt in range(MAX_RETRIES + 1):
         if use_template:
             _apply_updates(local, await template_node_single(local))
+            used_template = bool(local.get("format_tasks", {}).get(fmt_id, {}).get("html"))
+            await _audit(
+                "template",
+                {"format": fmt_id, "used": used_template,
+                 "template_id": local.get("format_tasks", {}).get(fmt_id, {}).get("template_id")},
+            )
 
         fmt_task = local.get("format_tasks", {}).get(fmt_id, {})
         if not fmt_task.get("html"):
             # No template matched (or copy missing) → LLM designer.
             _apply_updates(local, await designer_node_single(local))
+            await _audit(
+                "designer",
+                {"format": fmt_id, "attempt": _attempt, "status": "designed"},
+            )
 
         _apply_updates(local, await renderer_node_single(local))
         _apply_updates(local, await quality_check_node_single(local))
 
         fmt_task = local.get("format_tasks", {}).get(fmt_id, {})
         status = fmt_task.get("status", "")
+        verification = local.get("verification", {}).get(fmt_id, {})
+        await _audit(
+            "verifier",
+            {
+                "format": fmt_id,
+                "status": status,
+                "pass": verification.get("pass"),
+                "score": verification.get("score"),
+            },
+            critique=str(verification.get("critique") or ""),
+        )
         if status in ("verified", "error", "failed"):
             break
         if status == "needs_retry":

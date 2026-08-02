@@ -70,6 +70,27 @@ async def list_task_files(task_id: str, db: AsyncSession = Depends(get_db)):
     return list_output_files(task_id)
 
 
+@router.get("/{task_id}/audit")
+async def list_task_audit(task_id: str, db: AsyncSession = Depends(get_db)):
+    """Per-agent step timeline for a task (strategist/copywriter + per-format chain)."""
+    from app.db.repositories.audit_logs import AuditLogRepository
+
+    repo = TaskRepository(db)
+    if not await repo.get_by_id(task_id):
+        raise NotFoundError(f"Task {task_id} not found")
+    rows = await AuditLogRepository(db).list_by_task(task_id)
+    return [
+        {
+            "id": r.id,
+            "agent_name": r.agent_name,
+            "decision": r.decision,
+            "critique": r.critique,
+            "created_at": iso_utc(r.created_at),
+        }
+        for r in rows
+    ]
+
+
 @router.get("/{task_id}/files/archive")
 async def download_task_archive(task_id: str, db: AsyncSession = Depends(get_db)):
     """Download every remaining artifact (HTML + PNG) as a ZIP."""
@@ -171,8 +192,8 @@ async def rerender_format(
     with tokens/fonts/KaTeX, rendered to PNG, and checked. Vision audit only
     runs when ``?audit=true`` to protect the free-tier quota.
     """
-    from app.agents.prompts.registry import load_prompt
     from app.config import get_settings
+    from app.services.agents import get_agent_config
     from app.services.design_instruction import (
         build_google_fonts_link,
         inject_fonts_into_html,
@@ -240,7 +261,7 @@ async def rerender_format(
 
     if audit and passed:
         try:
-            prompt_cfg = load_prompt("verifier")
+            prompt_cfg = await get_agent_config("verifier")
             png = await render_to_png(html, fmt.width, fmt.height)
             if png:
                 ds_context = _build_design_system_context(

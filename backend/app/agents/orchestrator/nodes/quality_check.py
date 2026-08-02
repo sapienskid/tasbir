@@ -22,8 +22,8 @@ import re
 from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
-from app.agents.prompts.registry import load_prompt
 from app.config import get_settings
+from app.services.agents import get_agent_config
 from app.services.design_instruction import (
     build_google_fonts_link,
     format_design_instruction_block,
@@ -285,7 +285,7 @@ def _run_deterministic_checks(
 
 async def quality_check_node_single(state: GenerationState) -> dict:
     """Run multimodal quality check for a single platform."""
-    prompt_cfg = load_prompt("verifier")
+    prompt_cfg = await get_agent_config("verifier")
     fmt_id = state.get("_processing_format_id", "")
     fmt = get_format_info(fmt_id)
     task_id = state.get("_task_id", "default")

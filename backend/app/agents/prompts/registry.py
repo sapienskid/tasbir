@@ -12,11 +12,9 @@ Each YAML file has:
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -33,8 +31,14 @@ class PromptConfig:
     persona: str
     role: str
     system_prompt: str
+    model: str = ""
     temperature: float = 0.7
     max_tokens: int = 2000
+
+
+def prompts_dir() -> Path:
+    """The directory that holds the YAML seed prompt files."""
+    return _PROMPTS_DIR
 
 
 @lru_cache(maxsize=32)
@@ -43,6 +47,10 @@ def load_prompt(agent_name: str) -> PromptConfig:
 
     Looks in backend/config/prompts/{agent_name}.yaml.
     Falls back to inline defaults if the file is missing.
+
+    NOTE: This is the YAML *seed* loader. At runtime the pipeline uses
+    ``app.services.agents.get_agent_config()`` (DB-backed), which falls back
+    to this when no row exists.
     """
     import yaml
 
@@ -60,6 +68,7 @@ def load_prompt(agent_name: str) -> PromptConfig:
             persona=data.get("persona", agent_name),
             role=data.get("role", ""),
             system_prompt=data.get("system_prompt", ""),
+            model=data.get("model", ""),
             temperature=float(data.get("temperature", 0.7)),
             max_tokens=int(data.get("max_tokens", 2000)),
         )
