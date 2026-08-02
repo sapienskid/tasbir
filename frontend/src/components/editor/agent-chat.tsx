@@ -1,10 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Loader2, Send, Sparkles } from "lucide-react"
+import {
+  Bot,
+  CheckCircle2,
+  FileCode2,
+  Loader2,
+  Send,
+  Sparkles,
+  User,
+  X,
+} from "lucide-react"
 import { toast } from "sonner"
 import { getChat, sendChat, type ChatMessage, type ChatThread } from "@/lib/api"
 
@@ -19,6 +27,26 @@ interface AgentChatProps {
   onApplyAndRender: (html: string) => void
 }
 
+// Persist handled proposals per (task, format) so the action bar doesn't
+// reappear every time the tab is reopened.
+function readHandled(taskId: string, format: string): string[] {
+  try {
+    return JSON.parse(
+      localStorage.getItem(`tasbir:chat:handled:${taskId}:${format}`) ?? "[]"
+    ) as string[]
+  } catch {
+    return []
+  }
+}
+
+function writeHandled(taskId: string, format: string, ids: string[]): void {
+  try {
+    localStorage.setItem(`tasbir:chat:handled:${taskId}:${format}`, JSON.stringify(ids))
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 function formatTime(iso: string | null): string {
   if (!iso) return ""
   try {
@@ -28,19 +56,18 @@ function formatTime(iso: string | null): string {
   }
 }
 
-function Avatar({ who, className }: { who: "agent" | "user"; className?: string }) {
+function Avatar({ who }: { who: "agent" | "user" }) {
   return (
     <div
       className={
-        "flex size-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold uppercase " +
+        "flex size-7 shrink-0 items-center justify-center rounded-full " +
         (who === "agent"
           ? "bg-primary text-primary-foreground"
-          : "bg-muted-foreground/20 text-muted-foreground") +
-        (className ?? "")
+          : "bg-muted text-muted-foreground")
       }
       aria-hidden
     >
-      {who === "agent" ? "MC" : "You"}
+      {who === "agent" ? <Bot className="size-4" /> : <User className="size-4" />}
     </div>
   )
 }
@@ -60,32 +87,31 @@ function TypingDots() {
 }
 
 function MessageRow({ m }: { m: ChatMessage }) {
-  if (m.role === "user") {
-    return (
-      <div className="flex items-end justify-end gap-2">
-        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-primary px-3 py-2 text-sm text-primary-foreground">
-          {m.content}
-        </div>
-        <Avatar who="user" />
-      </div>
-    )
-  }
+  const isUser = m.role === "user"
   return (
-    <div className="flex items-end justify-start gap-2">
-      <Avatar who="agent" />
-      <div className="max-w-[85%]">
-        <div className="whitespace-pre-wrap rounded-2xl rounded-bl-sm border bg-muted/40 px-3 py-2 text-sm">
+    <div className="flex flex-col gap-1">
+      <div className={"flex items-end gap-2 " + (isUser ? "justify-end" : "justify-start")}>
+        {!isUser ? <Avatar who="agent" /> : null}
+        <div
+          className={
+            "max-w-[80%] rounded-2xl px-3 py-2 text-sm " +
+            (isUser
+              ? "rounded-br-sm bg-primary text-primary-foreground"
+              : "rounded-bl-sm border bg-muted/40")
+          }
+        >
           {m.content}
         </div>
-        {m.html ? (
-          <div className="mt-1 flex items-center gap-1.5 pl-1">
-            <Sparkles className="size-3 text-primary" />
-            <span className="text-[11px] font-medium text-primary">
-              Suggested a change
-            </span>
-          </div>
-        ) : null}
+        {isUser ? <Avatar who="user" /> : null}
       </div>
+      <span
+        className={
+          "text-[10px] text-muted-foreground/60 " +
+          (isUser ? "self-end pr-1" : "self-start pl-9")
+        }
+      >
+        {formatTime(m.created_at)}
+      </span>
     </div>
   )
 }
@@ -99,59 +125,87 @@ export function AgentChat({
 }: AgentChatProps) {
   const key = `/tasks/${taskId}/chat?format=${encodeURIComponent(format)}`
   const { data, mutate } = useSWR<ChatThread>(key, () => getChat(taskId, format))
+
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
-  const [appliedId, setAppliedId] = useState<string | null>(null)
+  const [pendingUser, setPendingUser] = useState<ChatMessage | null>(null)
+  const [handled, setHandled] = useState<string[]>(() => readHandled(taskId, format))
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setInput("")
-    setAppliedId(null)
-  }, [key])
+    setPendingUser(null)
+    setSending(false)
+    setHandled(readHandled(taskId, format))
+  }, [key, taskId, format])
 
-  const messages = useMemo(() => data?.messages ?? [], [data])
+  // Optimistic list: DB history + the in-flight user message.
+  const messages = useMemo(() => {
+    const base = data?.messages ?? []
+    return pendingUser ? [...base, pendingUser] : base
+  }, [data, pendingUser])
+
+  const lastMessage = messages[messages.length - 1]
+  const pendingProposal =
+    !sending && !pendingUser && lastMessage?.role === "assistant" && !!lastMessage.html
+      ? (handled.includes(lastMessage.id) ? null : lastMessage)
+      : null
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages.length, sending])
 
-  const pendingProposal = useMemo(() => {
-    let found: ChatMessage | null = null
-    for (const m of messages) {
-      if (m.role === "assistant" && m.html && m.id !== appliedId) found = m
-    }
-    return found
-  }, [messages, appliedId])
+  const markHandled = useCallback(
+    (id: string) => {
+      setHandled((prev) => {
+        const next = [...prev, id]
+        writeHandled(taskId, format, next)
+        return next
+      })
+    },
+    [taskId, format]
+  )
 
   async function send() {
     const text = input.trim()
     if (!text || sending) return
+    // Optimistic: put the message in the chat immediately, clear the box.
+    setInput("")
+    setPendingUser({ id: "pending", role: "user", content: text, html: null, created_at: null })
     setSending(true)
     try {
       await sendChat(taskId, format, text, currentHtml || undefined)
-      setInput("")
+      // Refresh authoritative history, then drop the optimistic placeholder.
       await mutate()
     } catch (err) {
+      setInput(text)
       toast.error(err instanceof Error ? err.message : "Chat failed")
     } finally {
+      setPendingUser(null)
       setSending(false)
     }
   }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Conversation header */}
+      {/* Header */}
       <div className="flex shrink-0 items-center gap-3 border-b px-3 py-2.5">
         <div className="relative">
           <Avatar who="agent" />
           <span className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full border-2 border-background bg-emerald-500" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium leading-tight">Marcus Chen</p>
           <p className="truncate text-[11px] leading-tight text-muted-foreground">
             Design assistant · {format}
           </p>
         </div>
+        {sending ? (
+          <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+            <Loader2 className="size-3 animate-spin" />
+            thinking…
+          </span>
+        ) : null}
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
@@ -165,12 +219,7 @@ export function AgentChat({
             </div>
           ) : null}
           {messages.map((m) => (
-            <div key={m.id} className="grid gap-1">
-              <MessageRow m={m} />
-              <span className="px-1 text-[10px] text-muted-foreground/60">
-                {formatTime(m.created_at)}
-              </span>
-            </div>
+            <MessageRow key={m.id} m={m} />
           ))}
           {sending ? (
             <div className="flex items-start gap-2">
@@ -184,25 +233,34 @@ export function AgentChat({
         </div>
       </ScrollArea>
 
-      {/* Proposed-change action bar */}
+      {/* Proposed-change action bar (only for the latest unhandled proposal) */}
       {pendingProposal ? (
-        <div className="mx-3 mb-2 shrink-0 rounded-xl border border-primary/40 bg-primary/5 p-3">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="flex items-center gap-1.5 text-xs font-medium">
-              <Sparkles className="size-3.5 text-primary" />
-              Agent proposed changes
+        <div className="mx-3 mb-2 shrink-0 rounded-xl border border-primary/30 bg-primary/5">
+          <div className="flex items-center justify-between gap-2 px-3 pt-2.5">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+              <Sparkles className="size-3.5" />
+              Proposed changes
             </p>
-            <Badge variant="outline" className="text-[10px]">
-              {pendingProposal.html!.length.toLocaleString()} chars
-            </Badge>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Dismiss proposal"
+              className="h-6 w-6"
+              onClick={() => markHandled(pendingProposal.id)}
+            >
+              <X className="size-3.5" />
+            </Button>
           </div>
-          <div className="grid gap-1.5 sm:grid-cols-2">
+          <p className="line-clamp-2 px-3 pt-1 text-[11px] text-muted-foreground">
+            {pendingProposal.content}
+          </p>
+          <div className="grid grid-cols-2 gap-1.5 p-3 pt-2">
             <Button
               size="sm"
               className="h-8 text-xs"
               onClick={() => {
                 onApplyAndRender(pendingProposal.html!)
-                setAppliedId(pendingProposal.id)
+                markHandled(pendingProposal.id)
               }}
             >
               <CheckCircle2 className="size-3.5" />
@@ -214,16 +272,13 @@ export function AgentChat({
               className="h-8 text-xs"
               onClick={() => {
                 onApplyHtml(pendingProposal.html!)
-                setAppliedId(pendingProposal.id)
+                markHandled(pendingProposal.id)
               }}
             >
+              <FileCode2 className="size-3.5" />
               Apply to editor
             </Button>
           </div>
-          <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-            Apply &amp; Save re-renders and persists the change; Apply to editor loads it into the
-            canvas for review first.
-          </p>
         </div>
       ) : null}
 
@@ -244,7 +299,7 @@ export function AgentChat({
         />
         <Button
           size="icon"
-          className="h-14 w-10 shrink-0"
+          className="size-10 shrink-0"
           onClick={() => void send()}
           disabled={sending || !input.trim()}
           aria-label="Send"
