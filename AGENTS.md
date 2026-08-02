@@ -82,10 +82,16 @@ renders to PNG for visual verification.
 - Security hardening: fail-closed API keys, per-key Redis rate limit, SSRF guard, HTML sanitizer, input caps
 - Ephemeral artifact delivery (persist-until-TTL + `?consume=true` opt-in delete)
 - Manual edit → re-render endpoint (`POST /tasks/{id}/formats/{fmt}/rerender`)
+- **Agent chat** (`GET/POST /tasks/{id}/chat`): DB-backed thread per (task, format);
+  vision-capable design assistant proposes replacement HTML, applied review-then-render
+- **Visual editing** in the Studio: locked-down GrapesJS canvas (exact format dims,
+  no manual blocks — elements come from the agent), apply → re-render
+- Bulk download of all artifacts as a ZIP (`GET /tasks/{id}/files/archive`)
 - **Template library**: human-authored Jinja2 post compositions (12), template-first
   pipeline with LLM fallback, category-mapped selection + strategist `template_hint`,
   anti-repeat via Redis, and a promote-edited-post learning loop
-- **Tasbir Studio**: React + Vite + shadcn/ui SPA served by FastAPI (Monaco editor, PNG preview, QC report, save-as-template)
+- **Tasbir Studio**: React + Vite + shadcn/ui SPA served by FastAPI (Monaco + GrapesJS editors,
+  live scaled preview, inspector rail with QC + agent chat, bulk ZIP download, save-as-template)
 
 ### Stack
 
@@ -462,7 +468,8 @@ tasbir/
 │   │   ├── api/
 │   │   │   ├── health.py                ← GET /health
 │   │   │   ├── generate.py              ← POST /generate (design_system_id, template_id)
-│   │   │   ├── tasks.py                 ← GET /tasks/{id}, DELETE, files (persist-until-TTL), rerender
+│   │   │   ├── tasks.py                 ← GET /tasks/{id}, DELETE, files (persist-until-TTL), archive, rerender
+│   │   │   ├── chat.py                  ← GET/POST /tasks/{id}/chat (agent thread, vision turns)
 │   │   │   ├── design_systems.py        ← /design-systems CRUD, logo, preview, from-input job
 │   │   │   ├── templates.py             ← /templates CRUD, preview, render, from-image job
 │   │   │   ├── agent_jobs.py            ← GET /agent-jobs/{id} (template/design-system jobs)
@@ -507,6 +514,7 @@ tasbir/
 │   │   │   ├── __init__.py              ← Base + model imports
 │   │   │   ├── task.py                  ← GenerationTask
 │   │   │   ├── audit_log.py             ← AuditLog
+│   │   │   ├── chat.py                  ← ChatThread + ChatMessage (per task+format agent thread)
 │   │   │   ├── design_system.py         ← DesignSystem (brand/tokens/campaigns/DI/logo)
 │   │   │   ├── template.py              ← Template (scoped per design system)
 │   │   │   └── agent_job.py             ← AgentJob (template/design-system background jobs)
@@ -516,6 +524,7 @@ tasbir/
 │   │   │   └── repositories/
 │   │   │       ├── tasks.py
 │   │   │       ├── audit_logs.py
+│   │   │       ├── chat.py
 │   │   │       ├── design_systems.py
 │   │   │       ├── templates.py
 │   │   │       └── agent_jobs.py
@@ -554,12 +563,12 @@ tasbir/
 │   │   ├── components/
 │   │   │   ├── ui/                      ← shadcn-generated components only
 │   │   │   ├── layout/                  ← AppShell (nav), ThemeToggle
-│   │   │   ├── tasks/                   ← StatusBadge, template gallery, PreviewFrame, Dropzone
-│   │   │   ├── editor/                  ← HtmlEditor (lazy Monaco), PreviewPane, QCReport
+│   │   │   ├── tasks/                   ← StatusBadge, template gallery, PreviewFrame, Dropzone, InspectorRail
+│   │   │   ├── editor/                  ← HtmlEditor (lazy Monaco), VisualEditor (lazy GrapesJS), AgentChat, QCReport
 │   │   │   └── settings/                ← ApiKeyDialog
 │   │   └── pages/
-│   │       ├── task-list.tsx            ← Task table (lazy)
-│   │       ├── task-detail.tsx          ← Editor + preview + rerender + QC
+│   │       ├── task-list.tsx            ← Task table (lazy, row-click → detail)
+│   │       ├── task-detail.tsx          ← Code/Visual edit + live preview + inspector (QC + agent chat) + ZIP
 │   │       ├── new-task.tsx             ← /new wizard (design system → content → template → media)
 │   │       ├── templates.tsx            ← Template library management (+ from-image job)
 │   │       └── design-systems.tsx       ← Design system editor (+ from-input job)
@@ -760,9 +769,29 @@ Response:
 ### GET /tasks/{id}/files
 Lists remaining artifacts: `[{"format", "ext", "size", "filename"}, ...]`.
 
+### GET /tasks/{id}/files/archive
+Streams every remaining artifact (HTML + PNG) for the task as one ZIP
+(`{task_id}.zip`). Non-consuming — files stay until the TTL sweep.
+
 ### GET /tasks/{id}/files/{filename}
 Streams an artifact. Files persist until the TTL sweep; downloads are
 repeatable. `?consume=true` deletes the file after delivery (one-time download).
+
+### GET /tasks/{id}/chat?format={fmt}
+Returns (lazily creating) the agent-chat thread for a (task, format):
+`{"thread_id", "format", "messages": [{"id", "role", "content", "html", "created_at"}]}`.
+
+### POST /tasks/{id}/chat
+```json
+{ "format": "instagram-square", "message": "Tighten the headline",
+  "html": "<optional current editor HTML>" }
+```
+Runs one turn with the design assistant (Marcus Chen — collaborative mode,
+vision-capable: it sees the current render when available). If a change is
+requested it returns a full replacement document. Response:
+`{"reply", "html" (nullable), "qc": {"ok", "issues"} | null, "thread_id"}`.
+Thread + messages persist in the DB (`chat_threads`/`chat_messages`); the
+frontend offers `html` for review before re-rendering (review-then-render).
 
 ### POST /tasks/{id}/formats/{fmt}/rerender
 ```json
