@@ -126,6 +126,9 @@ services:
     environment:
       <<: *shared-env
       SERVICE: beat
+      # Schedule file persists in the writable data volume (image /app is root-owned).
+      PYTHONPATH: /app
+    working_dir: /app/data
     command: celery -A app.tasks.celery_app beat --loglevel=info
     volumes:
       - ./backend/config:/app/config
