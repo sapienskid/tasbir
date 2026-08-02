@@ -482,3 +482,37 @@ def _extract_image_key(tag: str) -> str:
     """Extract the data-image-key value from an img tag."""
     m = re.search(r'data-image-key=["\'](\d+)["\']', tag)
     return m.group(1) if m else ""
+
+
+def substitute_logo(html: str, logo_data_uri: str) -> str:
+    """Replace ``data-logo`` markers with the design system's logo image.
+
+    Mirrors ``substitute_image_keys``: an existing <img data-logo> gets its
+    src set; any other element with data-logo is replaced by an <img>.
+    No-op when the design system has no logo.
+    """
+    if not logo_data_uri:
+        return html
+
+    def _replace(match):
+        tag = match.group(0)
+        if tag.lstrip().startswith("<img"):
+            tag = re.sub(
+                r'\s+src\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)', "", tag, count=1
+            )
+            return tag.replace("<img", f'<img src="{logo_data_uri}"', 1)
+        return (
+            f'<img src="{logo_data_uri}" data-logo alt="" '
+            'style="height:100%;width:auto;object-fit:contain"/>'
+        )
+
+    # Pass 1: full elements with closing tags (div/span with data-logo).
+    html = re.sub(
+        r'<[a-zA-Z]+[^>]*data-logo[^>]*>.*?</[a-zA-Z]+>',
+        _replace,
+        html,
+        flags=re.DOTALL,
+    )
+    # Pass 2: self-closing / void elements.
+    html = re.sub(r'<[a-zA-Z]+[^>]*data-logo[^>]*/?>', _replace, html)
+    return html

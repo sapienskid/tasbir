@@ -18,6 +18,7 @@ from app.services.design_instruction import (
     inject_fonts_into_html,
     load_design_instruction,
     substitute_image_keys,
+    substitute_logo,
 )
 from app.services.sanitizer import sanitize_html
 from app.services.tokens import (
@@ -42,6 +43,7 @@ async def renderer_node_single(state: GenerationState) -> dict:
     html = task.get("html", "")
     design_tokens = state.get("design_tokens", DEFAULT_TOKEN_VALUES)
     images = state.get("images", [])
+    logo = state.get("logo", "")
 
     if not html:
         log.warning("[renderer] No HTML for %s, skipping", fmt_id)
@@ -58,9 +60,11 @@ async def renderer_node_single(state: GenerationState) -> dict:
     html = inject_tokens_into_html(html, design_tokens)
 
     # 1b. Guarantee the Google Fonts link (system-controlled, not left to LLM)
-    di_config = load_design_instruction(
-        Path(get_settings().design_system_dir) / "design-instruction.yaml"
-    )
+    di_config = state.get("design_instruction") or {}
+    if not di_config:
+        di_config = load_design_instruction(
+            Path(get_settings().design_system_dir) / "design-instruction.yaml"
+        )
     html = inject_fonts_into_html(html, build_google_fonts_link(design_tokens, di_config))
 
     # 2. Inject KaTeX for math rendering
@@ -68,6 +72,9 @@ async def renderer_node_single(state: GenerationState) -> dict:
 
     # 3. Embed images as base64 via data-image-key markers
     html = substitute_image_keys(html, images)
+
+    # 3b. Embed the design system logo via data-logo markers
+    html = substitute_logo(html, logo)
 
     output_dir = Path(settings.output_dir) / task_id
     output_dir.mkdir(parents=True, exist_ok=True)

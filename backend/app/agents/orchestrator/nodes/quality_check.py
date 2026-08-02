@@ -16,8 +16,6 @@ Output (to GenerationState):
 
 from __future__ import annotations
 
-import asyncio
-import base64
 import json
 import logging
 import re
@@ -32,6 +30,7 @@ from app.services.design_instruction import (
     inject_fonts_into_html,
     load_design_instruction,
     substitute_image_keys,
+    substitute_logo,
 )
 from app.services.dom_extractor import detect_overflow, render_to_png
 from app.services.formats import get_format_info
@@ -44,12 +43,6 @@ from app.services.tokens import (
 log = logging.getLogger(__name__)
 
 MAX_RETRIES = 2  # Max verifier retry loops
-
-# Vision calls are expensive on the free tier (15 req/min). Serialize them and
-# enforce a minimum interval so parallel formats don't exhaust the quota.
-_VISION_LOCK = asyncio.Lock()
-_VISION_LAST_CALL = 0.0
-_VISION_MIN_INTERVAL = 5.0  # seconds between vision LLM calls
 
 # Decorative/emoji Unicode ranges to scan for — excludes mathematical operators
 # (U+2200–U+22FF) so KaTeX/$...$ math content never false-positives.
@@ -136,62 +129,12 @@ async def _call_vision_llm(
     temperature: float = 0.3,
     max_tokens: int = 1000,
 ) -> str:
-    """Call Gemini Vision with an image + text prompt via langchain_google_genai."""
-    settings = get_settings()
-    api_key = settings.gemini_api_key
+    """Call Gemini Vision with an image + text prompt (shared helper)."""
+    from app.services.vision import call_vision_llm as _shared
 
-    if not api_key:
-        log.warning("[verifier] No Gemini API key — raising (no silent auto-pass)")
-        raise RuntimeError("Gemini API key not configured for visual verification")
-
-    try:
-        from langchain_core.messages import HumanMessage, SystemMessage
-        from langchain_google_genai import ChatGoogleGenerativeAI
-
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-3.5-flash-lite",
-            google_api_key=api_key,
-            max_output_tokens=max_tokens,
-        )
-
-        # Build multimodal message: system + image + text
-        image_b64 = base64.b64encode(image_bytes).decode("utf-8")
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=[
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-                },
-                {"type": "text", "text": user_prompt},
-            ]),
-        ]
-
-        # Serialize + space vision calls to respect free-tier rate limits
-        global _VISION_LAST_CALL
-        loop = asyncio.get_event_loop()
-        async with _VISION_LOCK:
-            elapsed = loop.time() - _VISION_LAST_CALL
-            if elapsed < _VISION_MIN_INTERVAL:
-                await asyncio.sleep(_VISION_MIN_INTERVAL - elapsed)
-            _VISION_LAST_CALL = loop.time()
-            response = await llm.ainvoke(messages)
-
-        content = response.content or ""
-        # LangChain can return content as a list of content blocks
-        if isinstance(content, list):
-            texts = []
-            for block in content:
-                if isinstance(block, dict) and "text" in block:
-                    texts.append(block["text"])
-                elif isinstance(block, str):
-                    texts.append(block)
-            content = "\n".join(texts)
-        return content
-
-    except Exception as e:
-        log.error("[verifier] Vision LLM call failed: %s", e)
-        raise
+    return await _shared(
+        system_prompt, user_prompt, image_bytes, temperature=temperature, max_tokens=max_tokens
+    )
 
 
 def _build_design_system_context(
@@ -401,14 +344,18 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # Step 1: Inject tokens, fonts, KaTeX, and images into HTML
     log.info("[verifier] Rendering %s to PNG for visual audit", fmt_id)
     images_list = state.get("images", [])
+    logo = state.get("logo", "")
     html_with_tokens = inject_tokens_into_html(html, design_tokens)
     from pathlib import Path as _Path
-    di_config = load_design_instruction(_Path(settings.design_system_dir) / "design-instruction.yaml")
+    di_config = state.get("design_instruction") or {}
+    if not di_config:
+        di_config = load_design_instruction(_Path(settings.design_system_dir) / "design-instruction.yaml")
     html_with_tokens = inject_fonts_into_html(
         html_with_tokens, build_google_fonts_link(design_tokens, di_config)
     )
     html_with_tokens = inject_katex_into_html(html_with_tokens)
     html_with_tokens = substitute_image_keys(html_with_tokens, images_list)
+    html_with_tokens = substitute_logo(html_with_tokens, logo)
     png_bytes = await render_to_png(html_with_tokens, fmt.width, fmt.height)
 
     if not png_bytes:
@@ -475,7 +422,9 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     _save_png(task_id, fmt_id, png_bytes)
     _save_html_preview(task_id, fmt_id, html_with_tokens)
     di_path = _Path(settings.design_system_dir) / "design-instruction.yaml"
-    design_instruction = load_design_instruction(di_path)
+    design_instruction = state.get("design_instruction") or {}
+    if not design_instruction:
+        design_instruction = load_design_instruction(di_path)
     ds_context = _build_design_system_context(design_tokens, design_instruction, footer, category, ground)
     user_prompt = (
         f"TARGET PLATFORM: {fmt_id} ({fmt.width}x{fmt.height}px)\n"

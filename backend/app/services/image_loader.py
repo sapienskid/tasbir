@@ -20,7 +20,8 @@ log = logging.getLogger(__name__)
 async def prepare_images(images: list[dict] | None) -> list[dict]:
     """Download images from URLs and encode as base64 data URIs.
 
-    Input: [{url, alt, description, placement}]
+    Input: [{url, alt, description, placement}] or already-embedded
+           [{data, mime, alt, description, placement}] (e.g. uploaded media).
     Output: [{data (base64), alt, description, placement, mime}]
     """
     if not images:
@@ -35,6 +36,17 @@ async def prepare_images(images: list[dict] | None) -> list[dict]:
         max_redirects=settings.image_max_redirects,
     ) as client:
         for img in images:
+            # Uploaded media already carries base64 data — pass it through.
+            if img.get("data"):
+                result.append({
+                    "data": img["data"],
+                    "mime": img.get("mime", "image/png"),
+                    "alt": img.get("alt", ""),
+                    "description": img.get("description", ""),
+                    "placement": img.get("placement", "auto"),
+                })
+                continue
+
             url = img.get("url", "")
             if not url:
                 continue

@@ -124,16 +124,19 @@ async def designer_node_single(state: GenerationState) -> dict:
     critique = fmt_verification.get("critique", "")
     retry_count = state.get("retry_count", {}).get(fmt_id, 0)
 
-    # Load design-instruction YAML
+    # Load design-instruction — per-design-system (state) with YAML fallback.
     settings = get_settings()
-    di_path = Path(settings.design_system_dir) / "design-instruction.yaml"
-    di_config = load_design_instruction(di_path)
+    di_config = state.get("design_instruction") or {}
+    if not di_config:
+        di_path = Path(settings.design_system_dir) / "design-instruction.yaml"
+        di_config = load_design_instruction(di_path)
     di_block = format_design_instruction_block(di_config)
     layout_block = format_format_layout_block(di_config, fmt_id, fmt.width, fmt.height)
 
     # Design tokens (variable names + semantic roles only — never values)
     design_tokens = state.get("design_tokens", {})
-    css_var_reference = build_css_var_reference(design_tokens)
+    token_roles = state.get("token_roles", {})
+    css_var_reference = build_css_var_reference(design_tokens, token_roles or None)
 
     # Layout archetype — deterministic per post so designs vary across runs
     from app.services.design_instruction import (
@@ -234,6 +237,16 @@ async def designer_node_single(state: GenerationState) -> dict:
         "  Do NOT put images in a separate card/box — integrate them into the layout.\n"
     )
 
+    # Brand logo marker (injected at render) — only when the DS has a logo.
+    logo_block = ""
+    if state.get("logo"):
+        logo_block = (
+            "\nBRAND LOGO (place exactly once):\n"
+            "  Add <div class=\"logo\" data-logo></div> where the brand logo belongs "
+            "(usually a top corner or the footer). The system injects the actual "
+            "image at render time — do NOT put a real <img> here.\n"
+        )
+
     copy_block = f"""HEADLINE: {headline}
 SUBHEAD: {subhead}
 BODY: {body}
@@ -252,6 +265,7 @@ TAGLINE: {tagline}"""
         f"{category_block}\n"
         f"{footer_block}\n"
         f"COPY TO USE:\n{copy_block}\n\n"
+        f"{logo_block}\n"
         f"{images_block}\n"
         f"{placement_guide}\n"
         f"GOOGLE FONTS LINK (include in <head>):\n{fonts_link}\n\n"

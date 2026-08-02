@@ -129,9 +129,11 @@ async def strategist_node(state: GenerationState) -> dict:
         categories_block = "APPROVED CATEGORY LABELS (choose exactly one):\n" + "\n".join(cat_lines) + "\n"
 
     # Template library — the strategist can hint at a composition style.
-    from app.services.templates import load_template_catalog
-
-    template_catalog = load_template_catalog().get("templates", {})
+    template_catalog = {
+        t.get("id", ""): t
+        for t in (state.get("ds_templates") or [])
+        if t.get("id")
+    }
     template_block = ""
     if template_catalog:
         tpl_lines = []

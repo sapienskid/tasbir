@@ -3,6 +3,11 @@
 Runs before the LLM designer. If a matching template exists it produces the
 HTML (status ``html_ready`` + the chosen ``template_id``). If nothing matches
 it returns no update, and the per-format chain falls back to the designer.
+
+Templates are DB-backed (v0.5) and scoped to the task's design system; the
+list is loaded once into ``state.ds_templates`` before the graph runs. A
+user-chosen ``state.template_id`` is honored for its own family + a supported
+ground, falling back to normal selection for other families (auto-fallback).
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ from app.services.templates import (
     format_family,
     get_recent_template_ids,
     push_recent_template_id,
-    render_template_file,
+    render_template_html,
     select_template,
 )
 
@@ -55,13 +60,35 @@ async def template_node_single(state: GenerationState) -> dict:
         log.info("[template] No copy for %s — skipping", fmt_id)
         return {}
 
-    exclude = await get_recent_template_ids()
-    selection = select_template(family, ground, category, hint, seed, exclude)
-    if selection is None:
+    templates = state.get("ds_templates") or []
+    if not templates:
+        return {}
+
+    user_template_id = (state.get("template_id") or "").strip()
+
+    # User override: honor the chosen template for its family + a supported
+    # ground; otherwise fall back to deterministic selection.
+    selected: tuple[str, dict] | None = None
+    if user_template_id:
+        entry = next(
+            (t for t in templates if t.get("id") == user_template_id), None
+        )
+        if (
+            entry
+            and entry.get("family") == family
+            and ground in entry.get("grounds", ["white", "black"])
+        ):
+            selected = (user_template_id, entry)
+
+    if selected is None:
+        exclude = await get_recent_template_ids()
+        selected = select_template(family, ground, category, hint, seed, templates, exclude)
+
+    if selected is None:
         log.info("[template] No template for %s (%s / %s)", fmt_id, family, ground)
         return {}
 
-    tid, entry = selection
+    tid, entry = selected
     try:
         context = build_template_context(
             copy,
@@ -73,8 +100,9 @@ async def template_node_single(state: GenerationState) -> dict:
             bool(state.get("images", [])),
             seed=seed,
             family=family,
+            logo=state.get("logo", ""),
         )
-        html = render_template_file(entry["file"], context)
+        html = render_template_html(entry.get("html", ""), context)
     except Exception as e:
         log.warning("[template] Render failed for %s (%s): %s", fmt_id, tid, e)
         return {}

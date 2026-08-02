@@ -63,7 +63,9 @@ class GenerationState(TypedDict):
 
     # Configuration
     _task_id: Annotated[str, _keep_first]
+    design_system_id: Annotated[str, _keep_first]
     design_tokens: Annotated[dict[str, Any], _keep_first_dict]
+    token_roles: Annotated[dict[str, Any], _keep_first_dict]
     brand_info: Annotated[dict[str, Any], _keep_first_dict]
     campaign: Annotated[dict[str, Any], _keep_first_dict]
     campaign_name: Annotated[str, _keep_first]
@@ -73,6 +75,12 @@ class GenerationState(TypedDict):
     categories: Annotated[list[dict[str, Any]], _keep_first_list]
     category: Annotated[str, _keep_first]
     ground: Annotated[str, _keep_first]
+    design_instruction: Annotated[dict[str, Any], _keep_first_dict]
+    logo: Annotated[str, _keep_first]
+    # User-selected template override (auto-fallback for other families)
+    template_id: Annotated[str, _keep_first]
+    # The design system's templates, loaded once before the graph runs
+    ds_templates: Annotated[list[dict[str, Any]], _keep_first_list]
 
     # Agent Outputs
     strategic_brief: Annotated[dict[str, Any], _keep_first_dict]
@@ -105,6 +113,12 @@ def initial_state(
     ground: str = "",
     excerpt: str = "",
     tags: list[str] | None = None,
+    design_system_id: str = "default",
+    token_roles: dict[str, Any] | None = None,
+    design_instruction: dict[str, Any] | None = None,
+    logo: str = "",
+    template_id: str = "",
+    ds_templates: list[dict[str, Any]] | None = None,
     **kwargs,
 ) -> GenerationState:
     format_tasks: dict[str, FormatTask] = {}
@@ -128,7 +142,9 @@ def initial_state(
         "tags": tags or kwargs.get("tags", []),
         "platforms": platforms,
         "_task_id": _task_id,
+        "design_system_id": design_system_id,
         "design_tokens": design_tokens or {},
+        "token_roles": token_roles or {},
         "brand_info": brand_info or {},
         "campaign": campaign or {},
         "campaign_name": campaign_name or kwargs.get("campaign", ""),
@@ -138,6 +154,10 @@ def initial_state(
         "categories": categories or [],
         "category": category or kwargs.get("category", ""),
         "ground": ground or kwargs.get("ground", ""),
+        "design_instruction": design_instruction or {},
+        "logo": logo,
+        "template_id": template_id,
+        "ds_templates": ds_templates or [],
         "strategic_brief": {},
         "format_tasks": format_tasks,
         "_processing_format_id": "",

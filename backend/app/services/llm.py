@@ -15,6 +15,11 @@ MODEL_ROUTES = {
     "copywriter": "gemini-3.5-flash-lite",
     "designer": "gemini-3.5-flash-lite",
     "verifier": "gemini-3.5-flash-lite",
+    "template_vision": "gemini-3.5-flash-lite",
+    "template_author": "gemini-3.5-flash-lite",
+    "brand_vision": "gemini-3.5-flash-lite",
+    "brand_tokens": "gemini-3.5-flash-lite",
+    "brand_campaigns": "gemini-3.5-flash-lite",
 }
 
 

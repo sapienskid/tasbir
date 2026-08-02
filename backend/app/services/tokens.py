@@ -58,20 +58,24 @@ DEFAULT_CATEGORIES: list[dict] = [
 DEFAULT_FOOTER: dict[str, str] = {"left": "", "right": ""}
 
 
-def build_css_var_reference(tokens: dict[str, str]) -> str:
+def build_css_var_reference(
+    tokens: dict[str, str], roles: dict[str, str] | None = None
+) -> str:
     """Build a semantic CSS-variable reference for the designer prompt.
 
     Lists each load-bearing variable with its role description — variable
-    NAMES only, never values.
+    NAMES only, never values. ``roles`` overrides the default semantic roles
+    (per-design-system token_roles).
     """
+    role_map = roles or SEMANTIC_VAR_ROLES
     lines = [
         "AVAILABLE CSS VARIABLES (use ONLY these for all color/typography —",
         "never hardcode hex values or font names):",
     ]
     for var, value in tokens.items():
-        if var not in SEMANTIC_VAR_ROLES:
+        role = role_map.get(var)
+        if role is None:
             continue
-        role = SEMANTIC_VAR_ROLES[var]
         lines.append(f"  {var} — {role}")
     return "\n".join(lines)
 
