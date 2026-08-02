@@ -1,14 +1,16 @@
-"""Template library — Jinja2-rendered, human-authored post compositions.
+"""Template library — Jinja2-rendered, DB-backed post compositions.
 
-Templates live in ``data/design_system/templates/`` as Jinja2 HTML with
-``data-slot`` attributes on every content element. The pipeline consults the
-library first; only when nothing matches (or the chosen template overflows)
-does the LLM designer run.
+Templates live in the ``templates`` table (v0.5), scoped to a design system.
+The pipeline consults the library first; only when nothing matches (or the
+chosen template overflows) does the LLM designer run.
 
 Two directions are supported:
   - render:  select a template, fill it with copy via Jinja2
   - promote: take rendered/edited HTML, read ``data-slot`` text, and produce a
-             fresh template file (the learning loop)
+             fresh template row (the learning loop)
+
+The file-based catalog helpers (``load_template_catalog`` etc.) remain only
+for the first-boot seed that imports the legacy YAML templates into the DB.
 """
 
 from __future__ import annotations
@@ -20,7 +22,6 @@ import re
 from html.parser import HTMLParser
 from pathlib import Path
 
-import yaml
 from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 
 from app.config import get_settings
@@ -40,30 +41,23 @@ def catalog_path() -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Catalog
+# Legacy file catalog (seeding only)
 # ---------------------------------------------------------------------------
 
 
 def load_template_catalog() -> dict:
-    """Load templates/catalog.yaml → {"templates": {id: entry}}."""
+    """Load templates/catalog.yaml → {"templates": {id: entry}} (seed path)."""
     path = catalog_path()
     if not path.exists():
         return {"templates": {}}
     try:
         with open(path, encoding="utf-8") as f:
-            raw = yaml.safe_load(f)
+            raw = __import__("yaml").safe_load(f)
         if isinstance(raw, dict) and isinstance(raw.get("templates"), dict):
             return raw
     except Exception as e:
         log.warning("[templates] Failed to load catalog: %s", e)
     return {"templates": {}}
-
-
-def save_template_catalog(catalog: dict) -> None:
-    """Persist the catalog (used by the promote endpoint)."""
-    templates_dir().mkdir(parents=True, exist_ok=True)
-    with open(catalog_path(), "w", encoding="utf-8") as f:
-        yaml.safe_dump(catalog, f, sort_keys=False, allow_unicode=True)
 
 
 # ---------------------------------------------------------------------------
@@ -84,8 +78,14 @@ def get_environment() -> Environment:
     return _TEMPLATE_ENV
 
 
+def render_template_html(html: str, context: dict) -> str:
+    """Render a Jinja2 template string with the given context."""
+    env = get_environment()
+    return env.from_string(html).render(**context)
+
+
 def render_template_file(rel_path: str, context: dict) -> str:
-    """Render a Jinja2 template file by its catalog ``file`` path."""
+    """Render a Jinja2 template file (legacy/seed path)."""
     env = get_environment()
     try:
         tmpl = env.get_template(rel_path)
@@ -93,6 +93,31 @@ def render_template_file(rel_path: str, context: dict) -> str:
         log.warning("[templates] Missing template file: %s", rel_path)
         raise
     return tmpl.render(**context)
+
+
+# ---------------------------------------------------------------------------
+# DB row → selection entry
+# ---------------------------------------------------------------------------
+
+
+def template_to_dict(row) -> dict:
+    """Convert a Template ORM row to the dict shape selection expects."""
+    return {
+        "id": row.id,
+        "name": row.name,
+        "family": row.family,
+        "grounds": row.grounds or ["white", "black"],
+        "categories": row.categories or [],
+        "hint_tags": row.hint_tags or [],
+        "weight": float(row.weight or 1.0),
+        "description": row.description or "",
+        "html": row.html,
+        "image_slots": row.image_slots or [],
+        "has_logo_slot": bool(row.has_logo_slot),
+        "design_system_id": row.design_system_id,
+        "source": row.source,
+        "is_active": bool(row.is_active),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -139,19 +164,22 @@ def select_template(
     category: str,
     hint: str,
     seed: str,
+    templates: list[dict],
     exclude: set[str] | None = None,
 ) -> tuple[str, dict] | None:
-    """Pick a template deterministically for the given post context.
+    """Pick a template deterministically from a loaded template list.
 
     Filters by family + ground, ranks by category affinity + strategist hint
     + a seeded jitter, and excludes recently-used ids (anti-repetition).
+    ``templates`` is the list of template dicts (see ``template_to_dict``) —
+    a pure function, so it stays testable without a DB session.
     """
     exclude = exclude or set()
-    catalog = load_template_catalog().get("templates", {})
     candidates = {
-        tid: e
-        for tid, e in catalog.items()
-        if e.get("family") == family and ground in e.get("grounds", ["white", "black"])
+        t["id"]: t
+        for t in templates
+        if t.get("family") == family
+        and ground in t.get("grounds", ["white", "black"])
     }
     if not candidates:
         return None
@@ -205,6 +233,7 @@ def build_template_context(
     meta: str = "",
     seed: str = "",
     family: str = "square",
+    logo: str = "",
 ) -> dict:
     """Build the Jinja2 render context from typed copy + design decisions."""
     # Deterministic index numeral (editorial device, varies per post).
@@ -235,6 +264,8 @@ def build_template_context(
         "width": width,
         "height": height,
         "has_image": bool(has_image),
+        "has_logo": bool(logo),
+        "logo": logo,
         "meta": meta,
         "loop_index": loop_index,
         "tscale": tscale,
@@ -258,6 +289,10 @@ _BODY_DIM_RE = re.compile(
     r"(body\s*\{[^}]*?width:\s*)\d+(px;[^}]*?height:\s*)\d+(px)",
     re.IGNORECASE | re.DOTALL,
 )
+_LOGO_DATA_SRC_RE = re.compile(
+    r'(<img[^>]*data-logo[^>]*)src="data:[^"]*"([^>]*>)',
+    re.IGNORECASE,
+)
 
 
 def extract_slots(html: str) -> dict[str, str]:
@@ -278,7 +313,6 @@ def extract_slots(html: str) -> dict[str, str]:
                 self.slots.setdefault(slot, [])
 
         def handle_startendtag(self, tag, attrs):
-            # void element with data-slot — treat as empty
             slot = None
             for k, v in attrs:
                 if k.lower() == "data-slot" and v:
@@ -367,6 +401,7 @@ def slotize_html(html: str) -> str:
     - replaces every [data-slot] element's content with {{ slot_name }}
     - restores the black-ground conditional on <body>
     - converts baked base64 <img> back to data-image-key markers
+    - rewrites a baked logo data-URI back to src="{{ logo }}"
     """
     html = _strip_injected(html)
     parser = _Slotizer()
@@ -390,16 +425,30 @@ def slotize_html(html: str) -> str:
         lambda m: f'<img {m.group(1)} data-image-key="0" {m.group(2)}/>',
         joined,
     )
+
+    # Logo stays content too: baked data-URI → src="{{ logo }}".
+    joined = _LOGO_DATA_SRC_RE.sub(r'\1src="{{ logo }}"\2', joined)
+
     return joined
 
 
 def save_template(rel_file: str, html: str) -> Path:
-    """Write a template file into the library directory."""
+    """Write a template file into the library directory (legacy path)."""
     path = templates_dir() / rel_file
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(html, encoding="utf-8")
-    log.info("[templates] Saved template %s", path)
+    log.info("[templates] Saved template file %s", path)
     return path
+
+
+def scan_template_features(html: str) -> tuple[list[dict], bool]:
+    """Derive image_slots + has_logo_slot from a template's markers."""
+    keys = set(re.findall(r'data-image-key=["\'](\d+)["\']', html))
+    image_slots = [
+        {"key": k, "role": "image", "hint": f"Image slot {k}"} for k in sorted(keys)
+    ]
+    has_logo = bool(re.search(r'data-logo["\s]', html)) or "{{ logo }}" in html
+    return image_slots, has_logo
 
 
 # ---------------------------------------------------------------------------
@@ -449,9 +498,11 @@ __all__ = [
     "load_template_catalog",
     "push_recent_template_id",
     "render_template_file",
+    "render_template_html",
     "save_template",
-    "save_template_catalog",
+    "scan_template_features",
     "select_template",
     "slotize_html",
+    "template_to_dict",
     "templates_dir",
 ]
