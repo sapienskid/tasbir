@@ -64,7 +64,15 @@ renders to PNG for visual verification.
 - LangGraph pipeline (strategist → copywriter → process_all_formats)
 - Playwright service (HTML rendering + DOM extraction + overflow detection, internal-only + shared-secret auth)
 - YAML prompt configs (`config/prompts/*.yaml`)
-- YAML design system (`data/design_system/*.yaml`) — 3 type voices, layout archetypes
+- **DB-backed design systems** (v0.5): brand, footer, categories, campaigns,
+  tokens, design-instruction, logo — fully editable in the Studio
+- **DB-backed template library** (v0.5): 16 seeded templates + AI-generated
+  ones, scoped per design system, template-first pipeline with LLM fallback
+- **Brand Builder agent**: form + optional reference/logo images → complete
+  design system + starter templates (background Celery job)
+- **Template Author agent**: mockup image → validated Jinja2 template
+- YAML design system (`data/design_system/*.yaml`) — seeds the `default`
+  system on first boot; templates' YAML catalog only used for that seed
 - LLM client (Gemini 3.5 Flash Lite via OpenRouter fallback)
 - KaTeX automatic injection for math rendering
 - Image embedding (SSRF-guarded download, base64 encode, inject into HTML)
@@ -453,8 +461,12 @@ tasbir/
 │   │   │
 │   │   ├── api/
 │   │   │   ├── health.py                ← GET /health
-│   │   │   ├── generate.py              ← POST /generate
-│   │   │   └── tasks.py                 ← GET /tasks/{id}, DELETE, files (persist-until-TTL), rerender
+│   │   │   ├── generate.py              ← POST /generate (design_system_id, template_id)
+│   │   │   ├── tasks.py                 ← GET /tasks/{id}, DELETE, files (persist-until-TTL), rerender
+│   │   │   ├── design_systems.py        ← /design-systems CRUD, logo, preview, from-input job
+│   │   │   ├── templates.py             ← /templates CRUD, preview, render, from-image job
+│   │   │   ├── agent_jobs.py            ← GET /agent-jobs/{id} (template/design-system jobs)
+│   │   │   └── uploads.py               ← POST /uploads (validated media)
 │   │   │
 │   │   ├── agents/
 │   │   │   ├── orchestrator/
@@ -465,16 +477,25 @@ tasbir/
 │   │   │   │       ├── copywriter.py    ← LLM node (parallel, length limits)
 │   │   │   │       ├── designer.py      ← LLM node (layout archetype, sanitized output)
 │   │   │   │       ├── quality_check.py ← Verifier (deterministic + overflow + vision)
-│   │   │   │       └── renderer.py      ← HTML persistence (tokens/fonts/KateX/images)
+│   │   │   │       ├── renderer.py      ← HTML persistence (tokens/fonts/KateX/images/logo)
+│   │   │   │       └── template_renderer.py ← fills a DB template (template-first, user override)
 │   │   │   └── prompts/
 │   │   │       └── registry.py          ← YAML prompt loader
 │   │   │
 │   │   ├── services/
 │   │   │   ├── llm.py                   ← Gemini/OpenRouter client
+│   │   │   ├── vision.py                ← shared Gemini Vision helper (verifier + agents)
 │   │   │   ├── tokens.py                ← Token/brand/campaign/platform YAML loader + semantic vars
 │   │   │   ├── design_instruction.py    ← Swiss style loader + font link builder + archetypes
+│   │   │   ├── design_systems.py        ← DB design-system CRUD + pipeline payload + preview
+│   │   │   ├── templates.py             ← DB template render/select/slotize (YAML catalog = seed)
+│   │   │   ├── template_author.py       ← mockup image → validated Jinja2 template (agent)
+│   │   │   ├── brand_agent.py           ← form(+images) → full design system + starters (agent)
+│   │   │   ├── fonts.py                 ← curated Google Fonts pool loader (fonts.yaml)
+│   │   │   ├── seeding.py               ← first-boot seed of `default` DS + 16 templates
+│   │   │   ├── uploads.py               ← magic-byte image validation
 │   │   │   ├── formats.py               ← Format dimension helper + platform validation
-│   │   │   ├── image_loader.py          ← SSRF-guarded image download + base64 embed
+│   │   │   ├── image_loader.py          ← SSRF-guarded download / base64 pass-through
 │   │   │   ├── ssrf.py                  ← SSRF guard (private/loopback/metadata block, LAN allow)
 │   │   │   ├── sanitizer.py             ← HTML sanitizer (strict / preserve-system modes)
 │   │   │   ├── artifacts.py             ← Output path resolution + delivery helpers
@@ -485,17 +506,24 @@ tasbir/
 │   │   ├── models/
 │   │   │   ├── __init__.py              ← Base + model imports
 │   │   │   ├── task.py                  ← GenerationTask
-│   │   │   └── audit_log.py             ← AuditLog
+│   │   │   ├── audit_log.py             ← AuditLog
+│   │   │   ├── design_system.py         ← DesignSystem (brand/tokens/campaigns/DI/logo)
+│   │   │   ├── template.py              ← Template (scoped per design system)
+│   │   │   └── agent_job.py             ← AgentJob (template/design-system background jobs)
 │   │   │
 │   │   ├── db/
 │   │   │   ├── session.py               ← SQLite async engine
 │   │   │   └── repositories/
 │   │   │       ├── tasks.py
-│   │   │       └── audit_logs.py
+│   │   │       ├── audit_logs.py
+│   │   │       ├── design_systems.py
+│   │   │       ├── templates.py
+│   │   │       └── agent_jobs.py
 │   │   │
 │   │   ├── tasks/
 │   │   │   ├── celery_app.py            ← Celery config (+ hourly beat schedule)
 │   │   │   ├── generate.py              ← Celery task (loads config, runs pipeline)
+│   │   │   ├── agent_jobs.py            ← template-from-image + design-system-from-input
 │   │   │   └── retention.py             ← TTL sweep (expired outputs + task rows)
 │   │   │
 │   │   └── core/
@@ -521,16 +549,21 @@ tasbir/
 │   │   │   ├── theme.tsx                ← Light/dark/system theme provider
 │   │   │   └── utils.ts                 ← cn() from shadcn
 │   │   ├── hooks/
-│   │   │   └── use-task.ts              ← SWR polling hooks (task + files)
+│   │   │   ├── use-task.ts              ← SWR polling hooks (task + files)
+│   │   │   └── use-library.ts           ← design systems / templates / agent jobs
 │   │   ├── components/
 │   │   │   ├── ui/                      ← shadcn-generated components only
-│   │   │   ├── layout/                  ← AppShell, ThemeToggle
-│   │   │   ├── tasks/                   ← StatusBadge, NewTaskDialog, TaskListPage
+│   │   │   ├── layout/                  ← AppShell (nav), ThemeToggle
+│   │   │   ├── tasks/                   ← StatusBadge, template gallery, PreviewFrame, Dropzone
 │   │   │   ├── editor/                  ← HtmlEditor (lazy Monaco), PreviewPane, QCReport
 │   │   │   └── settings/                ← ApiKeyDialog
 │   │   └── pages/
 │   │       ├── task-list.tsx            ← Task table (lazy)
-│   │       └── task-detail.tsx          ← Editor + preview + rerender + QC
+│   │       ├── task-detail.tsx          ← Editor + preview + rerender + QC
+│   │       ├── new-task.tsx             ← /new wizard (design system → content → template → media)
+│   │       ├── templates.tsx            ← Template library management (+ from-image job)
+│   │       └── design-systems.tsx       ← Design system editor (+ from-input job)
+│   └── routes: `/`, `/new`, `/tasks/:taskId`, `/templates`, `/design-systems`
 ```
 
 ## Common Tasks For AI Agents
@@ -594,13 +627,28 @@ containers at `/app/config/prompts`.)
 3. Placement options: `auto`, `background`, `top-left`, `center`, `bottom-right`
 
 ### Adding a template
-1. Author a Jinja2 HTML file in `data/design_system/templates/{family}/` with
-   `var(--color-*)` tokens, `data-slot` attributes on content elements, and
+Templates are DB-backed (v0.5) and scoped to a design system. Prefer the
+Studio flow (edit / save-as-template / from-image agent). Programmatically:
+1. `POST /templates` with `{name, design_system_id, family, grounds, html}`
+   — HTML uses `var(--color-*)` tokens, `data-slot` attributes, and
    `{{ width }}`/`{{ height }}` for the parametric canvas size
-2. Add a `catalog.yaml` entry (family, grounds, categories, hint_tags, file)
-3. Optional image slot: `{% if has_image %}<img data-image-key="0">{% endif %}`
-4. No code changes — templates hot-reload with the bind-mounted config
-5. Run `pytest tests/test_services/test_templates.py` to verify render + overflow
+2. Optional image slot: `{% if has_image %}<img data-image-key="0">{% endif %}`
+3. Optional logo slot: `{% if logo %}<img class="logo" data-logo src="{{ logo }}">{% endif %}`
+4. The API validates render + overflow before saving
+5. Existing `data/design_system/templates/*.html` + `catalog.yaml` only seed the
+   `default` system on first boot
+
+### Creating a template from an image (agent)
+1. `POST /templates/from-image` (multipart `file` + `design_system_id`) → `{job_id}`
+2. Poll `GET /agent-jobs/{id}` until `completed`; the result has `template_id`
+3. The chain: vision (layout spec) → author (Jinja2) → validate (overflow + QC, retry-on-critique)
+
+### Creating a design system with AI
+1. `POST /design-systems/from-input` (multipart form + optional `reference_image`/`logo_image`) → `{job_id}`
+2. Poll `GET /agent-jobs/{id}` until `completed`; the result has `design_system_id`
+3. The chain: brand vision → tokens (from curated `fonts.yaml` pool) → campaigns
+   → starter square/landscape templates → persist
+4. The `default` design system cannot be deleted; logos are stored base64 in the row
 
 ### Testing
 ```bash
@@ -642,6 +690,8 @@ that the `api` service mounts at `/app/static`. `beat` runs the hourly
   "overrides": {
     "headline": "Custom Headline"
   },
+  "design_system_id": "default",
+  "template_id": "square-editorial-stack",
   "images": [
     {
       "url": "https://example.com/image.png",
@@ -655,6 +705,25 @@ that the `api` service mounts at `/app/static`. `beat` runs the hourly
 Response: `{"task_id": "uuid", "status": "pending"}`
 
 Requires `x-api-key` header. Rate-limited per key (default 30 req/min).
+`design_system_id` selects the brand system (default `default`); `template_id`
+locks a template for matching families (auto-fallback otherwise). Images may
+also be pre-embedded: `{data, mime, alt, description, placement}` (uploaded via
+`POST /uploads`).
+
+### Design systems API
+- `GET /design-systems` · `POST /design-systems` · `GET/PUT/DELETE /design-systems/{id}`
+- `POST/DELETE /design-systems/{id}/logo` (multipart, raster only)
+- `POST /design-systems/{id}/preview` → `{html}` (live sample render)
+- `POST /design-systems/from-input` (multipart form + optional reference/logo images) → `{job_id}`
+
+### Templates API
+- `GET /templates?design_system_id=&family=` · `POST /templates` · `GET/PUT/DELETE /templates/{id}`
+- `POST /templates/{id}/render` (validate) · `POST /templates/{id}/preview` → `{html}`
+- `POST /templates/from-image` (multipart `file` + `design_system_id`) → `{job_id}`
+
+### Agent jobs + uploads
+- `GET /agent-jobs/{id}` — poll template/design-system creation jobs
+- `POST /uploads` — validated image upload → `{mime, size, data(base64)}`
 
 ### GET /tasks/{id}
 Response:
