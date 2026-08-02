@@ -11,7 +11,9 @@ from app.config import get_settings
 
 # Single source of truth for the default model. All MODEL_ROUTES entries and
 # the vision path fall back to this when no DB agent row provides a model.
-DEFAULT_MODEL = "gemini-3.5-flash-lite"
+# Verified against the Google Generative Language API (gemini-3.5-flash-lite
+# is not an accepted model id there — it hangs instead of erroring).
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 MODEL_ROUTES = {
     "strategist": DEFAULT_MODEL,
