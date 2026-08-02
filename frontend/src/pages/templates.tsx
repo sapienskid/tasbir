@@ -38,7 +38,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Dropzone } from "@/components/tasks/dropzone"
-import { PreviewFrame, ScaledFrame, FAMILY_DIMS } from "@/components/tasks/preview-frame"
+import { PreviewFrame, ZoomableFrame, FAMILY_DIMS } from "@/components/tasks/preview-frame"
 import {
   createTemplateFromImage,
   createTemplate,
@@ -527,19 +527,21 @@ function EditTemplateDialog({
                 </Suspense>
               )}
             </div>
-            <div className="flex h-full min-h-0 items-center justify-center overflow-hidden rounded-md border bg-muted/10 p-4">
+            <div className="h-full min-h-0 overflow-hidden rounded-md border bg-muted/10">
               {previewError ? (
-                <p className="max-w-sm text-sm text-destructive">{previewError}</p>
+                <p className="flex h-full items-center justify-center p-4 text-sm text-destructive">
+                  {previewError}
+                </p>
               ) : previewHtml ? (
-                <ScaledFrame
+                <ZoomableFrame
                   html={previewHtml}
                   width={FAMILY_DIMS[template.family]?.width ?? 1080}
                   height={FAMILY_DIMS[template.family]?.height ?? 1080}
-                  maxWidth={560}
-                  maxHeight={620}
                 />
               ) : (
-                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                <div className="flex h-full items-center justify-center">
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
+                </div>
               )}
             </div>
           </div>

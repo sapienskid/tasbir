@@ -26,7 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Dropzone } from "@/components/tasks/dropzone"
-import { ScaledFrame } from "@/components/tasks/preview-frame"
+import { ZoomableFrame } from "@/components/tasks/preview-frame"
 import {
   createDesignSystemFromInput,
   getDesignSystem,
@@ -809,8 +809,8 @@ function DesignSystemPreview({ dsId }: { dsId: string }) {
           Sample post rendered with this design system's tokens, fonts, and logo.
         </p>
         {html ? (
-          <div className="flex justify-center">
-            <ScaledFrame html={html} width={1080} height={1080} maxWidth={640} maxHeight={640} />
+          <div className="h-[560px] rounded-md border bg-muted/10">
+            <ZoomableFrame html={html} width={1080} height={1080} />
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Preview unavailable.</p>
