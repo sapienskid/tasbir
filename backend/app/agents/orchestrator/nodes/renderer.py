@@ -19,11 +19,11 @@ from app.services.design_instruction import (
     load_design_instruction,
     substitute_image_keys,
 )
-from app.services.formats import get_format_info
+from app.services.sanitizer import sanitize_html
 from app.services.tokens import (
     DEFAULT_TOKEN_VALUES,
-    inject_tokens_into_html,
     inject_katex_into_html,
+    inject_tokens_into_html,
 )
 
 log = logging.getLogger(__name__)
@@ -36,7 +36,6 @@ async def renderer_node_single(state: GenerationState) -> dict:
     settings = get_settings()
     fmt_id = state.get("_processing_format_id", "")
     task_id = state.get("_task_id", "default")
-    fmt = get_format_info(fmt_id)
 
     format_tasks = state.get("format_tasks", {})
     task = format_tasks.get(fmt_id, {})
@@ -52,11 +51,13 @@ async def renderer_node_single(state: GenerationState) -> dict:
             }
         }
 
+    # Defense in depth: re-sanitize before anything is injected or persisted.
+    html = sanitize_html(html, mode="strict")
+
     # 1. Inject CSS tokens
     html = inject_tokens_into_html(html, design_tokens)
 
     # 1b. Guarantee the Google Fonts link (system-controlled, not left to LLM)
-    from pathlib import Path
     di_config = load_design_instruction(
         Path(get_settings().design_system_dir) / "design-instruction.yaml"
     )
