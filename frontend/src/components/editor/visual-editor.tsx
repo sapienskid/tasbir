@@ -55,6 +55,7 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
   const containerRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Editor | null>(null)
+  const frameWinRef = useRef<Window | null>(null)
   const originalRef = useRef<Document | null>(null)
   const [ready, setReady] = useState(false)
   const [zoomPct, setZoomPct] = useState(100)
@@ -154,6 +155,12 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
 
       editor = ed
       editorRef.current = ed
+      // Also catch Ctrl± when focus is inside the canvas iframe.
+      const frameWin = ed.Canvas.getWindow()
+      if (frameWin) {
+        frameWin.addEventListener("keydown", handleZoomKey)
+        frameWinRef.current = frameWin
+      }
       setZoomPct(fitPct)
       setReady(true)
     }
@@ -161,6 +168,10 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
     void init()
     return () => {
       cancelled = true
+      if (frameWinRef.current) {
+        frameWinRef.current.removeEventListener("keydown", handleZoomKey)
+        frameWinRef.current = null
+      }
       try {
         editor?.destroy()
       } catch {
@@ -192,13 +203,24 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
     setZoom(fitPctFor(editor))
   }, [centerFrame, fitPctFor, setZoom])
 
-  const zoomOut = useCallback(() => setZoom(zoomPct / 1.2), [setZoom, zoomPct])
-  const zoomIn = useCallback(() => setZoom(zoomPct * 1.2), [setZoom, zoomPct])
+  const zoomOut = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    setZoom(editor.Canvas.getZoom() / 1.2)
+  }, [setZoom])
+  const zoomIn = useCallback(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    setZoom(editor.Canvas.getZoom() * 1.2)
+  }, [setZoom])
   const oneToOne = useCallback(() => setZoom(100), [setZoom])
 
-  // Ctrl/Cmd ± zoom the canvas (not the page); Ctrl/Cmd 0 fits it.
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
+  // Ctrl/Cmd ± zoom the canvas (not the page); Ctrl/Cmd 0 fits it. The
+  // handler must also be attached to the GrapesJS canvas iframe window —
+  // when focus is inside the canvas, key events go to the iframe, not the
+  // parent page, so a parent-only listener lets the browser zoom the page.
+  const handleZoomKey = useCallback(
+    (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return
       const target = e.target as HTMLElement | null
       if (
@@ -218,10 +240,14 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
         e.preventDefault()
         fit()
       }
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [zoomOut, zoomIn, fit])
+    },
+    [zoomOut, zoomIn, fit]
+  )
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleZoomKey)
+    return () => window.removeEventListener("keydown", handleZoomKey)
+  }, [handleZoomKey])
 
   const buildDocument = useCallback((): string | null => {
     const editor = editorRef.current
