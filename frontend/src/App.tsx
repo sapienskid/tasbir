@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react"
 import { BrowserRouter, Route, Routes } from "react-router-dom"
 import { AppShell } from "@/components/layout/app-shell"
+import { ApiKeyPrompt } from "@/components/settings/api-key-prompt"
 import { Toaster } from "@/components/ui/sonner"
 import { TaskListPage } from "@/pages/task-list"
 import { ThemeProvider } from "@/lib/theme"
@@ -34,6 +35,7 @@ export default function App() {
           </Route>
         </Routes>
         <Toaster richColors position="top-right" />
+        <ApiKeyPrompt />
       </BrowserRouter>
     </ThemeProvider>
   )
