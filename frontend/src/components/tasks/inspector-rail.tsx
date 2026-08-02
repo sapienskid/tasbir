@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { QCReport } from "@/components/editor/qc-report"
 import { AgentChat } from "@/components/editor/agent-chat"
-import { X } from "lucide-react"
+import { Eye, X } from "lucide-react"
 
 export interface QcState {
   score?: number
@@ -20,6 +20,9 @@ interface InspectorRailProps {
   currentHtml: string
   onApplyHtml: (html: string) => void
   onApplyAndRender: (html: string) => void
+  /** Runs the vision audit on the current format. */
+  onAudit: () => void
+  auditing: boolean
 }
 
 export function InspectorRail({
@@ -30,6 +33,8 @@ export function InspectorRail({
   currentHtml,
   onApplyHtml,
   onApplyAndRender,
+  onAudit,
+  auditing,
 }: InspectorRailProps) {
   const [tab, setTab] = useState<"quality" | "agent">("quality")
 
@@ -58,7 +63,20 @@ export function InspectorRail({
       </div>
       <div className="flex min-h-0 flex-1 flex-col p-3">
         {tab === "quality" ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="grid min-h-0 flex-1 content-start gap-3 overflow-y-auto">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">Quality</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={onAudit}
+                disabled={auditing}
+              >
+                <Eye className="size-3.5" />
+                {auditing ? "Auditing…" : "Run audit"}
+              </Button>
+            </div>
             <QCReport
               score={qc?.score}
               issues={qc?.issues}

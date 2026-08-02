@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
 import { HtmlEditor } from "@/components/editor/html-editor"
-import { VisualEditor } from "@/components/editor/visual-editor"
+import { VisualEditor, type VisualEditorHandle } from "@/components/editor/visual-editor"
 import { useDebouncedValue } from "@/components/editor/use-debounce"
 import { ZoomableFrame, formatDims } from "@/components/tasks/preview-frame"
 import { InspectorRail, type QcState } from "@/components/tasks/inspector-rail"
@@ -32,7 +32,6 @@ import {
   ArrowLeft,
   Archive,
   ChevronDown,
-  Eye,
   FileCode2,
   FileImage,
   FilePlus,
@@ -64,6 +63,8 @@ export default function TaskDetailPage() {
   const [inspectorOpen, setInspectorOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [templateOpen, setTemplateOpen] = useState(false)
+
+  const visualEditorRef = useRef<VisualEditorHandle>(null)
 
   // Per-format caches so tab switches don't lose edits or consume files twice.
   const draftsRef = useRef(new Map<string, string>())
@@ -156,7 +157,14 @@ export default function TaskDetailPage() {
   const handleRerender = useCallback(
     async (audit: boolean, htmlOverride?: string) => {
       if (!selectedFormat) return
-      const html = htmlOverride ?? draft
+      let html = htmlOverride
+      // In visual mode the live canvas is the source of truth — capture it so
+      // Save/Audit never persist a stale draft (the user may not have hit
+      // "Apply to editor" yet).
+      if (html === undefined && mode === "visual") {
+        html = visualEditorRef.current?.exportHtml() ?? undefined
+      }
+      if (html === undefined) html = draft
       setRerendering(true)
       try {
         const res = await apiRequest<RerenderResponse>(
@@ -166,6 +174,10 @@ export default function TaskDetailPage() {
         const dataUri = `data:image/png;base64,${res.png_b64}`
         pngRef.current.set(selectedFormat, dataUri)
         draftsRef.current.set(selectedFormat, html)
+        // Keep the editor/preview in sync with what was actually saved.
+        if (html !== draft) {
+          setDraft(html)
+        }
         setQc({
           score: res.quality.score,
           issues: res.quality.issues,
@@ -180,7 +192,7 @@ export default function TaskDetailPage() {
         setRerendering(false)
       }
     },
-    [selectedFormat, taskId, draft, mutate]
+    [selectedFormat, taskId, draft, mutate, mode]
   )
 
   const applyHtml = useCallback((html: string) => {
@@ -368,15 +380,6 @@ export default function TaskDetailPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
               <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleRerender(true)}
-                disabled={rerendering || !selectedFormat}
-              >
-                <Eye className="size-4" />
-                Audit
-              </Button>
-              <Button
                 size="sm"
                 onClick={() => void handleRerender(false)}
                 disabled={rerendering || !selectedFormat}
@@ -426,6 +429,7 @@ export default function TaskDetailPage() {
                     <HtmlEditor value={draft} onChange={setDraft} />
                   ) : (
                     <VisualEditor
+                      ref={visualEditorRef}
                       html={draft}
                       width={dims.width}
                       height={dims.height}
@@ -454,6 +458,8 @@ export default function TaskDetailPage() {
                   currentHtml={draft}
                   onApplyHtml={applyHtml}
                   onApplyAndRender={applyAndRender}
+                  onAudit={() => void handleRerender(true)}
+                  auditing={rerendering}
                 />
               </aside>
             ) : null}

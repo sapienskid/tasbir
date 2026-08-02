@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Check, Maximize2, Minus, PanelRight, PanelRightClose, Plus, RotateCcw } from "lucide-react"
+import { Check, ChevronRight, Maximize2, Minus, PanelRight, PanelRightClose, Plus, RotateCcw } from "lucide-react"
 import type { Editor } from "grapesjs"
+
+export interface VisualEditorHandle {
+  /** Rebuild the current canvas into a full HTML document (null before ready). */
+  exportHtml: () => string | null
+}
 
 interface VisualEditorProps {
   /** Full HTML document (token-injected). */
@@ -11,6 +16,8 @@ interface VisualEditorProps {
   height: number
   /** Called with a rebuilt full document when the user applies edits. */
   onExport: (html: string) => void
+  /** Imperative handle — lets the parent save the live canvas without applying first. */
+  ref?: React.Ref<VisualEditorHandle>
 }
 
 /** Rebuild a full document from the original head (fonts/KaTeX/meta) + new CSS + body. */
@@ -44,7 +51,7 @@ function rebuildDocument(original: Document, bodyHtml: string, css: string): str
  * "Apply to editor" exports the canvas back into the code editor, where
  * Re-render re-injects tokens/fonts/KaTeX/images and re-runs QC.
  */
-export function VisualEditor({ html, width, height, onExport }: VisualEditorProps) {
+export function VisualEditor({ html, width, height, onExport, ref }: VisualEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<Editor | null>(null)
@@ -189,14 +196,27 @@ export function VisualEditor({ html, width, height, onExport }: VisualEditorProp
   const zoomIn = useCallback(() => setZoom(zoomPct * 1.2), [setZoom, zoomPct])
   const oneToOne = useCallback(() => setZoom(100), [setZoom])
 
-  const apply = useCallback(() => {
+  const buildDocument = useCallback((): string | null => {
     const editor = editorRef.current
     const original = originalRef.current
-    if (!editor || !original) return
+    if (!editor || !original) return null
     const css = editor.getCss() ?? ""
     const bodyHtml = editor.getHtml() ?? ""
-    onExport(rebuildDocument(original, bodyHtml, css))
-  }, [onExport])
+    return rebuildDocument(original, bodyHtml, css)
+  }, [])
+
+  const apply = useCallback(() => {
+    const doc = buildDocument()
+    if (doc) onExport(doc)
+  }, [buildDocument, onExport])
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      exportHtml: () => (ready ? buildDocument() : null),
+    }),
+    [ready, buildDocument]
+  )
 
   // Drive the GrapesJS sidebar width via the CSS variable on the wrapper.
   useEffect(() => {
@@ -257,7 +277,7 @@ export function VisualEditor({ html, width, height, onExport }: VisualEditorProp
       <style>{`
         [data-visual-editor] { --gjs-left-width: 280px; }
         [data-visual-editor][data-sidebar="closed"] .gjs-pn-views,
-        [data-visual-editor][data-sidebar="closed"] .gjs-pn-views-container { overflow: hidden; }
+        [data-visual-editor][data-sidebar="closed"] .gjs-pn-views-container { display: none; }
       `}</style>
       <div className="flex shrink-0 items-center justify-between gap-2 border-b bg-muted/20 px-2 py-1">
         <div className="flex items-center gap-1">
@@ -303,15 +323,29 @@ export function VisualEditor({ html, width, height, onExport }: VisualEditorProp
       <div className="relative min-h-0 flex-1 overflow-hidden bg-neutral-100 dark:bg-neutral-900">
         <div ref={containerRef} className="h-full w-full" />
         {sidebarOpen ? (
-          <div
-            onPointerDown={onResizeStart}
-            onPointerMove={onResizeMove}
-            onPointerUp={onResizeEnd}
-            onPointerCancel={onResizeEnd}
-            aria-hidden
-            className="absolute inset-y-0 z-30 w-1.5 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/40"
-            style={{ left: "calc(100% - var(--gjs-left-width) - 3px)" }}
-          />
+          <>
+            <div
+              onDoubleClick={toggleSidebar}
+              onPointerDown={onResizeStart}
+              onPointerMove={onResizeMove}
+              onPointerUp={onResizeEnd}
+              onPointerCancel={onResizeEnd}
+              aria-hidden
+              className="absolute inset-y-0 z-30 w-1.5 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/40"
+              style={{ left: "calc(100% - var(--gjs-left-width) - 3px)" }}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar (double-click the edge too)"
+              onClick={toggleSidebar}
+              className="absolute top-1.5 z-30 h-5 w-5 text-muted-foreground"
+              style={{ left: "calc(100% - var(--gjs-left-width) - 20px)" }}
+            >
+              <ChevronRight className="size-3.5" />
+            </Button>
+          </>
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2 border-t bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground">
