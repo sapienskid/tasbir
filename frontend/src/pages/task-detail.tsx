@@ -1,18 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate, useParams } from "react-router-dom"
-import { HtmlEditor } from "@/components/editor/html-editor"
-import { VisualEditor, type VisualEditorHandle } from "@/components/editor/visual-editor"
-import { useDebouncedValue } from "@/components/editor/use-debounce"
-import { ZoomableFrame, formatDims, type PreviewZoomHandle } from "@/components/tasks/preview-frame"
-import { InspectorRail, type QcState } from "@/components/tasks/inspector-rail"
-
-/** Friendly tab labels: instagram-carousel-2 → "Slide 2". */
-function formatTabLabel(fmt: string): string {
-  const m = /^instagram-carousel-(\d+)$/.exec(fmt)
-  if (m) return `Slide ${m[1]}`
-  if (fmt === "instagram-carousel") return "Carousel"
-  return fmt
-}
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,128 +11,42 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { StatusBadge } from "@/components/tasks/status-badge"
 import { SaveTemplateDialog } from "@/components/tasks/save-template-dialog"
-import {
-  ArrowLeft,
-  Archive,
-  ChevronDown,
-  FileCode2,
-  FileImage,
-  FilePlus,
-  PanelRight,
-  Save,
-  Trash2,
-} from "lucide-react"
+import { GalleryView } from "@/components/tasks/artifact-gallery"
+import { FormatEditor } from "@/components/tasks/format-editor"
+import { formatDims } from "@/lib/platforms"
+import { ArrowLeft, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useTask, useTaskProgress } from "@/hooks/use-task"
-import {
-  apiRequest,
-  ApiError,
-  downloadBlob,
-  fetchBlob,
-  fetchText,
-  type RerenderResponse,
-} from "@/lib/api"
+import { apiRequest, ApiError, fetchBlob, fetchText, downloadBlob } from "@/lib/api"
+import { formatLabel, StepDot } from "@/components/tasks/format-utils"
 
 export default function TaskDetailPage() {
   const { taskId = "" } = useParams<{ taskId: string }>()
   const navigate = useNavigate()
   const { task, files, error, isLoading, mutate } = useTask(taskId)
 
+  const [view, setView] = useState<"gallery" | "edit">("gallery")
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null)
-  const [draft, setDraft] = useState("")
-  const [qc, setQc] = useState<QcState | null>(null)
-  const [rerendering, setRerendering] = useState(false)
-  const [mode, setMode] = useState<"code" | "visual">("code")
-  const [inspectorOpen, setInspectorOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [templateOpen, setTemplateOpen] = useState(false)
 
-  const visualEditorRef = useRef<VisualEditorHandle>(null)
-  const previewFrameRef = useRef<PreviewZoomHandle>(null)
-
-  // Ctrl/Cmd ± / 0 and Ctrl+wheel zoom the editing surface (visual canvas or
-  // live preview), never the browser page. Capture phase on the parent
-  // document as the outer net; the GrapesJS frame attaches its own handlers
-  // and tags the event (__tasbirZoomHandled) so we don't zoom twice.
-  useEffect(() => {
-    const applyZoom = (dir: "in" | "out" | "fit") => {
-      if (mode === "visual") {
-        if (dir === "fit") visualEditorRef.current?.zoomToFit()
-        else visualEditorRef.current?.zoomBy(dir === "out" ? 1 / 1.2 : 1.2)
-      } else {
-        if (dir === "fit") previewFrameRef.current?.fit()
-        else previewFrameRef.current?.zoomBy(dir === "out" ? 1 / 1.25 : 1.25)
-      }
-    }
-    // The GrapesJS canvas lives in an iframe whose own handlers own zoom for
-    // events inside it. A tag can't dedupe across the frame boundary (the
-    // event object is copied), so skip any event whose composed path includes
-    // the canvas iframe. For parent-origin events, dedupe window vs document
-    // with a tag (same document → same event object).
-    const fromCanvasFrame = (e: Event) => {
-      if (mode !== "visual") return false
-      const frame = document.querySelector("[data-visual-editor] .gjs-frame")
-      return !!frame && e.composedPath().includes(frame)
-    }
-
-    const onKeyDown = (e: Event) => {
-      const ev = e as KeyboardEvent
-      if (!(ev.ctrlKey || ev.metaKey)) return
-      const k = ev.key.toLowerCase()
-      let dir: "in" | "out" | "fit" | null = null
-      if (k === "-") dir = "out"
-      else if (k === "+" || k === "=") dir = "in"
-      else if (k === "0") dir = "fit"
-      else return
-      ev.preventDefault()
-      if (fromCanvasFrame(e)) return
-      const tag = ev as unknown as { __tasbirZoomHandled?: boolean }
-      if (tag.__tasbirZoomHandled) return
-      tag.__tasbirZoomHandled = true
-      applyZoom(dir)
-    }
-    const onWheel = (e: Event) => {
-      const ev = e as WheelEvent
-      if (!ev.ctrlKey) return
-      ev.preventDefault()
-      if (fromCanvasFrame(e)) return
-      const tag = ev as unknown as { __tasbirZoomHandled?: boolean }
-      if (tag.__tasbirZoomHandled) return
-      tag.__tasbirZoomHandled = true
-      applyZoom(ev.deltaY > 0 ? "out" : "in")
-    }
-
-    // Attach on both window and document (capture): if frame-origin events
-    // don't reach `document`, the `window` capture listener still catches
-    // them and prevents the browser page zoom.
-    for (const target of [window, document]) {
-      target.addEventListener("keydown", onKeyDown, true)
-      target.addEventListener("wheel", onWheel, { passive: false, capture: true })
-    }
-    return () => {
-      for (const target of [window, document]) {
-        target.removeEventListener("keydown", onKeyDown, true)
-        target.removeEventListener("wheel", onWheel, { capture: true })
-      }
-    }
-  }, [mode])
-
-  // Per-format caches so tab switches don't lose edits or consume files twice.
+  // Per-format caches so gallery↔editor switches never re-fetch or consume
+  // files twice, and edits survive leaving the editor. HTML content lives in a
+  // ref (the editor holds it as state); thumbnail URLs live in state so the
+  // gallery re-renders as renders finish loading.
   const draftsRef = useRef(new Map<string, string>())
-  const pngRef = useRef(new Map<string, string>())
-  // Mirror the latest task so `loadFormat` stays stable across SWR polls
-  // (the polling object identity would otherwise re-run the effect every tick).
+  const inflightRef = useRef(new Set<string>())
+  const [pngUrls, setPngUrls] = useState<Record<string, string>>({})
+  const [htmls, setHtmls] = useState<Record<string, string>>({})
+  const pngUrlsRef = useRef(pngUrls)
+  useEffect(() => {
+    pngUrlsRef.current = pngUrls
+  }, [pngUrls])
+  // Mirror the latest task so `prefetchFormat` stays stable across SWR polls.
   const taskRef = useRef(task)
   useEffect(() => {
     taskRef.current = task
@@ -155,198 +56,74 @@ export default function TaskDetailPage() {
   const running = task?.status === "pending" || task?.status === "running"
   const { data: progress } = useTaskProgress(taskId, running)
 
-  const postPlan = (task?.result?.post_plan ?? {}) as {
-    post_type?: string
-    ratio?: string
-    slides?: number
-  }
-  const planLabel =
-    postPlan.post_type === "carousel"
-      ? `Carousel · ${postPlan.slides ?? "?"} slides · ${postPlan.ratio ?? "square"}`
-      : postPlan.post_type === "story"
-        ? "Story · portrait"
-        : postPlan.post_type
-          ? "Single"
-          : null
-  const seqWarnings = ((task?.result?.sequence_check ?? {}) as { warnings?: string[] }).warnings ?? []
-
   const formats = useMemo(() => {
     const fromResult = Object.keys(task?.result?.platforms ?? {})
     const fromFiles = files.map((f) => f.format)
     return [...new Set([...fromResult, ...fromFiles])]
   }, [task, files])
 
-  const platform = selectedFormat ? task?.result?.platforms?.[selectedFormat] : undefined
-  const dims = formatDims(selectedFormat ?? "")
-  const livePreviewHtml = useDebouncedValue(draft, 300)
-  const hasQcIssues = Boolean(qc && (qc.issues.length > 0 || (qc.score ?? 100) < 100))
-
-  useEffect(() => {
-    if (formats.length > 0 && !formats.includes(selectedFormat ?? "")) {
-      setSelectedFormat(formats[0])
-    }
-  }, [formats, selectedFormat])
-
-  const loadFormat = useCallback(
-    async (fmt: string) => {
-      const cachedHtml = draftsRef.current.get(fmt)
-      const cachedPng = pngRef.current.get(fmt)
+  // Fetch (or resolve from cache) a format's HTML + PNG. DB-persisted edited
+  // HTML wins over files. Results are committed to state so the gallery
+  // re-renders as each render finishes loading.
+  const prefetchFormat = useCallback(
+    async (fmt: string): Promise<string> => {
+      const cached = draftsRef.current.get(fmt)
+      if (cached !== undefined) return cached
+      if (inflightRef.current.has(fmt)) return ""
       const htmlFile = files.find((f) => f.format === fmt && f.ext === "html")
       const pngFile = files.find((f) => f.format === fmt && f.ext === "png")
-      // DB-persisted edited HTML survives file consumption and reloads.
+      if (!htmlFile && !pngFile) return ""
       const dbHtml = taskRef.current?.edited_html?.[fmt]
-
-      // Fetch HTML and PNG in parallel — no serial waterfall.
-      const [html] = await Promise.all([
-        cachedHtml !== undefined
-          ? Promise.resolve(cachedHtml)
-          : dbHtml !== undefined
-            ? (draftsRef.current.set(fmt, dbHtml), Promise.resolve(dbHtml))
+      inflightRef.current.add(fmt)
+      try {
+        const html =
+          dbHtml !== undefined
+            ? dbHtml
             : htmlFile
-              ? fetchText(`/tasks/${taskId}/files/${htmlFile.filename}`)
-                  .then((t) => {
-                    draftsRef.current.set(fmt, t)
-                    return t
-                  })
-                  .catch(() => "")
-              : Promise.resolve(""),
-        cachedPng !== undefined
-          ? Promise.resolve(cachedPng)
-          : pngFile
-            ? fetchBlob(`/tasks/${taskId}/files/${pngFile.filename}`)
-                .then((blob) => {
-                  const url = URL.createObjectURL(blob)
-                  pngRef.current.set(fmt, url)
-                  return url
-                })
-                .catch(() => undefined)
-            : Promise.resolve(undefined),
-      ])
-
-      setDraft(html)
-
-      const platform = taskRef.current?.result?.platforms?.[fmt]
-      setQc(
-        platform
-          ? {
-              score: platform.quality_score,
-              issues: platform.quality_issues ?? [],
-              critique: "",
-              status: platform.status,
-            }
-          : null
-      )
+              ? await fetchText(`/tasks/${taskId}/files/${htmlFile.filename}`).catch(() => "")
+              : ""
+        draftsRef.current.set(fmt, html)
+        setHtmls((prev) => (prev[fmt] === html ? prev : { ...prev, [fmt]: html }))
+        if (pngFile) {
+          try {
+            const blob = await fetchBlob(`/tasks/${taskId}/files/${pngFile.filename}`)
+            const url = URL.createObjectURL(blob)
+            setPngUrls((prev) => {
+              const old = prev[fmt]
+              if (old && old !== url && old.startsWith("blob:")) URL.revokeObjectURL(old)
+              return { ...prev, [fmt]: url }
+            })
+          } catch {
+            /* PNG is optional — the gallery falls back to HTML */
+          }
+        }
+        return html
+      } finally {
+        inflightRef.current.delete(fmt)
+      }
     },
     [files, taskId]
   )
 
-  useEffect(() => {
-    if (selectedFormat) void loadFormat(selectedFormat)
-  }, [selectedFormat, loadFormat])
+  const pngUrlFor = useCallback((fmt: string) => pngUrls[fmt], [pngUrls])
+  const htmlFor = useCallback((fmt: string) => htmls[fmt], [htmls])
 
-  useEffect(() => {
-    return () => {
-      pngRef.current.forEach((url) => URL.revokeObjectURL(url))
-    }
+  const cachePng = useCallback((fmt: string, dataUri: string) => {
+    setPngUrls((prev) => {
+      const old = prev[fmt]
+      if (old && old !== dataUri && old.startsWith("blob:")) URL.revokeObjectURL(old)
+      return { ...prev, [fmt]: dataUri }
+    })
   }, [])
 
-  const handleRerender = useCallback(
-    async (audit: boolean, htmlOverride?: string) => {
-      if (!selectedFormat) return
-      let html = htmlOverride
-      // In visual mode the live canvas is the source of truth — capture it so
-      // Save/Audit never persist a stale draft (the user may not have hit
-      // "Apply to editor" yet).
-      if (html === undefined && mode === "visual") {
-        html = visualEditorRef.current?.exportHtml() ?? undefined
-      }
-      if (html === undefined) html = draft
-      setRerendering(true)
-      try {
-        const res = await apiRequest<RerenderResponse>(
-          `/tasks/${taskId}/formats/${selectedFormat}/rerender${audit ? "?audit=true" : ""}`,
-          { method: "POST", body: JSON.stringify({ html }) }
-        )
-        const dataUri = res.png_b64 ? `data:image/png;base64,${res.png_b64}` : undefined
-        if (dataUri) {
-          pngRef.current.set(selectedFormat, dataUri)
-        }
-        draftsRef.current.set(selectedFormat, html)
-        // Keep the editor/preview in sync with what was actually saved.
-        if (html !== draft) {
-          setDraft(html)
-        }
-        setQc({
-          score: res.quality.score,
-          issues: res.quality.issues,
-          critique: res.quality.critique,
-          status: res.pass ? "verified" : "needs_review",
-        })
-        toast.success(res.pass ? "Saved & rendered" : "Saved — review the issues")
-        void mutate()
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Re-render failed")
-      } finally {
-        setRerendering(false)
-      }
-    },
-    [selectedFormat, taskId, draft, mutate, mode]
-  )
+  const cacheHtml = useCallback((fmt: string, html: string) => {
+    draftsRef.current.set(fmt, html)
+  }, [])
 
-  const applyHtml = useCallback((html: string) => {
-    if (!selectedFormat) return
-    setDraft(html)
-    draftsRef.current.set(selectedFormat, html)
-    toast.success("Applied to editor — click Save & Render to persist")
-  }, [selectedFormat])
-
-  const applyAndRender = useCallback(
-    async (html: string) => {
-      if (!selectedFormat) return
-      applyHtml(html)
-      await handleRerender(false, html)
-    },
-    [selectedFormat, applyHtml, handleRerender]
-  )
-
-  const downloadPng = useCallback(() => {
-    if (!selectedFormat) return
-    const file = files.find((f) => f.format === selectedFormat && f.ext === "png")
-    if (!file) {
-      toast.error("No PNG available — render this format first")
-      return
-    }
-    void (async () => {
-      try {
-        const blob = await fetchBlob(`/tasks/${taskId}/files/${file.filename}`)
-        downloadBlob(blob, file.filename)
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Download failed")
-      }
-    })()
-  }, [selectedFormat, files, taskId])
-
-  const downloadHtml = useCallback(() => {
-    if (!selectedFormat) return
-    const cached = draftsRef.current.get(selectedFormat)
-    if (cached !== undefined) {
-      downloadBlob(new Blob([cached], { type: "text/html" }), `${selectedFormat}.html`)
-      return
-    }
-    const file = files.find((f) => f.format === selectedFormat && f.ext === "html")
-    if (!file) {
-      toast.error("No HTML available")
-      return
-    }
-    void (async () => {
-      try {
-        const text = await fetchText(`/tasks/${taskId}/files/${file.filename}`)
-        downloadBlob(new Blob([text], { type: "text/html" }), file.filename)
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Download failed")
-      }
-    })()
-  }, [selectedFormat, files, taskId])
+  const openFormat = useCallback((fmt: string) => {
+    setSelectedFormat(fmt)
+    setView("edit")
+  }, [])
 
   const downloadAll = useCallback(async () => {
     try {
@@ -368,6 +145,15 @@ export default function TaskDetailPage() {
     }
   }, [taskId, navigate])
 
+  // Revoke prefetched object URLs on unmount.
+  useEffect(() => {
+    return () => {
+      for (const url of Object.values(pngUrlsRef.current)) {
+        if (url.startsWith("blob:")) URL.revokeObjectURL(url)
+      }
+    }
+  }, [])
+
   if (isLoading && !task) {
     return <p className="text-sm text-muted-foreground">Loading task…</p>
   }
@@ -381,6 +167,8 @@ export default function TaskDetailPage() {
       </div>
     )
   }
+
+  const dims = formatDims(selectedFormat ?? "")
 
   return (
     <div className="grid gap-4">
@@ -433,7 +221,7 @@ export default function TaskDetailPage() {
                     className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs"
                   >
                     <StepDot status={v.status} />
-                    {formatTabLabel(fmt)}
+                    {formatLabel(fmt)}
                     <span className="text-muted-foreground">{v.step ?? v.status}</span>
                   </span>
                 ))}
@@ -441,160 +229,31 @@ export default function TaskDetailPage() {
             ) : null}
           </CardContent>
         </Card>
-      ) : (
-        <>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {platform?.template_id ? (
-                <Badge variant="outline" className="font-mono text-xs">
-                  {platform.template_id}
-                </Badge>
-              ) : null}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setTemplateOpen(true)}
-                disabled={!selectedFormat}
-              >
-                <FilePlus className="size-4" />
-                Template
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={!selectedFormat}>
-                    <Archive className="size-4" />
-                    Download
-                    <ChevronDown className="size-3.5 opacity-70" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
-                  <DropdownMenuItem onClick={downloadPng} disabled={!selectedFormat}>
-                    <FileImage className="size-4" />
-                    PNG
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={downloadHtml} disabled={!selectedFormat}>
-                    <FileCode2 className="size-4" />
-                    HTML
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => void downloadAll()} disabled={!selectedFormat}>
-                    <Archive className="size-4" />
-                    All assets (ZIP)
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button
-                size="sm"
-                onClick={() => void handleRerender(false)}
-                disabled={rerendering || !selectedFormat}
-              >
-                <Save className="size-4" />
-                {rerendering ? "Saving…" : "Save & Render"}
-              </Button>
-              <Button
-                variant={inspectorOpen ? "default" : "outline"}
-                size="sm"
-                onClick={() => setInspectorOpen((o) => !o)}
-                disabled={!selectedFormat}
-              >
-                <PanelRight className="size-4" />
-                Chat
-                {hasQcIssues && !inspectorOpen ? (
-                  <span className="ml-1 inline-block size-1.5 rounded-full bg-destructive" />
-                ) : null}
-              </Button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {planLabel ? (
-              <Badge variant="outline" className="font-mono text-xs">
-                {planLabel}
-              </Badge>
-            ) : null}
-            {seqWarnings.length > 0 ? (
-              <span className="text-xs text-amber-600 dark:text-amber-400">
-                Sequence: {seqWarnings[0]}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="flex items-stretch gap-4">
-            <FormatRail
-              formats={formats}
-              selected={selectedFormat}
-              onSelect={(f) => setSelectedFormat(f)}
-              platformStatus={(f) => task?.result?.platforms?.[f]?.status}
-              platformScore={(f) => task?.result?.platforms?.[f]?.quality_score}
-            />
-            <div className="grid min-w-0 flex-1 gap-4 lg:grid-cols-2">
-              <div className="grid gap-2">
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant={mode === "code" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setMode("code")}
-                  >
-                    <FileCode2 className="size-3.5" />
-                    Code
-                  </Button>
-                  <Button
-                    variant={mode === "visual" ? "default" : "outline"}
-                    size="sm"
-                    className="h-7 px-2 text-xs"
-                    onClick={() => setMode("visual")}
-                  >
-                    Visual
-                  </Button>
-                </div>
-                <div className="h-[65vh] overflow-hidden rounded-md border">
-                  {mode === "code" ? (
-                    <HtmlEditor value={draft} onChange={setDraft} />
-                  ) : (
-                    <VisualEditor
-                      ref={visualEditorRef}
-                      html={draft}
-                      width={dims.width}
-                      height={dims.height}
-                      onExport={applyHtml}
-                    />
-                  )}
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <p className="text-xs text-muted-foreground">
-                  Live preview — updates as you edit ({dims.width}×{dims.height}).
-                </p>
-                <div className="h-[65vh] overflow-hidden rounded-md border">
-                  <ZoomableFrame
-                    ref={previewFrameRef}
-                    html={livePreviewHtml}
-                    width={dims.width}
-                    height={dims.height}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {inspectorOpen ? (
-              <aside className="h-[65vh] w-[360px] shrink-0">
-                <InspectorRail
-                  onClose={() => setInspectorOpen(false)}
-                  qc={qc}
-                  taskId={taskId}
-                  format={selectedFormat ?? ""}
-                  currentHtml={draft}
-                  onApplyHtml={applyHtml}
-                  onApplyAndRender={applyAndRender}
-                  onAudit={() => void handleRerender(true)}
-                  auditing={rerendering}
-                  running={running}
-                />
-              </aside>
-            ) : null}
-          </div>
-        </>
-      )}
+      ) : view === "gallery" ? (
+        <GalleryView
+          task={task}
+          formats={formats}
+          pngUrlFor={pngUrlFor}
+          htmlFor={htmlFor}
+          prefetch={(fmt) => prefetchFormat(fmt)}
+          onOpenFormat={openFormat}
+          onDownloadZip={() => void downloadAll()}
+        />
+      ) : selectedFormat ? (
+        <FormatEditor
+          task={task}
+          taskId={taskId}
+          format={selectedFormat}
+          dims={{ width: dims.width, height: dims.height }}
+          prefetchFormat={prefetchFormat}
+          pngUrlFor={pngUrlFor}
+          cachePng={cachePng}
+          cacheHtml={cacheHtml}
+          onBack={() => setView("gallery")}
+          onSaveTemplate={() => setTemplateOpen(true)}
+          onMutate={() => void mutate()}
+        />
+      ) : null}
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent>
@@ -614,99 +273,10 @@ export default function TaskDetailPage() {
       <SaveTemplateDialog
         taskId={taskId}
         format={selectedFormat ?? ""}
-        sourceTemplateId={platform?.template_id}
+        sourceTemplateId={task?.result?.platforms?.[selectedFormat ?? ""]?.template_id}
         open={templateOpen}
         onOpenChange={setTemplateOpen}
       />
     </div>
-  )
-}
-
-/** Step status dot: green = verified, amber = running/queued, red = failed. */
-function StepDot({ status }: { status: string }) {
-  const color =
-    status === "verified"
-      ? "bg-emerald-500"
-      : status === "failed" || status === "error"
-        ? "bg-destructive"
-        : "bg-amber-400 animate-pulse"
-  return <span className={`inline-block size-2 rounded-full ${color}`} />
-}
-
-function groupFormats(formats: string[]): { group: string; items: string[] }[] {
-  const squareSlides = formats.filter((f) => /^instagram-carousel-\d+$/.test(f))
-  const portraitSlides = formats.filter(
-    (f) => /^instagram-carousel-portrait-\d+$/.test(f)
-  )
-  const singles = formats.filter(
-    (f) => !squareSlides.includes(f) && !portraitSlides.includes(f)
-  )
-  const groups: { group: string; items: string[] }[] = []
-  if (singles.length) groups.push({ group: "Posts", items: singles })
-  if (squareSlides.length) groups.push({ group: "Carousel · square", items: squareSlides })
-  if (portraitSlides.length) groups.push({ group: "Carousel · portrait", items: portraitSlides })
-  return groups
-}
-
-/**
- * Left rail listing every artifact/format for the task. Replaces the horizontal
- * tabs — scales to many formats (single + carousel slides) without overflowing.
- */
-function FormatRail({
-  formats,
-  selected,
-  onSelect,
-  platformStatus,
-  platformScore,
-}: {
-  formats: string[]
-  selected: string | null
-  onSelect: (fmt: string) => void
-  platformStatus: (fmt: string) => string | undefined
-  platformScore: (fmt: string) => number | undefined
-}) {
-  const groups = groupFormats(formats)
-  return (
-    <aside className="hidden w-56 shrink-0 overflow-y-auto rounded-md border bg-card sm:block">
-      <div className="sticky top-0 border-b bg-card px-3 py-2">
-        <p className="text-xs font-medium text-muted-foreground">
-          Artifacts · {formats.length}
-        </p>
-      </div>
-      <div className="p-2">
-        {groups.map((g) => (
-          <div key={g.group} className="mb-3">
-            <p className="px-1 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {g.group}
-            </p>
-            <div className="space-y-1">
-              {g.items.map((fmt) => {
-                const status = platformStatus(fmt)
-                const score = platformScore(fmt)
-                const active = selected === fmt
-                return (
-                  <button
-                    key={fmt}
-                    type="button"
-                    onClick={() => onSelect(fmt)}
-                    className={`flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors ${
-                      active
-                        ? "border-primary bg-primary/5"
-                        : "border-transparent hover:border-border hover:bg-muted/40"
-                    }`}
-                  >
-                    <StepDot status={status ?? "pending"} />
-                    <span className="flex-1 truncate text-sm">{formatTabLabel(fmt)}</span>
-                    {typeof score === "number" ? (
-                      <span className="text-xs tabular-nums text-muted-foreground">{score}</span>
-                    ) : null}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-    </aside>
   )
 }

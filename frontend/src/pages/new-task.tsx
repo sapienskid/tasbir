@@ -365,19 +365,19 @@ export default function NewTaskPage() {
             {families.join(", ")}. "Auto" lets the pipeline pick.
           </p>
           {tplLoading ? (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="flex flex-wrap justify-center gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-64 w-full" />
+                <Skeleton key={i} className="h-64 w-[280px]" />
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-4">
+            <div className="flex flex-wrap justify-center gap-4">
               <div
                 role="button"
                 tabIndex={0}
                 onClick={() => setTemplateId("")}
                 onKeyDown={(e) => e.key === "Enter" && setTemplateId("")}
-                className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border p-4 text-center transition-colors ${
+                className={`flex w-[280px] cursor-pointer flex-col items-center justify-center gap-2 rounded-md border p-4 text-center transition-colors ${
                   templateId === "" ? "border-primary bg-muted/50" : "hover:bg-muted/30"
                 }`}
               >
@@ -392,7 +392,7 @@ export default function NewTaskPage() {
                   tabIndex={0}
                   onClick={() => setTemplateId(t.id)}
                   onKeyDown={(e) => e.key === "Enter" && setTemplateId(t.id)}
-                  className={`flex cursor-pointer flex-col gap-2 rounded-md border p-2 transition-colors ${
+                  className={`flex w-[280px] cursor-pointer flex-col gap-2 rounded-md border p-2 transition-colors ${
                     templateId === t.id ? "border-primary" : "hover:border-muted-foreground/40"
                   }`}
                 >

@@ -453,11 +453,16 @@ export function AgentsPage() {
                   <div className="space-y-1">
                     <Label htmlFor="model">Model</Label>
                     <Select value={draft.model} onValueChange={(v) => setDraft({ ...draft, model: v })}>
-                      <SelectTrigger id="model"><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                      <SelectTrigger id="model" className="w-full min-w-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="max-w-[var(--radix-select-trigger-width)]">
                         {models.map((m) => (
                           <SelectItem key={m.id} value={m.id}>
-                            {m.name} · {m.rpd} RPD
+                            <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {m.rpd} RPD
+                            </span>
                           </SelectItem>
                         ))}
                         {!models.some((m) => m.id === draft.model) && draft.model ? (

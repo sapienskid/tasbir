@@ -191,9 +191,11 @@ export default function TemplatesPage() {
       </div>
 
       {isLoading || !templates ? (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+        <div className="columns-1 gap-4 sm:columns-2 md:columns-3 xl:columns-4">
           {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} className="aspect-[1/1.1] w-full rounded-lg" />
+            <div key={i} className="mb-4 break-inside-avoid">
+              <Skeleton className="aspect-[1/1.1] w-full rounded-lg" />
+            </div>
           ))}
         </div>
       ) : templates.length === 0 ? (
@@ -203,17 +205,18 @@ export default function TemplatesPage() {
             : "No active templates — tick “Show inactive” to see deactivated ones, or create one from an image."}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
+        <div className="columns-1 gap-4 sm:columns-2 md:columns-3 xl:columns-4">
           {templates.map((t) => (
-            <TemplateCard
-              key={t.id}
-              t={t}
-              onEdit={() => setEditTarget(t)}
-              onOpen={() => setEditTarget(t)}
-              onDuplicate={() => void handleDuplicate(t)}
-              onToggle={() => setToggleTarget(t)}
-              onDelete={() => void handleDelete(t)}
-            />
+            <div key={t.id} className="mb-4 break-inside-avoid">
+              <TemplateCard
+                t={t}
+                onEdit={() => setEditTarget(t)}
+                onOpen={() => setEditTarget(t)}
+                onDuplicate={() => void handleDuplicate(t)}
+                onToggle={() => setToggleTarget(t)}
+                onDelete={() => void handleDelete(t)}
+              />
+            </div>
           ))}
         </div>
       )}
