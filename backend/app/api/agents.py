@@ -23,6 +23,7 @@ class AgentUpdate(BaseModel):
     role: str | None = None
     system_prompt: str | None = None
     model: str | None = None
+    fallback_models: list[str] | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=None, ge=64, le=65536)
     is_active: bool | None = None

@@ -1,7 +1,10 @@
-"""LLM service — Google Gemini via LangChain ChatGoogleGenerativeAI.
+"""LLM service — Google Gemini/Genma via LangChain ChatGoogleGenerativeAI.
 
 All agents use this service. Provides both a high-level LangChain
 integration (with tool binding support) and a simple call_llm() helper.
+Model selection + per-role routing live in ``services.models`` (MODEL_ROUTES)
+with DB-backed per-agent overrides; ``call_llm`` walks the primary → fallback
+chain when a model times out / 504s / is rate-limited.
 """
 
 import asyncio
@@ -9,30 +12,15 @@ from collections.abc import AsyncIterator
 
 from app.config import get_settings
 
-# Single source of truth for the default model. All MODEL_ROUTES entries and
-# the vision path fall back to this when no DB agent row provides a model.
-# Parallelism/pacing is per-path (copywriter semaphore, vision lock) — see the
-# runtime-settings knobs.
-DEFAULT_MODEL = "gemini-3.5-flash-lite"
+# Catch-all default when a role has no MODEL_ROUTES entry and no DB row.
+# gemini-3.1-flash-lite is the reliable free text-out model.
+DEFAULT_MODEL = "gemini-3.1-flash-lite"
 
 # Hard per-call timeout so a stalled model request becomes an exception instead
-# of hanging the pipeline forever (then the OpenRouter fallback or node-level
-# fallbacks kick in).
-LLM_TIMEOUT = 90.0
-
-MODEL_ROUTES = {
-    "strategist": DEFAULT_MODEL,
-    "planner": DEFAULT_MODEL,
-    "copywriter": DEFAULT_MODEL,
-    "designer": DEFAULT_MODEL,
-    "verifier": DEFAULT_MODEL,
-    "template_vision": DEFAULT_MODEL,
-    "template_author": DEFAULT_MODEL,
-    "brand_vision": DEFAULT_MODEL,
-    "brand_tokens": DEFAULT_MODEL,
-    "brand_campaigns": DEFAULT_MODEL,
-    "editor_chat": DEFAULT_MODEL,
-}
+# of hanging the pipeline forever. Generous (180s) because the free-tier models
+# legitimately take 25-90s under load; the fallback chain handles models that
+# exceed it.
+LLM_TIMEOUT = 180.0
 
 
 def _model_for(agent_role: str) -> str:
@@ -88,13 +76,18 @@ async def call_llm_with_retry(llm, messages, max_retries=3, agent_role: str = ""
             raise
         except Exception as e:
             err_str = str(e)
-            is_429 = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Quota exceeded" in err_str
-            if is_429 and attempt < max_retries - 1:
+            is_retryable = (
+                "429" in err_str
+                or "RESOURCE_EXHAUSTED" in err_str
+                or "Quota exceeded" in err_str
+                or "504" in err_str
+                or "DEADLINE_EXCEEDED" in err_str
+            )
+            if is_retryable and attempt < max_retries - 1:
                 match = re.search(r'(?:retry(?:Delay)?\s*[:in]\s*)(\d+)(?:\.\d+)?s', err_str, re.IGNORECASE)
                 wait = (int(match.group(1)) + 2) if match else (2 ** (attempt + 2)) + 5
                 log.warning(
-                    f"[LLM RateLimit] 429 / RESOURCE_EXHAUSTED. "
-                    f"Retrying attempt {attempt + 1}/{max_retries} in {wait}s..."
+                    f"[LLM] 429/504. Retrying attempt {attempt + 1}/{max_retries} in {wait}s..."
                 )
                 last_error = e
                 await asyncio.sleep(wait)
@@ -112,42 +105,76 @@ async def call_llm(
     temperature: float = 0.7,
     max_tokens: int = 2000,
 ) -> str:
-    """Simple helper — calls LLM with system + user prompt and returns text.
+    """Call the LLM with system + user prompt; walk the fallback model chain.
 
-    Uses LangChain's ChatGoogleGenerativeAI under the hood.
-    Retries on 429 (rate limit) with exponential backoff.
-    Falls back to OpenRouter if Gemini fails and a key is configured.
+    Uses LangChain's ChatGoogleGenerativeAI under the hood. Tries the agent's
+    primary model first, then its fallback_models on timeout/504/429. If
+    Gemini+fallbacks all fail and an OpenRouter key is configured, falls back
+    to OpenRouter.
     """
+    import logging
+
     from langchain_core.messages import HumanMessage, SystemMessage
+    from langchain_google_genai import ChatGoogleGenerativeAI
 
-    llm = get_llm(agent_role=agent_role, temperature=temperature, max_tokens=max_tokens)
+    log = logging.getLogger(__name__)
+
+    from app.services.agents import get_agent_config
+
+    cfg = await get_agent_config(agent_role)
+    models = [m for m in ([cfg.model] + list(cfg.fallback_models or [])) if m]
+    if not models:
+        models = [DEFAULT_MODEL]
+
     messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    last_error: Exception | None = None
+    for model in models:
+        llm = ChatGoogleGenerativeAI(
+            model=model,
+            api_key=get_settings().gemini_api_key or None,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_retries=0,
+        )
+        try:
+            response = await call_llm_with_retry(llm, messages)
+            return _response_text(response)
+        except Exception as e:  # noqa: BLE001
+            last_error = e
+            log.warning(
+                "[LLM] model %s failed for %r (%s) — trying next", model, agent_role, e
+            )
 
-    try:
-        response = await call_llm_with_retry(llm, messages)
-        if isinstance(response.content, str):
-            return response.content
-        if isinstance(response.content, list):
-            texts = []
-            for b in response.content:
-                if isinstance(b, str):
-                    texts.append(b)
-                elif isinstance(b, dict) and b.get("type") == "text":
-                    texts.append(b.get("text", ""))
-            return "".join(texts)
-        return str(response.content)
-    except Exception as gemini_error:
-        settings = get_settings()
-        if settings.openrouter_api_key:
+    # All primary+fallback models failed → OpenRouter if configured.
+    settings = get_settings()
+    if settings.openrouter_api_key:
+        try:
             return await _call_openrouter(
                 api_key=settings.openrouter_api_key,
-                model=_model_for(agent_role),
+                model=models[0],
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 temperature=temperature,
                 max_tokens=max_tokens,
             )
-        raise gemini_error
+        except Exception as or_err:  # noqa: BLE001
+            log.error("[LLM] OpenRouter fallback also failed: %s", or_err)
+    raise last_error or RuntimeError("LLM call failed")
+
+
+def _response_text(response) -> str:
+    """Extract text from a LangChain AIMessage content (str or blocks)."""
+    if isinstance(response.content, str):
+        return response.content
+    if isinstance(response.content, list):
+        texts = []
+        for b in response.content:
+            if isinstance(b, str):
+                texts.append(b)
+            elif isinstance(b, dict) and b.get("type") == "text":
+                texts.append(b.get("text", ""))
+        return "".join(texts)
+    return str(response.content)
 
 
 async def call_llm_stream(

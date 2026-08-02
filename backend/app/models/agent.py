@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models import Base
@@ -21,6 +21,9 @@ class Agent(Base):
     role: Mapped[str] = mapped_column(String(128), default="")
     system_prompt: Mapped[str] = mapped_column(Text, default="")
     model: Mapped[str] = mapped_column(String(128), default="")
+    # Ordered fallback models tried when the primary times out / 504s / is
+    # rate-limited. Empty = no fallback.
+    fallback_models: Mapped[list] = mapped_column(JSON, default=list)
     temperature: Mapped[float] = mapped_column(Float, default=0.7)
     max_tokens: Mapped[int] = mapped_column(Integer, default=2000)
 

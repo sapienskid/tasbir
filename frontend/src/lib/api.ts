@@ -353,12 +353,27 @@ export interface AgentConfig {
   role: string
   system_prompt: string
   model: string
+  fallback_models: string[]
   temperature: number
   max_tokens: number
   source: "seed" | "manual"
   is_active: boolean
   created_at: string | null
   updated_at: string | null
+}
+
+export interface ModelInfo {
+  id: string
+  name: string
+  category: string
+  vision: boolean
+  rpm: number
+  tpm: number
+  rpd: number
+}
+
+export function listModels(): Promise<{ models: ModelInfo[] }> {
+  return apiRequest("/models")
 }
 
 export interface AgentGraphNode {
@@ -415,7 +430,7 @@ export function updateAgent(
   name: string,
   patch: Partial<Pick<
     AgentConfig,
-    "persona" | "role" | "system_prompt" | "model" | "temperature" | "max_tokens" | "is_active"
+    "persona" | "role" | "system_prompt" | "model" | "fallback_models" | "temperature" | "max_tokens" | "is_active"
   >>
 ): Promise<AgentConfig> {
   return apiRequest(`/agents/${name}`, { method: "PUT", body: JSON.stringify(patch) })

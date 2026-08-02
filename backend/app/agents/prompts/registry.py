@@ -32,6 +32,7 @@ class PromptConfig:
     role: str
     system_prompt: str
     model: str = ""
+    fallback_models: list[str] | None = None
     temperature: float = 0.7
     max_tokens: int = 2000
 

@@ -25,7 +25,7 @@ def _mock_chat_llm(monkeypatch):
         return []
 
     async def fake_vision(
-        system_prompt, user_prompt, image_bytes, temperature, max_tokens, model=None
+        system_prompt, user_prompt, image_bytes, temperature, max_tokens, model=None, fallback_models=None
     ):
         return (
             '{"reply": "Done — headline tightened.", "changed": true, '

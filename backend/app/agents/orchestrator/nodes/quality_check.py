@@ -132,6 +132,7 @@ async def _call_vision_llm(
     temperature: float = 0.3,
     max_tokens: int = 1000,
     model: str | None = None,
+    fallback_models: list[str] | None = None,
 ) -> str:
     """Call Gemini Vision with an image + text prompt (shared helper)."""
     from app.services.vision import call_vision_llm as _shared
@@ -143,6 +144,7 @@ async def _call_vision_llm(
         temperature=temperature,
         max_tokens=max_tokens,
         model=model,
+        fallback_models=fallback_models,
     )
 
 
@@ -458,6 +460,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
             temperature=prompt_cfg.temperature,
             max_tokens=prompt_cfg.max_tokens,
             model=prompt_cfg.model,
+            fallback_models=prompt_cfg.fallback_models,
         )
     except Exception as e:
         log.error("[verifier] Vision audit failed for %s: %s", fmt_id, e)

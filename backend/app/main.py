@@ -21,6 +21,9 @@ from app.api import (
     uploads,
 )
 from app.api import (
+    models as models_api,
+)
+from app.api import (
     settings as settings_api,
 )
 from app.config import get_settings
@@ -62,6 +65,7 @@ async def lifespan(app: FastAPI):
         # idempotent column migrations here.
         await conn.run_sync(_ensure_column, "generation_tasks", "edited_html", "JSON")
         await conn.run_sync(_ensure_column, "generation_tasks", "progress", "JSON")
+        await conn.run_sync(_ensure_column, "agents", "fallback_models", "JSON")
     await engine.dispose()
     log.info("[startup] SQLite tables created/verified")
 
@@ -164,6 +168,10 @@ app.include_router(
 )
 app.include_router(
     settings_api.router, prefix="/api/settings", tags=["settings"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    models_api.router, prefix="/api/models", tags=["models"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 

@@ -25,7 +25,8 @@ from app.core.time import iso_utc
 from app.db.repositories.agents import AgentRepository
 from app.db.session import get_shared_session_factory
 from app.models.agent import Agent
-from app.services.llm import DEFAULT_MODEL, MODEL_ROUTES
+from app.services.llm import DEFAULT_MODEL
+from app.services.models import MODEL_ROUTES, default_fallbacks
 
 log = logging.getLogger(__name__)
 
@@ -59,11 +60,14 @@ async def get_agent_config(name: str) -> PromptConfig:
         async with pool() as session:
             row = await AgentRepository(session).get_by_name(name)
         if row is not None and row.is_active:
+            model = row.model or MODEL_ROUTES.get(name, "")
             cfg = PromptConfig(
                 persona=row.persona,
                 role=row.role,
                 system_prompt=row.system_prompt,
-                model=row.model,
+                model=model,
+                fallback_models=list(row.fallback_models or [])
+                or default_fallbacks(model),
                 temperature=row.temperature,
                 max_tokens=row.max_tokens,
             )
@@ -74,6 +78,7 @@ async def get_agent_config(name: str) -> PromptConfig:
         cfg = load_prompt_yaml(name)
         if not cfg.model:
             cfg.model = MODEL_ROUTES.get(name, "")
+        cfg.fallback_models = cfg.fallback_models or default_fallbacks(cfg.model)
 
     _agent_cache[name] = (now, cfg)
     return cfg
@@ -102,6 +107,7 @@ def agent_to_dict(agent: Agent) -> dict:
         "role": agent.role,
         "system_prompt": agent.system_prompt,
         "model": agent.model,
+        "fallback_models": list(agent.fallback_models or []),
         "temperature": agent.temperature,
         "max_tokens": agent.max_tokens,
         "source": agent.source,
@@ -126,13 +132,15 @@ async def seed_agents(pool: async_sessionmaker[AsyncSession]) -> int:
             if name in existing_names:
                 continue
             cfg = load_prompt_yaml(name)
+            model = cfg.model or MODEL_ROUTES.get(name, "")
             await repo.create(
                 name,
                 {
                     "persona": cfg.persona,
                     "role": cfg.role,
                     "system_prompt": cfg.system_prompt,
-                    "model": cfg.model or MODEL_ROUTES.get(name, ""),
+                    "model": model,
+                    "fallback_models": default_fallbacks(model),
                     "temperature": cfg.temperature,
                     "max_tokens": cfg.max_tokens,
                     "source": "seed",
@@ -155,13 +163,15 @@ async def reset_agent(session: AsyncSession, name: str) -> Agent | None:
     agent = await repo.get_by_name(name)
     if agent is None:
         return None
+    model = cfg.model or MODEL_ROUTES.get(name, "")
     await repo.update(
         name,
         {
             "persona": cfg.persona,
             "role": cfg.role,
             "system_prompt": cfg.system_prompt,
-            "model": cfg.model or MODEL_ROUTES.get(name, ""),
+            "model": model,
+            "fallback_models": default_fallbacks(model),
             "temperature": cfg.temperature,
             "max_tokens": cfg.max_tokens,
             "source": "seed",

@@ -26,17 +26,26 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAgentGraph, useAgents } from "@/hooks/use-library"
 import {
   getTaskProgress,
+  listModels,
   listTasks,
   promptPreview,
   resetAgent,
   updateAgent,
   type AgentConfig,
   type AgentGraphSpec,
+  type ModelInfo,
   type PromptPreview,
   type TaskProgress,
 } from "@/lib/api"
@@ -200,6 +209,8 @@ export function AgentsPage() {
     () => getTaskProgress(liveTaskId as string),
     { refreshInterval: live ? 3000 : 0 }
   )
+  const { data: modelData } = useSWR("/models", () => listModels())
+  const models: ModelInfo[] = modelData?.models ?? []
 
   const { nodes, edges } = useMemo(() => (spec ? buildGraph(spec) : { nodes: [], edges: [] }), [spec])
   const liveNodes = useMemo(
@@ -271,6 +282,7 @@ export function AgentsPage() {
         role: draft.role,
         system_prompt: draft.system_prompt,
         model: draft.model,
+        fallback_models: draft.fallback_models,
         temperature: draft.temperature,
         max_tokens: draft.max_tokens,
         is_active: draft.is_active,
@@ -440,8 +452,35 @@ export function AgentsPage() {
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="model">Model</Label>
-                    <Input id="model" value={draft.model} onChange={(e) => setDraft({ ...draft, model: e.target.value })} placeholder="gemini-3.5-flash-lite" />
+                    <Select value={draft.model} onValueChange={(v) => setDraft({ ...draft, model: v })}>
+                      <SelectTrigger id="model"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {models.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.name} · {m.rpd} RPD
+                          </SelectItem>
+                        ))}
+                        {!models.some((m) => m.id === draft.model) && draft.model ? (
+                          <SelectItem value={draft.model}>{draft.model}</SelectItem>
+                        ) : null}
+                      </SelectContent>
+                    </Select>
                   </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="fallback">Fallback models (comma-separated)</Label>
+                  <Input
+                    id="fallback"
+                    placeholder="gemini-3.1-flash-lite, gemini-3.5-flash-lite"
+                    value={(draft.fallback_models ?? []).join(", ")}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        fallback_models: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
+                      })
+                    }
+                  />
                 </div>
 
                 <div className="space-y-1">

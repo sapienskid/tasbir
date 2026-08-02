@@ -116,6 +116,7 @@ async def _brand_vision(payload: dict) -> dict:
             temperature=prompt_cfg.temperature,
             max_tokens=prompt_cfg.max_tokens,
             model=prompt_cfg.model,
+            fallback_models=prompt_cfg.fallback_models,
         )
     else:
         raw = await call_llm(
