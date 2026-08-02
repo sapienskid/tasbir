@@ -12,8 +12,13 @@ from app.config import get_settings
 # Single source of truth for the default model. All MODEL_ROUTES entries and
 # the vision path fall back to this when no DB agent row provides a model.
 # Pacing/serialization that keeps this model within its rate limits is handled
-# by the global llm_gate (llm.min_interval_seconds knob).
+# by the global llm_gate (the llm.min_interval_seconds runtime knob).
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
+
+# Hard per-call timeout so a stalled model request becomes an exception instead
+# of hanging the pipeline forever (then the OpenRouter fallback or node-level
+# fallbacks kick in).
+LLM_TIMEOUT = 90.0
 
 MODEL_ROUTES = {
     "strategist": DEFAULT_MODEL,
@@ -71,7 +76,14 @@ async def call_llm_with_retry(llm, messages, max_retries=5, agent_role: str = ""
     last_error = None
     for attempt in range(max_retries):
         try:
-            return await llm.ainvoke(messages)
+            return await asyncio.wait_for(
+                llm.ainvoke(messages), timeout=LLM_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            log.warning(
+                "[LLM] Call timed out after %.0fs — no more retries", LLM_TIMEOUT
+            )
+            raise
         except Exception as e:
             err_str = str(e)
             is_429 = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "Quota exceeded" in err_str

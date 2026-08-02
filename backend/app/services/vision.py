@@ -7,11 +7,12 @@ so the whole pipeline respects the provider's rate limits.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 
 from app.config import get_settings
-from app.services.llm import DEFAULT_MODEL
+from app.services.llm import DEFAULT_MODEL, LLM_TIMEOUT
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +64,10 @@ async def call_vision_llm(
             ]),
         ]
 
-        response = await llm.ainvoke(messages)
+        response = await asyncio.wait_for(
+            llm.ainvoke(messages),
+            timeout=LLM_TIMEOUT,
+        )
 
         content = response.content or ""
         if isinstance(content, list):
