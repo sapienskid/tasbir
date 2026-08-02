@@ -276,11 +276,11 @@ async def save_as_template(
     request: SaveTemplateRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Promote a rendered/edited post into the template library.
+    """Promote a rendered/edited post into the design system's template library.
 
     Reads the current [data-slot] content from the saved HTML, converts it to
-    a Jinja2 template, validates it (render + overflow), and writes it to the
-    library — as a new template (mode=new) or an update of the source template
+    a Jinja2 template, validates it (render + overflow), and stores it in the
+    DB — as a new template (mode=new) or an update of the source template
     the post was built from (mode=update).
     """
     from app.services.artifacts import resolve_output_file
@@ -289,10 +289,8 @@ async def save_as_template(
         build_template_context,
         extract_slots,
         format_family,
-        load_template_catalog,
-        render_template_file,
-        save_template,
-        save_template_catalog,
+        render_template_html,
+        scan_template_features,
         slotize_html,
     )
 
@@ -315,28 +313,36 @@ async def save_as_template(
     with open(html_path, encoding="utf-8") as f:
         html = f.read()
 
+    from app.db.repositories.templates import TemplateRepository
+
+    tpl_repo = TemplateRepository(db)
     platform = ((task.result or {}).get("platforms") or {}).get(fmt_id, {})
     source_template = platform.get("template_id") or ""
+    design_system_id = (task.source_data or {}).get("design_system_id") or "default"
     family = format_family(fmt_id)
 
     if request.mode == "update":
         if not source_template:
             raise HTTPException(status_code=422, detail="This post was not built from a template")
         template_id = source_template
-        catalog = load_template_catalog()
-        entry = (catalog.get("templates") or {}).get(template_id)
-        if not entry:
+        existing = await tpl_repo.get_by_id(template_id)
+        if not existing:
             raise HTTPException(
                 status_code=422, detail=f"Source template {template_id!r} not found"
             )
-        file = entry["file"]
+        design_system_id = existing.design_system_id
     else:
         slug = re.sub(r"[^a-z0-9]+", "-", (request.name or fmt_id).strip().lower())
         slug = slug.strip("-")
         if not slug:
             raise HTTPException(status_code=422, detail="Provide a template name")
         template_id = f"{family}-{slug}"
-        file = f"{family}/{slug}.html"
+        # Ensure the id is unique within the design system.
+        base = template_id
+        suffix = 2
+        while await tpl_repo.get_by_id(template_id):
+            template_id = f"{base}-{suffix}"
+            suffix += 1
 
     slots = extract_slots(html)
     if not slots:
@@ -344,9 +350,8 @@ async def save_as_template(
 
     template_html = slotize_html(html)
 
-    # Validate before committing to the catalog: write the file, render it with
-    # the extracted copy, and check overflow. Roll back the file on failure.
-    saved_path = save_template(file, template_html)
+    # Validate before committing: render with the extracted copy, then check
+    # overflow. Nothing is persisted on failure.
     copy = {
         "headline": slots.get("headline", ""),
         "subhead": slots.get("subhead", ""),
@@ -357,7 +362,7 @@ async def save_as_template(
     context = build_template_context(
         copy,
         slots.get("kicker", ""),
-        "black" if "data-ground=\"black\"" in html else "white",
+        "black" if 'data-ground="black"' in html else "white",
         {"left": slots.get("footer_left", ""), "right": slots.get("footer_right", "")},
         fmt.width,
         fmt.height,
@@ -367,30 +372,36 @@ async def save_as_template(
     from app.services.dom_extractor import detect_overflow
 
     try:
-        rendered = render_template_file(file, context)
+        rendered = render_template_html(template_html, context)
         overflow = await detect_overflow(rendered, fmt.width, fmt.height)
     except Exception as e:
-        saved_path.unlink(missing_ok=True)
         raise HTTPException(status_code=422, detail=f"Template render failed: {e}")
     if overflow:
-        saved_path.unlink(missing_ok=True)
         raise HTTPException(
             status_code=422,
             detail="Template overflows the canvas: " + "; ".join(overflow),
         )
 
-    grounds = ["white", "black"] if "data-ground=\"black\"" in html else ["white"]
-    catalog = load_template_catalog()
-    catalog.setdefault("templates", {})
-    catalog["templates"][template_id] = {
+    image_slots, has_logo_slot = scan_template_features(template_html)
+    data = {
+        "design_system_id": design_system_id,
+        "name": slots.get("footer_left", "") or request.name or template_id,
         "family": family,
-        "grounds": grounds,
+        "grounds": ["white", "black"] if 'data-ground="black"' in html else ["white"],
         "categories": [slots.get("kicker", "").upper()] if slots.get("kicker") else [],
         "hint_tags": [slots.get("kicker", "").lower()] if slots.get("kicker") else [],
         "weight": 1.0,
         "description": f"Promoted from task {task_id[:8]} ({fmt_id}).",
-        "file": file,
+        "html": template_html,
+        "image_slots": image_slots,
+        "has_logo_slot": has_logo_slot,
+        "source": "promoted",
+        "is_active": True,
     }
-    save_template_catalog(catalog)
 
-    return {"template_id": template_id, "mode": request.mode, "file": file}
+    if request.mode == "update":
+        await tpl_repo.update(template_id, data)
+    else:
+        await tpl_repo.create({**data, "id": template_id})
+
+    return {"template_id": template_id, "mode": request.mode, "file": f"db://{template_id}"}

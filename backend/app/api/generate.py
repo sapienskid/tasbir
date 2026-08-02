@@ -11,7 +11,9 @@ router = APIRouter()
 
 
 class ImageRequest(BaseModel):
-    url: str = Field(max_length=2048)
+    url: str = Field(default="", max_length=2048)
+    data: str = Field(default="", max_length=40_000_000)
+    mime: str = Field(default="image/png", max_length=32)
     alt: str = Field(default="", max_length=300)
     description: str = Field(default="", max_length=500)
     placement: str = Field(default="auto", max_length=32)
@@ -25,6 +27,8 @@ class GenerateRequest(BaseModel):
     platforms: list[str] = Field(default_factory=lambda: ["instagram-square"], max_length=12)
     campaign: str = Field(default="default", max_length=64)
     category: str | None = Field(default=None, max_length=64)
+    design_system_id: str = Field(default="default", max_length=64)
+    template_id: str = Field(default="", max_length=64)
     overrides: dict[str, str] = Field(default_factory=dict)
     images: list[ImageRequest] = Field(default_factory=list, max_length=8)
 

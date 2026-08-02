@@ -6,7 +6,15 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.api import generate, health, tasks
+from app.api import (
+    agent_jobs,
+    design_systems,
+    generate,
+    health,
+    tasks,
+    templates,
+    uploads,
+)
 from app.config import get_settings
 from app.core.ratelimit import close_redis, rate_limiter
 from app.core.security import verify_api_key
@@ -34,6 +42,13 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
     log.info("[startup] SQLite tables created/verified")
 
+    # Seed the default design system + template library (idempotent).
+    try:
+        from app.services.seeding import seed_default_design_system
+        await seed_default_design_system(pool)
+    except Exception as e:
+        log.warning("[startup] Design system seed failed: %s", e)
+
     yield
     await close_shared_engine()
     await close_redis()
@@ -43,7 +58,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="Tasbir API",
-    version="0.4.0",
+    version="0.5.0",
     description="AI-powered social media asset pipeline — HTML + PNG output",
     lifespan=lifespan,
 )
@@ -59,13 +74,29 @@ app.add_middleware(
 # Public
 app.include_router(health.router, tags=["health"])
 
-# Protected
+# Protected (under /api so the SPA routes — /, /new, /templates, /design-systems — never collide)
 app.include_router(
-    generate.router, prefix="/generate", tags=["generate"],
+    generate.router, prefix="/api/generate", tags=["generate"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 app.include_router(
-    tasks.router, prefix="/tasks", tags=["tasks"],
+    tasks.router, prefix="/api/tasks", tags=["tasks"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    design_systems.router, prefix="/api/design-systems", tags=["design-systems"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    templates.router, prefix="/api/templates", tags=["templates"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    agent_jobs.router, prefix="/api/agent-jobs", tags=["agent-jobs"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    uploads.router, prefix="/api/uploads", tags=["uploads"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 
@@ -89,5 +120,7 @@ async def spa_fallback(full_path: str):
             return FileResponse(candidate)
     index = _STATIC_DIR / "index.html"
     if index.is_file():
-        return FileResponse(index)
+        # Never cache index.html — asset filenames are content-hashed, so the
+        # browser always gets the latest build on refresh.
+        return FileResponse(index, headers={"Cache-Control": "no-store"})
     return JSONResponse({"detail": "Not found"}, status_code=404)
