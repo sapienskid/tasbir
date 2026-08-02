@@ -12,6 +12,7 @@ from starlette.background import BackgroundTask
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
+from app.core.time import iso_utc
 from app.db.repositories.tasks import TaskRepository
 from app.services.artifacts import (
     delete_task_output,
@@ -37,7 +38,7 @@ async def list_tasks(
             "id": t.id,
             "title": (t.source_data or {}).get("title", ""),
             "status": t.status,
-            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "created_at": iso_utc(t.created_at),
         }
         for t in tasks
     ]
@@ -54,9 +55,10 @@ async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
         "status": task.status,
         "source_data": task.source_data,
         "result": task.result,
+        "edited_html": task.edited_html,
         "error": task.error,
-        "created_at": task.created_at.isoformat() if task.created_at else None,
-        "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+        "created_at": iso_utc(task.created_at),
+        "updated_at": iso_utc(task.updated_at),
     }
 
 
@@ -301,6 +303,12 @@ async def rerender_format(
     result["platforms"] = platforms
     await repo.update_status(task_id=task_id, status=task.status, result=result)
 
+    # Persist the edited HTML in the DB so an edit survives file consumption
+    # and reloads — the file remains the delivery copy, the DB is durable.
+    edited = dict(task.edited_html or {})
+    edited[fmt_id] = html
+    await repo.save_edited_html(task_id=task_id, edited_html=edited)
+
     return {
         "format": fmt_id,
         "pass": passed,
@@ -345,13 +353,16 @@ async def save_as_template(
     fmt_id = validated[0]
     fmt = get_format_info(fmt_id)
 
-    try:
-        html_path = resolve_output_file(task_id, f"{fmt_id}.html")
-    except FileNotFoundError:
-        raise NotFoundError(f"No HTML for {fmt_id} — render it first")
-
-    with open(html_path, encoding="utf-8") as f:
-        html = f.read()
+    # Prefer the DB-persisted edited HTML (survives file consumption); fall
+    # back to the filesystem copy.
+    html = ((task.edited_html or {}).get(fmt_id)) or None
+    if html is None:
+        try:
+            html_path = resolve_output_file(task_id, f"{fmt_id}.html")
+        except FileNotFoundError:
+            raise NotFoundError(f"No HTML for {fmt_id} — render it first")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
 
     from app.db.repositories.templates import TemplateRepository
 

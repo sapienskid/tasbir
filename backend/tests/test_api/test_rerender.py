@@ -91,6 +91,65 @@ class TestRerender:
         assert "script" not in saved
 
 
+class TestEditedHtmlPersistence:
+    async def test_rerender_persists_edited_html_to_db(
+        self, authed_client: AsyncClient, _mock_services, tmp_path
+    ):
+        task_id = str(uuid.uuid4())
+        await seed_task(task_id)
+        res = await authed_client.post(
+            f"/api/tasks/{task_id}/formats/instagram-square/rerender",
+            headers={"x-api-key": "test-key"},
+            json={"html": _HTML},
+        )
+        assert res.status_code == 200, res.text
+
+        # The edited HTML (injected, as saved) is exposed on GET /tasks/{id}
+        # and matches the filesystem copy.
+        saved = (tmp_path / task_id / "instagram-square.html").read_text()
+        task = await authed_client.get(
+            f"/api/tasks/{task_id}", headers={"x-api-key": "test-key"}
+        )
+        assert task.status_code == 200
+        edited = task.json()["edited_html"]
+        assert edited == {"instagram-square": saved}
+
+    async def test_edited_html_survives_subsequent_reads(
+        self, authed_client: AsyncClient, _mock_services
+    ):
+        task_id = str(uuid.uuid4())
+        await seed_task(task_id)
+        for _ in range(2):
+            res = await authed_client.post(
+                f"/api/tasks/{task_id}/formats/instagram-square/rerender",
+                headers={"x-api-key": "test-key"},
+                json={"html": _HTML},
+            )
+            assert res.status_code == 200, res.text
+
+        task = await authed_client.get(
+            f"/api/tasks/{task_id}", headers={"x-api-key": "test-key"}
+        )
+        edited = task.json()["edited_html"]
+        assert "content" in edited["instagram-square"]
+        assert "instagram-square" in task.json()["result"]["platforms"]
+
+
+class TestTimestampSerialization:
+    async def test_task_timestamps_are_utc_aware(
+        self, authed_client: AsyncClient
+    ):
+        task_id = str(uuid.uuid4())
+        await seed_task(task_id)
+        res = await authed_client.get(
+            f"/api/tasks/{task_id}", headers={"x-api-key": "test-key"}
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["created_at"].endswith("+00:00")
+        assert data["updated_at"].endswith("+00:00")
+
+
 class TestRenderFailure:
     async def test_save_survives_png_render_failure(
         self, authed_client: AsyncClient, _mock_services, monkeypatch, tmp_path

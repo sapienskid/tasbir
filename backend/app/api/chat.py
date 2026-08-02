@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
+from app.core.time import iso_utc
 from app.db.repositories.chat import ChatRepository
 from app.db.repositories.tasks import TaskRepository
 from app.services.formats import validate_platforms
@@ -25,7 +26,7 @@ def _msg_dict(m):
         "role": m.role,
         "content": m.content,
         "html": m.html,
-        "created_at": m.created_at.isoformat() if m.created_at else None,
+        "created_at": iso_utc(m.created_at),
     }
 
 

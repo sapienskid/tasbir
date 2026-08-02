@@ -169,19 +169,23 @@ export default function TaskDetailPage() {
       const cachedPng = pngRef.current.get(fmt)
       const htmlFile = files.find((f) => f.format === fmt && f.ext === "html")
       const pngFile = files.find((f) => f.format === fmt && f.ext === "png")
+      // DB-persisted edited HTML survives file consumption and reloads.
+      const dbHtml = taskRef.current?.edited_html?.[fmt]
 
       // Fetch HTML and PNG in parallel — no serial waterfall.
       const [html] = await Promise.all([
         cachedHtml !== undefined
           ? Promise.resolve(cachedHtml)
-          : htmlFile
-            ? fetchText(`/tasks/${taskId}/files/${htmlFile.filename}`)
-                .then((t) => {
-                  draftsRef.current.set(fmt, t)
-                  return t
-                })
-                .catch(() => "")
-            : Promise.resolve(""),
+          : dbHtml !== undefined
+            ? (draftsRef.current.set(fmt, dbHtml), Promise.resolve(dbHtml))
+            : htmlFile
+              ? fetchText(`/tasks/${taskId}/files/${htmlFile.filename}`)
+                  .then((t) => {
+                    draftsRef.current.set(fmt, t)
+                    return t
+                  })
+                  .catch(() => "")
+              : Promise.resolve(""),
         cachedPng !== undefined
           ? Promise.resolve(cachedPng)
           : pngFile

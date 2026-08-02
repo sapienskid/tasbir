@@ -26,6 +26,17 @@ log = logging.getLogger(__name__)
 _STATIC_DIR = Path("/app/static")
 
 
+def _ensure_column(conn, table: str, column: str, ddl: str) -> None:
+    """Idempotently add a column to a SQLite table if it is missing."""
+
+    columns = {
+        row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in columns:
+        conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+        log.info("[startup] Added column %s.%s", table, column)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.db.session import close_shared_engine, get_shared_session_factory
@@ -40,6 +51,9 @@ async def lifespan(app: FastAPI):
     engine = create_async_engine(settings.database_url, echo=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # SQLite create_all does not add columns to existing tables — apply
+        # idempotent column migrations here.
+        await conn.run_sync(_ensure_column, "generation_tasks", "edited_html", "JSON")
     await engine.dispose()
     log.info("[startup] SQLite tables created/verified")
 

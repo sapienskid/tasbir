@@ -144,6 +144,7 @@ export interface TaskDetail {
   status: TaskStatus
   source_data: Record<string, unknown>
   result: TaskResult | null
+  edited_html: Record<string, string> | null
   error: string | null
   created_at: string | null
   updated_at: string | null

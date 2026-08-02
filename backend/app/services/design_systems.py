@@ -13,6 +13,7 @@ import re
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.time import iso_utc
 from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.templates import TemplateRepository
 from app.models.design_system import DesignSystem
@@ -110,8 +111,8 @@ def ds_to_dict(ds: DesignSystem, template_count: int | None = None) -> dict:
         "source": ds.source,
         "is_active": bool(ds.is_active),
         "template_count": template_count,
-        "created_at": ds.created_at.isoformat() if ds.created_at else None,
-        "updated_at": ds.updated_at.isoformat() if ds.updated_at else None,
+        "created_at": iso_utc(ds.created_at),
+        "updated_at": iso_utc(ds.updated_at),
     }
 
 

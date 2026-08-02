@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
+from app.core.time import iso_utc
 from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.templates import TemplateRepository
 from app.services.design_systems import DEFAULT_ID, logo_data_uri
@@ -65,8 +66,8 @@ def _entry(row) -> dict:
         "has_logo_slot": bool(row.has_logo_slot),
         "source": row.source,
         "is_active": bool(row.is_active),
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "created_at": iso_utc(row.created_at),
+        "updated_at": iso_utc(row.updated_at),
     }
 
 

@@ -59,3 +59,16 @@ class TaskRepository:
         res = await self.session.execute(stmt)
         await self.session.commit()
         return res.scalar_one_or_none()
+
+    async def save_edited_html(
+        self, task_id: str, edited_html: dict
+    ) -> GenerationTask | None:
+        stmt = (
+            update(GenerationTask)
+            .where(GenerationTask.id == task_id)
+            .values(edited_html=edited_html)
+            .returning(GenerationTask)
+        )
+        res = await self.session.execute(stmt)
+        await self.session.commit()
+        return res.scalar_one_or_none()
