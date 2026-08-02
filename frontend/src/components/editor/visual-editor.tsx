@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Check, ChevronRight, Maximize2, Minus, PanelRight, PanelRightClose, Plus, RotateCcw } from "lucide-react"
+import { Check, Maximize2, Minus, PanelRight, PanelRightClose, Plus, RotateCcw } from "lucide-react"
 import type { Editor } from "grapesjs"
 
 export interface VisualEditorHandle {
@@ -196,6 +196,33 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
   const zoomIn = useCallback(() => setZoom(zoomPct * 1.2), [setZoom, zoomPct])
   const oneToOne = useCallback(() => setZoom(100), [setZoom])
 
+  // Ctrl/Cmd ± zoom the canvas (not the page); Ctrl/Cmd 0 fits it.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
+      ) {
+        return
+      }
+      const k = e.key.toLowerCase()
+      if (k === "-") {
+        e.preventDefault()
+        zoomOut()
+      } else if (k === "+" || k === "=") {
+        e.preventDefault()
+        zoomIn()
+      } else if (k === "0") {
+        e.preventDefault()
+        fit()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [zoomOut, zoomIn, fit])
+
   const buildDocument = useCallback((): string | null => {
     const editor = editorRef.current
     const original = originalRef.current
@@ -323,29 +350,16 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
       <div className="relative min-h-0 flex-1 overflow-hidden bg-neutral-100 dark:bg-neutral-900">
         <div ref={containerRef} className="h-full w-full" />
         {sidebarOpen ? (
-          <>
-            <div
-              onDoubleClick={toggleSidebar}
-              onPointerDown={onResizeStart}
-              onPointerMove={onResizeMove}
-              onPointerUp={onResizeEnd}
-              onPointerCancel={onResizeEnd}
-              aria-hidden
-              className="absolute inset-y-0 z-30 w-1.5 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/40"
-              style={{ left: "calc(100% - var(--gjs-left-width) - 3px)" }}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Collapse sidebar"
-              title="Collapse sidebar (double-click the edge too)"
-              onClick={toggleSidebar}
-              className="absolute top-1.5 z-30 h-5 w-5 text-muted-foreground"
-              style={{ left: "calc(100% - var(--gjs-left-width) - 20px)" }}
-            >
-              <ChevronRight className="size-3.5" />
-            </Button>
-          </>
+          <div
+            onDoubleClick={toggleSidebar}
+            onPointerDown={onResizeStart}
+            onPointerMove={onResizeMove}
+            onPointerUp={onResizeEnd}
+            onPointerCancel={onResizeEnd}
+            aria-hidden
+            className="absolute inset-y-0 z-30 w-1.5 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-primary/40"
+            style={{ left: "calc(100% - var(--gjs-left-width) - 3px)" }}
+          />
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2 border-t bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground">
