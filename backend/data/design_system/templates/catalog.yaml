@@ -181,3 +181,67 @@ templates:
     description: Big bottom-left headline, tracked meta top-right, footer rule — tight
       horizontal poster.
     file: landscape/landscape-pull.html
+  landscape-ad-card:
+    family: landscape
+    grounds:
+    - white
+    - black
+    categories:
+    - PROJECT
+    - PORTFOLIO
+    hint_tags:
+    - ad
+    - product
+    - doc
+    weight: 1.0
+    description: 'Product ad card: category + wordmark row, display headline, serif sub,
+      monochrome line-art, footer row with handle + url.'
+    file: landscape/ad-card.html
+  portrait-blog-card:
+    family: portrait
+    grounds:
+    - white
+    - black
+    categories:
+    - WRITING
+    - NOTE
+    hint_tags:
+    - blog
+    - date
+    - numeral
+    weight: 1.1
+    description: 'Blog preview: doc icon, oversized day numeral + month, display title,
+      byline row.'
+    file: portrait/blog-card.html
+  story-costs:
+    family: story
+    grounds:
+    - black
+    - white
+    categories:
+    - NOTE
+    - WRITING
+    hint_tags:
+    - story
+    - costs
+    - badge
+    weight: 1.0
+    description: 'Inherently dark story: progress bar, brand mark, +/- grid texture,
+      inverted-block headline badge.'
+    file: story/story-costs.html
+  square-quote-card:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - PROJECT
+    - WRITING
+    hint_tags:
+    - quote
+    - editorial
+    - serif
+    weight: 1.0
+    description: 'Centered editorial quote: tag block, serif pull-quote headline, italic
+      sub, CTA row, footer.'
+    file: square/quote-card.html
