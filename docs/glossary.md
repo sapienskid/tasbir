@@ -32,10 +32,10 @@ reads as premium editorial.
 secondary gray. Used for the @handle and timestamps.
 
 ## O
-**One-time download** — The delivery model for artifacts: `GET
-/tasks/{id}/files/{filename}` streams the file and then deletes it. A second
-request returns 404. Consumers (n8n, the UI) download within the retention
-window.
+**One-time download** — An opt-in delivery mode: `GET
+/tasks/{id}/files/{filename}?consume=true` streams the file and then deletes
+it. By default files persist until the retention sweep deletes the task's
+output directory.
 
 ## P
 **Per-family weights** — The weight limit applied per typeface: Space Grotesk

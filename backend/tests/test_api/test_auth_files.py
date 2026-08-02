@@ -36,7 +36,7 @@ class TestAuth:
 
 
 class TestServeAndDelete:
-    async def test_files_list_and_one_time_download(self, authed_client: AsyncClient):
+    async def test_files_persist_by_default(self, authed_client: AsyncClient):
         task_id = str(uuid.uuid4())
         await seed_task(task_id)
         await _write_output(task_id)
@@ -47,13 +47,31 @@ class TestServeAndDelete:
         names = [f["filename"] for f in res.json()]
         assert "instagram-square.png" in names
 
-        res = await authed_client.get(
+        # Default: files persist — a second download still succeeds.
+        first = await authed_client.get(
             f"/tasks/{task_id}/files/instagram-square.png", headers=headers
+        )
+        assert first.status_code == 200
+        assert first.content == b"PNGDATA"
+        second = await authed_client.get(
+            f"/tasks/{task_id}/files/instagram-square.png", headers=headers
+        )
+        assert second.status_code == 200
+        assert second.content == b"PNGDATA"
+
+    async def test_consume_deletes_after_download(self, authed_client: AsyncClient):
+        task_id = str(uuid.uuid4())
+        await seed_task(task_id)
+        await _write_output(task_id)
+        headers = {"x-api-key": "test-key"}
+
+        res = await authed_client.get(
+            f"/tasks/{task_id}/files/instagram-square.png?consume=true", headers=headers
         )
         assert res.status_code == 200
         assert res.content == b"PNGDATA"
 
-        # Second download → 404 (file deleted after delivery)
+        # Consumed → gone.
         res = await authed_client.get(
             f"/tasks/{task_id}/files/instagram-square.png", headers=headers
         )

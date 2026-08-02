@@ -72,7 +72,7 @@ renders to PNG for visual verification.
 - Deterministic QC: emoji/hex/footer/category/display-face/canvas checks + DOM overflow
 - Deterministic font loading (auto-quoted families, `document.fonts.ready`)
 - Security hardening: fail-closed API keys, per-key Redis rate limit, SSRF guard, HTML sanitizer, input caps
-- Ephemeral artifact delivery (serve-and-delete + `OUTPUT_TTL_HOURS` sweep)
+- Ephemeral artifact delivery (persist-until-TTL + `?consume=true` opt-in delete)
 - Manual edit → re-render endpoint (`POST /tasks/{id}/formats/{fmt}/rerender`)
 - **Template library**: human-authored Jinja2 post compositions (12), template-first
   pipeline with LLM fallback, category-mapped selection + strategist `template_hint`,
@@ -113,7 +113,7 @@ n8n Webhook → FastAPI (POST /generate) → Celery Worker → LangGraph Pipelin
                   │                                                        │
             GET /tasks/{id}                              Files saved in data/output/{task_id}/
             (n8n polls status)                           (.html for review, .png for sharing)
-                  │                                        served once → deleted (one-time download)
+                  │                  files persist until the TTL sweep; ?consume=true deletes on download
             Tasbir Studio (React SPA, same origin) ── POST /tasks/{id}/formats/{fmt}/rerender
             edit HTML → re-render → preview + QC
 ```
@@ -454,7 +454,7 @@ tasbir/
 │   │   ├── api/
 │   │   │   ├── health.py                ← GET /health
 │   │   │   ├── generate.py              ← POST /generate
-│   │   │   └── tasks.py                 ← GET /tasks/{id}, DELETE, files (serve-and-delete), rerender
+│   │   │   └── tasks.py                 ← GET /tasks/{id}, DELETE, files (persist-until-TTL), rerender
 │   │   │
 │   │   ├── agents/
 │   │   │   ├── orchestrator/
@@ -477,7 +477,7 @@ tasbir/
 │   │   │   ├── image_loader.py          ← SSRF-guarded image download + base64 embed
 │   │   │   ├── ssrf.py                  ← SSRF guard (private/loopback/metadata block, LAN allow)
 │   │   │   ├── sanitizer.py             ← HTML sanitizer (strict / preserve-system modes)
-│   │   │   ├── artifacts.py             ← Output path resolution + serve-and-delete helpers
+│   │   │   ├── artifacts.py             ← Output path resolution + delivery helpers
 │   │   │   ├── dom_extractor.py         ← Playwright DOM extraction + overflow detection
 │   │   │   ├── renderer.py              ← Playwright PNG render client
 │   │   │   └── render_server.py         ← Playwright HTTP microservice (Docker, key-authed)
@@ -692,7 +692,8 @@ Response:
 Lists remaining artifacts: `[{"format", "ext", "size", "filename"}, ...]`.
 
 ### GET /tasks/{id}/files/{filename}
-Streams an artifact then **deletes it** (one-time download; second GET → 404).
+Streams an artifact. Files persist until the TTL sweep; downloads are
+repeatable. `?consume=true` deletes the file after delivery (one-time download).
 
 ### POST /tasks/{id}/formats/{fmt}/rerender
 ```json

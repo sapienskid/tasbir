@@ -27,10 +27,10 @@ A React + Vite + shadcn/ui SPA served same-origin by FastAPI:
 - Task list with status polling and delete
 - Per-format Monaco HTML editor + live PNG preview + QC report
 - **Re-render** (edit → render → deterministic QC) and **Audit** (opt-in vision QC)
-- One-time **Download PNG/HTML** (files are deleted after delivery)
+- **Download PNG/HTML** (repeatable until the retention window; `?consume=true` deletes after download)
 - API key stored in localStorage (`tasbir:apikey:v1`)
 
-Artifacts are **ephemeral**: files are served once then deleted, and an
+Artifacts are **ephemeral**: they persist until the hourly TTL sweep, and an
 hourly sweep removes anything older than `OUTPUT_TTL_HOURS` (default 24h).
 
 ## Hot Reload (Development)

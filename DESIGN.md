@@ -205,7 +205,7 @@ data/
 │   ├── tokens.yaml               ← Design tokens
 │   ├── platforms.yaml            ← Platform dimensions
 │   └── campaigns.yaml            ← Campaign presets
-└── output/{task_id}/             ← EPHEMERAL — one-time download + TTL sweep
+└── output/{task_id}/             ← EPHEMERAL — persisted until the TTL sweep
     ├── instagram-square.html     ← Generated HTML (open in browser)
     ├── instagram-square.png      ← Rendered PNG (share ready)
     ├── linkedin-post.html
@@ -293,7 +293,7 @@ backend/config/prompts/
 13. **Render Service Is Internal**: Playwright is not published to the host; it requires `RENDER_SERVICE_KEY` and runs with same-origin security enabled.
 14. **SSRF-Guarded Image Fetch**: The worker validates every image URL (block loopback/link-local/metadata, allow LAN, size/redirect caps).
 15. **Sanitized LLM/Edited HTML**: Designer output and rerender payloads pass through the HTML sanitizer before rendering/saving.
-16. **Ephemeral Artifacts**: Files are served once then deleted; an hourly TTL sweep bounds disk and DB growth (ADR-0007).
+16. **Ephemeral Artifacts**: Files persist until the hourly TTL sweep removes the output directory and task row; downloads are repeatable, `?consume=true` opts into delete-after-delivery (ADR-0007).
 17. **Manual Edit → Re-render**: `POST /tasks/{id}/formats/{fmt}/rerender` renders edited HTML without the designer LLM; vision audit is opt-in (ADR-0010).
 18. **Template-First Composition**: Human-authored Jinja2 templates are tried before the LLM designer; the LLM falls back only on no-match or overflow. Templates carry `data-slot` attributes enabling a two-way promote loop (ADR-0011).
 
