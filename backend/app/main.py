@@ -10,6 +10,7 @@ from app.api import (
     agent_jobs,
     chat,
     design_systems,
+    fonts,
     generate,
     health,
     tasks,
@@ -116,6 +117,10 @@ app.include_router(
 )
 app.include_router(
     chat.router, prefix="/api/tasks", tags=["chat"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    fonts.router, prefix="/api/fonts", tags=["fonts"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { ArrowLeft, Loader2, Plus, Save, Trash2, Wand2 } from "lucide-react"
+import { ArrowLeft, Loader2, Plus, Save, Search, Trash2, Wand2 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Dropzone } from "@/components/tasks/dropzone"
+import { FontPickerDialog } from "@/components/design-system/font-picker"
 import { ZoomableFrame } from "@/components/tasks/preview-frame"
 import {
   createDesignSystemFromInput,
@@ -49,6 +50,43 @@ const COLOR_TOKENS = new Set([
   "--color-accent",
 ])
 
+const FONT_TOKENS = new Set(["--font-sans", "--font-display", "--font-serif"])
+
+// Each font role's picker is restricted to its matching type — except the
+// headline role, which may be any kind of typeface.
+const FONT_TOKEN_CATEGORIES: Record<string, string[] | undefined> = {
+  "--font-sans": ["sans-serif"],
+  "--font-serif": ["serif"],
+  "--font-display": undefined,
+}
+
+// Human-friendly labels so users see "color-bg" instead of raw CSS variables.
+const TOKEN_LABELS: Record<string, string> = {
+  "--color-bg": "Background",
+  "--color-bg-inverted": "Background (inverted)",
+  "--color-text": "Text",
+  "--color-text-inverted": "Text (inverted)",
+  "--color-text-secondary": "Text (secondary)",
+  "--color-text-tertiary": "Text (tertiary)",
+  "--color-border": "Border",
+  "--color-border-inverted": "Border (inverted)",
+  "--color-accent": "Accent",
+  "--font-sans": "Sans — body & interface",
+  "--font-display": "Headline — any typeface",
+  "--font-serif": "Serif — subhead & body",
+  "--radius-sm": "Radius (small)",
+  "--radius-md": "Radius (medium)",
+  "--shadow-md": "Shadow",
+}
+
+function tokenLabel(key: string): string {
+  return TOKEN_LABELS[key] ?? key.replace(/^--/, "")
+}
+
+function firstFamily(stack: string): string {
+  return stack.split(/[,'"]/)[0].trim()
+}
+
 export default function DesignSystemsPage() {
   const { data: systems, isLoading, mutate } = useDesignSystems()
   const [dsId, setDsId] = useState<string>("")
@@ -56,7 +94,17 @@ export default function DesignSystemsPage() {
   const [saving, setSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
+  const [fontPickerKey, setFontPickerKey] = useState<string | null>(null)
   const { data: job } = useAgentJob(jobId)
+
+  function applyFontFamily(key: string, family: string) {
+    setDraft((prev) => {
+      if (!prev) return prev
+      const current = prev.tokens[key] ?? ""
+      const rest = current.includes(",") ? current.slice(current.indexOf(",")) : ""
+      return { ...prev, tokens: { ...prev.tokens, [key]: family + rest } }
+    })
+  }
 
   const activeSystems = useMemo(() => (systems ?? []).filter((s) => s.is_active), [systems])
   const current = useMemo(
@@ -351,9 +399,16 @@ export default function DesignSystemsPage() {
             <TabsContent value="tokens" className="grid gap-4">
               <Card>
                 <CardContent className="grid gap-3 p-6">
+                  <p className="text-xs text-muted-foreground">
+                    Design tokens — CSS variables resolved at render time. Fonts load from Google
+                    Fonts automatically; the first family in each stack is what renders.
+                  </p>
                   {Object.entries(draft.tokens).map(([key, value]) => (
                     <div key={key} className="grid grid-cols-[1fr_1.5fr] items-center gap-3">
-                      <Label className="font-mono text-xs">{key}</Label>
+                      <div className="grid gap-0.5">
+                        <Label className="text-xs">{tokenLabel(key)}</Label>
+                        <span className="font-mono text-[10px] text-muted-foreground">{key}</span>
+                      </div>
                       {COLOR_TOKENS.has(key) ? (
                         <div className="flex items-center gap-2">
                           <input
@@ -368,6 +423,25 @@ export default function DesignSystemsPage() {
                             onChange={(e) => setDraft({ ...draft, tokens: { ...draft.tokens, [key]: e.target.value } })}
                           />
                         </div>
+                      ) : FONT_TOKENS.has(key) ? (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="justify-between gap-2 font-mono text-xs"
+                            onClick={() => setFontPickerKey(key)}
+                            title="Search Google Fonts"
+                          >
+                            <span className="max-w-40 truncate">{firstFamily(value) || "—"}</span>
+                            <Search className="size-3.5 shrink-0 text-muted-foreground" />
+                          </Button>
+                          <Input
+                            className="font-mono text-xs"
+                            value={value}
+                            placeholder="Family, fallback, sans-serif"
+                            onChange={(e) => setDraft({ ...draft, tokens: { ...draft.tokens, [key]: e.target.value } })}
+                          />
+                        </div>
                       ) : (
                         <Input
                           className="font-mono text-xs"
@@ -379,6 +453,13 @@ export default function DesignSystemsPage() {
                   ))}
                 </CardContent>
               </Card>
+              <FontPickerDialog
+                open={fontPickerKey !== null}
+                onOpenChange={(o) => !o && setFontPickerKey(null)}
+                currentFamily={fontPickerKey ? firstFamily(draft.tokens[fontPickerKey] ?? "") : ""}
+                onPick={(family) => fontPickerKey && applyFontFamily(fontPickerKey, family)}
+                categories={fontPickerKey ? FONT_TOKEN_CATEGORIES[fontPickerKey] : undefined}
+              />
             </TabsContent>
 
             <TabsContent value="campaigns" className="grid gap-4">
@@ -555,36 +636,42 @@ function TokenRolesEditor({
             <span />
           </div>
           {entries.map(([key, role]) => (
-            <div key={key} className="grid grid-cols-[1fr_1.5fr_36px] items-center gap-2 rounded-md border px-1 py-1.5">
-              <Input
-                className="font-mono text-xs"
-                value={key}
-                onChange={(e) => {
-                  const newKey = e.target.value
-                  const next: Record<string, string> = {}
-                  for (const [k, v] of entries) {
-                    next[k === key ? newKey : k] = k === key ? role : v
-                  }
-                  onChange(next)
-                }}
-              />
-              <Input
-                className="text-xs"
-                value={role}
-                placeholder="What this variable is for"
-                onChange={(e) => onChange({ ...roles, [key]: e.target.value })}
-              />
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  const next = { ...roles }
-                  delete next[key]
-                  onChange(next)
-                }}
-              >
-                <Trash2 className="size-4 text-destructive" />
-              </Button>
+            <div key={key} className="grid gap-1 rounded-md border px-1.5 py-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">{tokenLabel(key)}</span>
+                <span className="font-mono text-[10px] text-muted-foreground">{key}</span>
+              </div>
+              <div className="grid grid-cols-[1fr_1.5fr_36px] items-center gap-2">
+                <Input
+                  className="font-mono text-xs"
+                  value={key}
+                  onChange={(e) => {
+                    const newKey = e.target.value
+                    const next: Record<string, string> = {}
+                    for (const [k, v] of entries) {
+                      next[k === key ? newKey : k] = k === key ? role : v
+                    }
+                    onChange(next)
+                  }}
+                />
+                <Input
+                  className="text-xs"
+                  value={role}
+                  placeholder="What this variable is for"
+                  onChange={(e) => onChange({ ...roles, [key]: e.target.value })}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    const next = { ...roles }
+                    delete next[key]
+                    onChange(next)
+                  }}
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>

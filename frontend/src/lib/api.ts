@@ -282,6 +282,22 @@ export interface TemplateCreate {
   html: string
 }
 
+export interface GoogleFont {
+  family: string
+  category: string
+  variants: string[]
+}
+
+export function searchGoogleFonts(q: string): Promise<GoogleFont[]> {
+  return apiRequest<{ fonts: GoogleFont[] }>(
+    `/fonts/search?q=${encodeURIComponent(q)}`
+  ).then((r) => r.fonts)
+}
+
+export function listDefaultFonts(): Promise<GoogleFont[]> {
+  return apiRequest<{ fonts: GoogleFont[] }>("/fonts/default").then((r) => r.fonts)
+}
+
 export interface AgentJob {
   id: string
   kind: "template" | "design_system"
