@@ -2,6 +2,9 @@
 // is cached in a module-level slot so we never read storage per render.
 
 const API_KEY_STORAGE_KEY = "tasbir:apikey:v1"
+// All JSON API routes live under /api so the SPA routes (/, /templates, ...)
+// never collide with them. The vite dev proxy forwards /api → :8000.
+const API_BASE = "/api"
 
 let cachedApiKey: string | null = null
 
@@ -54,7 +57,7 @@ async function authHeaders(init: RequestInit): Promise<Headers> {
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = await authHeaders(init)
-  const res = await fetch(path, { ...init, headers })
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
   if (res.status === 401) {
     throw new ApiError(401, "Invalid or missing API key — set it in Settings.")
   }
@@ -74,9 +77,28 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
 export const apiFetcher = (path: string): Promise<unknown> => apiRequest(path)
 
+export async function apiForm<T>(path: string, form: FormData): Promise<T> {
+  const headers = await authHeaders({})
+  const res = await fetch(`${API_BASE}${path}`, { method: "POST", headers, body: form })
+  if (res.status === 401) {
+    throw new ApiError(401, "Invalid or missing API key — set it in Settings.")
+  }
+  if (!res.ok) {
+    let detail = res.statusText
+    try {
+      const body = (await res.json()) as { detail?: string }
+      if (body.detail) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail)
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(res.status, detail)
+  }
+  return (await res.json()) as T
+}
+
 export async function fetchBlob(path: string): Promise<Blob> {
   const headers = await authHeaders({})
-  const res = await fetch(path, { headers })
+  const res = await fetch(`${API_BASE}${path}`, { headers })
   if (res.status === 401) throw new ApiError(401, "Invalid or missing API key")
   if (!res.ok) throw new ApiError(res.status, res.statusText)
   return res.blob()
@@ -84,7 +106,7 @@ export async function fetchBlob(path: string): Promise<Blob> {
 
 export async function fetchText(path: string): Promise<string> {
   const headers = await authHeaders({})
-  const res = await fetch(path, { headers })
+  const res = await fetch(`${API_BASE}${path}`, { headers })
   if (res.status === 401) throw new ApiError(401, "Invalid or missing API key")
   if (!res.ok) throw new ApiError(res.status, res.statusText)
   return res.text()
@@ -154,6 +176,207 @@ export interface SaveTemplateResponse {
   template_id: string
   mode: "new" | "update"
   file: string
+}
+
+// ─── Design systems ───────────────────────────────────────────────────────
+
+export interface DesignSystem {
+  id: string
+  name: string
+  description: string
+  brand: {
+    name?: string
+    tagline?: string
+    mission?: string
+    story?: string
+    url?: string
+    social?: Record<string, string>
+  }
+  footer: { left: string; right: string }
+  categories: Array<{ name: string; description?: string; ground?: string }>
+  overrides: Record<string, string>
+  tokens: Record<string, string>
+  token_roles: Record<string, string>
+  campaigns: Record<string, { label: string; tone: string; ground: string; language: string }>
+  design_instruction: Record<string, unknown>
+  logo: { mime?: string; data?: string; filename?: string } | null
+  has_logo: boolean
+  source: string
+  is_active: boolean
+  template_count?: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+// ─── Templates ─────────────────────────────────────────────────────────────
+
+export interface Template {
+  id: string
+  name: string
+  design_system_id: string
+  family: "square" | "portrait" | "story" | "landscape"
+  grounds: string[]
+  categories: string[]
+  hint_tags: string[]
+  weight: number
+  description: string
+  image_slots: Array<{ key: string; role: string; hint: string }>
+  has_logo_slot: boolean
+  source: string
+  is_active: boolean
+  html?: string
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface TemplateCreate {
+  id?: string
+  name: string
+  design_system_id: string
+  family: Template["family"]
+  grounds: string[]
+  categories?: string[]
+  hint_tags?: string[]
+  weight?: number
+  description?: string
+  html: string
+}
+
+export interface AgentJob {
+  id: string
+  kind: "template" | "design_system"
+  status: "pending" | "running" | "completed" | "failed"
+  result: Record<string, unknown> | null
+  error: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+// ─── Design system API helpers ─────────────────────────────────────────────
+
+export function listDesignSystems(includeInactive = false): Promise<DesignSystem[]> {
+  return apiRequest(`/design-systems${includeInactive ? "?include_inactive=true" : ""}`)
+}
+
+export function getDesignSystem(id: string): Promise<DesignSystem> {
+  return apiRequest(`/design-systems/${id}`)
+}
+
+export function updateDesignSystem(id: string, patch: Partial<DesignSystem>): Promise<DesignSystem> {
+  return apiRequest(`/design-systems/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(patch),
+  })
+}
+
+export async function uploadLogo(id: string, file: File): Promise<{ has_logo: boolean }> {
+  const form = new FormData()
+  form.append("file", file)
+  return apiForm(`/design-systems/${id}/logo`, form)
+}
+
+export function removeLogo(id: string): Promise<void> {
+  return apiRequest(`/design-systems/${id}/logo`, { method: "DELETE" })
+}
+
+export async function createDesignSystemFromInput(form: {
+  name: string
+  tagline?: string
+  mission?: string
+  industry?: string
+  audience?: string
+  style?: string
+  handle?: string
+  referenceImage?: File | null
+  logoImage?: File | null
+}): Promise<{ job_id: string }> {
+  const fd = new FormData()
+  fd.append("name", form.name)
+  if (form.tagline) fd.append("tagline", form.tagline)
+  if (form.mission) fd.append("mission", form.mission)
+  if (form.industry) fd.append("industry", form.industry)
+  if (form.audience) fd.append("audience", form.audience)
+  if (form.style) fd.append("style", form.style)
+  if (form.handle) fd.append("handle", form.handle)
+  if (form.referenceImage) fd.append("reference_image", form.referenceImage)
+  if (form.logoImage) fd.append("logo_image", form.logoImage)
+  return apiForm(`/design-systems/from-input`, fd)
+}
+
+// ─── Template API helpers ──────────────────────────────────────────────────
+
+export function listTemplates(
+  designSystemId: string,
+  family?: string,
+  includeInactive = false
+): Promise<Template[]> {
+  const params = new URLSearchParams({ design_system_id: designSystemId })
+  if (family) params.set("family", family)
+  if (includeInactive) params.set("include_inactive", "true")
+  return apiRequest(`/templates?${params.toString()}`)
+}
+
+export function getTemplate(id: string): Promise<Template> {
+  return apiRequest(`/templates/${id}`)
+}
+
+export function createTemplate(body: TemplateCreate): Promise<Template> {
+  return apiRequest("/templates", { method: "POST", body: JSON.stringify(body) })
+}
+
+export function updateTemplate(
+  id: string,
+  patch: Partial<Template>
+): Promise<Template> {
+  return apiRequest(`/templates/${id}`, { method: "PUT", body: JSON.stringify(patch) })
+}
+
+export function deleteTemplate(id: string): Promise<void> {
+  return apiRequest(`/templates/${id}`, { method: "DELETE" })
+}
+
+export function previewTemplate(id: string): Promise<{ html: string }> {
+  return apiRequest(`/templates/${id}/preview`, { method: "POST" })
+}
+
+export function previewDraft(body: {
+  html: string
+  family: Template["family"]
+  design_system_id: string
+  ground?: string
+}): Promise<{ html: string }> {
+  return apiRequest("/templates/preview-draft", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export function validateTemplate(id: string): Promise<{ ok: boolean; issues: string[] }> {
+  return apiRequest(`/templates/${id}/render`, { method: "POST" })
+}
+
+export async function createTemplateFromImage(
+  designSystemId: string,
+  file: File
+): Promise<{ job_id: string }> {
+  const form = new FormData()
+  form.append("file", file)
+  form.append("design_system_id", designSystemId)
+  return apiForm(`/templates/from-image`, form)
+}
+
+// ─── Agent jobs ────────────────────────────────────────────────────────────
+
+export function getAgentJob(id: string): Promise<AgentJob> {
+  return apiRequest(`/agent-jobs/${id}`)
+}
+
+// ─── Uploads (post media) ──────────────────────────────────────────────────
+
+export async function uploadMedia(file: File): Promise<{ data: string; mime: string; size: number }> {
+  const form = new FormData()
+  form.append("file", file)
+  return apiForm("/uploads", form)
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

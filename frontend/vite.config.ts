@@ -17,9 +17,7 @@ export default defineConfig({
     port: 5173,
     host: "0.0.0.0",
     proxy: {
-      "/generate": apiProxy,
-      "/tasks": apiProxy,
-      "/health": apiProxy,
+      "/api": apiProxy,
     },
   },
   build: {
