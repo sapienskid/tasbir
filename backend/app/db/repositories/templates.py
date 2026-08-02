@@ -54,8 +54,8 @@ class TemplateRepository:
         await self.session.commit()
 
     async def delete_for_design_system(self, ds_id: str) -> int:
+        """Delete a design system's templates (caller controls the commit)."""
         res = await self.session.execute(
             delete(Template).where(Template.design_system_id == ds_id)
         )
-        await self.session.commit()
         return res.rowcount or 0

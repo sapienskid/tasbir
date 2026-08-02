@@ -44,3 +44,14 @@ class DesignSystemRepository:
         if ds:
             await self.session.delete(ds)
             await self.session.commit()
+
+    async def delete_cascade(self, ds_id: str) -> int:
+        """Delete a design system and its templates in ONE transaction."""
+        from app.db.repositories.templates import TemplateRepository
+
+        tpl_count = await TemplateRepository(self.session).delete_for_design_system(ds_id)
+        ds = await self.get_by_id(ds_id)
+        if ds:
+            await self.session.delete(ds)
+        await self.session.commit()
+        return tpl_count

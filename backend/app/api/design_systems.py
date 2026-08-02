@@ -117,8 +117,9 @@ async def delete_design_system(ds_id: str, db: AsyncSession = Depends(get_db)):
     ds = await repo.get_by_id(ds_id)
     if not ds:
         raise NotFoundError(f"Design system {ds_id!r} not found")
-    await TemplateRepository(db).delete_for_design_system(ds_id)
-    await repo.delete(ds_id)
+    # Atomic: templates + design system in one transaction.
+    deleted = await repo.delete_cascade(ds_id)
+    log.info("[design-systems] Deleted %s (+%d templates)", ds_id, deleted)
 
 
 @router.post("/{ds_id}/logo")
