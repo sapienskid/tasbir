@@ -65,20 +65,23 @@ n8n/Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → HTML + PNG
 
 ### Pipeline
 
-Strategist → Copywriter → process_all_formats (Designer → Renderer → Verifier,
-per-format in parallel, with retry loop).
+Strategist → Copywriter → process_all_formats. Each format tries the
+**human-authored template library** first (Jinja2, `data/design_system/templates/`);
+the LLM designer runs only when no template matches or the chosen one overflows.
+Then Renderer injects tokens/fonts/KaTeX/images → Verifier gates (deterministic
++ overflow; templates pre-approved, LLM designs get a vision audit).
 
 Each agent outputs typed JSON (Pydantic). Design tokens and typography live in
 YAML files — the LLM never sees brand colors or hex values.
 
 ### Agent Team
 
-1. **Strategist** (Aura Vance) — content analysis → structured brief + category + ground
+1. **Strategist** (Aura Vance) — content analysis → structured brief + category + ground + template hint
 2. **Copywriter** (Julian Sterling) — per-platform copy (headline, subhead, body)
-3. **Designer** (Marcus Chen) — HTML with CSS variables (`var(--color-*)`)
-4. **Renderer** — injects tokens/fonts/KaTeX/images, saves HTML
-5. **Verifier** (Victoria Thorne) — deterministic checks + renders to PNG +
-   multimodal audit via Gemini Vision
+3. **Template library** — human-authored Jinja2 compositions (default path)
+4. **Designer** (Marcus Chen) — LLM fallback only when no template matches or it overflows
+5. **Renderer** — injects tokens/fonts/KaTeX/images, saves HTML
+6. **Verifier** (Victoria Thorne) — deterministic + overflow checks, vision audit for LLM designs
 
 The typographic system uses three voices, all config-driven in
 `data/design_system/`: Space Grotesk (display — headline + wordmark),
@@ -95,13 +98,29 @@ metadata, handle).
 
 ## Production
 
+```bash
+cp .env.example .env
+# Required: GEMINI_API_KEY, API_KEYS (comma-separated), and for Docker
+# RENDER_SERVICE_KEY. Auth fails closed — the API refuses all requests
+# without API_KEYS set.
+docker compose up -d --build
+```
+
+- The Studio SPA is built into the `frontend` image and staged into a shared
+  volume the API serves at **http://localhost:8000** (same origin). Dev uses
+  the Vite server at `:5173` (see Hot Reload).
 - Code is baked into the images (`--build` after code changes); config
   (`config/prompts/`) and data (`data/design_system/`, `data/output/`) are
-  bind-mounted for config-driven control without rebuilds.
+  bind-mounted for config-driven control without rebuilds. Templates and
+  `design-instruction.yaml` hot-reload.
 - Dependencies are pinned in `backend/pyproject.toml` and
   `backend/requirements.txt`.
-- The SQLite task DB (`backend/data/tasbir.db`) is runtime data — keep it
-  out of version control (it's gitignored).
+- The SQLite task DB (`backend/data/tasbir.db`) and generated outputs are
+  runtime data — gitignored. Outputs persist until the hourly TTL sweep
+  (`OUTPUT_TTL_HOURS`); downloads are repeatable, `?consume=true` deletes on
+  download.
+- Deployment is **local/LAN-only** (no public exposure assumed). If you ever
+  expose it, put a reverse proxy with TLS in front.
 
 ## Development
 
