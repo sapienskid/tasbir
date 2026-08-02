@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px;
+  height: {{ height }}px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-serif);
+  -webkit-font-smoothing: antialiased;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+
+.sheet {
+  position: relative;
+  height: 100%;
+  padding: {{ (height * 0.12) | round | int }}px {{ (width * 0.05) | round | int }}px;
+}
+
+/* tracked meta pinned top-right */
+.kicker {
+  position: absolute;
+  top: {{ (height * 0.12) | round | int }}px;
+  right: {{ (width * 0.05) | round | int }}px;
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.015) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+/* big headline bottom-left, tight horizontal poster */
+.headline {
+  position: absolute;
+  left: {{ (width * 0.05) | round | int }}px;
+  bottom: {{ (height * 0.3) | round | int }}px;
+  right: {{ (width * 0.05) | round | int }}px;
+  font-family: var(--font-display);
+  font-size: {{ (width * 0.058) | round | int }}px;
+  font-weight: 700;
+  letter-spacing: -0.022em;
+  line-height: 0.96;
+  max-width: {{ (width * 0.82) | round | int }}px;
+}
+
+.subhead {
+  position: absolute;
+  left: {{ (width * 0.05) | round | int }}px;
+  bottom: {{ (height * 0.14) | round | int }}px;
+  font-size: {{ (width * 0.022) | round | int }}px;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+  max-width: {{ (width * 0.5) | round | int }}px;
+}
+
+.footer {
+  position: absolute;
+  left: {{ (width * 0.05) | round | int }}px;
+  right: {{ (width * 0.05) | round | int }}px;
+  bottom: {{ (height * 0.05) | round | int }}px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-top: 1px solid var(--color-border);
+  padding-top: {{ (width * 0.012) | round | int }}px;
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.014) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
+.wordmark { font-family: var(--font-display); letter-spacing: -0.01em; color: var(--color-text); }
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="sheet">
+    <div class="kicker" data-slot="kicker">{{ kicker }}</div>
+    <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+    {% if subhead %}
+    <div class="subhead" data-slot="subhead">{{ subhead }}</div>
+    {% endif %}
+    <div class="footer">
+      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
+      <span data-slot="footer_right">{{ footer_right }}</span>
+    </div>
+  </div>
+</body>
+</html>

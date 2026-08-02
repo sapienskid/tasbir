@@ -1,0 +1,183 @@
+templates:
+  square-editorial-stack:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - WRITING
+    hint_tags:
+    - editorial
+    - stack
+    - article
+    weight: 1.0
+    description: 'Refined editorial stack: kicker rule, tight display headline, serif
+      measure, bottom-anchored footer band.'
+    file: square/editorial-stack.html
+  square-index-numeral:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - NOTE
+    hint_tags:
+    - note
+    - index
+    - numeral
+    weight: 1.2
+    description: 'Magazine index: oversized index numeral, kicker top-left, headline
+      mid, footnote meta.'
+    file: square/index-numeral.html
+  square-asymmetric-split:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - PORTFOLIO
+    hint_tags:
+    - asymmetric
+    - split
+    - portfolio
+    weight: 1.0
+    description: Headline pushed off-grid upper-right, serif body in a counter-column
+      lower-left, crossing hairline rule.
+    file: square/asymmetric-split.html
+  square-pull-quote:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - PROJECT
+    hint_tags:
+    - pull
+    - quote
+    - poster
+    weight: 1.0
+    description: One enormous display pull-quote owns the canvas; tiny source line
+      below; footer band.
+    file: square/pull-quote.html
+  square-note-card:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - NOTE
+    hint_tags:
+    - note
+    - card
+    - index
+    weight: 0.9
+    description: Content inside a thin inset frame like a handwritten note, corner
+      index, footline.
+    file: square/note-card.html
+  square-inverted-block:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - PROJECT
+    hint_tags:
+    - block
+    - inverted
+    - bold
+    weight: 0.9
+    description: Inverted color block with reversed headline, white body below, classic
+      Swiss device.
+    file: square/inverted-block.html
+  portrait-index:
+    family: portrait
+    grounds:
+    - white
+    - black
+    categories:
+    - WRITING
+    hint_tags:
+    - index
+    - editorial
+    - portrait
+    weight: 1.0
+    description: 'Tall editorial: kicker + big headline top, index numeral, serif
+      body with vertical rhythm, footer.'
+    file: portrait/portrait-index.html
+  portrait-split:
+    family: portrait
+    grounds:
+    - white
+    - black
+    categories:
+    - PORTFOLIO
+    hint_tags:
+    - split
+    - portrait
+    - showcase
+    weight: 1.0
+    description: Headline in the top third, body in a measure column, large quiet
+      lower region with index meta.
+    file: portrait/portrait-split.html
+  story-lower-third:
+    family: story
+    grounds:
+    - white
+    - black
+    categories:
+    - WRITING
+    - NOTE
+    hint_tags:
+    - story
+    - lower
+    - third
+    - reel
+    weight: 1.2
+    description: Headline in the upper third clearing platform UI; content + footer
+      in a designed lower-third band.
+    file: story/story-lower-third.html
+  story-poster:
+    family: story
+    grounds:
+    - white
+    - black
+    categories:
+    - PROJECT
+    hint_tags:
+    - story
+    - poster
+    - bold
+    weight: 1.0
+    description: Poster-scale headline floating high on a mostly empty canvas; thin
+      meta band at the bottom.
+    file: story/story-poster.html
+  landscape-split:
+    family: landscape
+    grounds:
+    - white
+    - black
+    categories:
+    - PORTFOLIO
+    hint_tags:
+    - landscape
+    - split
+    - two-column
+    weight: 1.0
+    description: 'Vertical rule splits the card: display headline left, serif measure
+      right, footer spanning.'
+    file: landscape/landscape-split.html
+  landscape-pull:
+    family: landscape
+    grounds:
+    - white
+    - black
+    categories:
+    - PROJECT
+    hint_tags:
+    - landscape
+    - pull
+    - headline
+    weight: 1.0
+    description: Big bottom-left headline, tracked meta top-right, footer rule — tight
+      horizontal poster.
+    file: landscape/landscape-pull.html

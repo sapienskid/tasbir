@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px;
+  height: {{ height }}px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-serif);
+  -webkit-font-smoothing: antialiased;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+
+.sheet { height: 100%; padding: {{ (height * 0.045) | round | int }}px {{ (width * 0.06) | round | int }}px; }
+
+.kicker {
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.020) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.headline {
+  margin-top: {{ (height * 0.03) | round | int }}px;
+  font-family: var(--font-display);
+  font-size: {{ (width * 0.072) | round | int }}px;
+  font-weight: 700;
+  letter-spacing: -0.018em;
+  line-height: 1.02;
+  max-width: {{ (width * 0.8) | round | int }}px;
+}
+
+.body {
+  margin-top: {{ (height * 0.035) | round | int }}px;
+  font-size: {{ (width * 0.028) | round | int }}px;
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+  max-width: {{ (width * 0.62) | round | int }}px;
+}
+
+/* quiet lower region — big whitespace, meta low */
+.lower {
+  margin-top: {{ (height * 0.1) | round | int }}px;
+  border-top: 1px solid var(--color-border);
+  padding-top: {{ (width * 0.022) | round | int }}px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.019) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+body[data-ground="black"] .lower { border-color: var(--color-border-inverted); }
+.wordmark { font-family: var(--font-display); letter-spacing: -0.01em; color: var(--color-text); }
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="sheet">
+    <div class="kicker" data-slot="kicker">{{ kicker }}</div>
+    <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+    {% if subhead %}
+    <div class="body" data-slot="subhead" style="color:var(--color-text);font-size:{{ (width * 0.034) | round | int }}px;line-height:1.4;">{{ subhead }}</div>
+    {% endif %}
+    {% if body %}
+    <div class="body" data-slot="body">{{ body }}</div>
+    {% endif %}
+    <div class="lower">
+      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
+      <span data-slot="footer_right">{{ footer_right }}</span>
+    </div>
+  </div>
+</body>
+</html>

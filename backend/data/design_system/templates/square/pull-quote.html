@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px;
+  height: {{ height }}px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-serif);
+  -webkit-font-smoothing: antialiased;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+
+.sheet {
+  height: 100%;
+  padding: {{ (height * 0.06) | round | int }}px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* kicker as a thin spine on the left */
+.spine {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.spine-bar { width: 3px; height: {{ (width * 0.06) | round | int }}px; background: var(--color-text); }
+body[data-ground="black"] .spine-bar { background: var(--color-text-inverted); }
+.kicker {
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.020) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.headline-zone { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+.headline {
+  font-family: var(--font-display);
+  font-size: {{ (width * 0.088) | round | int }}px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+  max-width: {{ (width * 0.9) | round | int }}px;
+}
+
+.source-line {
+  margin-top: {{ (width * 0.06) | round | int }}px;
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.019) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+body[data-ground="black"] .source-line { color: var(--color-text-secondary); }
+
+.footer {
+  border-top: 1px solid var(--color-border);
+  padding-top: {{ (width * 0.02) | round | int }}px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
+.wordmark {
+  font-family: var(--font-display);
+  font-size: {{ (width * 0.024) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.handle {
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.020) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="sheet">
+    <div class="spine">
+      <span class="spine-bar"></span>
+      <span class="kicker" data-slot="kicker">{{ kicker }}</span>
+    </div>
+    <div class="headline-zone">
+      <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+      {% if subhead %}
+      <div class="source-line" data-slot="subhead" style="text-transform:none;letter-spacing:0;font-family:var(--font-serif);font-size:{{ (width * 0.032) | round | int }}px;font-weight:400;color:var(--color-text-secondary);max-width:{{ (width * 0.62) | round | int }}px;line-height:1.4;margin-top:{{ (width * 0.05) | round | int }}px;">{{ subhead }}</div>
+      {% endif %}
+    </div>
+    <div class="footer">
+      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
+      <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
+    </div>
+  </div>
+</body>
+</html>

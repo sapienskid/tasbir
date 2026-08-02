@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px;
+  height: {{ height }}px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-serif);
+  -webkit-font-smoothing: antialiased;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+
+/* a thin inset frame — the "note card" */
+.frame {
+  position: absolute;
+  inset: {{ (height * 0.045) | round | int }}px {{ (width * 0.045) | round | int }}px;
+  border: 1px solid var(--color-border);
+}
+body[data-ground="black"] .frame { border-color: var(--color-border-inverted); }
+
+.sheet {
+  position: absolute;
+  inset: {{ (height * 0.09) | round | int }}px {{ (width * 0.09) | round | int }}px;
+  display: flex;
+  flex-direction: column;
+}
+
+.topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.019) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.spacer { flex: 1; }
+
+.headline {
+  font-family: var(--font-display);
+  font-size: {{ (width * 0.068) | round | int }}px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  line-height: 1.02;
+  max-width: {{ (width * 0.8) | round | int }}px;
+}
+
+.body {
+  margin-top: {{ (width * 0.04) | round | int }}px;
+  font-size: {{ (width * 0.026) | round | int }}px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  max-width: {{ (width * 0.66) | round | int }}px;
+}
+
+.footnote {
+  margin-top: auto;
+  padding-top: {{ (width * 0.022) | round | int }}px;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.019) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+body[data-ground="black"] .footnote { border-color: var(--color-border-inverted); }
+.wordmark { font-family: var(--font-display); letter-spacing: -0.01em; color: var(--color-text); }
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="frame"></div>
+  <div class="sheet">
+    <div class="topline">
+      <span data-slot="kicker">{{ kicker }}</span>
+      <span data-slot="footer_right">{{ footer_right }}</span>
+    </div>
+    <div class="spacer"></div>
+    <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+    {% if subhead %}
+    <div class="body" data-slot="subhead" style="color:var(--color-text);font-size:{{ (width * 0.033) | round | int }}px;line-height:1.35;">{{ subhead }}</div>
+    {% endif %}
+    {% if body %}
+    <div class="body" data-slot="body">{{ body }}</div>
+    {% endif %}
+    <div class="footnote">
+      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
+      {% if tagline %}<span data-slot="tagline">{{ tagline }}</span>{% endif %}
+    </div>
+  </div>
+</body>
+</html>
