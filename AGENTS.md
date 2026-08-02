@@ -74,7 +74,10 @@ renders to PNG for visual verification.
 - Security hardening: fail-closed API keys, per-key Redis rate limit, SSRF guard, HTML sanitizer, input caps
 - Ephemeral artifact delivery (serve-and-delete + `OUTPUT_TTL_HOURS` sweep)
 - Manual edit → re-render endpoint (`POST /tasks/{id}/formats/{fmt}/rerender`)
-- **Tasbir Studio**: React + Vite + shadcn/ui SPA served by FastAPI (Monaco editor, PNG preview, QC report)
+- **Template library**: human-authored Jinja2 post compositions (12), template-first
+  pipeline with LLM fallback, category-mapped selection + strategist `template_hint`,
+  anti-repeat via Redis, and a promote-edited-post learning loop
+- **Tasbir Studio**: React + Vite + shadcn/ui SPA served by FastAPI (Monaco editor, PNG preview, QC report, save-as-template)
 
 ### Stack
 
@@ -440,6 +443,7 @@ tasbir/
 │   │   │   ├── platforms.yaml          ← Platform dimensions
 │   │   │   ├── campaigns.yaml          ← Campaign presets (tone, ground, language)
 │   │   │   └── design-instruction.yaml ← Swiss style rules (type voices, roles, measure, archetypes)
+│   │   │   └── templates/                  ← Human-authored Jinja2 post templates + catalog.yaml
 │   │   └── output/{task_id}/           ← Generated HTML + PNG files
 │   │
 │   ├── app/
@@ -589,6 +593,15 @@ containers at `/app/config/prompts`.)
 2. Each image: `{url, alt, description, placement}`
 3. Placement options: `auto`, `background`, `top-left`, `center`, `bottom-right`
 
+### Adding a template
+1. Author a Jinja2 HTML file in `data/design_system/templates/{family}/` with
+   `var(--color-*)` tokens, `data-slot` attributes on content elements, and
+   `{{ width }}`/`{{ height }}` for the parametric canvas size
+2. Add a `catalog.yaml` entry (family, grounds, categories, hint_tags, file)
+3. Optional image slot: `{% if has_image %}<img data-image-key="0">{% endif %}`
+4. No code changes — templates hot-reload with the bind-mounted config
+5. Run `pytest tests/test_services/test_templates.py` to verify render + overflow
+
 ### Testing
 ```bash
 # Backend (pytest)
@@ -688,6 +701,14 @@ Streams an artifact then **deletes it** (one-time download; second GET → 404).
 Re-injects tokens/fonts/KaTeX/images, renders PNG, runs deterministic + overflow
 checks. `?audit=true` also runs the vision audit (opt-in to save quota). Skips
 the designer LLM. Response: `{"format", "pass", "quality": {"score", "issues", "critique"}, "png_b64"}`.
+
+### POST /tasks/{id}/formats/{fmt}/template
+```json
+{ "name": "bold-index", "mode": "new" }   // mode: new | update
+```
+Promotes the current render (or your edit) into the template library. `mode=update`
+replaces the source template the post came from; `mode=new` creates one. Validated
+(render + overflow) before saving. Response: `{"template_id", "mode", "file"}`.
 
 ### GET /health
 Response: `{"status": "ok"}`

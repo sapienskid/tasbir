@@ -82,6 +82,15 @@ n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → HTML + PNG
       PNG preview, QC report, downloads, delete) served by FastAPI
 - [x] ADRs 0007–0010 (ephemeral delivery, auth/trust boundary, SSRF policy, rerender)
 
+### Phase 8: Template-Driven Composition (v3.2)
+- [x] Human-authored Jinja2 template library (12 templates, `data/design_system/templates/`)
+- [x] Template-first pipeline with LLM-designer fallback (no-match or overflow)
+- [x] Category-mapped selection + strategist `template_hint` + Redis anti-repeat
+- [x] Promote/update endpoint (`POST /tasks/{id}/formats/{fmt}/template`) with
+      data-slot slot-ization + validation before save
+- [x] Studio "Save as Template" button/dialog; copywriter editorial overhaul
+- [x] ADR-0011; AGENTS/DESIGN refresh
+
 ## What Was Removed From v2
 
 | Removed | Replaced By |
