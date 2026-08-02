@@ -204,11 +204,25 @@ def build_template_context(
     has_image: bool,
     meta: str = "",
     seed: str = "",
+    family: str = "square",
 ) -> dict:
     """Build the Jinja2 render context from typed copy + design decisions."""
     # Deterministic index numeral (editorial device, varies per post).
     digest = int(hashlib.sha1(seed.encode("utf-8")).hexdigest()[:6], 16) if seed else 1
     loop_index = (digest % 27) + 1
+
+    # Family-aware type scale: tall formats get larger type to fill the canvas.
+    from app.config import get_settings
+    from app.services.design_instruction import load_design_instruction
+
+    base = 1080
+    di = load_design_instruction(
+        Path(get_settings().design_system_dir) / "design-instruction.yaml"
+    )
+    fam_scale = (di.get("type_scale", {}).get("family_scale") or {}).get(family, 1.0)
+    tscale = float(fam_scale) * (width / base)
+    tscale = max(0.6, min(tscale, 2.0))
+
     return {
         "kicker": category,
         "headline": copy.get("headline", ""),
@@ -223,6 +237,7 @@ def build_template_context(
         "has_image": bool(has_image),
         "meta": meta,
         "loop_index": loop_index,
+        "tscale": tscale,
     }
 
 

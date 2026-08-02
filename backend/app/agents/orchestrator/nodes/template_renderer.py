@@ -72,6 +72,7 @@ async def template_node_single(state: GenerationState) -> dict:
             fmt.height,
             bool(state.get("images", [])),
             seed=seed,
+            family=family,
         )
         html = render_template_file(entry["file"], context)
     except Exception as e:

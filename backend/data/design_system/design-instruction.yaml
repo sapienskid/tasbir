@@ -33,6 +33,14 @@ type_voice:
 
 type_scale:
   base_canvas_width: 1080
+  # Per-family type multiplier on top of width scaling. Tall formats
+  # (portrait/story) get larger type so the canvas reads full without
+  # leftover space; square/landscape stay at 1.0.
+  family_scale:
+    square: 1.0
+    portrait: 1.18
+    story: 1.45
+    landscape: 1.0
   # Sizes are at base_canvas_width; scale by width/1080 for other formats.
   # THREE voices: display (headline + wordmark), serif (subhead + body),
   # sans (category + metadata + handle). Per-family max 2 weights.
