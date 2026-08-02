@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px;
+  height: {{ height }}px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+
+.card {
+  width: 100%;
+  height: 100%;
+  padding: {{ (height * 0.09) | round | int }}px {{ (width * 0.05) | round | int }}px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* top row: category left, brand wordmark right */
+.toprow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.kicker {
+  font-size: {{ (22 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+.wordmark {
+  font-family: var(--font-display);
+  font-size: {{ (24 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+/* middle: display column left, line-art right */
+.middle {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: {{ (width * 0.05) | round | int }}px;
+  min-height: 0;
+}
+.left { flex: 1 1 55%; min-width: 0; }
+.headline {
+  font-family: var(--font-display);
+  font-size: {{ (60 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.06;
+  max-width: {{ (width * 0.5) | round | int }}px;
+}
+.subhead {
+  margin-top: {{ (height * 0.035) | round | int }}px;
+  font-family: var(--font-serif);
+  font-size: {{ (24 * tscale) | round | int }}px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  max-width: {{ (width * 0.42) | round | int }}px;
+}
+.right { flex: 1 1 45%; display: flex; justify-content: center; }
+.right svg { max-width: 100%; }
+
+.footer {
+  border-top: 1px solid var(--color-border);
+  padding-top: {{ (height * 0.022) | round | int }}px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
+.dots { display: flex; align-items: center; gap: 10px; }
+.dot { width: 10px; height: 10px; background: var(--color-text-tertiary); }
+.dot.dark { background: var(--color-text); }
+.handle {
+  font-size: {{ (19 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-left: 16px;
+}
+.meta {
+  font-size: {{ (19 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="card">
+    <div class="toprow">
+      <span class="kicker" data-slot="kicker">{{ kicker }}</span>
+      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
+    </div>
+
+    <div class="middle">
+      <div class="left">
+        <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+        {% if subhead %}
+        <div class="subhead" data-slot="subhead">{{ subhead }}</div>
+        {% endif %}
+      </div>
+      <div class="right">
+        <svg width="{{ (width * 0.4) | round | int }}" height="{{ (height * 0.5) | round | int }}" viewBox="0 0 420 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="20" y="50" width="380" height="70" stroke="var(--color-border)" stroke-width="4" fill="none"/>
+          <line x1="60" y1="72" x2="300" y2="72" stroke="var(--color-text)" stroke-width="5"/>
+          <line x1="60" y1="90" x2="240" y2="90" stroke="var(--color-text-secondary)" stroke-width="5"/>
+          <line x1="60" y1="108" x2="280" y2="108" stroke="var(--color-text-tertiary)" stroke-width="5"/>
+          <circle cx="140" cy="160" r="18" stroke="var(--color-text)" stroke-width="4" fill="none"/>
+          <line x1="140" y1="178" x2="140" y2="144" stroke="var(--color-text)" stroke-width="4"/>
+          <circle cx="300" cy="158" r="16" stroke="var(--color-text-secondary)" stroke-width="4" fill="none"/>
+          <line x1="300" y1="174" x2="300" y2="144" stroke="var(--color-text-secondary)" stroke-width="4"/>
+          <line x1="95" y1="150" x2="140" y2="126" stroke="var(--color-text)" stroke-width="4"/>
+          <line x1="185" y1="150" x2="140" y2="126" stroke="var(--color-text)" stroke-width="4"/>
+          <line x1="268" y1="148" x2="300" y2="126" stroke="var(--color-text-secondary)" stroke-width="4"/>
+          <line x1="332" y1="148" x2="300" y2="126" stroke="var(--color-text-secondary)" stroke-width="4"/>
+        </svg>
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="dots">
+        <span class="dot dark"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
+      </div>
+      <span class="meta" data-slot="meta">{{ meta }}</span>
+    </div>
+  </div>
+</body>
+</html>

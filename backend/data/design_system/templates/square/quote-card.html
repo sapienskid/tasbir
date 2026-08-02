@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px;
+  height: {{ height }}px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+
+.card {
+  width: 100%;
+  height: 100%;
+  padding: {{ (width * 0.09) | round | int }}px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: {{ (width * 0.035) | round | int }}px;
+}
+
+/* tag → kicker (0-radius block per the design system) */
+.kicker {
+  background: var(--color-text);
+  color: var(--color-bg);
+  font-size: {{ (28 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: {{ (width * 0.014) | round | int }}px {{ (width * 0.032) | round | int }}px;
+}
+body[data-ground="black"] .kicker { background: var(--color-text-inverted); color: var(--color-bg-inverted); }
+
+/* quote → headline, in the serif editorial voice */
+.headline {
+  font-family: var(--font-serif);
+  font-size: {{ (80 * tscale) | round | int }}px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  max-width: {{ (width * 0.72) | round | int }}px;
+}
+
+.subhead {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: {{ (51 * tscale) | round | int }}px;
+  line-height: 1.4;
+  color: var(--color-text-tertiary);
+  max-width: {{ (width * 0.6) | round | int }}px;
+}
+body[data-ground="black"] .subhead { color: var(--color-text-secondary); }
+
+.cta {
+  display: flex;
+  align-items: center;
+  gap: {{ (width * 0.03) | round | int }}px;
+  margin-top: {{ (width * 0.02) | round | int }}px;
+}
+.cta-label {
+  border: 1px solid var(--color-text);
+  padding: {{ (width * 0.02) | round | int }}px {{ (width * 0.04) | round | int }}px;
+  font-size: {{ (30 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.arrow {
+  width: {{ (width * 0.07) | round | int }}px;
+  height: {{ (width * 0.07) | round | int }}px;
+  border: 1px solid var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.arrow svg { display: block; }
+
+.footer {
+  width: 100%;
+  margin-top: auto;
+  border-top: 1px solid var(--color-border);
+  padding-top: {{ (width * 0.02) | round | int }}px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
+.wordmark {
+  font-family: var(--font-display);
+  font-size: {{ (24 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.handle {
+  font-size: {{ (20 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="card">
+    <div class="kicker" data-slot="kicker">{{ kicker }}</div>
+    <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+    {% if subhead %}
+    <div class="subhead" data-slot="subhead">{{ subhead }}</div>
+    {% endif %}
+    {% if tagline %}
+    <div class="cta">
+      <span class="cta-label" data-slot="tagline">{{ tagline }}</span>
+      <span class="arrow">
+        <svg width="{{ (width * 0.03) | round | int }}" height="{{ (width * 0.03) | round | int }}" viewBox="0 0 24 24" fill="none">
+          <path d="M18 6 6 18M6 6h12v12" stroke="var(--color-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
+      <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
+    </div>
+  </div>
+</body>
+</html>

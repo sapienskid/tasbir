@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px;
+  height: {{ height }}px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+
+.card {
+  width: 100%;
+  height: 100%;
+  padding: {{ (height * 0.05) | round | int }}px {{ (width * 0.06) | round | int }}px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* top row: doc icon left, index date right */
+.toprow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+.icon svg { display: block; }
+.date { text-align: right; }
+.day {
+  font-family: var(--font-display);
+  font-size: {{ (120 * tscale) | round | int }}px;
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.month {
+  margin-top: {{ (width * 0.012) | round | int }}px;
+  font-size: {{ (24 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.kicker {
+  margin-top: {{ (height * 0.04) | round | int }}px;
+  font-size: {{ (22 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.headline {
+  margin-top: {{ (height * 0.025) | round | int }}px;
+  font-family: var(--font-display);
+  font-size: {{ (62 * tscale) | round | int }}px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  max-width: {{ (width * 0.82) | round | int }}px;
+}
+
+/* bottom row: wordmark + byline */
+.bottomrow {
+  border-top: 1px solid var(--color-border);
+  padding-top: {{ (width * 0.02) | round | int }}px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+body[data-ground="black"] .bottomrow { border-color: var(--color-border-inverted); }
+.wordmark {
+  font-family: var(--font-display);
+  font-size: {{ (24 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+.byline {
+  font-size: {{ (22 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="card">
+    <div class="toprow">
+      <div class="icon">
+        <svg width="{{ (width * 0.12) | round | int }}" height="{{ (width * 0.12) | round | int }}" viewBox="0 0 56 56" fill="none">
+          <path d="M12 46V14l10-6h14a4 4 0 0 1 4 4v34l-14-6-14 6z" stroke="var(--color-text)" stroke-width="2.4" stroke-linejoin="round"/>
+          <line x1="18" y1="16" x2="34" y2="16" stroke="var(--color-text)" stroke-width="2"/>
+          <line x1="18" y1="22" x2="34" y2="22" stroke="var(--color-text)" stroke-width="2"/>
+          <line x1="12" y1="8" x2="22" y2="8" stroke="var(--color-text)" stroke-width="2.4"/>
+        </svg>
+      </div>
+      <div class="date">
+        <div class="day">{{ loop_index }}</div>
+        <div class="month" data-slot="meta">{{ meta }}</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="kicker" data-slot="kicker">{{ kicker }}</div>
+      <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+      {% if subhead %}
+      <div style="margin-top:{{ (height * 0.03) | round | int }}px;font-family:var(--font-serif);font-size:{{ (30 * tscale) | round | int }}px;line-height:1.5;color:var(--color-text-secondary);max-width:{{ (width * 0.66) | round | int }}px;" data-slot="subhead">{{ subhead }}</div>
+      {% endif %}
+    </div>
+
+    <div class="bottomrow">
+      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
+      <span class="byline" data-slot="footer_right">{{ footer_right }}</span>
+    </div>
+  </div>
+</body>
+</html>

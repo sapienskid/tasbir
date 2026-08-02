@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px;
+  height: {{ height }}px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+/* this composition is inherently dark — black is the natural ground */
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+
+.card {
+  width: 100%;
+  height: 100%;
+  padding: {{ (height * 0.09) | round | int }}px {{ (width * 0.07) | round | int }}px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* progress bar */
+.progress {
+  height: 4px;
+  background: var(--color-border);
+}
+body[data-ground="black"] .progress { background: var(--color-border-inverted); }
+.progress::after {
+  content: "";
+  display: block;
+  width: 38%;
+  height: 100%;
+  background: var(--color-text);
+}
+body[data-ground="black"] .progress::after { background: var(--color-text-inverted); }
+
+.brandrow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: {{ (height * 0.035) | round | int }}px;
+}
+.mark {
+  width: {{ (width * 0.045) | round | int }}px;
+  height: {{ (width * 0.045) | round | int }}px;
+  background: var(--color-text);
+  color: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: {{ (22 * tscale) | round | int }}px;
+}
+body[data-ground="black"] .mark { background: var(--color-text-inverted); color: var(--color-bg-inverted); }
+.brandname {
+  font-family: var(--font-display);
+  font-size: {{ (26 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+/* +/− texture grid — typographic decoration, monochrome */
+.grid {
+  position: absolute;
+  top: {{ (height * 0.2) | round | int }}px;
+  left: {{ (width * 0.07) | round | int }}px;
+  right: {{ (width * 0.07) | round | int }}px;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: {{ (height * 0.03) | round | int }}px {{ (width * 0.025) | round | int }}px;
+  font-size: {{ (34 * tscale) | round | int }}px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  pointer-events: none;
+}
+body[data-ground="black"] .grid { color: var(--color-text-secondary); }
+.grid span { text-align: center; }
+
+.kicker {
+  margin-top: auto;
+  margin-bottom: {{ (height * 0.02) | round | int }}px;
+  font-size: {{ (22 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+/* badge → headline: inverted block device */
+.headline {
+  font-family: var(--font-display);
+  font-size: {{ (48 * tscale) | round | int }}px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: -0.015em;
+  max-width: {{ (width * 0.86) | round | int }}px;
+  background: var(--color-text);
+  color: var(--color-bg);
+  padding: {{ (width * 0.03) | round | int }}px {{ (width * 0.035) | round | int }}px;
+}
+body[data-ground="black"] .headline {
+  background: var(--color-text-inverted);
+  color: var(--color-bg-inverted);
+}
+
+.footerrow {
+  margin-top: {{ (height * 0.025) | round | int }}px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.handle {
+  font-size: {{ (22 * tscale) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="card">
+    <div class="progress"></div>
+    <div class="brandrow">
+      <span class="mark">{{ loop_index }}</span>
+      <span class="brandname" data-slot="footer_left">{{ footer_left }}</span>
+    </div>
+
+    <div class="grid">
+      <span>+</span><span>+</span><span>+</span><span>+</span><span>+</span><span>+</span>
+      <span>+</span><span>−</span><span>+</span><span>+</span><span>−</span><span>+</span>
+      <span>−</span><span>+</span><span>+</span><span>+</span><span>+</span><span>−</span>
+      <span>+</span><span>+</span><span>+</span><span>−</span><span>+</span><span>+</span>
+    </div>
+
+    <div class="kicker" data-slot="kicker">{{ kicker }}</div>
+    <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+    {% if tagline %}
+    <div style="margin-top:{{ (height * 0.02) | round | int }}px;font-size:{{ (24 * tscale) | round | int }}px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-text-secondary);" data-slot="tagline">{{ tagline }}</div>
+    {% endif %}
+
+    <div class="footerrow">
+      <span style="color:var(--color-text-tertiary);font-size:{{ (20 * tscale) | round | int }}px;">{{ meta }}</span>
+      <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
+    </div>
+  </div>
+</body>
+</html>
