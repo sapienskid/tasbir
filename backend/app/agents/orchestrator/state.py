@@ -4,7 +4,7 @@ Each agent node reads from and writes to this state dict.
 Per-format streaming via FormatTask dict + Send fan-out.
 """
 
-from typing import Annotated, Any, Optional, TypedDict
+from typing import Annotated, Any, TypedDict
 
 
 def _keep_first(a: str, b: str) -> str:
@@ -56,11 +56,9 @@ class GenerationState(TypedDict):
     # Input
     content: Annotated[str, _keep_first]
     title: Annotated[str, _keep_first]
-    url: Annotated[str, _keep_first]
     excerpt: Annotated[str, _keep_first]
     tags: Annotated[list[str], _keep_first_list]
     platforms: Annotated[list[str], _keep_first_list]
-    source_url: Annotated[Optional[str], _keep_first]
 
     # Configuration
     _task_id: Annotated[str, _keep_first]
@@ -104,7 +102,6 @@ def initial_state(
     categories: list[dict[str, Any]] | None = None,
     category: str = "",
     ground: str = "",
-    url: str = "",
     excerpt: str = "",
     tags: list[str] | None = None,
     **kwargs,
@@ -125,11 +122,9 @@ def initial_state(
     return {
         "title": title,
         "content": content,
-        "url": url or kwargs.get("url", ""),
         "excerpt": excerpt or kwargs.get("excerpt", ""),
         "tags": tags or kwargs.get("tags", []),
         "platforms": platforms,
-        "source_url": kwargs.get("source_url"),
         "_task_id": _task_id,
         "design_tokens": design_tokens or {},
         "brand_info": brand_info or {},

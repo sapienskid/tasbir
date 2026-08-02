@@ -39,9 +39,11 @@ def test_initial_state_with_design_tokens():
     assert state["design_tokens"]["--color-bg"] == "#0f172a"
 
 
-def test_initial_state_with_source_url():
-    state = initial_state(title="T", content="C", platforms=["instagram-square"], source_url="https://example.com")
-    assert state["source_url"] == "https://example.com"
+def test_initial_state_with_tags():
+    state = initial_state(title="T", content="C", platforms=["instagram-square"], tags=["ai"])
+    assert state["tags"] == ["ai"]
+    assert "url" not in state
+    assert "source_url" not in state
 
 
 def test_format_task_structure():
