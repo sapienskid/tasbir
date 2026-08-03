@@ -163,13 +163,16 @@ def select_template(
     seed: str,
     templates: list[dict],
     exclude: set[str] | None = None,
+    prefer: str | None = None,
 ) -> tuple[str, dict] | None:
     """Pick a template deterministically from a loaded template list.
 
     Filters by family + ground, ranks by category affinity + strategist hint
     + a seeded jitter, and excludes recently-used ids (anti-repetition).
     ``templates`` is the list of template dicts (see ``template_to_dict``) —
-    a pure function, so it stays testable without a DB session.
+    a pure function, so it stays testable without a DB session. ``prefer``
+    biases toward templates carrying that ``hint_tag`` (e.g. ``"media"`` /
+    ``"text"`` for carousel layout variety); falls back if none match.
     """
     exclude = exclude or set()
     candidates = {
@@ -180,6 +183,15 @@ def select_template(
     }
     if not candidates:
         return None
+
+    if prefer:
+        preferred = {
+            tid: e
+            for tid, e in candidates.items()
+            if prefer in {str(h).lower() for h in e.get("hint_tags", [])}
+        }
+        if preferred:
+            candidates = preferred
 
     # The strategist's hint is the strongest signal — if it names an
     # available template for this family+ground, honor it directly.

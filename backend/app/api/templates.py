@@ -64,6 +64,8 @@ def _entry(row) -> dict:
         "description": row.description,
         "image_slots": row.image_slots,
         "has_logo_slot": bool(row.has_logo_slot),
+        "supports_text": "{{ body" in (row.html or ""),
+        "has_illustration_slot": "{{ illustration" in (row.html or ""),
         "source": row.source,
         "is_active": bool(row.is_active),
         "created_at": iso_utc(row.created_at),

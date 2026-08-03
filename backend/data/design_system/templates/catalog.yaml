@@ -230,3 +230,38 @@ templates:
     description: 'Carousel slide: category + slide counter rail, verbatim body text
       (poems keep their line breaks), complete title on the cover slide, footer.'
     file: square/slide.html
+  square-split-media:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - PORTFOLIO
+    - PROJECT
+    - WRITING
+    hint_tags:
+    - media
+    - split
+    - image
+    weight: 1.0
+    description: 'Half text / half image: headline + body on the left, a grayscale
+      photo filling the right column, footer. Good for carousel covers and media
+      slides.'
+    file: square/split-media.html
+  square-cover-bg:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - PORTFOLIO
+    - PROJECT
+    - WRITING
+    hint_tags:
+    - media
+    - cover
+    - background
+    weight: 1.0
+    description: 'Full-bleed background photo with a monochrome scrim and overlay
+      headline/body. Strong carousel cover layout.'
+    file: square/cover-bg.html

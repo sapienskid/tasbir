@@ -16,7 +16,7 @@ import json
 import logging
 
 from app.agents.orchestrator.state import GenerationState
-from app.services.formats import get_format_info
+from app.services.formats import get_format_info, parse_carousel_slide
 from app.services.templates import (
     build_template_context,
     format_family,
@@ -48,12 +48,12 @@ _PHOTO_CAP = 3  # max find_photo LLM calls per post
 
 
 async def _get_post_illustration(state: GenerationState, ground: str, seed: str) -> str:
-    """Return the post's shared illustration (LLM tool once per post).
+    """Return this slide/format's illustration (LLM director, cached per slide).
 
     Runs the illustration director (the unified ``illustrate`` tool — Anthropic
-    procedural or vendored CC0 hand-drawn kits) once per post via the shared
-    per-post cache, and memoizes it on this branch's state for retries. Falls
-    back to the deterministic render if the tool fails.
+    procedural or vendored CC0 hand-drawn kits) once per carousel slide (cached
+    per format id) so each slide may get its own figure — the director decides
+    a cover figure and "necessary" interior figures, or declines.
     """
     cached = state.get(_ILLUSTRATION_CACHE_KEY)
     if cached:
@@ -61,9 +61,11 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
 
     from app.agents.orchestrator.post_cache import post_cached
 
+    fmt_id = state.get("_processing_format_id", "")
+
     async def loader() -> str:
         title = state.get("title", "")
-        task = (state.get("format_tasks") or {}).get(state.get("_processing_format_id", ""), {})
+        task = (state.get("format_tasks") or {}).get(fmt_id, {})
         copy = _parse_copy(task.get("copy", ""))
         category = state.get("category", "")
         from app.services.illustration import illustration_via_tool
@@ -74,10 +76,10 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
             headline=copy.get("headline", ""),
             category=category,
             ground=ground,
-            seed=f"{title or ''}|illustration",
+            seed=f"{title or ''}|illustration|{fmt_id}",
         )
 
-    svg = await post_cached(state.get("_task_id", ""), "illustration", loader) or ""
+    svg = await post_cached(state.get("_task_id", ""), f"illustration:{fmt_id}", loader) or ""
     state[_ILLUSTRATION_CACHE_KEY] = svg
     return svg
 
@@ -99,6 +101,15 @@ _PHOTO_DIRECTOR_SEARCH = (
     "render grayscale with a small credit caption."
 )
 
+_PHOTO_DIRECTOR_SEARCH_REQUIRED = (
+    "You are the image director for a strict monochrome editorial design "
+    "system. This slide's layout REQUIRES a photo. Call find_photo with a "
+    "SHORT, BROAD query (1-3 words) matching the post's subject, then review "
+    "the shortlist and call choose_photo with the best index. If the first "
+    "search is poor, try one simpler query. Do not decline unless no photo "
+    "can be found. Photos render grayscale with a small credit caption."
+)
+
 _PHOTO_DIRECTOR_PICK = (
     "You are the image director for a strict monochrome editorial design "
     "system. A shortlist of photo candidates is provided below. Call "
@@ -107,14 +118,16 @@ _PHOTO_DIRECTOR_PICK = (
 )
 
 
-async def _get_post_photo(state: GenerationState, orientation: str) -> dict | None:
+async def _get_post_photo(state: GenerationState, orientation: str, required: bool = False) -> dict | None:
     """Return the post's shared auto-photo: {image, credit, candidate}.
 
     Runs the LLM photo director ONCE per post (shared per-post cache) in a
-    bounded two-phase flow: the model decides whether a photo is warranted and
-    searches via ``find_photo`` (one retry if the first query finds nothing),
-    then sees the shortlist and picks via ``choose_photo``. Nothing is chosen
-    deterministically by the pipeline, and a decline means no photo.
+    bounded two-phase flow: the model searches via ``find_photo`` (one retry if
+    the first query finds nothing), then sees the shortlist and picks via
+    ``choose_photo``. Nothing is chosen deterministically by the pipeline. When
+    ``required`` the layout depends on the photo (media templates) so the model
+    is instructed to search rather than decline; a still-empty result means no
+    photo (the caller falls back to a text template).
     """
     cached = state.get(_PHOTO_CACHE_KEY)
     if cached:
@@ -152,11 +165,13 @@ async def _get_post_photo(state: GenerationState, orientation: str) -> dict | No
         def _query(args: dict) -> str:
             return str(args.get("query") or "").strip()
 
+        search_system = _PHOTO_DIRECTOR_SEARCH if not required else _PHOTO_DIRECTOR_SEARCH_REQUIRED
+
         # Phase A — decide + search (one bounded retry on an empty result).
         try:
             args = await call_llm_for_tool(
                 agent_role="designer",
-                system_prompt=_PHOTO_DIRECTOR_SEARCH,
+                system_prompt=search_system,
                 user_prompt=user,
                 tool=FIND_PHOTO_TOOL,
                 temperature=0.5,
@@ -180,7 +195,7 @@ async def _get_post_photo(state: GenerationState, orientation: str) -> dict | No
             try:
                 args = await call_llm_for_tool(
                     agent_role="designer",
-                    system_prompt=_PHOTO_DIRECTOR_SEARCH,
+                    system_prompt=search_system,
                     user_prompt=retry_user,
                     tool=FIND_PHOTO_TOOL,
                     temperature=0.5,
@@ -247,22 +262,21 @@ async def template_node_single(state: GenerationState) -> dict:
     if not templates:
         return {}
 
+    user_template_id = (state.get("template_id") or "").strip()
+
     # Verbatim mode carries long-form text in {{ body }} — only templates that
     # actually render a body slot can host it, or the content would be dropped.
-    # Prefer the dedicated slide template (slide counter, pre-line text) so
-    # verbatim carousels read as slides rather than editorial posters.
     if state.get("verbatim"):
         body_templates = [t for t in templates if "{{ body" in (t.get("html") or "")]
         if body_templates:
             templates = body_templates
-        slide_tpl = next(
-            (t for t in templates if t.get("family") == family and "slide" in (t.get("hint_tags") or [])),
-            None,
-        )
-        if slide_tpl:
-            templates = [slide_tpl]
 
-    user_template_id = (state.get("template_id") or "").strip()
+    # Carousel slide layout direction: cover prefers a media template; interior
+    # slides alternate text ↔ media so the sequence breathes.
+    layout_pref: str | None = None
+    parsed = parse_carousel_slide(fmt_id)
+    if parsed and not state.get("verbatim"):
+        layout_pref = "media" if parsed[1] % 2 == 1 else "text"
 
     # User override: honor the chosen template for its family + a supported
     # ground; otherwise fall back to deterministic selection.
@@ -279,8 +293,22 @@ async def template_node_single(state: GenerationState) -> dict:
             selected = (user_template_id, entry)
 
     if selected is None:
+        # Auto verbatim → prefer the dedicated slide-style text template.
+        if state.get("verbatim") and not user_template_id:
+            slide_tpl = next(
+                (
+                    t
+                    for t in templates
+                    if t.get("family") == family and "slide" in (t.get("hint_tags") or [])
+                ),
+                None,
+            )
+            if slide_tpl:
+                templates = [slide_tpl]
         exclude = await get_recent_template_ids()
-        selected = select_template(family, ground, category, hint, seed, templates, exclude)
+        selected = select_template(
+            family, ground, category, hint, seed, templates, exclude, prefer=layout_pref
+        )
 
     if selected is None:
         log.info("[template] No template for %s (%s / %s)", fmt_id, family, ground)
@@ -288,6 +316,33 @@ async def template_node_single(state: GenerationState) -> dict:
 
     tid, entry = selected
     html = entry.get("html", "")
+    image_slots = entry.get("image_slots") or []
+    has_user_images = bool(state.get("images", []))
+
+    def _hint_tags(e: dict) -> set[str]:
+        return {str(h).lower() for h in e.get("hint_tags", [])}
+
+    # Structural media slot: the photo is required. If the director can't fill
+    # it, fall back to a text template so a slide is never a broken half-image.
+    auto_photo: dict | None = None
+    if not has_user_images and len(image_slots) == 1:
+        is_media = "media" in _hint_tags(entry)
+        auto_photo = await _get_post_photo(state, _orientation_for(fmt), required=is_media)
+        if auto_photo is None and is_media:
+            log.info("[template] media template %s has no photo — falling back to text", tid)
+            text_tpls = [
+                t for t in templates
+                if t.get("family") == family and "media" not in _hint_tags(t)
+            ]
+            reselected = (
+                select_template(family, ground, category, hint, seed, text_tpls, exclude, prefer="text")
+                if text_tpls else None
+            )
+            if reselected:
+                tid, entry = reselected
+                html = entry.get("html", "")
+                auto_photo = None
+
     try:
         # Templates that opt in to the illustration slot get an LLM-directed
         # illustration (unified tool); everything else stays static.
@@ -295,19 +350,8 @@ async def template_node_single(state: GenerationState) -> dict:
         if "{{ illustration" in html:
             illustration = await _get_post_illustration(state, ground, seed)
 
-        # Auto-fill a single empty image slot with a searched photo when the
-        # user provided no media.
-        image_slots = entry.get("image_slots") or []
-        has_user_images = bool(state.get("images", []))
-        auto_photo: dict | None = None
-        if not has_user_images and len(image_slots) == 1:
-            auto_photo = await _get_post_photo(state, _orientation_for(fmt))
-
         # Carousel slide counter (i / N) for slide-style templates.
         slide_index, slide_total = 0, 0
-        from app.services.formats import parse_carousel_slide
-
-        parsed = parse_carousel_slide(fmt_id)
         if parsed:
             slide_index = parsed[1]
             slide_total = int((state.get("slide_context") or {}).get(fmt_id, {}).get("total", 0))

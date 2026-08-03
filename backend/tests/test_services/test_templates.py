@@ -99,6 +99,28 @@ class TestSelection:
     def test_no_match_for_unknown_family(self):
         assert select_template("octagonal", "white", "", "", "seed", _catalog_templates()) is None
 
+    def test_prefer_media(self):
+        selection = select_template(
+            "square", "white", "PROJECT", "", "seed", _catalog_templates(), prefer="media"
+        )
+        assert selection is not None
+        _, entry = selection
+        assert "media" in {str(h).lower() for h in entry.get("hint_tags", [])}
+
+    def test_prefer_falls_back_when_none_match(self):
+        selection = select_template(
+            "square", "white", "PROJECT", "", "seed", _catalog_templates(), prefer="does-not-exist"
+        )
+        assert selection is not None  # falls back to the full candidate set
+
+    def test_prefer_text_excludes_media(self):
+        selection = select_template(
+            "square", "white", "PROJECT", "", "seed", _catalog_templates(), prefer="text"
+        )
+        assert selection is not None
+        _, entry = selection
+        assert "media" not in {str(h).lower() for h in entry.get("hint_tags", [])}
+
     def test_category_boost(self):
         selection = select_template("landscape", "white", "PORTFOLIO", "", "seed", _catalog_templates())
         # PORTFOLIO maps to both landscape-split and landscape-ad-card.

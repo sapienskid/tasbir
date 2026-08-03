@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px;
+  height: {{ height }}px;
+  overflow: hidden;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+
+/* full-bleed background photo */
+.bg { position: absolute; inset: 0; }
+.bg .auto-photo, .bg img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.scrim { position: absolute; inset: 0; background: var(--color-bg); opacity: 0.74; }
+body[data-ground="black"] .scrim { background: var(--color-bg-inverted); }
+
+.content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  overflow: hidden;
+  padding: {{ (height * 0.08) | round | int }}px {{ (width * 0.08) | round | int }}px;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+}
+.kicker {
+  font-size: {{ (width * 0.020) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+.headline {
+  font-family: var(--font-display);
+  font-size: {{ (width * 0.074) | round | int }}px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.0;
+  margin-top: {{ (height * 0.03) | round | int }}px;
+  max-width: {{ (width * 0.84) | round | int }}px;
+}
+.body {
+  margin-top: {{ (height * 0.03) | round | int }}px;
+  font-family: var(--font-serif);
+  font-size: {{ (width * 0.026) | round | int }}px;
+  line-height: 1.5;
+  color: var(--color-text);
+  max-width: {{ (width * 0.72) | round | int }}px;
+}
+
+.footer {
+  position: absolute;
+  left: {{ (width * 0.08) | round | int }}px;
+  bottom: {{ (height * 0.045) | round | int }}px;
+  right: {{ (width * 0.08) | round | int }}px;
+  z-index: 2;
+  border-top: 1px solid var(--color-border);
+  padding-top: {{ (height * 0.018) | round | int }}px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
+.wordmark { font-family: var(--font-display); font-size: {{ (width * 0.021) | round | int }}px; font-weight: 500; letter-spacing: -0.01em; text-transform: uppercase; }
+.handle { font-size: {{ (width * 0.018) | round | int }}px; font-weight: 500; letter-spacing: 0.09em; text-transform: uppercase; color: var(--color-text-secondary); }
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  {% if has_image %}
+  <div class="bg"><img data-image-key="0" alt=""/><div class="scrim"></div></div>
+  {% endif %}
+  <div class="content">
+    <span class="kicker" data-slot="kicker">{{ kicker }}</span>
+    <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+    {% if body %}
+    <div class="body" data-slot="body">{{ body }}</div>
+    {% endif %}
+  </div>
+  <div class="footer">
+    <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
+    <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
+  </div>
+</body>
+</html>
