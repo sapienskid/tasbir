@@ -68,15 +68,40 @@ def extract_json(text: str) -> dict:
     raise ValueError(f"Could not extract JSON from agent output: {text[:200]}")
 
 
+def repair_jinja(html: str) -> str:
+    """Repair common malformed-Jinja slips LLMs produce in template HTML.
+
+    Known failure mode: a block-close ``%}`` fused with a following ``>`` or
+    ``}}`` so the closing brace goes missing, e.g. ``{% endif %>`` instead of
+    ``{% endif %}``. This makes ``Environment.parse`` raise
+    ``expected token 'end of statement block', got '%'``. Only known block
+    keywords are rewritten so legitimate CSS/JS ``%>`` sequences are untouched.
+    """
+    if "{%" not in html:
+        return html
+    keywords = (
+        r"if|endif|else|elif|for|endfor|set|block|endblock|with|endwith|"
+        r"filter|endfilter|macro|endmacro|call|endcall|raw|endraw|"
+        r"extends|include|import|from|do|break|continue"
+    )
+    pattern = re.compile(
+        rf"(\{{%\s*(?:{keywords})\b[^%]*?)%>(?=[>}}])", re.IGNORECASE
+    )
+    fixed = pattern.sub(r"\1%}", html)
+    return fixed
+
+
 def clean_html(raw: str) -> str:
     raw = raw.strip()
     raw = re.sub(r"^```(?:html)?\s*\n?", "", raw, flags=re.MULTILINE | re.IGNORECASE)
     raw = re.sub(r"\n?```\s*$", "", raw, flags=re.MULTILINE)
     if "<!DOCTYPE" in raw.upper():
-        return raw[raw.upper().index("<!DOCTYPE"):].strip()
-    if "<html" in raw.lower():
-        return raw[raw.lower().index("<html"):].strip()
-    return raw.strip()
+        raw = raw[raw.upper().index("<!DOCTYPE"):].strip()
+    elif "<html" in raw.lower():
+        raw = raw[raw.lower().index("<html"):].strip()
+    else:
+        raw = raw.strip()
+    return repair_jinja(raw)
 
 
 async def build_layout_spec(image_bytes: bytes, mime: str = "image/png") -> dict:
@@ -126,8 +151,14 @@ async def author_template_html(
     ds: DesignSystem,
     critique: str = "",
     ground_hint: str = "",
+    source_html: str = "",
 ) -> str:
-    """Template Author: spec + design system → Jinja2 HTML."""
+    """Template Author: spec + design system → Jinja2 HTML.
+
+    ``source_html`` optionally carries user-supplied HTML (a pasted draft or
+    existing template) that the author should convert/improve rather than
+    write from scratch.
+    """
     prompt_cfg = await get_agent_config("template_author")
     ground = ground_hint or spec.get("ground", "white")
     user_prompt = (
@@ -136,6 +167,12 @@ async def author_template_html(
         f"{_design_context_block(ds)}\n\n"
         "Write the complete Jinja2 HTML template per the rules."
     )
+    if source_html.strip():
+        user_prompt += (
+            "\n\nUSER-PROVIDED HTML (convert or improve this into a valid "
+            "template — keep the intent, fix structure/tokens/slots):\n"
+            f"{source_html.strip()[:60_000]}"
+        )
     if critique:
         user_prompt += f"\n\nPREVIOUS VALIDATION FAILED — fix ALL of these:\n{critique}"
     raw = await call_llm(

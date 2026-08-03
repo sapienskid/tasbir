@@ -352,3 +352,53 @@ async def create_template_from_image(
     job = await AgentJobRepository(db).create("template", payload)
     run_template_from_image.delay(str(job.id), payload)
     return {"job_id": str(job.id), "status": "pending"}
+
+
+@router.post("/from-input")
+async def create_template_from_input(
+    design_system_id: str = Form(DEFAULT_ID),
+    message: str = Form(""),
+    html: str = Form(""),
+    family: str = Form("square"),
+    ground: str = Form("white"),
+    file: UploadFile | None = File(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Start a one-shot template build from image / HTML / text context.
+
+    Creates an AgentJob (kind ``template``) that authors + validates + saves a
+    template in the background. Returns a job id to poll.
+    """
+    from app.db.repositories.agent_jobs import AgentJobRepository
+    from app.services.uploads import validate_upload
+    from app.tasks.agent_jobs import run_template_build_task
+
+    ds_repo = DesignSystemRepository(db)
+    if not await ds_repo.get_by_id(design_system_id):
+        raise HTTPException(status_code=422, detail="Design system not found")
+    family = family if family in ("square", "portrait", "story", "landscape") else "square"
+    ground = ground if ground in ("white", "black") else "white"
+    if not message and not html and not file:
+        raise HTTPException(status_code=422, detail="Provide an image, HTML, or a description")
+
+    payload: dict = {
+        "design_system_id": design_system_id,
+        "family": family,
+        "ground": ground,
+    }
+    if message:
+        payload["message"] = message
+    if html:
+        payload["html"] = html
+    if file:
+        raw = await file.read()
+        try:
+            mime, b64 = validate_upload(raw)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        payload["image"] = b64
+        payload["mime"] = mime
+
+    job = await AgentJobRepository(db).create("template", payload)
+    run_template_build_task.delay(str(job.id), payload)
+    return {"job_id": str(job.id), "status": "pending"}

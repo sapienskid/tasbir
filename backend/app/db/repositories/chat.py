@@ -46,3 +46,16 @@ class ChatRepository:
         await self.session.commit()
         await self.session.refresh(msg)
         return msg
+
+    async def delete_thread(self, task_id: str, format: str) -> None:
+        """Delete a thread (and its messages) for a (task_id, format)."""
+        thread = await self.get_thread(task_id, format)
+        if not thread:
+            return
+        await self.session.execute(
+            ChatMessage.__table__.delete().where(
+                ChatMessage.thread_id == thread.id
+            )
+        )
+        await self.session.delete(thread)
+        await self.session.commit()

@@ -1,4 +1,4 @@
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_job import AgentJob
@@ -13,6 +13,18 @@ class AgentJobRepository:
             select(AgentJob).where(AgentJob.id == job_id)
         )
         return result.scalar_one_or_none()
+
+    async def list_recent(self, limit: int = 50, kind: str | None = None) -> list[AgentJob]:
+        stmt = select(AgentJob).order_by(AgentJob.created_at.desc())
+        if kind:
+            stmt = stmt.where(AgentJob.kind == kind)
+        result = await self.session.execute(stmt.limit(limit))
+        return list(result.scalars().all())
+
+    async def delete(self, job_id: str) -> bool:
+        result = await self.session.execute(delete(AgentJob).where(AgentJob.id == job_id))
+        await self.session.commit()
+        return result.rowcount > 0
 
     async def create(self, kind: str, payload: dict) -> AgentJob:
         job = AgentJob(kind=kind, status="pending", payload=payload)
