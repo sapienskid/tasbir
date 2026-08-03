@@ -31,20 +31,27 @@ from app.services.llm import call_llm
 log = logging.getLogger(__name__)
 
 # Copywriter concurrency (Gemini free tier limit) — from runtime settings,
-# created lazily so a Studio edit takes effect without a restart.
-_copy_semaphore: asyncio.Semaphore | None = None
+# created lazily so a Studio edit takes effect without a restart. Scoped per
+# event loop: under Celery prefork each task runs a fresh loop, so a shared
+# module-level semaphore would bind to the first loop and break the next task.
+_copy_semaphores: dict[int, asyncio.Semaphore] = {}
 _copy_semaphore_size = 0
 
 
 async def _get_copy_semaphore() -> asyncio.Semaphore:
     from app.services.settings import get_runtime_setting
 
-    global _copy_semaphore, _copy_semaphore_size
+    global _copy_semaphore_size
     size = int(await get_runtime_setting("copywriter.concurrency", 2))
-    if _copy_semaphore is None or _copy_semaphore_size != size:
-        _copy_semaphore = asyncio.Semaphore(size)
+    loop = asyncio.get_running_loop()
+    if _copy_semaphore_size != size:
+        _copy_semaphores.clear()
         _copy_semaphore_size = size
-    return _copy_semaphore
+    sem = _copy_semaphores.get(loop)
+    if sem is None:
+        sem = asyncio.Semaphore(size)
+        _copy_semaphores[loop] = sem
+    return sem
 
 
 # ---------------------------------------------------------------------------

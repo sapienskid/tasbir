@@ -9,17 +9,17 @@ formats race for them.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections import OrderedDict
 from typing import Awaitable, Callable, TypeVar
+
+from app.core.loop_lock import loop_lock
 
 log = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 _cache: "OrderedDict[str, dict[str, object]]" = OrderedDict()
-_lock = asyncio.Lock()
 _MAX_ENTRIES = 64
 
 
@@ -28,7 +28,7 @@ async def post_cached(task_id: str, key: str, loader: Callable[[], Awaitable[T]]
     if not task_id:
         return await loader()
 
-    async with _lock:
+    async with loop_lock():
         entry = _cache.setdefault(task_id, {})
         if key in entry:
             return entry[key]  # type: ignore[return-value]

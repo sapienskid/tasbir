@@ -12,11 +12,11 @@ import base64
 import logging
 
 from app.config import get_settings
+from app.core.loop_lock import loop_lock
 from app.services.llm import DEFAULT_MODEL, LLM_TIMEOUT
 
 log = logging.getLogger(__name__)
 
-_vision_lock = asyncio.Lock()
 _vision_last = 0.0
 
 
@@ -76,7 +76,7 @@ async def call_vision_llm(
         try:
             global _vision_last
             loop = asyncio.get_event_loop()
-            async with _vision_lock:
+            async with loop_lock():
                 elapsed = loop.time() - _vision_last
                 if elapsed < min_interval:
                     await asyncio.sleep(min_interval - elapsed)
