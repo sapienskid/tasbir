@@ -93,7 +93,15 @@ export function TaskListPage() {
                 <TableRow
                   key={task.id}
                   className="cursor-pointer"
+                  tabIndex={0}
+                  role="link"
                   onClick={() => navigate(`/tasks/${task.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      navigate(`/tasks/${task.id}`)
+                    }
+                  }}
                   onPointerEnter={preloadMonacoEditor}
                 >
                   <TableCell className="max-w-xl truncate font-medium">
@@ -117,7 +125,7 @@ export function TaskListPage() {
                         setDeleting(task.id)
                       }}
                     >
-                      <Trash2 className="size-4" />
+                      <Trash2 aria-hidden="true" className="size-4" />
                     </Button>
                   </TableCell>
                 </TableRow>

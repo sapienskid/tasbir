@@ -16,6 +16,12 @@ export function AppShell() {
   const { pathname } = useLocation()
   return (
     <div className="flex min-h-screen flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-background focus:px-4 focus:py-2 focus:text-sm"
+      >
+        Skip to content
+      </a>
       <header className="sticky top-0 z-40 border-b bg-background">
         <div className="mx-auto flex h-14 w-full max-w-screen-2xl items-center justify-between px-6">
           <div className="flex items-center gap-6">
@@ -41,14 +47,14 @@ export function AppShell() {
             <ThemeToggle />
             <Button asChild size="sm">
               <Link to="/new">
-                <Plus className="size-4" />
+                <Plus aria-hidden="true" className="size-4" />
                 New Task
               </Link>
             </Button>
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-screen-2xl flex-1 px-6 py-6">
+      <main id="main-content" className="mx-auto w-full max-w-screen-2xl flex-1 px-6 py-6">
         <Outlet />
       </main>
     </div>

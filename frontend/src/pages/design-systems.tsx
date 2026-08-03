@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { ArrowLeft, Loader2, Plus, Save, Search, Trash2, Wand2 } from "lucide-react"
 import { toast } from "sonner"
@@ -197,7 +197,7 @@ export default function DesignSystemsPage() {
         </p>
         <div>
           <Button onClick={() => setCreateOpen(true)}>
-            <Wand2 className="size-4" />
+            <Wand2 aria-hidden="true" className="size-4" />
             Create with AI
           </Button>
         </div>
@@ -211,7 +211,7 @@ export default function DesignSystemsPage() {
         <div className="flex items-center gap-3">
           <Button asChild variant="ghost" size="icon" aria-label="Back">
             <Link to="/">
-              <ArrowLeft className="size-4" />
+              <ArrowLeft aria-hidden="true" className="size-4" />
             </Link>
           </Button>
           <div>
@@ -235,7 +235,7 @@ export default function DesignSystemsPage() {
             </SelectContent>
           </Select>
           <Button onClick={() => setCreateOpen(true)}>
-            <Wand2 className="size-4" />
+            <Wand2 aria-hidden="true" className="size-4" />
             Create with AI
           </Button>
         </div>
@@ -261,11 +261,11 @@ export default function DesignSystemsPage() {
             <Button onClick={() => void save()} disabled={saving}>
               {saving ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" /> Saving…
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Saving…
                 </>
               ) : (
                 <>
-                  <Save className="size-4" /> Save
+                  <Save aria-hidden="true" className="size-4" /> Save
                 </>
               )}
             </Button>
@@ -317,7 +317,7 @@ export default function DesignSystemsPage() {
                         })
                       }
                     >
-                      <Plus className="size-4" /> Add
+                      <Plus aria-hidden="true" className="size-4" /> Add
                     </Button>
                   </div>
                   {draft.categories.map((cat, i) => (
@@ -364,11 +364,12 @@ export default function DesignSystemsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label="Delete category"
                         onClick={() =>
                           setDraft({ ...draft, categories: draft.categories.filter((_, j) => j !== i) })
                         }
                       >
-                        <Trash2 className="size-4 text-destructive" />
+                        <Trash2 aria-hidden="true" className="size-4 text-destructive" />
                       </Button>
                     </div>
                   ))}
@@ -383,6 +384,8 @@ export default function DesignSystemsPage() {
                       <img
                         src={`data:${draft.logo?.mime ?? "image/png"};base64,${draft.logo?.data ?? ""}`}
                         alt="logo"
+                        width={64}
+                        height={64}
                         className="h-16 w-auto border bg-white object-contain"
                       />
                       <Button variant="outline" size="sm" onClick={() => void handleRemoveLogo()}>
@@ -413,6 +416,7 @@ export default function DesignSystemsPage() {
                         <div className="flex items-center gap-2">
                           <input
                             type="color"
+                            aria-label={`${tokenLabel(key)} color`}
                             value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000"}
                             onChange={(e) => setDraft({ ...draft, tokens: { ...draft.tokens, [key]: e.target.value } })}
                             className="size-8 cursor-pointer rounded border"
@@ -433,7 +437,7 @@ export default function DesignSystemsPage() {
                             title="Search Google Fonts"
                           >
                             <span className="max-w-40 truncate">{firstFamily(value) || "—"}</span>
-                            <Search className="size-3.5 shrink-0 text-muted-foreground" />
+                            <Search aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
                           </Button>
                           <Input
                             className="font-mono text-xs"
@@ -490,7 +494,7 @@ export default function DesignSystemsPage() {
                         })
                       }
                     >
-                      <Plus className="size-4" /> Add
+                      <Plus aria-hidden="true" className="size-4" /> Add
                     </Button>
                   </div>
                   <div className="grid gap-1">
@@ -537,13 +541,14 @@ export default function DesignSystemsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label="Delete campaign"
                           onClick={() => {
                             const next = { ...draft.campaigns }
                             delete next[key]
                             setDraft({ ...draft, campaigns: next })
                           }}
                         >
-                          <Trash2 className="size-4 text-destructive" />
+                          <Trash2 aria-hidden="true" className="size-4 text-destructive" />
                         </Button>
                       </div>
                     ))}
@@ -595,10 +600,11 @@ function BrandField({
   value: string
   onChange: (v: string) => void
 }) {
+  const id = useId()
   return (
     <div className="grid gap-2">
-      <Label>{label}</Label>
-      <Input value={value} onChange={(e) => onChange(e.target.value)} />
+      <Label htmlFor={id}>{label}</Label>
+      <Input id={id} value={value} onChange={(e) => onChange(e.target.value)} />
     </div>
   )
 }
@@ -626,7 +632,7 @@ function TokenRolesEditor({
             size="sm"
             onClick={() => onChange({ ...roles, [`--color-${entries.length + 1}`]: "" })}
           >
-            <Plus className="size-4" /> Add
+            <Plus aria-hidden="true" className="size-4" /> Add
           </Button>
         </div>
         <div className="grid gap-1">
@@ -663,13 +669,14 @@ function TokenRolesEditor({
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label="Delete role"
                   onClick={() => {
                     const next = { ...roles }
                     delete next[key]
                     onChange(next)
                   }}
                 >
-                  <Trash2 className="size-4 text-destructive" />
+                  <Trash2 aria-hidden="true" className="size-4 text-destructive" />
                 </Button>
               </div>
             </div>
@@ -713,7 +720,7 @@ function ListEditor({
       <div className="flex items-center justify-between">
         <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h4>
         <Button variant="ghost" size="sm" onClick={() => onChange([...items, ""])}>
-          <Plus className="size-3.5" /> Add
+          <Plus aria-hidden="true" className="size-3.5" /> Add
         </Button>
       </div>
       {items.map((item, i) => (
@@ -726,9 +733,10 @@ function ListEditor({
           <Button
             variant="ghost"
             size="icon"
+            aria-label="Remove item"
             onClick={() => onChange(items.filter((_, j) => j !== i))}
           >
-            <Trash2 className="size-4 text-destructive" />
+            <Trash2 aria-hidden="true" className="size-4 text-destructive" />
           </Button>
         </div>
       ))}
@@ -885,7 +893,7 @@ function DesignSystemPreview({ dsId }: { dsId: string }) {
   if (html === null) {
     return (
       <div className="flex h-96 items-center justify-center">
-        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        <Loader2 aria-hidden="true" className="size-5 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -991,26 +999,27 @@ function CreateFromInputDialog({
               <Button onClick={onDone}>Done</Button>
             ) : (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" /> Building brand system…
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Building brand system…
               </p>
             )}
           </div>
         ) : (
           <div className="grid gap-3">
             <div className="grid grid-cols-2 gap-3">
-              <Input placeholder="Brand name *" value={form.name} onChange={(e) => set("name")(e.target.value)} />
-              <Input placeholder="Handle (e.g. @sapienskid)" value={form.handle} onChange={(e) => set("handle")(e.target.value)} />
+              <Input placeholder="Brand name *" aria-label="Brand name" value={form.name} onChange={(e) => set("name")(e.target.value)} />
+              <Input placeholder="Handle (e.g. @sapienskid)" aria-label="Handle" value={form.handle} onChange={(e) => set("handle")(e.target.value)} />
             </div>
-            <Input placeholder="Tagline" value={form.tagline} onChange={(e) => set("tagline")(e.target.value)} />
+            <Input placeholder="Tagline" aria-label="Tagline" value={form.tagline} onChange={(e) => set("tagline")(e.target.value)} />
             <Textarea
               placeholder="Mission / brand story"
+              aria-label="Mission / brand story"
               value={form.mission}
               onChange={(e) => set("mission")(e.target.value)}
             />
             <div className="grid grid-cols-3 gap-3">
-              <Input placeholder="Industry" value={form.industry} onChange={(e) => set("industry")(e.target.value)} />
-              <Input placeholder="Audience" value={form.audience} onChange={(e) => set("audience")(e.target.value)} />
-              <Input placeholder="Style keywords" value={form.style} onChange={(e) => set("style")(e.target.value)} />
+              <Input placeholder="Industry" aria-label="Industry" value={form.industry} onChange={(e) => set("industry")(e.target.value)} />
+              <Input placeholder="Audience" aria-label="Audience" value={form.audience} onChange={(e) => set("audience")(e.target.value)} />
+              <Input placeholder="Style keywords" aria-label="Style keywords" value={form.style} onChange={(e) => set("style")(e.target.value)} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1">
@@ -1047,11 +1056,11 @@ function CreateFromInputDialog({
             <Button onClick={() => void start()} disabled={starting}>
               {starting ? (
                 <>
-                  <Loader2 className="size-4 animate-spin" /> Starting…
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Starting…
                 </>
               ) : (
                 <>
-                  <Wand2 className="size-4" /> Generate
+                  <Wand2 aria-hidden="true" className="size-4" /> Generate
                 </>
               )}
             </Button>

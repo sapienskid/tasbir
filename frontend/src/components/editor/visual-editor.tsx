@@ -479,7 +479,7 @@ export function VisualEditor({ html, width, height, onExport, ref }: VisualEdito
         ) : null}
       </div>
       <div className="flex shrink-0 items-center gap-2 border-t bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground">
-        <RotateCcw className="size-3" />
+        <RotateCcw aria-hidden="true" className="size-3" />
         Select elements to edit text / restyle. No manual additions — new elements come from the agent chat.
       </div>
     </div>

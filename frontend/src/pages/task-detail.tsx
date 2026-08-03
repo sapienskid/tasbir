@@ -176,7 +176,7 @@ export default function TaskDetailPage() {
         <div className="flex items-center gap-3">
           <Button asChild variant="ghost" size="icon" aria-label="Back">
             <Link to="/">
-              <ArrowLeft className="size-4" />
+              <ArrowLeft aria-hidden="true" className="size-4" />
             </Link>
           </Button>
           <div className="grid gap-0.5">
@@ -189,7 +189,7 @@ export default function TaskDetailPage() {
         <div className="flex items-center gap-2">
           <StatusBadge status={task.status} />
           <Button variant="ghost" size="icon" aria-label="Delete task" onClick={() => setDeleteOpen(true)}>
-            <Trash2 className="size-4" />
+            <Trash2 aria-hidden="true" className="size-4" />
           </Button>
         </div>
       </div>
@@ -208,7 +208,7 @@ export default function TaskDetailPage() {
           <CardContent className="space-y-3">
             <Progress value={progress?.pct ?? 10} />
             <p className="text-sm text-muted-foreground">
-              {progress?.node ?? "Analyzing content..."}
+              {progress?.node ?? "Analyzing content…"}
               {progress && progress.total > 0
                 ? ` · ${progress.done}/${progress.total} formats verified`
                 : ""}

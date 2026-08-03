@@ -266,7 +266,7 @@ export function FormatEditor({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={onBack} className="h-7 gap-1 px-2">
-            <ArrowLeft className="size-4" />
+            <ArrowLeft aria-hidden="true" className="size-4" />
             All artifacts
           </Button>
           <span className="text-sm font-medium">{formatLabel(format)}</span>
@@ -277,8 +277,8 @@ export function FormatEditor({
         <div className="flex items-center gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <MoreVertical className="size-4" />
+              <Button variant="outline" size="sm" aria-label="More options">
+                <MoreVertical aria-hidden="true" className="size-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
@@ -305,7 +305,7 @@ export function FormatEditor({
             onClick={() => void handleRerender(false)}
             disabled={rerendering}
           >
-            <Save className="size-4" />
+            <Save aria-hidden="true" className="size-4" />
             {rerendering ? "Saving…" : "Save & Render"}
           </Button>
         </div>
@@ -320,7 +320,7 @@ export function FormatEditor({
             >
               <TabsList className="h-8">
                 <TabsTrigger value="code" className="px-3 text-xs">
-                  <FileCode2 className="mr-1 size-3.5" />
+                  <FileCode2 aria-hidden="true" className="mr-1 size-3.5" />
                   Code
                 </TabsTrigger>
                 <TabsTrigger value="visual" className="px-3 text-xs">
@@ -335,7 +335,7 @@ export function FormatEditor({
                 className="h-8"
                 onClick={() => toggleRail("preview")}
               >
-                <Eye className="size-4" />
+                <Eye aria-hidden="true" className="size-4" />
                 Preview
               </Button>
               <Button
@@ -344,7 +344,7 @@ export function FormatEditor({
                 className="h-8"
                 onClick={() => toggleRail("inspector")}
               >
-                <PanelRight className="size-4" />
+                <PanelRight aria-hidden="true" className="size-4" />
                 Chat
                 {hasQcIssues && rail !== "inspector" ? (
                   <span className="ml-1 inline-block size-1.5 rounded-full bg-destructive" />

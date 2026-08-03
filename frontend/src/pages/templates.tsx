@@ -167,7 +167,7 @@ export default function TemplatesPage() {
                 : "No inactive templates"
             }
           >
-            {includeInactive ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            {includeInactive ? <EyeOff aria-hidden="true" className="size-4" /> : <Eye aria-hidden="true" className="size-4" />}
             {includeInactive ? "Hide inactive" : "Show inactive"}
             {inactiveCount > 0 ? (
               <span className="rounded bg-background/30 px-1.5 text-xs font-semibold">
@@ -176,7 +176,7 @@ export default function TemplatesPage() {
             ) : null}
           </Button>
           <Button onClick={() => setImageOpen(true)}>
-            <Plus className="size-4" />
+            <Plus aria-hidden="true" className="size-4" />
             From Image
           </Button>
         </div>
@@ -185,7 +185,7 @@ export default function TemplatesPage() {
       <div className="flex items-center gap-2">
         <Button asChild variant="ghost" size="sm">
           <Link to="/">
-            <ArrowLeft className="size-4" />
+            <ArrowLeft aria-hidden="true" className="size-4" />
             Tasks
           </Link>
         </Button>
@@ -331,7 +331,7 @@ function TemplateCard({
               onEdit()
             }}
           >
-            <PenLine className="size-3.5" />
+            <PenLine aria-hidden="true" className="size-3.5" />
           </Button>
           <Button
             variant="ghost"
@@ -343,7 +343,7 @@ function TemplateCard({
               onDuplicate()
             }}
           >
-            <Copy className="size-3.5" />
+            <Copy aria-hidden="true" className="size-3.5" />
           </Button>
           <Button
             variant="ghost"
@@ -355,7 +355,11 @@ function TemplateCard({
               onToggle()
             }}
           >
-            {t.is_active ? <Power className="size-3.5 text-emerald-300" /> : <PowerOff className="size-3.5" />}
+            {t.is_active ? (
+              <Power aria-hidden="true" className="size-3.5 text-emerald-300" />
+            ) : (
+              <PowerOff aria-hidden="true" className="size-3.5" />
+            )}
           </Button>
           <Button
             variant="ghost"
@@ -367,7 +371,7 @@ function TemplateCard({
               onDelete()
             }}
           >
-            <Trash2 className="size-3.5" />
+            <Trash2 aria-hidden="true" className="size-3.5" />
           </Button>
         </div>
       </div>
@@ -524,7 +528,7 @@ function EditTemplateDialog({
           <details className="group rounded-md border p-3">
             <summary className="cursor-pointer select-none text-sm font-medium">
               Metadata
-              <ChevronDown className="ml-1 inline size-4 align-text-bottom transition-transform group-open:rotate-180" />
+              <ChevronDown aria-hidden="true" className="ml-1 inline size-4 align-text-bottom transition-transform group-open:rotate-180" />
             </summary>
             <div className="mt-3 grid grid-cols-2 gap-3">
               <div className="space-y-1">

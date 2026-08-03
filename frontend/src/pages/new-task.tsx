@@ -191,7 +191,7 @@ export default function NewTaskPage() {
         </div>
         <Button asChild variant="ghost" size="sm">
           <Link to="/">
-            <ArrowLeft className="size-4" />
+            <ArrowLeft aria-hidden="true" className="size-4" />
             Back
           </Link>
         </Button>
@@ -209,7 +209,11 @@ export default function NewTaskPage() {
                     : "bg-muted/50 text-muted-foreground"
               }`}
             >
-              {i < step || (i === 3 && !hasMediaStep && step === 3) ? <Check className="size-3" /> : i + 1}
+              {i < step || (i === 3 && !hasMediaStep && step === 3) ? (
+                <Check aria-hidden="true" className="size-3" />
+              ) : (
+                i + 1
+              )}
             </span>
             <span className={`text-xs ${i === step ? "font-medium" : "text-muted-foreground"}`}>
               {label}
@@ -236,12 +240,12 @@ export default function NewTaskPage() {
                     {s.description || s.id} · {s.template_count ?? "?"} templates
                   </p>
                 </div>
-                {dsId === s.id ? <Check className="size-4 text-primary" /> : null}
+                {dsId === s.id ? <Check aria-hidden="true" className="size-4 text-primary" /> : null}
               </button>
             ))}
             <div className="flex justify-end">
               <Button onClick={() => setStep(1)} disabled={!dsId}>
-                Continue <ArrowRight className="size-4" />
+                Continue <ArrowRight aria-hidden="true" className="size-4" />
               </Button>
             </div>
           </CardContent>
@@ -257,7 +261,7 @@ export default function NewTaskPage() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="nt-content">Content</Label>
-              <Textarea id="nt-content" className="min-h-40" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Paste the full article / blog post..." />
+              <Textarea id="nt-content" className="min-h-40" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Paste the full article / blog post…" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
@@ -385,7 +389,7 @@ export default function NewTaskPage() {
                 Back
               </Button>
               <Button onClick={() => setStep(2)} disabled={platforms.length === 0}>
-                Choose Template <ArrowRight className="size-4" />
+                Choose Template <ArrowRight aria-hidden="true" className="size-4" />
               </Button>
             </div>
           </CardContent>
@@ -412,12 +416,17 @@ export default function NewTaskPage() {
                 role="button"
                 tabIndex={0}
                 onClick={() => setTemplateId("")}
-                onKeyDown={(e) => e.key === "Enter" && setTemplateId("")}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault()
+                    setTemplateId("")
+                  }
+                }}
                 className={`flex w-[280px] cursor-pointer flex-col items-center justify-center gap-2 rounded-md border p-4 text-center transition-colors ${
                   templateId === "" ? "border-primary bg-muted/50" : "hover:bg-muted/30"
                 }`}
               >
-                <Wand2 className="size-6 text-muted-foreground" />
+                <Wand2 aria-hidden="true" className="size-6 text-muted-foreground" />
                 <span className="text-sm font-medium">Auto</span>
                 <span className="text-xs text-muted-foreground">Pipeline picks the best match</span>
               </div>
@@ -427,7 +436,12 @@ export default function NewTaskPage() {
                   role="button"
                   tabIndex={0}
                   onClick={() => setTemplateId(t.id)}
-                  onKeyDown={(e) => e.key === "Enter" && setTemplateId(t.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      setTemplateId(t.id)
+                    }
+                  }}
                   className={`flex w-[280px] cursor-pointer flex-col gap-2 rounded-md border p-2 transition-colors ${
                     templateId === t.id ? "border-primary" : "hover:border-muted-foreground/40"
                   }`}
@@ -461,7 +475,7 @@ export default function NewTaskPage() {
             </Button>
             <Button onClick={() => setStep(hasMediaStep ? 3 : 4)} disabled={!templateId && gallery.length === 0}>
               {hasMediaStep ? "Add Media" : "Generate"}
-              <ArrowRight className="size-4" />
+              <ArrowRight aria-hidden="true" className="size-4" />
             </Button>
           </div>
         </div>
@@ -471,7 +485,7 @@ export default function NewTaskPage() {
         <Card>
           <CardContent className="grid gap-4 p-6">
             <div className="flex items-center gap-2">
-              <ImagePlus className="size-4" />
+              <ImagePlus aria-hidden="true" className="size-4" />
               <Label>Media slots</Label>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -486,7 +500,7 @@ export default function NewTaskPage() {
                   </Label>
                   <div className="grid grid-cols-2 gap-3">
                     <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground hover:bg-muted/30">
-                      <ImagePlus className="size-4" />
+                      <ImagePlus aria-hidden="true" className="size-4" />
                       {entry?.data ? "Replace image" : "Upload image"}
                       <input
                         type="file"
@@ -499,7 +513,7 @@ export default function NewTaskPage() {
                       />
                     </label>
                     <div className="flex items-center gap-2">
-                      <Link2 className="size-4 shrink-0 text-muted-foreground" />
+                      <Link2 aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                       <Input
                         placeholder="https://… image URL"
                         value={entry?.url ?? ""}
@@ -526,11 +540,11 @@ export default function NewTaskPage() {
               <Button onClick={() => void submit()} disabled={submitting}>
                 {submitting ? (
                   <>
-                    <Loader2 className="size-4 animate-spin" /> Queuing…
+                    <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Queuing…
                   </>
                 ) : (
                   <>
-                    Generate <ArrowRight className="size-4" />
+                    Generate <ArrowRight aria-hidden="true" className="size-4" />
                   </>
                 )}
               </Button>
@@ -550,11 +564,11 @@ export default function NewTaskPage() {
               <Button onClick={() => void submit()} disabled={submitting}>
                 {submitting ? (
                   <>
-                    <Loader2 className="size-4 animate-spin" /> Queuing…
+                    <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Queuing…
                   </>
                 ) : (
                   <>
-                    Generate <ArrowRight className="size-4" />
+                    Generate <ArrowRight aria-hidden="true" className="size-4" />
                   </>
                 )}
               </Button>
@@ -586,7 +600,7 @@ function TemplatePreviewCard({ t }: { t: Template }) {
       className="flex items-center justify-center rounded-md border bg-muted/20"
       style={{ width: 264, height: Math.round((dims.height / dims.width) * 264) }}
     >
-      <Loader2 className="size-4 animate-spin text-muted-foreground" />
+      <Loader2 aria-hidden="true" className="size-4 animate-spin text-muted-foreground" />
     </div>
   )
 }

@@ -444,7 +444,7 @@ export function AgentsPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   {lane.agents.map((a, i) => (
                     <div key={a.name} className="flex items-center gap-2">
-                      {i > 0 ? <ArrowRight className="size-4 shrink-0 text-muted-foreground/50" /> : null}
+                      {i > 0 ? <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/50" /> : null}
                       <div className="w-48">
                         <AgentNodeCard
                           data={{ label: a.name, persona: a.persona, model: a.model }}
@@ -675,7 +675,7 @@ function LiveRunCard({
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-1.5 text-sm">
-          <Activity className="size-3.5" />
+          <Activity aria-hidden="true" className="size-3.5" />
           Pipeline status
           {live ? (
             <span className="inline-block size-2 animate-pulse rounded-full bg-amber-400" />

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useState } from "react"
 import { UploadCloud } from "lucide-react"
 
 interface DropzoneProps {
@@ -10,10 +10,11 @@ interface DropzoneProps {
 
 /**
  * Hand-rolled drag-and-drop file input (no dependency needed for a single file).
+ * The whole box is a <label> wrapping a visually-hidden but focusable file
+ * input, so mouse, keyboard (Tab → Enter/Space), and drag-and-drop all work.
  */
 export function Dropzone({ accept = "image/png,image/jpeg,image/webp,image/gif", onFile, busy, hint }: DropzoneProps) {
   const [over, setOver] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -26,23 +27,18 @@ export function Dropzone({ accept = "image/png,image/jpeg,image/webp,image/gif",
   )
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-label="Upload an image"
+    <label
       onDragOver={(e) => {
         e.preventDefault()
         setOver(true)
       }}
       onDragLeave={() => setOver(false)}
       onDrop={handleDrop}
-      onClick={() => inputRef.current?.click()}
-      onKeyDown={(e) => e.key === "Enter" && inputRef.current?.click()}
       className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground transition-colors ${
         over ? "border-primary bg-muted/50" : "hover:bg-muted/30"
       }`}
     >
-      <UploadCloud className={`size-6 ${over ? "text-primary" : ""}`} />
+      <UploadCloud aria-hidden="true" className={`size-6 ${over ? "text-primary" : ""}`} />
       {busy ? (
         <span>Uploading…</span>
       ) : (
@@ -52,16 +48,15 @@ export function Dropzone({ accept = "image/png,image/jpeg,image/webp,image/gif",
         </>
       )}
       <input
-        ref={inputRef}
         type="file"
         accept={accept}
-        className="hidden"
+        className="sr-only"
         onChange={(e) => {
           const f = e.target.files?.[0]
           if (f) onFile(f)
           e.target.value = ""
         }}
       />
-    </div>
+    </label>
   )
 }

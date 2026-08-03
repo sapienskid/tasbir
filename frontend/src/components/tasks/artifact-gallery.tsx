@@ -50,7 +50,7 @@ export function GalleryView({
           {formats.length} artifacts{missing > 0 ? ` · ${missing} without a render yet` : ""}
         </p>
         <Button variant="outline" size="sm" onClick={onDownloadZip} disabled={formats.length === 0}>
-          <Download className="size-4" />
+          <Download aria-hidden="true" className="size-4" />
           Download ZIP
         </Button>
       </div>
@@ -109,6 +109,8 @@ const ArtifactCard = memo(function ArtifactCard({
           <img
             src={pngUrl}
             alt={formatLabel(fmt)}
+            width={dims.width}
+            height={dims.height}
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
           />

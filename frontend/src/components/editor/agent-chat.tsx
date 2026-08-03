@@ -202,7 +202,7 @@ export function AgentChat({
         </div>
         {sending ? (
           <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
-            <Loader2 className="size-3 animate-spin" />
+            <Loader2 aria-hidden="true" className="size-3 animate-spin" />
             thinking…
           </span>
         ) : null}
@@ -214,7 +214,7 @@ export function AgentChat({
             <div className="grid gap-1 rounded-xl border bg-muted/20 p-4 text-center text-xs text-muted-foreground">
               <p>Ask the design assistant to adjust this format.</p>
               <p className="text-muted-foreground/70">
-                "tighter headline", "move the subhead up", "switch to black ground"
+                “tighter headline”, “move the subhead up”, “switch to black ground”
               </p>
             </div>
           ) : null}
@@ -238,7 +238,7 @@ export function AgentChat({
         <div className="mx-3 mb-2 shrink-0 rounded-xl border border-primary/30 bg-primary/5">
           <div className="flex items-center justify-between gap-2 px-3 pt-2.5">
             <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
-              <Sparkles className="size-3.5" />
+              <Sparkles aria-hidden="true" className="size-3.5" />
               Proposed changes
             </p>
             <Button
@@ -248,7 +248,7 @@ export function AgentChat({
               className="h-6 w-6"
               onClick={() => markHandled(pendingProposal.id)}
             >
-              <X className="size-3.5" />
+              <X aria-hidden="true" className="size-3.5" />
             </Button>
           </div>
           <p className="line-clamp-2 px-3 pt-1 text-[11px] text-muted-foreground">
@@ -263,7 +263,7 @@ export function AgentChat({
                 markHandled(pendingProposal.id)
               }}
             >
-              <CheckCircle2 className="size-3.5" />
+              <CheckCircle2 aria-hidden="true" className="size-3.5" />
               Apply &amp; Save
             </Button>
             <Button
@@ -275,7 +275,7 @@ export function AgentChat({
                 markHandled(pendingProposal.id)
               }}
             >
-              <FileCode2 className="size-3.5" />
+              <FileCode2 aria-hidden="true" className="size-3.5" />
               Apply to editor
             </Button>
           </div>
@@ -287,6 +287,7 @@ export function AgentChat({
         <Textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          aria-label="Message the design assistant"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault()
@@ -304,7 +305,11 @@ export function AgentChat({
           disabled={sending || !input.trim()}
           aria-label="Send"
         >
-          {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+          {sending ? (
+            <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+          ) : (
+            <Send aria-hidden="true" className="size-4" />
+          )}
         </Button>
       </div>
     </div>

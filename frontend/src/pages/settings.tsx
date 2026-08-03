@@ -156,7 +156,19 @@ function PlatformsTab() {
             </TableHeader>
             <TableBody>
               {platforms.map((p) => (
-                <TableRow key={p.id} className="cursor-pointer" onClick={() => openEdit(p)}>
+                <TableRow
+                  key={p.id}
+                  className="cursor-pointer"
+                  tabIndex={0}
+                  role="button"
+                  onClick={() => openEdit(p)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      openEdit(p)
+                    }
+                  }}
+                >
                   <TableCell className="font-mono">{p.id}</TableCell>
                   <TableCell>{p.name || p.id}</TableCell>
                   <TableCell className="font-mono">
@@ -212,24 +224,24 @@ function PlatformForm({
   return (
     <div className="grid gap-3">
       <div className="grid gap-2">
-        <Label>ID (url-safe, e.g. mastodon-post)</Label>
-        <Input value={value.id} disabled={!isNew} onChange={(e) => onChange({ ...value, id: e.target.value.trim() })} />
+        <Label htmlFor="plat-id">ID (url-safe, e.g. mastodon-post)</Label>
+        <Input id="plat-id" value={value.id} disabled={!isNew} onChange={(e) => onChange({ ...value, id: e.target.value.trim() })} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-2">
-          <Label>Width (px)</Label>
-          <Input type="number" value={value.width} onChange={(e) => onChange({ ...value, width: Number(e.target.value) || 1080 })} />
+          <Label htmlFor="plat-width">Width (px)</Label>
+          <Input id="plat-width" type="number" value={value.width} onChange={(e) => onChange({ ...value, width: Number(e.target.value) || 1080 })} />
         </div>
         <div className="grid gap-2">
-          <Label>Height (px)</Label>
-          <Input type="number" value={value.height} onChange={(e) => onChange({ ...value, height: Number(e.target.value) || 1080 })} />
+          <Label htmlFor="plat-height">Height (px)</Label>
+          <Input id="plat-height" type="number" value={value.height} onChange={(e) => onChange({ ...value, height: Number(e.target.value) || 1080 })} />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-2">
-          <Label>Family</Label>
+          <Label htmlFor="plat-family">Family</Label>
           <Select value={value.family} onValueChange={(v) => onChange({ ...value, family: v as typeof value.family })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger id="plat-family"><SelectValue /></SelectTrigger>
             <SelectContent>
               {FAMILIES.map((f) => (
                 <SelectItem key={f} value={f}>{f}</SelectItem>
@@ -238,13 +250,13 @@ function PlatformForm({
           </Select>
         </div>
         <div className="grid gap-2">
-          <Label>Sort order</Label>
-          <Input type="number" value={value.sort_order} onChange={(e) => onChange({ ...value, sort_order: Number(e.target.value) || 0 })} />
+          <Label htmlFor="plat-sort">Sort order</Label>
+          <Input id="plat-sort" type="number" value={value.sort_order} onChange={(e) => onChange({ ...value, sort_order: Number(e.target.value) || 0 })} />
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <Checkbox checked={value.is_active} onCheckedChange={(c) => onChange({ ...value, is_active: c === true })} />
-        <Label className="font-normal">Active</Label>
+        <Checkbox id="plat-active" checked={value.is_active} onCheckedChange={(c) => onChange({ ...value, is_active: c === true })} />
+        <Label htmlFor="plat-active" className="font-normal">Active</Label>
       </div>
       <div className="flex justify-between">
         {onDelete ? (
@@ -333,7 +345,19 @@ function FontsTab() {
             </TableHeader>
             <TableBody>
               {(fonts ?? []).map((f) => (
-                <TableRow key={f.family} className="cursor-pointer" onClick={() => openEdit(f)}>
+                <TableRow
+                  key={f.family}
+                  className="cursor-pointer"
+                  tabIndex={0}
+                  role="button"
+                  onClick={() => openEdit(f)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      openEdit(f)
+                    }
+                  }}
+                >
                   <TableCell className="font-medium">{f.family}</TableCell>
                   <TableCell><Badge variant="outline">{f.role}</Badge></TableCell>
                   <TableCell className="font-mono text-xs">{f.weights.join(", ")}</TableCell>
@@ -356,14 +380,14 @@ function FontsTab() {
           {editing ? (
             <div className="grid gap-3">
               <div className="grid gap-2">
-                <Label>Family</Label>
-                <Input value={editing.family} disabled={!isNew} onChange={(e) => setEditing({ ...editing, family: e.target.value })} />
+                <Label htmlFor="font-family">Family</Label>
+                <Input id="font-family" value={editing.family} disabled={!isNew} onChange={(e) => setEditing({ ...editing, family: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="grid gap-2">
-                  <Label>Role</Label>
+                  <Label htmlFor="font-role">Role</Label>
                   <Select value={editing.role} onValueChange={(v) => setEditing({ ...editing, role: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectTrigger id="font-role"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {FONT_ROLES.map((r) => (
                         <SelectItem key={r} value={r}>{r}</SelectItem>
@@ -372,8 +396,9 @@ function FontsTab() {
                   </Select>
                 </div>
                 <div className="grid gap-2">
-                  <Label>Weights (comma-separated)</Label>
+                  <Label htmlFor="font-weights">Weights (comma-separated)</Label>
                   <Input
+                    id="font-weights"
                     value={editing.weights.join(", ")}
                     onChange={(e) =>
                       setEditing({
@@ -385,12 +410,12 @@ function FontsTab() {
                 </div>
               </div>
               <div className="grid gap-2">
-                <Label>Style</Label>
-                <Input value={editing.style} onChange={(e) => setEditing({ ...editing, style: e.target.value })} />
+                <Label htmlFor="font-style">Style</Label>
+                <Input id="font-style" value={editing.style} onChange={(e) => setEditing({ ...editing, style: e.target.value })} />
               </div>
               <div className="flex items-center gap-2">
-                <Checkbox checked={editing.is_active} onCheckedChange={(c) => setEditing({ ...editing, is_active: c === true })} />
-                <Label className="font-normal">Active</Label>
+                <Checkbox id="font-active" checked={editing.is_active} onCheckedChange={(c) => setEditing({ ...editing, is_active: c === true })} />
+                <Label htmlFor="font-active" className="font-normal">Active</Label>
               </div>
               <div className="flex justify-between">
                 {!isNew ? (
@@ -468,6 +493,7 @@ function RuntimeTab() {
               <Input
                 type="number"
                 step="any"
+                aria-label={key}
                 value={String(values[key] ?? "")}
                 onChange={(e) => setValue(key, Number(e.target.value))}
               />

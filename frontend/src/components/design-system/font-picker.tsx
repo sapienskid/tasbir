@@ -140,9 +140,10 @@ export function FontPickerDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
+          <Search aria-hidden="true" className="absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
             autoFocus
+            aria-label="Search fonts"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search fonts…"

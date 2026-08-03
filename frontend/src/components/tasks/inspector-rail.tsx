@@ -72,7 +72,7 @@ export function InspectorRail({
           onClick={onClose}
           className="h-7 w-7"
         >
-          <X className="size-4" />
+          <X aria-hidden="true" className="size-4" />
         </Button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col p-3">
@@ -87,7 +87,7 @@ export function InspectorRail({
                 onClick={onAudit}
                 disabled={auditing}
               >
-                <Eye className="size-3.5" />
+                <Eye aria-hidden="true" className="size-3.5" />
                 {auditing ? "Auditing…" : "Run audit"}
               </Button>
             </div>
@@ -101,7 +101,7 @@ export function InspectorRail({
         ) : tab === "trace" ? (
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
             <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <Activity className="size-3.5" />
+              <Activity aria-hidden="true" className="size-3.5" />
               Agent steps
             </p>
             {!audit || audit.length === 0 ? (
@@ -157,6 +157,8 @@ export function InspectorRail({
 function BadgeStatus({ ok }: { ok: boolean }) {
   return (
     <span
+      role="img"
+      aria-label={ok ? "passed" : "failed"}
       className={cn(
         "inline-flex h-2 w-2 rounded-full",
         ok ? "bg-emerald-500" : "bg-destructive"
