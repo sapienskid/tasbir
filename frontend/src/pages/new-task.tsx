@@ -58,6 +58,7 @@ export default function NewTaskPage() {
   const [slides, setSlides] = useState(3)
   const [ratio, setRatio] = useState<"square" | "portrait" | "auto">("square")
   const [sequenceAudit, setSequenceAudit] = useState(false)
+  const [verbatim, setVerbatim] = useState(false)
   const [templateId, setTemplateId] = useState<string>("")
   const [media, setMedia] = useState<Record<string, MediaEntry>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -82,8 +83,13 @@ export default function NewTaskPage() {
     [platforms]
   )
   const gallery = useMemo(
-    () => (templates ?? []).filter((t) => families.includes(t.family)),
-    [templates, families]
+    () =>
+      (templates ?? []).filter(
+        (t) =>
+          families.includes(t.family) &&
+          (!verbatim || t.supports_text !== false) // verbatim needs a body slot
+      ),
+    [templates, families, verbatim]
   )
   const selected = useMemo(
     () => (templates ?? []).find((t) => t.id === templateId),
@@ -127,6 +133,7 @@ export default function NewTaskPage() {
           slides: hasCarousel ? slides : undefined,
           ratio,
           sequence_audit: sequenceAudit,
+          verbatim,
           design_system_id: dsId,
           template_id: templateId,
           images,
@@ -302,6 +309,34 @@ export default function NewTaskPage() {
                   </Label>
                 </div>
               </div>
+              {verbatim ? (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  The exact text is split across the slides — no rewording (essays /
+                  stories / poems). Every slide shows its i/N counter.
+                </p>
+              ) : null}
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <Label className="shrink-0">Content mode</Label>
+                <div className="flex overflow-hidden rounded-md border">
+                  {(["ai", "verbatim"] as const).map((m) => {
+                    const active = (m === "verbatim") === verbatim
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setVerbatim(m === "verbatim")}
+                        className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        {m === "ai" ? "AI copy" : "Keep text verbatim"}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
               {platforms.some(isCarouselPlatform) ? (
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
                   <div className="flex items-center gap-2">
@@ -363,6 +398,8 @@ export default function NewTaskPage() {
           <p className="text-sm text-muted-foreground">
             Templates for <Badge variant="outline">{ds?.name}</Badge> matching{" "}
             {families.join(", ")}. "Auto" lets the pipeline pick.
+            {verbatim ? " Verbatim mode shows text-capable templates only." : ""}
+            {" "}Every carousel slide shows its i/N counter.
           </p>
           {tplLoading ? (
             <div className="flex flex-wrap justify-center gap-4">
@@ -397,11 +434,23 @@ export default function NewTaskPage() {
                   }`}
                 >
                   <TemplatePreviewCard t={t} />
-                  <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center justify-between gap-2 px-1">
                     <span className="truncate text-xs font-medium">{t.id}</span>
-                    <Badge variant="outline" className="text-[10px]">
-                      {t.family}
-                    </Badge>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {verbatim && t.supports_text !== false ? (
+                        <Badge variant="secondary" className="text-[10px]">
+                          text
+                        </Badge>
+                      ) : null}
+                      {t.image_slots.length > 0 ? (
+                        <Badge variant="outline" className="text-[10px]">
+                          image
+                        </Badge>
+                      ) : null}
+                      <Badge variant="outline" className="text-[10px]">
+                        {t.family}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
               ))}

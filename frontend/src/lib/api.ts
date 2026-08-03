@@ -299,6 +299,8 @@ export interface Template {
   description: string
   image_slots: Array<{ key: string; role: string; hint: string }>
   has_logo_slot: boolean
+  supports_text?: boolean
+  has_illustration_slot?: boolean
   source: string
   is_active: boolean
   html?: string
