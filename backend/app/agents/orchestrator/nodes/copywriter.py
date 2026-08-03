@@ -80,11 +80,13 @@ class _CopyFields(BaseModel):
     @field_validator("body")
     @classmethod
     def trim_body(cls, v: str) -> str:
-        # Body sits in a ~600px measure at 28px serif (~45 chars/line, 5 lines)
-        if len(v) > 230:
-            idx = v.rfind(" ", 0, 230)
-            log.warning("body truncated from %d to 230 chars", len(v))
-            return v[:idx] if idx > 0 else v[:230]
+        # Hard ceiling: ~500 chars fits the square canvas's body measure at
+        # readable size (~10 lines of 30px serif). Verbatim slides target this
+        # too; LLM slides are tightened further by _finalize_slides.
+        if len(v) > 520:
+            idx = v.rfind(" ", 0, 520)
+            log.warning("body truncated from %d to 520 chars", len(v))
+            return v[:idx] if idx > 0 else v[:520]
         return v
 
     @field_validator("tagline")
@@ -158,11 +160,36 @@ async def _write_copy_for_platform(
     campaign: dict | None = None,
     overrides: dict | None = None,
     slides_count: int = 0,
+    verbatim: bool = False,
 ) -> tuple[str, PlatformCopy]:
     """Write copy for a single platform with rate-limit semaphore."""
     fmt = get_format_info(platform_id)
     platform_note = brief.get("platform_notes", {}).get(platform_id, "")
     is_carousel = slides_count > 0
+
+    # Verbatim mode: keep the source text intact (no LLM paraphrase) —
+    # carousels split the raw content across slides, ideal for essays/stories/
+    # poems. Slide 1 carries the title as its headline.
+    if verbatim:
+        if is_carousel:
+            slides = _verbatim_slides(content, title, slides_count)
+            cover = slides[0] if slides else SlideCopy(headline=title[:50], body="")
+            return platform_id, PlatformCopy(
+                headline=cover.headline,
+                subhead="",
+                body=cover.body,
+                tagline="",
+                badge=None,
+                slides=slides,
+            )
+        return platform_id, PlatformCopy(
+            headline=title[:60],
+            subhead="",
+            body=(content or "").strip()[:1200],
+            tagline="",
+            badge=None,
+            slides=[],
+        )
 
     overrides = overrides or {}
     has_headline_override = bool(overrides.get("headline"))
@@ -310,12 +337,62 @@ def _split_sentences(text: str, n: int) -> list[str]:
     return chunks
 
 
+def _verbatim_slides(content: str, title: str, n: int, body_cap: int = 500) -> list[SlideCopy]:
+    """Split the source text into n slides VERBATIM, preserving paragraph breaks.
+
+    The text is cut into units on BLANK lines first (stanzas / paragraphs keep
+    their internal line breaks), then grouped into roughly balanced buckets so
+    the original wording stays intact across slides — no summarization. Slide 1
+    uses the title as its headline.
+    """
+    text = (content or "").strip()
+    if not text or n < 1:
+        return []
+    blocks = [b.strip() for b in re.split(r"\n\s*\n+", text) if b.strip()]
+    if len(blocks) < n:
+        # Not enough stanza/paragraph blocks — widen to single lines, then sentences.
+        blocks = [b.strip() for b in re.split(r"\n+", text) if b.strip()]
+    if len(blocks) < n:
+        blocks = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()] or [text]
+
+    total = sum(len(b) for b in blocks)
+    target = max(1, total / n)
+    buckets: list[list[str]] = [[] for _ in range(n)]
+    sizes = [0] * n
+    bi = 0
+    for i, b in enumerate(blocks):
+        remaining = len(blocks) - i - 1
+        open_buckets = n - bi - 1
+        # Force a move so later buckets never starve, or when the bucket is full.
+        if (
+            bi < n - 1
+            and sizes[bi] > 0
+            and (remaining <= open_buckets or sizes[bi] + len(b) > target * 1.5)
+        ):
+            bi += 1
+        buckets[bi].append(b)
+        sizes[bi] += len(b) + 1
+
+    slides: list[SlideCopy] = []
+    for i, bucket in enumerate(buckets):
+        body = "\n\n".join(bucket).strip()
+        if len(body) > body_cap:
+            cut = body.rfind(" ", 0, body_cap)
+            body = (body[:cut] + "…") if cut > 0 else body[:body_cap]
+        # Cover slide carries the complete title; later slides show only the
+        # text (no truncated per-slide headlines).
+        headline = title[:60] if i == 0 else ""
+        slides.append(SlideCopy(headline=headline, subhead="", body=body, tagline="", badge=None))
+    return slides
+
+
 def _derive_mini_headline(body: str, title: str, max_len: int = 42) -> str:
     """Turn a slide's body into a short, sentence-case mini-headline."""
     body = (body or "").strip()
     if not body:
         return (title or "Frame")[:max_len]
     first = re.split(r"(?<=[.!?])\s+", body)[0].strip().rstrip(".")
+    first = re.sub(r"\s+", " ", first)  # collapse internal newlines/indent
     if len(first) > max_len:
         idx = first.rfind(" ", 0, max_len)
         first = first[:idx] if idx > 0 else first[:max_len]
@@ -406,6 +483,7 @@ async def copywriter_node(state: GenerationState) -> dict:
     campaign = state.get("campaign")
     overrides = state.get("overrides")
     slides_count = int(state.get("slides", 0) or 0)
+    verbatim = bool(state.get("verbatim"))
 
     # Process all platforms in parallel
     tasks = [
@@ -419,6 +497,7 @@ async def copywriter_node(state: GenerationState) -> dict:
             campaign,
             overrides,
             slides_count=slides_count if is_carousel(platform_id) else 0,
+            verbatim=verbatim,
         )
         for platform_id in platforms
     ]

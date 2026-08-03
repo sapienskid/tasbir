@@ -95,6 +95,7 @@ def generate_task(self, task_id: str, source_data: dict):
         # The design system's active template library (selection input).
         pipeline_input["ds_templates"] = await load_ds_templates(pool, ds.id)
         pipeline_input["template_id"] = source_data.get("template_id") or ""
+        pipeline_input["verbatim"] = bool(source_data.get("verbatim"))
 
         # Download URL images / pass through uploaded base64 media.
         raw_images = source_data.get("images", [])

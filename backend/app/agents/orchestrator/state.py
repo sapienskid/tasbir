@@ -109,6 +109,8 @@ class GenerationState(TypedDict):
     ratio: Annotated[str, _keep_first]
     # Opt-in: run the sequence vision audit on a carousel's slide set
     sequence_audit: Annotated[bool, _keep_first]
+    # Keep the source content verbatim (carousels split raw text across slides)
+    verbatim: Annotated[bool, _keep_first]
 
     # Configuration
     _task_id: Annotated[str, _keep_first]
@@ -208,6 +210,7 @@ def initial_state(
         "slides": int(slides or kwargs.get("slides", 0)),
         "ratio": ratio or kwargs.get("ratio", "auto"),
         "sequence_audit": bool(sequence_audit or kwargs.get("sequence_audit", False)),
+        "verbatim": bool(kwargs.get("verbatim", False)),
         "_task_id": _task_id,
         "design_system_id": design_system_id,
         "design_tokens": design_tokens or {},

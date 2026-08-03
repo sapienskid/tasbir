@@ -38,6 +38,9 @@ class GenerateRequest(BaseModel):
     template_id: str = Field(default="", max_length=64)
     overrides: dict[str, str] = Field(default_factory=dict)
     images: list[ImageRequest] = Field(default_factory=list, max_length=8)
+    # Keep the source content verbatim: carousels split the raw text across
+    # slides (no LLM paraphrase) — ideal for essays, stories, and poems.
+    verbatim: bool = False
 
     @field_validator("tags")
     @classmethod

@@ -233,6 +233,8 @@ def build_template_context(
     logo: str = "",
     di_config: dict | None = None,
     illustration: str | None = None,
+    slide_index: int = 0,
+    slide_total: int = 0,
 ) -> dict:
     """Build the Jinja2 render context from typed copy + design decisions."""
     # Deterministic index numeral (editorial device, varies per post).
@@ -284,6 +286,8 @@ def build_template_context(
         "loop_index": loop_index,
         "decor_pattern": decor_pattern,
         "illustration": illustration,
+        "slide_index": slide_index,
+        "slide_total": slide_total,
         "tscale": tscale,
     }
 

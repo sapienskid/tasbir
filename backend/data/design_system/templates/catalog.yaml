@@ -214,3 +214,19 @@ templates:
     description: 'Centered editorial quote: tag block, serif pull-quote headline, italic
       sub, CTA row, footer.'
     file: square/quote-card.html
+  square-slide:
+    family: square
+    grounds:
+    - white
+    - black
+    categories:
+    - WRITING
+    - NOTE
+    hint_tags:
+    - slide
+    - text
+    - verbatim
+    weight: 0.5
+    description: 'Carousel slide: category + slide counter rail, verbatim body text
+      (poems keep their line breaks), complete title on the cover slide, footer.'
+    file: square/slide.html

@@ -92,8 +92,9 @@ class TestSelection:
     def test_ground_filter(self):
         selection = select_template("square", "black", "NOTE", "", "seed", _catalog_templates())
         assert selection is not None
-        # NOTE + black should prefer index-numeral (weighted/category boost)
-        assert selection[0] == "square-index-numeral"
+        # The chosen template must support the black ground.
+        _, entry = selection
+        assert "black" in entry.get("grounds", [])
 
     def test_no_match_for_unknown_family(self):
         assert select_template("octagonal", "white", "", "", "seed", _catalog_templates()) is None

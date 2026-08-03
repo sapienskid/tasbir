@@ -239,13 +239,28 @@ async def template_node_single(state: GenerationState) -> dict:
     format_tasks = state.get("format_tasks", {})
     task = format_tasks.get(fmt_id, {})
     copy = _parse_copy(task.get("copy", ""))
-    if not copy.get("headline"):
+    if not copy.get("headline") and not copy.get("body"):
         log.info("[template] No copy for %s — skipping", fmt_id)
         return {}
 
     templates = state.get("ds_templates") or []
     if not templates:
         return {}
+
+    # Verbatim mode carries long-form text in {{ body }} — only templates that
+    # actually render a body slot can host it, or the content would be dropped.
+    # Prefer the dedicated slide template (slide counter, pre-line text) so
+    # verbatim carousels read as slides rather than editorial posters.
+    if state.get("verbatim"):
+        body_templates = [t for t in templates if "{{ body" in (t.get("html") or "")]
+        if body_templates:
+            templates = body_templates
+        slide_tpl = next(
+            (t for t in templates if t.get("family") == family and "slide" in (t.get("hint_tags") or [])),
+            None,
+        )
+        if slide_tpl:
+            templates = [slide_tpl]
 
     user_template_id = (state.get("template_id") or "").strip()
 
@@ -288,6 +303,15 @@ async def template_node_single(state: GenerationState) -> dict:
         if not has_user_images and len(image_slots) == 1:
             auto_photo = await _get_post_photo(state, _orientation_for(fmt))
 
+        # Carousel slide counter (i / N) for slide-style templates.
+        slide_index, slide_total = 0, 0
+        from app.services.formats import parse_carousel_slide
+
+        parsed = parse_carousel_slide(fmt_id)
+        if parsed:
+            slide_index = parsed[1]
+            slide_total = int((state.get("slide_context") or {}).get(fmt_id, {}).get("total", 0))
+
         context = build_template_context(
             copy,
             category,
@@ -301,6 +325,8 @@ async def template_node_single(state: GenerationState) -> dict:
             logo=state.get("logo", ""),
             di_config=state.get("design_instruction") or {},
             illustration=illustration,
+            slide_index=slide_index,
+            slide_total=slide_total,
         )
         rendered = render_template_html(html, context)
         if auto_photo:
