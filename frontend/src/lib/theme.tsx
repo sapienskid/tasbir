@@ -27,6 +27,8 @@ function resolveTheme(t: Theme): "light" | "dark" {
 function applyTheme(t: Theme): "light" | "dark" {
   const resolved = resolveTheme(t)
   document.documentElement.classList.toggle("dark", resolved === "dark")
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.setAttribute("content", resolved === "dark" ? "#18181b" : "#ffffff")
   return resolved
 }
 

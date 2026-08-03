@@ -4,6 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
   --radius: 0px;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -39,6 +40,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -78,6 +80,25 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  button {
+    touch-action: manipulation;
+  }
+  [role="dialog"] {
+    overscroll-behavior: contain;
+  }
+}
+
+/* Honor reduced-motion: kill CSS animation/transition durations for users
+   who ask for it (loaders, pulse dots, bounce dots all quiet down). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
