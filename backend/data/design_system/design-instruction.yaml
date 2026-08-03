@@ -167,9 +167,10 @@ do_dont:
     - "Constrain subhead/body copy to the measure (~600px at 1080) — never full-width lines"
     - "Keep hairline rules exactly 1px: hairline on white-ground, hairline-inverted on black-ground"
     - "Use generous whitespace — flexible space is intentional, not empty by accident"
+    - "A single AI-generated illustration (Anthropic-style procedural OR a hand-drawn figure from the Open Peeps / Open Doodles kits) may fill the designated illustration slot — it must stay strictly monochrome (brand grays via var(--color-*)), and photos in the image slot render grayscale with a small credit caption"
   dont:
     - "No hue of any kind — not even 'just a little' blue, amber, or green"
-    - "No icons, illustrations, or motifs of any kind"
+    - "No icons or decorative motifs outside the designated illustration slot"
     - "No centering"
     - "No more than 2 weights per family (Space Grotesk 500+700, Source Serif 4 400, Inter 500)"
     - "Never use the display face for body, subhead, category, or metadata text"

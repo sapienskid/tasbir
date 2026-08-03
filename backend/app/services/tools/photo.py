@@ -81,22 +81,25 @@ def _query_variants(query: str) -> list[str]:
     return variants
 
 
-async def search_photo_candidates(
-    query: str,
-    orientation: str = "landscape",
-    min_width: int | None = None,
-    limit: int = 8,
+# High-yield editorial fallbacks — used only when the LLM's query (and its
+# simplified variants) return nothing, so an image slot still gets media.
+_FALLBACK_QUERIES = [
+    "minimalist architecture",
+    "abstract paper texture",
+    "city skyline fog",
+    "natural stones",
+    "light and shadow",
+]
+
+
+async def _fetch_variants(
+    queries: list[str],
+    orientation: str,
+    min_w: int,
+    limit: int,
 ) -> list[dict]:
-    """Search providers in order; return normalized candidates ([] if none).
-
-    If a long/rare query returns nothing, it is retried with progressively
-    simpler variants so a single off-key phrase doesn't sink the whole post.
-    """
-    orientation = orientation if orientation in ("landscape", "portrait", "square") else "landscape"
-    min_w = min_width or MIN_WIDTHS.get(orientation, 800)
-
     seen: dict[str, dict] = {}
-    for variant in _query_variants(query):
+    for variant in queries:
         for fn in (search_pexels, search_pixabay, search_wikimedia):
             try:
                 cands = await fn(variant, orientation=orientation, per_page=max(6, limit))
@@ -109,6 +112,27 @@ async def search_photo_candidates(
         if seen:
             break  # a variant produced usable results — stop spending searches
     return list(seen.values())
+
+
+async def search_photo_candidates(
+    query: str,
+    orientation: str = "landscape",
+    min_width: int | None = None,
+    limit: int = 8,
+) -> list[dict]:
+    """Search providers in order; return normalized candidates ([] if none).
+
+    If a long/rare query returns nothing, it is retried with progressively
+    simpler variants, then a small pool of high-yield editorial fallbacks, so
+    an off-key phrase never sinks the whole post.
+    """
+    orientation = orientation if orientation in ("landscape", "portrait", "square") else "landscape"
+    min_w = min_width or MIN_WIDTHS.get(orientation, 800)
+
+    candidates = await _fetch_variants(_query_variants(query), orientation, min_w, limit)
+    if candidates:
+        return candidates
+    return await _fetch_variants(_FALLBACK_QUERIES, orientation, min_w, limit)
 
 
 def _attribution(c: dict) -> str:

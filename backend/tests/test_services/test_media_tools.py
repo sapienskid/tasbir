@@ -17,6 +17,7 @@ from app.services.tools.photo import (
 )
 
 HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}")
+EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F]")
 
 
 # ---------------------------------------------------------------------------
@@ -41,6 +42,9 @@ def test_compose_handdrawn_monochrome_and_deterministic():
     assert not HEX_RE.search(a)  # verifier-safe: no raw hex
     assert "var(" in a  # recolored to brand tokens
     assert "data-ground=\"black\"" in a  # ground-adaptive role vars
+    # kit files carry emoji in <title>/<desc> — stripped at compose time
+    assert not EMOJI_RE.search(a)
+    assert "<title" not in a.lower() and "<desc" not in a.lower()
 
 
 def test_compose_handdrawn_varies_by_seed():

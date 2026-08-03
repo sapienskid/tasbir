@@ -29,6 +29,12 @@ _DATA_DIR = Path(__file__).resolve().parent.parent.parent.parent / "data" / "ill
 _TAG_RE = re.compile(r"<([A-Za-z][\w:.-]*)([^>]*)>")
 _HEX = re.compile(r"#([0-9a-fA-F]{6}|[0-9a-fA-F]{3}|[0-9a-fA-F]{8})")
 _ATTR_RE = re.compile(r'([\w:.-]+)="([^"]*)"')
+_EMOJI_RE = re.compile(
+    "[\U0001F300-\U0001FAFF\u2600-\u27BF\u2190-\u21FF\u2B00-\u2BFF\uFE0F]"
+)
+_TITLE_DESC_RE = re.compile(
+    r"<\s*(?:title|desc)\b[^>]*>.*?<\s*/\s*(?:title|desc)\s*>", re.IGNORECASE | re.DOTALL
+)
 _SKIP_NAMES = ("page-", "icon-", "logo-", "footer-", "cover-", "mix-", "sit-stand-walk")
 
 ILLUSTRATE_TOOL: dict = {
@@ -184,6 +190,10 @@ def compose_handdrawn(kit: str, seed: str, ground: str, theme: str = "") -> str:
         log.warning("[illustrate] failed to read %s: %s", path, e)
         return ""
     svg = _recolor_svg(svg)
+    # Kit files carry emoji in <title>/<desc> metadata and stray unicode —
+    # strip them so the verifier's no-emoji rule stays satisfied.
+    svg = _TITLE_DESC_RE.sub("", svg)
+    svg = _EMOJI_RE.sub("", svg)
     return _figure_wrapper(svg)
 
 
