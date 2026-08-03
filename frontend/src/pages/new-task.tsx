@@ -19,13 +19,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import {
   apiRequest,
-  previewTemplate,
   uploadMedia,
   type GenerateResponse,
   type DesignSystem,
   type Template,
 } from "@/lib/api"
-import { useDesignSystems, useTemplates } from "@/hooks/use-library"
+import { useDesignSystems, useTemplates, useTemplatePreview } from "@/hooks/use-library"
 import { usePlatforms } from "@/hooks/use-platforms"
 import { familyOfPlatform } from "@/lib/platforms"
 import { PreviewFrame, FAMILY_DIMS } from "@/components/tasks/preview-frame"
@@ -568,12 +567,6 @@ export default function NewTaskPage() {
 }
 
 function TemplatePreviewCard({ t }: { t: Template }) {
-  return (
-    <TemplatePreviewInner t={t} />
-  )
-}
-
-function TemplatePreviewInner({ t }: { t: Template }) {
   const { data, failed, retry } = useTemplatePreview(t.id)
   const dims = FAMILY_DIMS[t.family] ?? FAMILY_DIMS.square
   if (data) return <PreviewFrame html={data.html} family={t.family} />
@@ -596,33 +589,4 @@ function TemplatePreviewInner({ t }: { t: Template }) {
       <Loader2 className="size-4 animate-spin text-muted-foreground" />
     </div>
   )
-}
-
-function useTemplatePreview(id: string) {
-  const [html, setHtml] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-  const [attempt, setAttempt] = useState(0)
-  useEffect(() => {
-    let alive = true
-    setHtml(null)
-    setFailed(false)
-    const t = setTimeout(() => {
-      previewTemplate(id)
-        .then((r) => {
-          if (alive) setHtml(r.html)
-        })
-        .catch(() => {
-          if (alive) setFailed(true)
-        })
-    }, 60)
-    return () => {
-      alive = false
-      clearTimeout(t)
-    }
-  }, [id, attempt])
-  return {
-    data: html !== null ? { html } : null,
-    failed,
-    retry: () => setAttempt((a) => a + 1),
-  }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react"
+import { memo, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { ScaledFrame } from "@/components/tasks/preview-frame"
 import { formatDims } from "@/lib/platforms"
@@ -66,7 +66,7 @@ export function GalleryView({
                 html={htmlFor(fmt)}
                 status={p?.status}
                 score={p?.quality_score}
-                onOpen={() => onOpenFormat(fmt)}
+                onOpenFormat={onOpenFormat}
               />
             </div>
           )
@@ -76,27 +76,29 @@ export function GalleryView({
   )
 }
 
-function ArtifactCard({
+// Memoized so a freshly-arrived PNG (per-format cache update) only re-renders
+// the card whose props changed, not every thumbnail in the gallery.
+const ArtifactCard = memo(function ArtifactCard({
   fmt,
   pngUrl,
   html,
   status,
   score,
-  onOpen,
+  onOpenFormat,
 }: {
   fmt: string
   pngUrl?: string
   html?: string
   status?: string
   score?: number
-  onOpen: () => void
+  onOpenFormat: (fmt: string) => void
 }) {
   const dims = formatDims(fmt)
 
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={() => onOpenFormat(fmt)}
       className="group w-full overflow-hidden rounded-lg border bg-card text-left transition-colors hover:border-primary/50 hover:bg-primary/5"
     >
       <div
@@ -136,4 +138,4 @@ function ArtifactCard({
       </div>
     </button>
   )
-}
+})

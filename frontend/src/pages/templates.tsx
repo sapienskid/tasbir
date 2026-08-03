@@ -41,11 +41,10 @@ import {
   deleteTemplate,
   getTemplate,
   previewDraft,
-  previewTemplate,
   updateTemplate,
   type Template,
 } from "@/lib/api"
-import { useDesignSystems, useTemplates, useAgentJob, isJobDone } from "@/hooks/use-library"
+import { useDesignSystems, useTemplates, useAgentJob, isJobDone, useTemplatePreview } from "@/hooks/use-library"
 
 const LazyHtmlEditor = lazy(() =>
   import("@/components/editor/html-editor").then((m) => ({ default: m.HtmlEditor }))
@@ -402,37 +401,6 @@ function TemplateCard({
       </div>
     </div>
   )
-}
-
-function useTemplatePreview(id: string) {
-  const [html, setHtml] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-  const [attempt, setAttempt] = useState(0)
-
-  useEffect(() => {
-    let alive = true
-    setHtml(null)
-    setFailed(false)
-    const t = setTimeout(() => {
-      previewTemplate(id)
-        .then((r) => {
-          if (alive) setHtml(r.html)
-        })
-        .catch(() => {
-          if (alive) setFailed(true)
-        })
-    }, 60)
-    return () => {
-      alive = false
-      clearTimeout(t)
-    }
-  }, [id, attempt])
-
-  return {
-    data: html !== null ? { html } : null,
-    failed,
-    retry: () => setAttempt((a) => a + 1),
-  }
 }
 
 function EditTemplateDialog({

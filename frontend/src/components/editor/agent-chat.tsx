@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -86,7 +86,7 @@ function TypingDots() {
   )
 }
 
-function MessageRow({ m }: { m: ChatMessage }) {
+const MessageRow = memo(function MessageRow({ m }: { m: ChatMessage }) {
   const isUser = m.role === "user"
   return (
     <div className="flex flex-col gap-1">
@@ -114,7 +114,7 @@ function MessageRow({ m }: { m: ChatMessage }) {
       </span>
     </div>
   )
-}
+})
 
 export function AgentChat({
   taskId,

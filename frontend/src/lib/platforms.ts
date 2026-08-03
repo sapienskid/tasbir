@@ -41,12 +41,16 @@ const _SLIDE_RE = /^(instagram-carousel(?:-portrait)?)-(\d+)$/
 export async function loadPlatforms(): Promise<PlatformInfo[]> {
   const rows = await listPlatforms()
   const byId: Record<string, PlatformInfo> = {}
+  // Build a family → first-active-platform map once (instead of a find per
+  // family in the loop below).
+  const firstByFamily: Record<string, PlatformInfo> = {}
   for (const row of rows) {
     byId[row.id] = row
     FORMAT_DIMS[row.id] = { width: row.width, height: row.height }
+    if (!(row.family in firstByFamily)) firstByFamily[row.family] = row
   }
   for (const fam of Object.keys(FAMILY_DIMS)) {
-    const first = Object.values(byId).find((p) => p.family === fam)
+    const first = firstByFamily[fam]
     if (first) FAMILY_DIMS[fam] = { width: first.width, height: first.height }
   }
   return rows

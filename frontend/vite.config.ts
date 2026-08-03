@@ -22,5 +22,24 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        // Split the stable third-party stack into its own chunks so the app
+        // entry stays small and vendors are cached independently of deploys.
+        // Only explicit shared deps are grouped — everything else falls back
+        // to Vite's default so the lazy Monaco/GrapesJS/ReactFlow chunks stay
+        // on-demand.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined
+          if (id.includes("/react/") || id.includes("/react-dom/") || id.includes("/scheduler/") || id.includes("react-router") || id.includes("swr")) {
+            return "vendor-react"
+          }
+          if (id.includes("radix-ui") || id.includes("lucide-react") || id.includes("sonner") || id.includes("next-themes")) {
+            return "vendor-ui"
+          }
+          return undefined
+        },
+      },
+    },
   },
 })
