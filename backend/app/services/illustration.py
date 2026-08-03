@@ -350,13 +350,14 @@ from app.services.tools.illustrator import ILLUSTRATE_TOOL as ILLUSTRATION_TOOL 
 
 _DIRECTOR_SYSTEM = (
     "You are the illustration director for a strict monochrome editorial "
-    "design system. Decide the illustration for this post, then call the "
-    "illustrate tool EXACTLY ONCE. Choose a style: 'anthropic' for abstract "
-    "procedural compositions, 'open-peeps' for a hand-drawn person, "
-    "'open-doodles' for a hand-drawn scene. Rules: choose an abstract theme "
-    "only (growth, flow, burst, orbit, layers, spiral...) — no literal "
-    "objects, no words/letters, no emoji, no color terms. Keep the theme "
-    "under 60 characters. Never refuse; always call the tool."
+    "design system. An illustration is OPTIONAL — add one only if it "
+    "genuinely strengthens this post. If you decide one helps, call the "
+    "illustrate tool once with a style: 'anthropic' for abstract procedural "
+    "compositions, 'open-peeps' for a hand-drawn person, 'open-doodles' for a "
+    "hand-drawn scene — plus an abstract theme only (growth, flow, burst, "
+    "orbit, layers, spiral...) — no literal objects, no words/letters, no "
+    "emoji, no color terms. Keep the theme under 60 characters. If no "
+    "illustration helps, do NOT call any tool."
 )
 
 
@@ -368,8 +369,12 @@ async def illustration_via_tool(
     ground: str = "white",
     seed: str = "",
 ) -> str:
-    """Ask the LLM (via the unified tool) for a post illustration; fall back
-    to a plain deterministic render if the tool call fails for any reason."""
+    """Ask the LLM (via the unified tool) for a post illustration.
+
+    Returns the figure/svg fragment if the LLM decides to illustrate, or "" if
+    it declines or the tool call fails — no deterministic fallback, so media
+    only ever appears when the LLM chose it.
+    """
     from app.services.llm import call_llm_for_tool
     from app.services.tools.illustrator import run_illustrate
 
@@ -389,6 +394,6 @@ async def illustration_via_tool(
             max_tokens=1024,
         )
         return run_illustrate(args, seed)
-    except Exception as e:  # noqa: BLE001 — never let the art break the post
-        log.warning("[illustration] LLM tool call failed (%s) — using deterministic fallback", e)
-        return generate_illustration_svg(seed, ground)
+    except Exception as e:  # noqa: BLE001
+        log.warning("[illustration] LLM tool call failed (%s) — no illustration", e)
+        return ""

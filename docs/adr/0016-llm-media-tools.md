@@ -31,13 +31,15 @@ Expose two new LLM function-calling tools alongside the existing
 `illustrate`-style director, behind a small tool registry
 (`app/services/tools/`):
 
-- **`find_photo(query, orientation?, min_width?)`** — returns ONE vetted
-  candidate `{url, width, height, avg_color, provider, attribution, license}`
-  after filtering. Providers are tried in fallback order (Pexels → Pixabay →
-  Wikimedia), unkeyed providers are skipped, and a too-specific query degrades
-  through progressively simpler variants. Downloads go through the existing
-  SSRF guard (`check_image_url`) with a size cap and a descriptive
-  User-Agent. Pixabay responses are cached 24h in-process (ToS).
+- **`find_photo(query, orientation?, min_width?)` + `choose_photo(index)`** —
+  `find_photo` returns a **shortlist** of candidates (provider fallback order
+  Pexels → Pixabay → Wikimedia; unkeyed providers skipped) as the tool result
+  the model sees. The model then calls `choose_photo` to pick one — or re-calls
+  `find_photo` with a refined query. Nothing is picked deterministically by the
+  pipeline and there is no generic fallback query pool: a search that finds
+  nothing simply reports "no results". Downloads go through the existing SSRF
+  guard (`check_image_url`) with a size cap and a descriptive User-Agent.
+  Pixabay responses are cached 24h in-process (ToS).
 - **`illustrate(style: anthropic|open-peeps|open-doodles, theme, ground)`** —
   the unified illustration director. `anthropic` routes to the procedural SVG
   generator; the two kit styles compose vendored CC0 SVGs from
@@ -45,17 +47,25 @@ Expose two new LLM function-calling tools alongside the existing
   hex fill/stroke to a brand gray token by luminance** (ink/mid/light/paper)
   via `var(--color-*)`, so output is verifier-safe and ground-adaptive.
 
-Pipeline wiring:
+Pipeline wiring (multi-turn function-calling via `call_llm_tool_loop`):
 
 - **Template auto-fill** (template renderer): a template with exactly one
-  empty image slot and no user media gets a `find_photo` call; `{{ illustration }}`
-  slots get `illustrate`. Results are cached once per post in a shared
-  per-post cache (`app/agents/orchestrator/post_cache.py`) because each
-  per-format branch runs on a deep-copied state and cannot share `state`.
-- **Designer node**: the designer's media director binds both tools once per
-  post; a chosen photo is appended to `state["images"]` (so the existing
-  `data-image-key` render path embeds it) and an illustration is injected via a
-  `data-illustration` marker after generation.
+  empty image slot and no user media runs a **neutral** photo director that
+  decides whether a photo genuinely helps (it may decline), searches via
+  `find_photo`, and picks via `choose_photo`; `{{ illustration }}` slots run a
+  neutral illustration director that may decline. Results are cached once per
+  post in a shared per-post cache (`app/agents/orchestrator/post_cache.py`)
+  because each per-format branch runs on a deep-copied state and cannot share
+  `state`.
+- **Designer node**: the designer's media director binds all three tools once
+  per post and decides whether media helps at all; a chosen photo is appended
+  to `state["images"]` (so the existing `data-image-key` render path embeds it)
+  and an illustration is injected via a `data-illustration` marker after
+  generation.
+- Media is never forced: the director prompts are neutral ("add media only if
+  it genuinely strengthens the post"), and a declined/failed media call leaves
+  the slot empty (templates guard with `{% if has_image %}` /
+  `{% if illustration %}`).
 - Photos render grayscale via a guard CSS `filter: grayscale(1) contrast(1.05)`
   and carry an on-image attribution caption (see ADR-0017). Attribution is
   persisted on the task result as `media_credits`.

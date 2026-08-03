@@ -117,10 +117,19 @@ def _ground_css_vars(
 
 _MEDIA_DIRECTOR_SYSTEM = (
     "You are the media director for a strict monochrome editorial design "
-    "system. Decide whether this post benefits from a stock photo or an "
-    "illustration, then call EXACTLY ONE tool: find_photo (concrete query) or "
-    "illustrate (style + abstract theme). If neither helps, prefer a calm "
-    "illustration. Photos are shown grayscale. Never refuse; always call a tool."
+    "system. Media is OPTIONAL — add a photo or illustration only if it "
+    "genuinely strengthens this post. If a photo helps: call find_photo with "
+    "a SHORT, BROAD query (1-3 words). If an illustration helps: call "
+    "illustrate with a style (anthropic | open-peeps | open-doodles) and an "
+    "abstract theme. If nothing helps, do NOT call any tool. Photos render "
+    "grayscale with a credit caption; illustrations stay strictly monochrome."
+)
+
+_MEDIA_DIRECTOR_PICK = (
+    "You are the media director for a strict monochrome editorial design "
+    "system. A shortlist of photo candidates is provided below. Call "
+    "choose_photo with the index of the single best fit for the post. If none "
+    "of them work, do NOT call the tool (decline the photo)."
 )
 
 
@@ -146,8 +155,15 @@ async def _designer_media_director(state: GenerationState, fmt) -> None:
     category = state.get("category", "")
     orientation = "landscape" if fmt.width > fmt.height else ("portrait" if fmt.height > fmt.width else "square")
 
-    from app.services.llm import call_llm_for_tools
-    from app.services.tools.photo import FIND_PHOTO_TOOL, download_photo, run_find_photo
+    from app.services.llm import call_llm_for_tool, call_llm_for_tools
+    from app.services.tools.photo import (
+        CHOOSE_PHOTO_TOOL,
+        FIND_PHOTO_TOOL,
+        download_photo,
+        format_shortlist,
+        pick_candidate,
+        search_photo_candidates,
+    )
     from app.services.tools.illustrator import ILLUSTRATE_TOOL, run_illustrate
 
     async def loader() -> dict | None:
@@ -158,6 +174,8 @@ async def _designer_media_director(state: GenerationState, fmt) -> None:
             f"Orientation: {orientation}\n"
             f"Ground: {state.get('ground', 'white')}"
         )
+
+        # Phase A — decide photo vs illustration vs none.
         try:
             name, args = await call_llm_for_tools(
                 agent_role="designer",
@@ -167,27 +185,60 @@ async def _designer_media_director(state: GenerationState, fmt) -> None:
                 temperature=0.7,
                 max_tokens=256,
             )
-        except Exception as e:  # noqa: BLE001
-            log.warning("[designer] media director failed (%s)", e)
+        except Exception as e:  # noqa: BLE001 — declined or failed
+            log.info("[designer] media director declined/failed (%s)", e)
             return None
 
+        if name == "illustrate":
+            fig = run_illustrate(args, f"{title or ''}|designer-illustration")
+            return {"kind": "illustration", "figure": fig} if fig else None
+
+        if name != "find_photo":
+            return None
+
+        query = str(args.get("query") or "").strip()
+        if not query:
+            return None
+        shortlist = await search_photo_candidates(query, orientation, args.get("min_width"))
+        if not shortlist:
+            try:
+                args = await call_llm_for_tool(
+                    agent_role="designer",
+                    system_prompt=_MEDIA_DIRECTOR_SYSTEM,
+                    user_prompt=user + (
+                        "\n[NOTE] The previous query returned no photos. Call "
+                        "find_photo once more with a simpler, broader query — or "
+                        "do NOT call the tool to decline the photo."
+                    ),
+                    tool=FIND_PHOTO_TOOL,
+                    temperature=0.6,
+                    max_tokens=256,
+                )
+            except Exception:  # noqa: BLE001
+                return None
+            shortlist = await search_photo_candidates(str(args.get("query") or "").strip(), orientation, args.get("min_width"))
+        if not shortlist:
+            return None
+
+        # Phase B — the LLM picks from the shortlist it now sees.
         try:
-            if name == "find_photo":
-                args["orientation"] = orientation
-                candidate = await run_find_photo(args)
-                if not candidate.get("ok"):
-                    return None
-                image = await download_photo(candidate)
-                if not image:
-                    return None
-                return {"kind": "photo", "image": image, "candidate": candidate}
-            if name == "illustrate":
-                fig = run_illustrate(args, f"{title or ''}|designer-illustration")
-                if fig:
-                    return {"kind": "illustration", "figure": fig}
-        except Exception as e:  # noqa: BLE001
-            log.warning("[designer] media director execution failed (%s)", e)
-        return None
+            pick_args = await call_llm_for_tool(
+                agent_role="designer",
+                system_prompt=_MEDIA_DIRECTOR_PICK,
+                user_prompt=user + "\n\nSearch results:\n" + format_shortlist(shortlist),
+                tool=CHOOSE_PHOTO_TOOL,
+                temperature=0.4,
+                max_tokens=128,
+            )
+        except Exception:  # noqa: BLE001 — declined to pick
+            return None
+        chosen = pick_candidate(shortlist, pick_args.get("index"))
+        if not chosen:
+            return None
+        image = await download_photo(chosen)
+        if not image:
+            return None
+        return {"kind": "photo", "image": image, "candidate": chosen}
 
     media = await post_cached(state.get("_task_id", ""), "designer_media", loader)
     if not media:

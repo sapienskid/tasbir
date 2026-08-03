@@ -90,21 +90,31 @@ def _orientation_for(fmt) -> str:
     return "square"
 
 
-_PHOTO_DIRECTOR_SYSTEM = (
+_PHOTO_DIRECTOR_SEARCH = (
     "You are the image director for a strict monochrome editorial design "
-    "system. Call the find_photo tool EXACTLY ONCE with a concrete query that "
-    "matches the post's subject. Prefer calm, compositionally clean photos "
-    "(minimal, typographic, architectural, texture). The photo will be shown "
-    "in grayscale. Never refuse; always call the tool."
+    "system. A photo is OPTIONAL — add one only if it genuinely strengthens "
+    "this post (minimal, typographic, architectural, texture subjects work "
+    "best). If you decide a photo helps, call find_photo with a SHORT, BROAD "
+    "query (1-3 words). If no photo helps, do NOT call the tool. Photos "
+    "render grayscale with a small credit caption."
+)
+
+_PHOTO_DIRECTOR_PICK = (
+    "You are the image director for a strict monochrome editorial design "
+    "system. A shortlist of photo candidates is provided below. Call "
+    "choose_photo with the index of the single best fit for the post. If none "
+    "of them work, do NOT call the tool (decline the photo)."
 )
 
 
 async def _get_post_photo(state: GenerationState, orientation: str) -> dict | None:
     """Return the post's shared auto-photo: {image, credit, candidate}.
 
-    One LLM ``find_photo`` call per post (shared per-post cache); the result is
-    memoized on this branch's state so every format reuses it. Honours a
-    per-post cap on external photo searches.
+    Runs the LLM photo director ONCE per post (shared per-post cache) in a
+    bounded two-phase flow: the model decides whether a photo is warranted and
+    searches via ``find_photo`` (one retry if the first query finds nothing),
+    then sees the shortlist and picks via ``choose_photo``. Nothing is chosen
+    deterministically by the pipeline, and a decline means no photo.
     """
     cached = state.get(_PHOTO_CACHE_KEY)
     if cached:
@@ -116,7 +126,6 @@ async def _get_post_photo(state: GenerationState, orientation: str) -> dict | No
         if (state.get(_PHOTO_CALLS_KEY) or 0) >= _PHOTO_CAP:
             log.info("[template] photo search cap reached — skipping auto photo")
             return None
-        state[_PHOTO_CALLS_KEY] = (state.get(_PHOTO_CALLS_KEY) or 0) + 1
 
         title = state.get("title", "")
         task = (state.get("format_tasks") or {}).get(state.get("_processing_format_id", ""), {})
@@ -124,7 +133,14 @@ async def _get_post_photo(state: GenerationState, orientation: str) -> dict | No
         category = state.get("category", "")
 
         from app.services.llm import call_llm_for_tool
-        from app.services.tools.photo import FIND_PHOTO_TOOL, download_photo, run_find_photo
+        from app.services.tools.photo import (
+            CHOOSE_PHOTO_TOOL,
+            FIND_PHOTO_TOOL,
+            download_photo,
+            format_shortlist,
+            pick_candidate,
+            search_photo_candidates,
+        )
 
         user = (
             f"Title: {title or '(untitled)'}\n"
@@ -132,33 +148,73 @@ async def _get_post_photo(state: GenerationState, orientation: str) -> dict | No
             f"Category: {category or '(none)'}\n"
             f"Orientation: {orientation}"
         )
+
+        def _query(args: dict) -> str:
+            return str(args.get("query") or "").strip()
+
+        # Phase A — decide + search (one bounded retry on an empty result).
         try:
             args = await call_llm_for_tool(
                 agent_role="designer",
-                system_prompt=_PHOTO_DIRECTOR_SYSTEM,
+                system_prompt=_PHOTO_DIRECTOR_SEARCH,
                 user_prompt=user,
                 tool=FIND_PHOTO_TOOL,
-                temperature=0.6,
-                max_tokens=256,
+                temperature=0.5,
+                max_tokens=128,
             )
-            args["orientation"] = orientation
-            candidate = await run_find_photo(args)
-        except Exception as e:  # noqa: BLE001
-            log.warning("[template] find_photo tool call failed (%s)", e)
+        except Exception as e:  # noqa: BLE001 — model declined or failed
+            log.info("[template] photo director declined/failed (%s)", e)
+            return None
+        if not _query(args):
+            return None
+        if (state.get(_PHOTO_CALLS_KEY) or 0) < _PHOTO_CAP:
+            state[_PHOTO_CALLS_KEY] = (state.get(_PHOTO_CALLS_KEY) or 0) + 1
+        shortlist = await search_photo_candidates(_query(args), orientation, args.get("min_width"))
+        if not shortlist and (state.get(_PHOTO_CALLS_KEY) or 0) < _PHOTO_CAP:
+            state[_PHOTO_CALLS_KEY] = (state.get(_PHOTO_CALLS_KEY) or 0) + 1
+            retry_user = user + (
+                "\n[NOTE] The previous query returned no photos. Call find_photo "
+                "once more with a simpler, broader query — or do NOT call the "
+                "tool to decline the photo."
+            )
+            try:
+                args = await call_llm_for_tool(
+                    agent_role="designer",
+                    system_prompt=_PHOTO_DIRECTOR_SEARCH,
+                    user_prompt=retry_user,
+                    tool=FIND_PHOTO_TOOL,
+                    temperature=0.5,
+                    max_tokens=128,
+                )
+            except Exception:  # noqa: BLE001 — declined on retry
+                return None
+            shortlist = await search_photo_candidates(_query(args), orientation, args.get("min_width"))
+        if not shortlist:
+            log.info("[template] photo director: no results after searches")
             return None
 
-        if not candidate.get("ok"):
-            log.info("[template] find_photo: %s", candidate.get("error", "no results"))
+        # Phase B — the LLM picks from the shortlist it now sees.
+        try:
+            pick_args = await call_llm_for_tool(
+                agent_role="designer",
+                system_prompt=_PHOTO_DIRECTOR_PICK,
+                user_prompt=user + "\n\nSearch results:\n" + format_shortlist(shortlist),
+                tool=CHOOSE_PHOTO_TOOL,
+                temperature=0.4,
+                max_tokens=128,
+            )
+        except Exception:  # noqa: BLE001 — declined to pick
+            log.info("[template] photo director declined the shortlist")
+            return None
+        chosen = pick_candidate(shortlist, pick_args.get("index"))
+        if not chosen:
+            log.info("[template] photo director invalid pick")
             return None
 
-        image = await download_photo(candidate)
+        image = await download_photo(chosen)
         if not image:
             return None
-        return {
-            "image": image,
-            "credit": candidate.get("attribution", ""),
-            "candidate": candidate,
-        }
+        return {"image": image, "credit": chosen.get("attribution", ""), "candidate": chosen}
 
     result = await post_cached(state.get("_task_id", ""), "photo", loader)
     if result:

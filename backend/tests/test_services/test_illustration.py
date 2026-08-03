@@ -82,14 +82,13 @@ def test_tool_schema_shape():
 
 
 @pytest.mark.asyncio
-async def test_illustration_via_tool_falls_back_deterministic(monkeypatch):
+async def test_illustration_via_tool_failure_means_no_media(monkeypatch):
     async def _boom(*args, **kwargs):
         raise RuntimeError("no tools today")
 
     monkeypatch.setattr("app.services.llm.call_llm_for_tool", _boom)
     svg = await illustration_via_tool(title="T", headline="H", ground="white", seed="s|illustration")
-    assert svg.startswith("<svg")
-    assert not HEX_RE.search(svg)
+    assert svg == ""  # no deterministic fallback — media only when the LLM chose it
 
 
 @pytest.mark.asyncio

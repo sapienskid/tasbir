@@ -1,13 +1,14 @@
-"""``find_photo`` — search stock photos across providers (LLM tool).
+"""``find_photo`` / ``choose_photo`` — LLM-driven stock photo search.
 
-One vetted candidate per call, in provider fallback order
-(Pexels → Pixabay → Wikimedia). Providers without a configured key are
-skipped. Candidates are filtered by minimum dimension and orientation before
-the best one is returned, so the LLM can re-call with a refined query instead
-of parsing a shortlist.
+``find_photo`` returns a **shortlist** of candidates (provider fallback order
+Pexels → Pixabay → Wikimedia; unkeyed providers skipped) as the tool result the
+model sees. The model then calls ``choose_photo`` to pick one — or re-calls
+``find_photo`` with a refined query. Nothing is picked deterministically by the
+pipeline, and there is no generic fallback query pool: a search that finds
+nothing simply reports "no results" and the LLM decides what to do next.
 
-The handler returns a candidate dict; embedding (download → base64 → inject
-into template HTML) happens in the pipeline via :func:`embed_photo_into_html`.
+Download → base64 → inject happens in the pipeline via
+:func:`download_photo` / :func:`embed_photo_into_html`.
 """
 
 from __future__ import annotations
@@ -32,11 +33,12 @@ FIND_PHOTO_TOOL: dict = {
     "function": {
         "name": "find_photo",
         "description": (
-            "Search royalty-free stock photos for the post and return the best "
-            "single candidate. Call once with a concrete query; if the returned "
-            "image doesn't fit the post, call again with a refined query. The "
-            "photo is automatically converted to grayscale and credited on the "
-            "post."
+            "Search royalty-free stock photos for the post and return a numbered "
+            "shortlist of candidates. Then call choose_photo with the index of "
+            "the best fit, or call find_photo again with a REFINED query if none "
+            "fit. Use SHORT, BROAD queries (1-3 words, e.g. 'minimal architecture' "
+            "'paper texture') — long phrases rarely match. The photo is shown "
+            "grayscale and credited on the post."
         ),
         "parameters": {
             "type": "object",
@@ -44,10 +46,9 @@ FIND_PHOTO_TOOL: dict = {
                 "query": {
                     "type": "string",
                     "description": (
-                        "A concrete search query matching the post's subject, "
-                        "e.g. 'minimal typography on paper', 'city skyline fog'. "
-                        "Prefer terms that lead to clean, compositionally calm "
-                        "photos."
+                        "A SHORT, BROAD search query (1-3 words) matching the "
+                        "post's subject, e.g. 'minimal typography', 'city fog', "
+                        "'paper texture'. Avoid long descriptive phrases."
                     ),
                 },
                 "orientation": {
@@ -65,53 +66,33 @@ FIND_PHOTO_TOOL: dict = {
     },
 }
 
+CHOOSE_PHOTO_TOOL: dict = {
+    "type": "function",
+    "function": {
+        "name": "choose_photo",
+        "description": (
+            "Pick the best photo from the find_photo shortlist by index. Call "
+            "exactly once after reviewing the candidates. If none fit, call "
+            "find_photo again with a refined query instead."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "index": {
+                    "type": "integer",
+                    "description": "Index of the chosen candidate from the shortlist.",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Optional refined query if the pick was weak (unused when index is valid).",
+                },
+            },
+            "required": ["index"],
+        },
+    },
+}
+
 MIN_WIDTHS = {"square": 900, "landscape": 1000, "portrait": 800}
-
-
-def _query_variants(query: str) -> list[str]:
-    """Progressive simplifications of a too-specific query (long → short)."""
-    q = query.strip()
-    variants = [q]
-    words = [w for w in re.split(r"\W+", q) if len(w) > 2]
-    for n in (4, 3, 2):
-        if len(words) > n:
-            variant = " ".join(words[:n])
-            if variant not in variants:
-                variants.append(variant)
-    return variants
-
-
-# High-yield editorial fallbacks — used only when the LLM's query (and its
-# simplified variants) return nothing, so an image slot still gets media.
-_FALLBACK_QUERIES = [
-    "minimalist architecture",
-    "abstract paper texture",
-    "city skyline fog",
-    "natural stones",
-    "light and shadow",
-]
-
-
-async def _fetch_variants(
-    queries: list[str],
-    orientation: str,
-    min_w: int,
-    limit: int,
-) -> list[dict]:
-    seen: dict[str, dict] = {}
-    for variant in queries:
-        for fn in (search_pexels, search_pixabay, search_wikimedia):
-            try:
-                cands = await fn(variant, orientation=orientation, per_page=max(6, limit))
-            except Exception as e:  # noqa: BLE001
-                log.warning("[photo] provider %s failed: %s", fn.__name__, e)
-                continue
-            for c in cands:
-                if (c.get("width") or 0) >= min_w or (c.get("width") or 0) == 0:
-                    seen.setdefault(c.get("url"), c)
-        if seen:
-            break  # a variant produced usable results — stop spending searches
-    return list(seen.values())
 
 
 async def search_photo_candidates(
@@ -120,19 +101,28 @@ async def search_photo_candidates(
     min_width: int | None = None,
     limit: int = 8,
 ) -> list[dict]:
-    """Search providers in order; return normalized candidates ([] if none).
+    """Search providers directly for the exact query; return normalized candidates.
 
-    If a long/rare query returns nothing, it is retried with progressively
-    simpler variants, then a small pool of high-yield editorial fallbacks, so
-    an off-key phrase never sinks the whole post.
+    Providers are tried in fallback order until one yields usable results.
+    No query rewriting, no generic fallback pool — a miss reports "no results"
+    so the LLM can refine its own query.
     """
     orientation = orientation if orientation in ("landscape", "portrait", "square") else "landscape"
     min_w = min_width or MIN_WIDTHS.get(orientation, 800)
 
-    candidates = await _fetch_variants(_query_variants(query), orientation, min_w, limit)
-    if candidates:
-        return candidates
-    return await _fetch_variants(_FALLBACK_QUERIES, orientation, min_w, limit)
+    seen: dict[str, dict] = {}
+    for fn in (search_pexels, search_pixabay, search_wikimedia):
+        try:
+            cands = await fn(query, orientation=orientation, per_page=max(6, limit))
+        except Exception as e:  # noqa: BLE001
+            log.warning("[photo] provider %s failed: %s", fn.__name__, e)
+            continue
+        for c in cands:
+            if (c.get("width") or 0) >= min_w or (c.get("width") or 0) == 0:
+                seen.setdefault(c.get("url"), c)
+        if seen:
+            break  # first provider with usable results wins
+    return list(seen.values())[:limit]
 
 
 def _attribution(c: dict) -> str:
@@ -150,33 +140,38 @@ def _attribution(c: dict) -> str:
     return ""
 
 
-def pick_best_candidate(
-    candidates: list[dict], seed: str = ""
-) -> dict | None:
-    """Pick one vetted candidate (first usable, deterministic tie-break)."""
+def format_shortlist(candidates: list[dict]) -> str:
+    """Human/machine-readable shortlist text shown to the LLM after find_photo."""
     if not candidates:
+        return (
+            "No photos found for that query. Try ONE simpler, broader query "
+            "(1-3 words). If that also finds nothing, decline media — do not keep "
+            "refining."
+        )
+    lines = ["Photo candidates (pick one via choose_photo):"]
+    for i, c in enumerate(candidates):
+        dims = f"{c.get('width') or '?'}x{c.get('height') or '?'}"
+        lines.append(
+            f"[{i}] provider={c.get('provider')} · {dims} · license={c.get('license') or '?'} "
+            f"· credit={_attribution(c)}"
+        )
+    lines.append("Reply by calling choose_photo with the best index — or find_photo with a refined query if none fit.")
+    return "\n".join(lines)
+
+
+def pick_candidate(candidates: list[dict], index) -> dict | None:
+    """Return the candidate at ``index`` (validated) with attribution attached."""
+    if not candidates or index is None:
         return None
-    best = candidates[0]
-    for c in candidates[1:]:
-        if (c.get("width") or 0) > (best.get("width") or 0):
-            best = c
-    out = dict(best)
-    out["attribution"] = _attribution(best)
+    try:
+        idx = int(index)
+    except (TypeError, ValueError):
+        return None
+    if idx < 0 or idx >= len(candidates):
+        return None
+    out = dict(candidates[idx])
+    out["attribution"] = _attribution(out)
     return out
-
-
-async def run_find_photo(args: dict) -> dict:
-    """Execute a ``find_photo`` tool call → a single vetted candidate dict."""
-    query = str(args.get("query") or "").strip()
-    if not query:
-        return {"ok": False, "error": "empty query"}
-    orientation = str(args.get("orientation") or "landscape")
-    min_width = args.get("min_width")
-    candidates = await search_photo_candidates(query, orientation, min_width)
-    best = pick_best_candidate(candidates)
-    if not best:
-        return {"ok": False, "error": "no results", "query": query}
-    return {"ok": True, **best}
 
 
 # ---------------------------------------------------------------------------

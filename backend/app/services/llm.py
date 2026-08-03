@@ -247,6 +247,77 @@ async def call_llm_for_tools(
     raise last_error or RuntimeError("LLM tool call failed")
 
 
+async def call_llm_tool_loop(
+    agent_role: str,
+    system_prompt: str,
+    user_prompt: str,
+    tools: list[dict],
+    handlers: dict,
+    max_turns: int = 4,
+    temperature: float = 0.7,
+    max_tokens: int = 1024,
+) -> str:
+    """Multi-turn function-calling loop: the model may call tools repeatedly.
+
+    Each ``name -> async (args) -> str`` entry in ``handlers`` executes a tool
+    and returns the result text fed back to the model as a ``ToolMessage``.
+    The loop runs until the model stops calling tools (its final text is
+    returned) or ``max_turns`` is exhausted. Walks the same per-agent fallback
+    model chain as :func:`call_llm`. Returns "" if no model produced an answer.
+    """
+    import logging
+
+    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    log = logging.getLogger(__name__)
+
+    from app.services.agents import get_agent_config
+
+    cfg = await get_agent_config(agent_role)
+    models = [m for m in ([cfg.model] + list(cfg.fallback_models or [])) if m]
+    if not models:
+        models = [DEFAULT_MODEL]
+
+    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    last_error: Exception | None = None
+    for model in models:
+        llm = ChatGoogleGenerativeAI(
+            model=model,
+            api_key=get_settings().gemini_api_key or None,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            max_retries=0,
+        )
+        try:
+            bound = llm.bind_tools(tools)
+            for _turn in range(max_turns):
+                response = await call_llm_with_retry(bound, messages)
+                tool_calls = getattr(response, "tool_calls", None) or []
+                if not tool_calls:
+                    text = _response_text(response)
+                    return text or ""
+                for call in tool_calls:
+                    name = call.get("name") or ""
+                    args = call.get("args") or {}
+                    handler = handlers.get(name)
+                    if handler is None:
+                        messages.append(ToolMessage(content=f"Unknown tool: {name}", tool_call_id=call.get("id", "")))
+                        continue
+                    result = await handler(args)
+                    log.info("[llm] tool %r args=%r (model %s)", name, args, model)
+                    messages.append(ToolMessage(content=result or "ok", tool_call_id=call.get("id", "")))
+            log.warning("[LLM] tool loop exceeded %d turns (%s)", max_turns, agent_role)
+            return ""
+        except Exception as e:  # noqa: BLE001
+            last_error = e
+            log.warning("[LLM] model %s tool loop failed for %r (%s) — trying next", model, agent_role, e)
+
+    if last_error:
+        log.warning("[LLM] tool loop exhausted all models for %s", agent_role)
+    return ""
+
+
 def _response_text(response) -> str:
     """Extract text from a LangChain AIMessage content (str or blocks)."""
     if isinstance(response.content, str):

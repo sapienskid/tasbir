@@ -664,22 +664,28 @@ restart needed. `Reset to seed` restores the YAML seed; the YAML files in
 3. Placement options: `auto`, `background`, `top-left`, `center`, `bottom-right`
 
 ### Auto-media (LLM tools)
-Templates and the Designer can pull media automatically via two LLM tools:
-- **`find_photo(query, orientation?, min_width?)`** — stock photos in fallback
-  order Pexels → Pixabay → Wikimedia Commons (unkeyed providers skipped; long
-  queries degrade to simpler variants). Downloads are SSRF-guarded, photos
-  render grayscale with an attribution caption, and credits land on the task
-  result as `media_credits`. Add a key via `PEXELS_API_KEY` / `PIXABAY_API_KEY`;
+Templates and the Designer can pull media automatically via LLM tools — always
+**LLM-decided and LLM-driven** (never forced, no deterministic fallback pool):
+- **`find_photo(query, orientation?, min_width?)`** — returns a numbered
+  **shortlist** of stock-photo candidates (Pexels → Pixabay → Wikimedia
+  Commons; unkeyed providers skipped); the LLM then calls **`choose_photo(index)`**
+  to pick, or refines its query. Downloads are SSRF-guarded, photos render
+  grayscale with an attribution caption, and credits land on the task result
+  as `media_credits`. Add a key via `PEXELS_API_KEY` / `PIXABAY_API_KEY`;
   Wikimedia needs none.
 - **`illustrate(style: anthropic|open-peeps|open-doodles, theme, ground)`** —
   unified illustration director. `anthropic` is the procedural generator;
   `open-peeps`/`open-doodles` compose vendored CC0 SVGs
   (`backend/data/illustrations/`) recolored to `var(--color-*)`.
 
-Triggers: a template with exactly one empty image slot and no user media →
-`find_photo`; any template with `{{ illustration | safe }}` → `illustrate`;
-LLM-designed posts get both via the media director. Results are cached once
-per post (`app/agents/orchestrator/post_cache.py`).
+Triggers: a template with exactly one empty image slot and no user media runs
+a neutral photo director (it may decline); any template with
+`{{ illustration | safe }}` runs a neutral illustration director. LLM-designed
+posts get both via the media director. The director prompts are neutral ("add
+media only if it genuinely strengthens the post"), multi-turn tool use runs via
+`call_llm_tool_loop`, and results are cached once per post
+(`app/agents/orchestrator/post_cache.py`). A declined/failed media call leaves
+the slot empty.
 
 ### Adding a template
 Templates are DB-backed (v0.5) and scoped to a design system. Prefer the
