@@ -370,6 +370,11 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     html_with_tokens = inject_katex_into_html(html_with_tokens)
     html_with_tokens = substitute_image_keys(html_with_tokens, images_list)
     html_with_tokens = substitute_logo(html_with_tokens, logo)
+    # Universal slide counter (i / N) — mirrors renderer_node_single so the
+    # preview this step persists keeps the counter that the renderer wrote.
+    from app.agents.orchestrator.nodes.renderer import _inject_slide_counter
+
+    html_with_tokens = _inject_slide_counter(html_with_tokens, state, fmt_id)
     png_bytes = await render_to_png(html_with_tokens, fmt.width, fmt.height)
 
     if not png_bytes:

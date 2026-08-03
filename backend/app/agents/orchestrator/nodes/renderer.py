@@ -10,6 +10,7 @@ The designer generates platform-optimized HTML. This node:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
@@ -27,6 +28,46 @@ from app.services.tokens import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _inject_slide_counter(html: str, state: GenerationState, fmt_id: str) -> str:
+    """Add a ``i/N`` slide counter to carousel slides whose template lacks one.
+
+    Templates may opt in to their own counter with ``data-slot="counter"``
+    (e.g. ``square-slide``); for every other carousel slide a small metadata
+    counter is injected top-right. ``position: fixed`` against the fixed-size
+    canvas never overflows, and only ``var(--color-*)`` tokens are used so the
+    deterministic checks stay green.
+    """
+    from app.services.formats import parse_carousel_slide
+
+    parsed = parse_carousel_slide(fmt_id)
+    if not parsed:
+        return html
+    if 'data-slot="counter"' in html:
+        return html
+    index = parsed[1]
+    total = int((state.get("slide_context") or {}).get(fmt_id, {}).get("total", 0))
+    if total < 1:
+        return html
+
+    style = (
+        "<style>.tasbir-slide-counter{position:fixed;top:48px;right:48px;z-index:50;"
+        "font-family:var(--font-sans);font-size:20px;font-weight:500;"
+        "letter-spacing:0.08em;color:var(--color-text-secondary);"
+        "background:var(--color-bg);padding:2px 8px}"
+        'body[data-ground="black"] .tasbir-slide-counter{'
+        "color:var(--color-text-secondary);background:var(--color-bg-inverted)}</style>"
+    )
+    counter = f'<span class="tasbir-slide-counter" data-slot="counter">{index}/{total}</span>'
+    if "<body" in html:
+        return re.sub(
+            r"<body\b[^>]*>",
+            lambda m: m.group(0) + style + counter,
+            html,
+            count=1,
+        )
+    return style + counter + html
 
 
 async def renderer_node_single(state: GenerationState) -> dict:
@@ -77,6 +118,10 @@ async def renderer_node_single(state: GenerationState) -> dict:
 
     # 3b. Embed the design system logo via data-logo markers
     html = substitute_logo(html, logo)
+
+    # 3c. Universal carousel slide counter — every slide shows i/N. Templates
+    #     that already render a counter (data-slot="counter") are left alone.
+    html = _inject_slide_counter(html, state, fmt_id)
 
     output_dir = Path(settings.output_dir) / task_id
     output_dir.mkdir(parents=True, exist_ok=True)
