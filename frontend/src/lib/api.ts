@@ -345,6 +345,7 @@ export interface AgentJob {
   error: string | null
   created_at: string | null
   updated_at: string | null
+  title: string
 }
 
 // ─── Agents (DB-backed agent configs) ──────────────────────────────────────
@@ -643,20 +644,42 @@ export function validateTemplate(id: string): Promise<{ ok: boolean; issues: str
   return apiRequest(`/templates/${id}/render`, { method: "POST" })
 }
 
-export async function createTemplateFromImage(
-  designSystemId: string,
-  file: File
-): Promise<{ job_id: string }> {
-  const form = new FormData()
-  form.append("file", file)
-  form.append("design_system_id", designSystemId)
-  return apiForm(`/templates/from-image`, form)
-}
-
 // ─── Agent jobs ────────────────────────────────────────────────────────────
 
 export function getAgentJob(id: string): Promise<AgentJob> {
   return apiRequest(`/agent-jobs/${id}`)
+}
+
+export function listAgentJobs(kind?: string): Promise<AgentJob[]> {
+  return apiRequest(`/agent-jobs${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`)
+}
+
+export function deleteAgentJob(id: string): Promise<void> {
+  return apiRequest(`/agent-jobs/${id}`, { method: "DELETE" })
+}
+
+// ─── Template build job ────────────────────────────────────────────────────
+
+export interface TemplateBuildSeed {
+  designSystemId: string
+  message?: string
+  html?: string
+  family?: string
+  ground?: string
+  image?: File | null
+}
+
+export async function createTemplateBuild(
+  seed: TemplateBuildSeed
+): Promise<{ job_id: string; status: string }> {
+  const fd = new FormData()
+  fd.append("design_system_id", seed.designSystemId)
+  if (seed.message) fd.append("message", seed.message)
+  if (seed.html) fd.append("html", seed.html)
+  if (seed.family) fd.append("family", seed.family)
+  if (seed.ground) fd.append("ground", seed.ground)
+  if (seed.image) fd.append("file", seed.image)
+  return apiForm("/templates/from-input", fd)
 }
 
 // ─── Uploads (post media) ──────────────────────────────────────────────────

@@ -12,6 +12,7 @@ const TaskListPage = lazy(() =>
   import("@/pages/task-list").then((m) => ({ default: m.TaskListPage }))
 )
 const TaskDetailPage = lazy(() => import("@/pages/task-detail"))
+const JobDetailPage = lazy(() => import("@/pages/job-detail"))
 const NewTaskPage = lazy(() => import("@/pages/new-task"))
 const TemplatesPage = lazy(() => import("@/pages/templates"))
 const DesignSystemsPage = lazy(() => import("@/pages/design-systems"))
@@ -53,6 +54,14 @@ export default function App() {
               element={
                 <Suspense fallback={<FullPageSkeleton />}>
                   <TaskDetailPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="jobs/:jobId"
+              element={
+                <Suspense fallback={<FullPageSkeleton />}>
+                  <JobDetailPage />
                 </Suspense>
               }
             />

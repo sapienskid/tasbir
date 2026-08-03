@@ -1,8 +1,9 @@
 import useSWR from "swr"
 import {
   getAgentGraph,
-  listAgents,
   getAgentJob,
+  listAgents,
+  listAgentJobs,
   listDesignSystems,
   listTemplates,
   previewTemplate,
@@ -52,6 +53,22 @@ export function useAgentJob(jobId: string | null): {
         job && (job.status === "pending" || job.status === "running") ? 3000 : 0,
     }
   )
+}
+
+export function useAgentJobs(kind?: string): {
+  data: AgentJob[] | undefined
+  error: unknown
+  isLoading: boolean
+  mutate: () => Promise<unknown>
+} {
+  const key = `/agent-jobs${kind ? `?kind=${encodeURIComponent(kind)}` : ""}`
+  return useSWR(key, () => listAgentJobs(kind), {
+    // Poll while any job is still pending/running so the Tasks list updates.
+    refreshInterval: (data: AgentJob[] | undefined) =>
+      (data ?? []).some((j) => j.status === "pending" || j.status === "running")
+        ? 3000
+        : 0,
+  })
 }
 
 export function isJobDone(job: AgentJob | undefined): boolean {
