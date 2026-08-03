@@ -52,6 +52,7 @@ frontend/dist/
 *.db-journal
 *.sqlite3
 backend/data/tasbir.db
+backend/data/backups/
 
 # ── Celery runtime state ─────────────────────────────────────────────────
 celerybeat-schedule*

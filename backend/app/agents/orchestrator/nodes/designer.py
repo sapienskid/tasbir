@@ -156,6 +156,7 @@ async def _designer_media_director(state: GenerationState, fmt) -> None:
     orientation = "landscape" if fmt.width > fmt.height else ("portrait" if fmt.height > fmt.width else "square")
 
     from app.services.llm import call_llm_for_tool, call_llm_for_tools
+    from app.services.tools.illustrator import ILLUSTRATE_TOOL, run_illustrate
     from app.services.tools.photo import (
         CHOOSE_PHOTO_TOOL,
         FIND_PHOTO_TOOL,
@@ -164,7 +165,6 @@ async def _designer_media_director(state: GenerationState, fmt) -> None:
         pick_candidate,
         search_photo_candidates,
     )
-    from app.services.tools.illustrator import ILLUSTRATE_TOOL, run_illustrate
 
     async def loader() -> dict | None:
         user = (

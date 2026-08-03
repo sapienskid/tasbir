@@ -47,8 +47,7 @@ class StrategicBrief(BaseModel):
     @field_validator("tone")
     @classmethod
     def validate_tone(cls, v: str) -> str:
-        valid = {"professional", "warm", "energetic", "minimal", "luxury", "bold", "editorial"}
-        # Accept any tone but normalize it
+        # Accept any tone but normalize it.
         return v.lower().strip() if v else "professional"
 
 

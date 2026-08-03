@@ -1,15 +1,14 @@
 """Shared fixtures for tests."""
 
 from collections.abc import AsyncGenerator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings, Settings
+from app.config import Settings
 from app.db.session import async_sessionmaker
 
 

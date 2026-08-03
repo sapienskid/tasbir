@@ -5,9 +5,9 @@ from contextlib import ExitStack
 from unittest.mock import AsyncMock, patch
 
 from app.agents.orchestrator.graph import (
+    _run_format_chain,
     build_pipeline,
     process_all_formats_node,
-    _run_format_chain,
 )
 from app.agents.orchestrator.state import initial_state
 

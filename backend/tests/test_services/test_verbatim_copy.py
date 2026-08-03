@@ -1,7 +1,6 @@
 """Tests for the verbatim carousel copy mode."""
 
 import sys
-import types
 
 # Make backend importable when running via pytest from repo root or backend/.
 sys.path.insert(0, ".")

@@ -105,7 +105,7 @@ settings = get_settings()
 
 app = FastAPI(
     title="Tasbir API",
-    version="0.5.0",
+    version="1.0.0",
     description="AI-powered social media asset pipeline — HTML + PNG output",
     lifespan=lifespan,
 )

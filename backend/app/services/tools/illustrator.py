@@ -163,13 +163,13 @@ def _recolor_svg(svg: str) -> str:
 
 def _figure_wrapper(svg_body: str) -> str:
     style = (
-        f".figure{{--ill-ink:var(--color-text);--ill-mid:var(--color-text-secondary);"
-        f"--ill-light:var(--color-text-tertiary);--ill-paper:var(--color-bg);"
-        f"width:100%;height:100%}}"
-        f'body[data-ground="black"] .figure{{--ill-ink:var(--color-text-inverted);'
-        f"--ill-mid:var(--color-text-secondary);--ill-light:var(--color-text-tertiary);"
-        f"--ill-paper:var(--color-bg-inverted)}}"
-        f".figure svg{{width:100%;height:100%;display:block}}"
+        ".figure{--ill-ink:var(--color-text);--ill-mid:var(--color-text-secondary);"
+        "--ill-light:var(--color-text-tertiary);--ill-paper:var(--color-bg);"
+        "width:100%;height:100%}"
+        'body[data-ground="black"] .figure{--ill-ink:var(--color-text-inverted);'
+        "--ill-mid:var(--color-text-secondary);--ill-light:var(--color-text-tertiary);"
+        "--ill-paper:var(--color-bg-inverted)}"
+        ".figure svg{width:100%;height:100%;display:block}"
     )
     return f'<div class="figure"><style>{style}</style>{svg_body}</div>'
 

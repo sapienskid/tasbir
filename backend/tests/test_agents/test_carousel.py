@@ -4,7 +4,11 @@ import asyncio
 import json
 from contextlib import ExitStack
 
-from app.agents.orchestrator.graph import _extract_slides, _run_sequence_check, process_all_formats_node
+from app.agents.orchestrator.graph import (
+    _extract_slides,
+    _run_sequence_check,
+    process_all_formats_node,
+)
 from app.agents.orchestrator.nodes.copywriter import _fallback_slides, _split_sentences
 from app.agents.orchestrator.state import initial_state
 from app.services.formats import (

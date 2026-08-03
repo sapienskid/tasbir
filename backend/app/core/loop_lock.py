@@ -25,7 +25,7 @@ def loop_lock() -> asyncio.Lock:
         lock = _locks.get(loop)
         if lock is None:
             if len(_locks) >= _MAX_TRACKED_LOOPS:
-                for tracked in [l for l, _ in _locks.items() if not l.is_running()]:
+                for tracked in [x for x, _ in _locks.items() if not x.is_running()]:
                     _locks.pop(tracked, None)
             lock = asyncio.Lock()
             _locks[loop] = lock

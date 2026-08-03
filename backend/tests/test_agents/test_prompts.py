@@ -1,7 +1,6 @@
 """Tests for v3 YAML prompt registry."""
 
-import pytest
-from app.agents.prompts.registry import load_prompt, PromptConfig
+from app.agents.prompts.registry import PromptConfig, load_prompt
 
 
 def test_load_strategist_prompt():

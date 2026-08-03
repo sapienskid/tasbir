@@ -38,7 +38,6 @@ async def test_list_filtered_by_kind(authed_client):
 
 
 async def test_get_job_title_and_delete(authed_client):
-    from app.db.repositories.agent_jobs import AgentJobRepository
     from app.db.session import get_shared_session_factory
 
     pool = await get_shared_session_factory()

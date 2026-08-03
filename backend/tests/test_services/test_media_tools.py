@@ -5,19 +5,16 @@ import re
 import pytest
 
 from app.services.tools.illustrator import (
-    ILLUSTRATE_TOOL,
     compose_handdrawn,
     run_illustrate,
 )
 from app.services.tools.photo import (
-    CHOOSE_PHOTO_TOOL,
     FIND_PHOTO_TOOL,
     embed_photo_into_html,
     format_shortlist,
     pick_candidate,
     search_photo_candidates,
 )
-
 
 # ---------------------------------------------------------------------------
 # Multi-turn tool loop

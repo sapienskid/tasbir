@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tasbir"
-version = "0.5.0"
+version = "1.0.0"
 description = "AI-powered social media asset pipeline — HTML + PNG output"
 requires-python = ">=3.12"
 dependencies = [
@@ -42,6 +42,26 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# Long, intentional content strings: prompt/instruction text, embedded
+# SVG/JS templates, and verbatim test speeches. Wrapping would hurt
+# readability, so E501 (line length) is relaxed for these files only.
+"tests/test_services/test_verbatim_copy.py" = ["E501"]
+"tests/test_services/test_tokens.py" = ["E501"]
+"tests/test_agents/test_state.py" = ["E501"]
+"tests/test_api/test_chat.py" = ["E501"]
+"tests/test_services/test_illustration.py" = ["E501"]
+"tests/test_services/test_media_tools.py" = ["E501"]
+"tests/test_services/test_templates.py" = ["E501"]
+"app/services/design_instruction.py" = ["E501"]
+"app/services/illustration.py" = ["E501"]
+"app/services/llm.py" = ["E501"]
+"app/services/render_server.py" = ["E501"]
+"app/services/tokens.py" = ["E501"]
+"app/services/tools/photo.py" = ["E501"]
+"app/tasks/agent_jobs.py" = ["E501"]
+"app/agents/orchestrator/nodes/*.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

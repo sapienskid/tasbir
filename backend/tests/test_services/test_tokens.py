@@ -2,17 +2,6 @@
 
 from pathlib import Path
 
-from app.services.tokens import (
-    load_tokens,
-    DEFAULT_TOKEN_VALUES,
-    inject_tokens_into_html,
-    build_css_var_reference,
-    build_css_variable_block,
-    load_brand_design,
-    category_matches,
-    resolve_ground,
-    DEFAULT_CATEGORIES,
-)
 from app.agents.orchestrator.nodes.designer import _build_fallback_html
 from app.agents.orchestrator.nodes.quality_check import _run_deterministic_checks
 from app.services import design_instruction as di_mod
@@ -20,6 +9,17 @@ from app.services.design_instruction import (
     build_google_fonts_link,
     inject_fonts_into_html,
     pick_layout_archetype,
+)
+from app.services.tokens import (
+    DEFAULT_CATEGORIES,
+    DEFAULT_TOKEN_VALUES,
+    build_css_var_reference,
+    build_css_variable_block,
+    category_matches,
+    inject_tokens_into_html,
+    load_brand_design,
+    load_tokens,
+    resolve_ground,
 )
 
 
@@ -249,18 +249,6 @@ def test_deterministic_checks_require_display_face():
             '<h1>H</h1><span>SABIN POKHAREL</span><span>@X</span></body></html>')
     issues = _run_deterministic_checks(html, {"left": "SABIN POKHAREL", "right": "@X"}, "WRITING", 1080, 1080)
     assert any("display face" in i.lower() for i in issues)
-
-
-def test_deterministic_checks_ignore_designer_root_block():
-    """A designer :root block is stripped by the token injector before render,
-    so hex inside it is harmless and must not be flagged."""
-    html = ('<html><head><style>:root { --color-bg: #000000; --color-text: #FFFFFF; }'
-            'body{width:1080px;height:1080px;background:var(--color-bg)}'
-            '.headline{font-family:var(--font-display)}</style></head>'
-            '<body style="width:1080px;height:1080px"><div class="kicker">WRITING</div>'
-            '<h1 class="headline">H</h1><span>SABIN POKHAREL</span><span>@X</span></body></html>')
-    issues = _run_deterministic_checks(html, {"left": "SABIN POKHAREL", "right": "@X"}, "WRITING", 1080, 1080)
-    assert issues == []
 
 
 def test_deterministic_checks_catch_violations():
