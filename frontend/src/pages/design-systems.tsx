@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { ArrowLeft, Loader2, Plus, Save, Search, Trash2, Wand2 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -36,7 +36,7 @@ import {
   uploadLogo,
   type DesignSystem,
 } from "@/lib/api"
-import { useDesignSystems, useAgentJob, isJobDone } from "@/hooks/use-library"
+import { useDesignSystems } from "@/hooks/use-library"
 
 const COLOR_TOKENS = new Set([
   "--color-bg",
@@ -89,13 +89,13 @@ function firstFamily(stack: string): string {
 
 export default function DesignSystemsPage() {
   const { data: systems, isLoading, mutate } = useDesignSystems()
-  const [dsId, setDsId] = useState<string>("")
   const [draft, setDraft] = useState<DesignSystem | null>(null)
   const [saving, setSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
-  const [jobId, setJobId] = useState<string | null>(null)
   const [fontPickerKey, setFontPickerKey] = useState<string | null>(null)
-  const { data: job } = useAgentJob(jobId)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [dsId, setDsId] = useState<string>(() => searchParams.get("ds") ?? "")
 
   function applyFontFamily(key: string, family: string) {
     setDraft((prev) => {
@@ -578,13 +578,9 @@ export default function DesignSystemsPage() {
       <CreateFromInputDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        jobId={jobId}
-        onJobStarted={setJobId}
-        job={job}
-        onDone={() => {
+        onJobStarted={(jobId) => {
           setCreateOpen(false)
-          setJobId(null)
-          void mutate()
+          navigate(`/jobs/${jobId}`)
         }}
       />
     </div>
@@ -918,17 +914,11 @@ function DesignSystemPreview({ dsId }: { dsId: string }) {
 function CreateFromInputDialog({
   open,
   onOpenChange,
-  jobId,
   onJobStarted,
-  job,
-  onDone,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  jobId: string | null
-  onJobStarted: (id: string) => void
-  job: ReturnType<typeof useAgentJob>["data"]
-  onDone: () => void
+  onJobStarted: (jobId: string) => void
 }) {
   const [form, setForm] = useState({
     name: "",
@@ -959,8 +949,8 @@ function CreateFromInputDialog({
         referenceImage: reference,
         logoImage: logo,
       })
+      toast.success("Brand builder job started")
       onJobStarted(res.job_id)
-      toast.success("Design system job started")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Start failed")
     } finally {
@@ -968,103 +958,75 @@ function CreateFromInputDialog({
     }
   }
 
-  const done = isJobDone(job)
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Create Design System with AI</DialogTitle>
           <DialogDescription>
-            The brand builder generates identity, tokens, campaigns, and starter templates.
+            The brand builder generates identity, tokens, campaigns, and starter
+            templates in the background. The job keeps running if you close this
+            — find it on the Tasks page.
           </DialogDescription>
         </DialogHeader>
-        {jobId ? (
-          <div className="grid gap-2">
-            <p className="text-sm">
-              Job status:{" "}
-              <Badge variant={job?.status === "completed" ? "default" : "outline"}>
-                {job?.status ?? "starting"}
-              </Badge>
-            </p>
-            {job?.status === "completed" ? (
-              <p className="text-sm text-muted-foreground">
-                Created: <code>{(job.result as { design_system_id?: string })?.design_system_id}</code>
-                {" · "}
-                {((job.result as { templates?: string[] })?.templates ?? []).length} templates
-              </p>
-            ) : null}
-            {job?.status === "failed" ? <p className="text-sm text-destructive">{job.error}</p> : null}
-            {done ? (
-              <Button onClick={onDone}>Done</Button>
-            ) : (
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Building brand system…
-              </p>
-            )}
+        <div className="grid gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Input placeholder="Brand name *" aria-label="Brand name" value={form.name} onChange={(e) => set("name")(e.target.value)} />
+            <Input placeholder="Handle (e.g. @sapienskid)" aria-label="Handle" value={form.handle} onChange={(e) => set("handle")(e.target.value)} />
           </div>
-        ) : (
-          <div className="grid gap-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Input placeholder="Brand name *" aria-label="Brand name" value={form.name} onChange={(e) => set("name")(e.target.value)} />
-              <Input placeholder="Handle (e.g. @sapienskid)" aria-label="Handle" value={form.handle} onChange={(e) => set("handle")(e.target.value)} />
-            </div>
-            <Input placeholder="Tagline" aria-label="Tagline" value={form.tagline} onChange={(e) => set("tagline")(e.target.value)} />
-            <Textarea
-              placeholder="Mission / brand story"
-              aria-label="Mission / brand story"
-              value={form.mission}
-              onChange={(e) => set("mission")(e.target.value)}
-            />
-            <div className="grid grid-cols-3 gap-3">
-              <Input placeholder="Industry" aria-label="Industry" value={form.industry} onChange={(e) => set("industry")(e.target.value)} />
-              <Input placeholder="Audience" aria-label="Audience" value={form.audience} onChange={(e) => set("audience")(e.target.value)} />
-              <Input placeholder="Style keywords" aria-label="Style keywords" value={form.style} onChange={(e) => set("style")(e.target.value)} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1">
-                <Label className="text-xs text-muted-foreground">Reference / moodboard (optional)</Label>
-                {reference ? (
-                  <div className="flex items-center justify-between rounded-md border p-2 text-sm">
-                    <span className="truncate">{reference.name}</span>
-                    <Button variant="ghost" size="sm" onClick={() => setReference(null)}>
-                      Remove
-                    </Button>
-                  </div>
-                ) : (
-                  <Dropzone onFile={setReference} hint="Palette + type inspiration" />
-                )}
-              </div>
-              <div className="grid gap-1">
-                <Label className="text-xs text-muted-foreground">Logo (optional)</Label>
-                {logo ? (
-                  <div className="flex items-center justify-between rounded-md border p-2 text-sm">
-                    <span className="truncate">{logo.name}</span>
-                    <Button variant="ghost" size="sm" onClick={() => setLogo(null)}>
-                      Remove
-                    </Button>
-                  </div>
-                ) : (
-                  <Dropzone onFile={setLogo} hint="Used in template logo slots" />
-                )}
-              </div>
-            </div>
+          <Input placeholder="Tagline" aria-label="Tagline" value={form.tagline} onChange={(e) => set("tagline")(e.target.value)} />
+          <Textarea
+            placeholder="Mission / brand story"
+            aria-label="Mission / brand story"
+            value={form.mission}
+            onChange={(e) => set("mission")(e.target.value)}
+          />
+          <div className="grid grid-cols-3 gap-3">
+            <Input placeholder="Industry" aria-label="Industry" value={form.industry} onChange={(e) => set("industry")(e.target.value)} />
+            <Input placeholder="Audience" aria-label="Audience" value={form.audience} onChange={(e) => set("audience")(e.target.value)} />
+            <Input placeholder="Style keywords" aria-label="Style keywords" value={form.style} onChange={(e) => set("style")(e.target.value)} />
           </div>
-        )}
-        <DialogFooter>
-          {!jobId ? (
-            <Button onClick={() => void start()} disabled={starting}>
-              {starting ? (
-                <>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Starting…
-                </>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1">
+              <Label className="text-xs text-muted-foreground">Reference / moodboard (optional)</Label>
+              {reference ? (
+                <div className="flex items-center justify-between rounded-md border p-2 text-sm">
+                  <span className="truncate">{reference.name}</span>
+                  <Button variant="ghost" size="sm" onClick={() => setReference(null)}>
+                    Remove
+                  </Button>
+                </div>
               ) : (
-                <>
-                  <Wand2 aria-hidden="true" className="size-4" /> Generate
-                </>
+                <Dropzone onFile={setReference} hint="Palette + type inspiration" />
               )}
-            </Button>
-          ) : null}
+            </div>
+            <div className="grid gap-1">
+              <Label className="text-xs text-muted-foreground">Logo (optional)</Label>
+              {logo ? (
+                <div className="flex items-center justify-between rounded-md border p-2 text-sm">
+                  <span className="truncate">{logo.name}</span>
+                  <Button variant="ghost" size="sm" onClick={() => setLogo(null)}>
+                    Remove
+                  </Button>
+                </div>
+              ) : (
+                <Dropzone onFile={setLogo} hint="Used in template logo slots" />
+              )}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={() => void start()} disabled={starting}>
+            {starting ? (
+              <>
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Starting…
+              </>
+            ) : (
+              <>
+                <Wand2 aria-hidden="true" className="size-4" /> Generate
+              </>
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

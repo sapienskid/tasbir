@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,19 +32,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dropzone } from "@/components/tasks/dropzone"
 import { FAMILY_DIMS, FitScaledFrame, ZoomableFrame } from "@/components/tasks/preview-frame"
 import {
-  createTemplateFromImage,
   createTemplate,
+  createTemplateBuild,
   deleteTemplate,
   getTemplate,
   previewDraft,
   updateTemplate,
   type Template,
 } from "@/lib/api"
-import { useDesignSystems, useTemplates, useAgentJob, isJobDone, useTemplatePreview } from "@/hooks/use-library"
+import { useDesignSystems, useTemplates, useTemplatePreview, useAgentJob, isJobDone } from "@/hooks/use-library"
 
 const LazyHtmlEditor = lazy(() =>
   import("@/components/editor/html-editor").then((m) => ({ default: m.HtmlEditor }))
@@ -54,20 +55,32 @@ export default function TemplatesPage() {
   const { data: systems } = useDesignSystems()
   const [dsId, setDsId] = useState<string>("")
   const [includeInactive, setIncludeInactive] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
   const activeSystems = (systems ?? []).filter((s) => s.is_active)
   const current = activeSystems.find((s) => s.id === dsId) ?? activeSystems[0]
   const { data: templates, isLoading, mutate } = useTemplates(
     current?.id ?? null,
     undefined,
-    includeInactive
+    true
   )
+  const activeTemplates = (templates ?? []).filter((t) => t.is_active)
   const inactiveCount = (templates ?? []).filter((t) => !t.is_active).length
 
   const [editTarget, setEditTarget] = useState<Template | null>(null)
   const [toggleTarget, setToggleTarget] = useState<Template | null>(null)
-  const [imageOpen, setImageOpen] = useState(false)
-  const [jobId, setJobId] = useState<string | null>(null)
-  const { data: job } = useAgentJob(jobId)
+
+  // ?open={templateId} → jump straight into the edit dialog.
+  useEffect(() => {
+    const openId = searchParams.get("open")
+    if (!openId || !templates) return
+    const t = templates.find((x) => x.id === openId)
+    if (t) {
+      setEditTarget(t)
+      setSearchParams({}, { replace: true })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, templates])
 
   async function handleDuplicate(t: Template) {
     try {
@@ -142,7 +155,6 @@ export default function TemplatesPage() {
             value={current.id}
             onValueChange={(v) => {
               setDsId(v)
-              setJobId(null)
             }}
           >
             <SelectTrigger className="w-52">
@@ -175,9 +187,9 @@ export default function TemplatesPage() {
               </span>
             ) : null}
           </Button>
-          <Button onClick={() => setImageOpen(true)}>
+          <Button onClick={() => setCreateOpen(true)}>
             <Plus aria-hidden="true" className="size-4" />
-            From Image
+            New template
           </Button>
         </div>
       </div>
@@ -191,6 +203,20 @@ export default function TemplatesPage() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <CountPill label="Total" value={(templates ?? []).length} />
+        <CountPill label="Active" value={activeTemplates.length} />
+        <CountPill label="Inactive" value={inactiveCount} muted />
+        {(["square", "portrait", "story", "landscape"] as const).map((f) => (
+          <CountPill
+            key={f}
+            label={f}
+            value={(templates ?? []).filter((t) => t.family === f).length}
+            muted
+          />
+        ))}
+      </div>
+
       {isLoading || !templates ? (
         <div className="columns-1 gap-4 sm:columns-2 md:columns-3 xl:columns-4">
           {Array.from({ length: 8 }).map((_, i) => (
@@ -199,15 +225,15 @@ export default function TemplatesPage() {
             </div>
           ))}
         </div>
-      ) : templates.length === 0 ? (
+      ) : (includeInactive ? templates : activeTemplates).length === 0 ? (
         <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
           {includeInactive
-            ? "No templates yet — generate one from an image."
-            : "No active templates — tick “Show inactive” to see deactivated ones, or create one from an image."}
+            ? "No templates yet — create one from an image, HTML, or a description."
+            : "No active templates — tick “Show inactive” to see deactivated ones, or create one."}
         </div>
       ) : (
         <div className="columns-1 gap-4 sm:columns-2 md:columns-3 xl:columns-4">
-          {templates.map((t) => (
+          {(includeInactive ? templates : activeTemplates).map((t) => (
             <div key={t.id} className="mb-4 break-inside-avoid">
               <TemplateCard
                 t={t}
@@ -257,20 +283,40 @@ export default function TemplatesPage() {
         />
       ) : null}
 
-      <FromImageDialog
-        open={imageOpen}
-        onOpenChange={setImageOpen}
+      <CreateTemplateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
         designSystemId={current.id}
-        jobId={jobId}
-        onJobStarted={setJobId}
-        job={job}
         onDone={() => {
-          setImageOpen(false)
-          setJobId(null)
+          setCreateOpen(false)
           void mutate()
         }}
       />
     </div>
+  )
+}
+
+function CountPill({
+  label,
+  value,
+  muted,
+}: {
+  label: string
+  value: number
+  muted?: boolean
+}) {
+  return (
+    <span
+      className={
+        "flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs " +
+        (muted ? "text-muted-foreground" : "font-semibold")
+      }
+    >
+      <span className="uppercase tracking-wide">{label}</span>
+      <span className={muted ? "" : "rounded bg-muted px-1.5"}>
+        {value}
+      </span>
+    </span>
   )
 }
 
@@ -658,52 +704,68 @@ function EditTemplateDialog({
   )
 }
 
-function FromImageDialog({
+function CreateTemplateDialog({
   open,
   onOpenChange,
   designSystemId,
-  jobId,
-  onJobStarted,
-  job,
   onDone,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   designSystemId: string
-  jobId: string | null
-  onJobStarted: (id: string) => void
-  job: ReturnType<typeof useAgentJob>["data"]
   onDone: () => void
 }) {
-  const [busy, setBusy] = useState(false)
+  const [mode, setMode] = useState<"image" | "html" | "text">("text")
+  const [message, setMessage] = useState("")
+  const [html, setHtml] = useState("")
+  const [image, setImage] = useState<File | null>(null)
+  const [family, setFamily] = useState("square")
+  const [ground, setGround] = useState("white")
+  const [starting, setStarting] = useState(false)
+  const [jobId, setJobId] = useState<string | null>(null)
+  const { data: job } = useAgentJob(jobId)
 
-  async function handleFile(file: File) {
-    setBusy(true)
+  const canStart = mode === "image" ? Boolean(image) : mode === "html" ? html.trim().length >= 50 : message.trim().length > 0
+  const done = isJobDone(job)
+
+  async function handleImage(file: File) {
+    setImage(file)
+  }
+
+  async function start() {
+    if (!canStart) return
+    setStarting(true)
     try {
-      const res = await createTemplateFromImage(designSystemId, file)
-      onJobStarted(res.job_id)
+      const res = await createTemplateBuild({
+        designSystemId,
+        message: mode === "text" ? message : message || undefined,
+        html: mode === "html" ? html : undefined,
+        family,
+        ground,
+        image: mode === "image" ? image : undefined,
+      })
       toast.success("Template job started")
+      setJobId(res.job_id)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Upload failed")
+      toast.error(err instanceof Error ? err.message : "Start failed")
     } finally {
-      setBusy(false)
+      setStarting(false)
     }
   }
 
-  const done = isJobDone(job)
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Create Template from Image</DialogTitle>
+          <DialogTitle>New template</DialogTitle>
           <DialogDescription>
-            Drop a design mockup — the agent analyzes it and writes a validated template.
+            The agent builds a validated template in the background — paste an
+            image, HTML, or describe the layout for context.
           </DialogDescription>
         </DialogHeader>
         {jobId ? (
-          <div className="grid gap-2">
-            <p className="text-sm">
+          <div className="grid gap-3">
+            <p className="flex items-center gap-2 text-sm">
               Job status:{" "}
               <Badge variant={job?.status === "completed" ? "default" : "outline"}>
                 {job?.status ?? "starting"}
@@ -711,7 +773,10 @@ function FromImageDialog({
             </p>
             {job?.status === "completed" ? (
               <p className="text-sm text-muted-foreground">
-                Template created: <code>{(job.result as { template_id?: string })?.template_id}</code>
+                Template created:{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
+                  {(job.result as { template_id?: string } | null)?.template_id ?? "—"}
+                </code>
               </p>
             ) : null}
             {job?.status === "failed" ? (
@@ -721,12 +786,93 @@ function FromImageDialog({
               <Button onClick={onDone}>Done</Button>
             ) : (
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" /> Analyzing & validating…
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                Analyzing & validating… runs in the background, close anytime.
               </p>
             )}
           </div>
         ) : (
-          <Dropzone busy={busy} onFile={(f) => void handleFile(f)} hint="PNG, JPEG, WebP or GIF" />
+          <div className="grid gap-3">
+            <Tabs value={mode} onValueChange={(v) => setMode(v as typeof mode)}>
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="text">Describe</TabsTrigger>
+                <TabsTrigger value="image">Image</TabsTrigger>
+                <TabsTrigger value="html">HTML</TabsTrigger>
+              </TabsList>
+              <TabsContent value="text" className="grid gap-2">
+                <Textarea
+                  rows={4}
+                  aria-label="Describe the template"
+                  placeholder="e.g. a bold square post, big serif headline, thin rule under the footer"
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                />
+              </TabsContent>
+              <TabsContent value="image" className="grid gap-2">
+                {image ? (
+                  <div className="flex items-center justify-between rounded-md border p-2 text-sm">
+                    <span className="truncate">{image.name}</span>
+                    <Button variant="ghost" size="sm" onClick={() => setImage(null)}>
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <Dropzone onFile={(f) => void handleImage(f)} hint="Paste or drop a mockup — PNG, JPEG, WebP or GIF" />
+                )}
+              </TabsContent>
+              <TabsContent value="html" className="grid gap-2">
+                <Textarea
+                  rows={6}
+                  aria-label="Paste template HTML"
+                  placeholder="Paste an existing template's HTML (Jinja2) to convert into a validated library template…"
+                  value={html}
+                  onChange={(e) => setHtml(e.target.value)}
+                />
+              </TabsContent>
+            </Tabs>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Ratio</Label>
+                <Select value={family} onValueChange={setFamily}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="square">Square</SelectItem>
+                    <SelectItem value="portrait">Portrait</SelectItem>
+                    <SelectItem value="story">Story</SelectItem>
+                    <SelectItem value="landscape">Landscape</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-muted-foreground">Ground</Label>
+                <Select value={ground} onValueChange={setGround}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="white">White</SelectItem>
+                    <SelectItem value="black">Black</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={starting}>
+                Cancel
+              </Button>
+              <Button onClick={() => void start()} disabled={!canStart || starting}>
+                {starting ? (
+                  <>
+                    <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Starting…
+                  </>
+                ) : (
+                  "Create template"
+                )}
+              </Button>
+            </DialogFooter>
+          </div>
         )}
       </DialogContent>
     </Dialog>

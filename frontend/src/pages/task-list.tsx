@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import {
   AlertDialog,
@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Table,
@@ -25,20 +26,68 @@ import { preloadMonacoEditor } from "@/components/editor/html-editor"
 import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useTasks } from "@/hooks/use-task"
-import { apiRequest, ApiError } from "@/lib/api"
+import { useAgentJobs } from "@/hooks/use-library"
+import { apiRequest, ApiError, deleteAgentJob, type AgentJob } from "@/lib/api"
+
+type Row =
+  | { kind: "post"; id: string; title: string; status: string; created_at: string | null }
+  | { kind: AgentJob["kind"]; id: string; title: string; status: string; created_at: string | null }
+
+const TYPE_LABEL: Record<Row["kind"], string> = {
+  post: "Post",
+  template: "Template",
+  design_system: "Design system",
+}
 
 export function TaskListPage() {
-  const { data, error, isLoading, mutate } = useTasks()
-  const [deleting, setDeleting] = useState<string | null>(null)
+  const { data: tasks, error, isLoading, mutate: mutateTasks } = useTasks()
+  const {
+    data: jobs,
+    error: jobsError,
+    isLoading: jobsLoading,
+    mutate: mutateJobs,
+  } = useAgentJobs()
+  const [deleting, setDeleting] = useState<Row | null>(null)
   const navigate = useNavigate()
+
+  const rows: Row[] = useMemo(() => {
+    const t: Row[] = (tasks ?? []).map((task) => ({
+      kind: "post",
+      id: task.id,
+      title: task.title || task.id.slice(0, 8),
+      status: task.status,
+      created_at: task.created_at,
+    }))
+    const j: Row[] = (jobs ?? []).map((job) => ({
+      kind: job.kind,
+      id: job.id,
+      title: job.title || (job.kind === "template" ? "Template job" : "Brand builder job"),
+      status: job.status,
+      created_at: job.created_at,
+    }))
+    return [...t, ...j].sort((a, b) => {
+      const at = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bt = b.created_at ? new Date(b.created_at).getTime() : 0
+      return bt - at
+    })
+  }, [tasks, jobs])
+
+  function rowHref(r: Row): string {
+    return r.kind === "post" ? `/tasks/${r.id}` : `/jobs/${r.id}`
+  }
 
   async function confirmDelete() {
     if (!deleting) return
     try {
-      await apiRequest(`/tasks/${deleting}`, { method: "DELETE" })
-      toast.success("Task deleted")
+      if (deleting.kind === "post") {
+        await apiRequest(`/tasks/${deleting.id}`, { method: "DELETE" })
+        await mutateTasks()
+      } else {
+        await deleteAgentJob(deleting.id)
+        await mutateJobs()
+      }
+      toast.success("Deleted")
       setDeleting(null)
-      await mutate()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delete failed")
       setDeleting(null)
@@ -50,15 +99,19 @@ export function TaskListPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Tasks</h1>
         <span className="text-sm text-muted-foreground">
-          Files auto-expire after the retention window (one-time download).
+          Posts, template builders, and brand builder jobs run in the background.
         </span>
       </div>
 
-      {error ? (
+      {error || jobsError ? (
         <div className="rounded-md border border-destructive/50 p-4 text-sm text-destructive">
-          {error instanceof ApiError && error.status === 401
+          {(error ?? jobsError) instanceof ApiError && (error ?? jobsError)?.status === 401
             ? "Authentication required — open the API Key dialog in the header to set your key."
-            : error.message}
+            : error instanceof Error
+              ? error.message
+              : jobsError instanceof Error
+                ? jobsError.message
+                : "Failed to load tasks."}
         </div>
       ) : null}
 
@@ -66,17 +119,21 @@ export function TaskListPage() {
         <TableHeader>
           <TableRow>
             <TableHead>Title</TableHead>
+            <TableHead className="w-28">Type</TableHead>
             <TableHead className="w-32">Status</TableHead>
             <TableHead className="w-44">Created</TableHead>
             <TableHead className="w-28 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {isLoading || !data
+          {isLoading || jobsLoading || !tasks || !jobs
             ? Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell>
                     <Skeleton className="h-4 w-64" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-16" />
                   </TableCell>
                   <TableCell>
                     <Skeleton className="h-4 w-16" />
@@ -89,31 +146,36 @@ export function TaskListPage() {
                   </TableCell>
                 </TableRow>
               ))
-            : data.map((task) => (
+            : rows.map((row) => (
                 <TableRow
-                  key={task.id}
+                  key={`${row.kind}-${row.id}`}
                   className="cursor-pointer"
                   tabIndex={0}
                   role="link"
-                  onClick={() => navigate(`/tasks/${task.id}`)}
+                  onClick={() => navigate(rowHref(row))}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault()
-                      navigate(`/tasks/${task.id}`)
+                      navigate(rowHref(row))
                     }
                   }}
                   onPointerEnter={preloadMonacoEditor}
                 >
                   <TableCell className="max-w-xl truncate font-medium">
-                    <Link to={`/tasks/${task.id}`} className="hover:underline">
-                      {task.title || task.id.slice(0, 8)}
+                    <Link to={rowHref(row)} className="hover:underline">
+                      {row.title}
                     </Link>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge status={task.status} />
+                    <Badge variant="secondary" className="text-[10px]">
+                      {TYPE_LABEL[row.kind]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge status={row.status} />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {task.created_at ? new Date(task.created_at).toLocaleString() : "—"}
+                    {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button
@@ -122,7 +184,7 @@ export function TaskListPage() {
                       aria-label="Delete"
                       onClick={(e) => {
                         e.stopPropagation()
-                        setDeleting(task.id)
+                        setDeleting(row)
                       }}
                     >
                       <Trash2 aria-hidden="true" className="size-4" />
@@ -136,9 +198,11 @@ export function TaskListPage() {
       <AlertDialog open={Boolean(deleting)} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this task?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this {deleting ? TYPE_LABEL[deleting.kind] : ""}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This removes the task record and its generated files from the server.
+              {deleting?.kind === "post"
+                ? "This removes the task record and its generated files from the server."
+                : "This removes the job record and its chat thread from the server."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
