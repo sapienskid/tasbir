@@ -344,41 +344,82 @@ def _split_sentences(text: str, n: int) -> list[str]:
     return chunks
 
 
+def _verbatim_pieces(blocks: list[str], target: float, body_cap: int) -> list[str]:
+    """Turn blocks into order-preserving pieces small enough to pack evenly.
+
+    Multi-line blocks (poem stanzas) stay whole when they fit the cap; long
+    single-line prose paragraphs are split at sentence boundaries so the minimax
+    partition can distribute the text evenly across slides.
+    """
+    pieces: list[str] = []
+    for b in blocks:
+        if "\n" in b:
+            pieces.append(b if len(b) <= body_cap else b)  # stanza intact
+        elif len(b) > max(target, 160):
+            parts = [s.strip() for s in re.split(r"(?<=[.!?])\s+", b) if s.strip()]
+            pieces.extend(parts if len(parts) > 1 else [b])
+        else:
+            pieces.append(b)
+    return pieces
+
+
+def _proportional_partition(pieces: list[str], n: int) -> list[list[str]]:
+    """Assign pieces to n ordered buckets proportionally to total length.
+
+    Each piece goes to the bucket whose ``i/n`` target-window its midpoint falls
+    in, so buckets end up roughly equal, none is empty (given pieces >= n), and
+    the original order is preserved.
+    """
+    total = sum(len(p) + 1 for p in pieces)
+    target = max(1.0, total / n)
+    buckets: list[list[str]] = [[] for _ in range(n)]
+    cur = 0.0
+    for p in pieces:
+        add = len(p) + 1
+        bi = min(int((cur + add / 2.0) / target), n - 1)
+        buckets[bi].append(p)
+        cur += add
+    return buckets
+
+
+def _fill_empty_buckets(buckets: list[list[str]]) -> list[list[str]]:
+    """Guarantee no empty slide: each empty bucket takes the tail piece of the
+    nearest non-empty bucket before it (order preserved)."""
+    for i in range(len(buckets) - 1, -1, -1):
+        if buckets[i]:
+            continue
+        j = i - 1
+        while j >= 0 and not buckets[j]:
+            j -= 1
+        if j >= 0 and buckets[j]:
+            buckets[i].append(buckets[j].pop())
+    return buckets
+
+
 def _verbatim_slides(content: str, title: str, n: int, body_cap: int = 500) -> list[SlideCopy]:
     """Split the source text into n slides VERBATIM, preserving paragraph breaks.
 
     The text is cut into units on BLANK lines first (stanzas / paragraphs keep
-    their internal line breaks), then grouped into roughly balanced buckets so
-    the original wording stays intact across slides — no summarization. Slide 1
-    uses the title as its headline.
+    their internal line breaks). Oversized prose paragraphs are pre-split at
+    sentence boundaries, then a minimax linear partition distributes the pieces
+    evenly across slides — no near-empty middle slides, order preserved, and
+    the whole text is kept whenever the canvas allows. Slide 1 uses the title
+    as its headline.
     """
     text = (content or "").strip()
     if not text or n < 1:
         return []
     blocks = [b.strip() for b in re.split(r"\n\s*\n+", text) if b.strip()]
     if len(blocks) < n:
-        # Not enough stanza/paragraph blocks — widen to single lines, then sentences.
         blocks = [b.strip() for b in re.split(r"\n+", text) if b.strip()]
     if len(blocks) < n:
         blocks = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()] or [text]
 
     total = sum(len(b) for b in blocks)
     target = max(1, total / n)
-    buckets: list[list[str]] = [[] for _ in range(n)]
-    sizes = [0] * n
-    bi = 0
-    for i, b in enumerate(blocks):
-        remaining = len(blocks) - i - 1
-        open_buckets = n - bi - 1
-        # Force a move so later buckets never starve, or when the bucket is full.
-        if (
-            bi < n - 1
-            and sizes[bi] > 0
-            and (remaining <= open_buckets or sizes[bi] + len(b) > target * 1.5)
-        ):
-            bi += 1
-        buckets[bi].append(b)
-        sizes[bi] += len(b) + 1
+    pieces = _verbatim_pieces(blocks, target, body_cap)
+    buckets = _proportional_partition(pieces, n) if len(pieces) > n else [[p] for p in pieces]
+    buckets = _fill_empty_buckets(buckets)
 
     slides: list[SlideCopy] = []
     for i, bucket in enumerate(buckets):
