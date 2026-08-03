@@ -20,12 +20,17 @@ async def authed_client(tmp_path, monkeypatch):
     await close_shared_engine()
 
     # Never enqueue real jobs from tests — no worker side-effects, no LLM cost.
-    from app.tasks.agent_jobs import run_design_system_from_input, run_template_from_image
+    from app.tasks.agent_jobs import (
+        run_design_system_from_input,
+        run_template_build_task,
+        run_template_from_image,
+    )
     from app.tasks.generate import generate_task
 
     monkeypatch.setattr(generate_task, "delay", lambda *a, **k: None)
     monkeypatch.setattr(run_template_from_image, "delay", lambda *a, **k: None)
     monkeypatch.setattr(run_design_system_from_input, "delay", lambda *a, **k: None)
+    monkeypatch.setattr(run_template_build_task, "delay", lambda *a, **k: None)
 
     async with app.router.lifespan_context(app):
         async with AsyncClient(

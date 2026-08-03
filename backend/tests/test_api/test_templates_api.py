@@ -94,3 +94,69 @@ async def test_from_image_rejects_bad_ds(authed_client):
         )
         assert r.status_code == 422
         delay.assert_not_called()
+
+
+async def test_from_input_requires_context(authed_client):
+    with patch("app.tasks.agent_jobs.run_template_build_task.delay") as delay:
+        r = await authed_client.post(
+            "/api/templates/from-input",
+            headers=H,
+            data={"design_system_id": "default", "family": "story"},
+        )
+        assert r.status_code == 422
+        delay.assert_not_called()
+
+
+async def test_from_input_with_message_dispatches_job(authed_client):
+    with patch("app.tasks.agent_jobs.run_template_build_task.delay") as delay:
+        r = await authed_client.post(
+            "/api/templates/from-input",
+            headers=H,
+            data={
+                "design_system_id": "default",
+                "message": "A bold story post with a big serif headline",
+                "family": "story",
+                "ground": "black",
+            },
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["job_id"]
+        delay.assert_called_once()
+
+
+async def test_from_input_with_image_dispatches_job(authed_client):
+    with patch("app.tasks.agent_jobs.run_template_build_task.delay") as delay:
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+        r = await authed_client.post(
+            "/api/templates/from-input",
+            headers=H,
+            files={"file": ("mock.png", png, "image/png")},
+            data={"design_system_id": "default"},
+        )
+        assert r.status_code == 200
+        assert r.json()["job_id"]
+        delay.assert_called_once()
+
+
+async def test_from_input_with_html_dispatches_job(authed_client):
+    with patch("app.tasks.agent_jobs.run_template_build_task.delay") as delay:
+        r = await authed_client.post(
+            "/api/templates/from-input",
+            headers=H,
+            data={"design_system_id": "default", "html": _tiny_html()},
+        )
+        assert r.status_code == 200
+        assert r.json()["job_id"]
+        delay.assert_called_once()
+
+
+async def test_from_input_rejects_bad_ds(authed_client):
+    with patch("app.tasks.agent_jobs.run_template_build_task.delay") as delay:
+        r = await authed_client.post(
+            "/api/templates/from-input",
+            headers=H,
+            data={"design_system_id": "nope", "message": "something"},
+        )
+        assert r.status_code == 422
+        delay.assert_not_called()
