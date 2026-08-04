@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from app.api import (
     agent_jobs,
@@ -97,6 +97,20 @@ async def lifespan(app: FastAPI):
         await seed_default_design_system(pool)
     except Exception as e:
         log.error("[startup] Design system seed FAILED: %s", e, exc_info=True)
+
+    # Reconcile seed-source templates/design system from the YAML + template
+    # files (dev: editing a seed template file then restarting applies it; the
+    # sync never touches user/Studio-created rows). Runs after first-boot seed.
+    try:
+        from app.services.seeding import sync_seed_design_system
+        summary = await sync_seed_design_system(pool)
+        if summary.get("templates_updated") or summary.get("templates_created"):
+            log.info(
+                "[startup] Seed templates reconciled: updated=%s created=%s",
+                summary.get("templates_updated"), summary.get("templates_created"),
+            )
+    except Exception as e:
+        log.error("[startup] Seed design-system sync FAILED: %s", e, exc_info=True)
 
     # Seed agent configs (personas/prompts/models) from YAML on first boot.
     try:
@@ -206,10 +220,43 @@ def _has_frontend() -> bool:
     return _STATIC_DIR.is_dir() and any(_STATIC_DIR.iterdir())
 
 
+def _dev_index_html() -> HTMLResponse:
+    """Dev-mode landing page — shown when the SPA isn't baked into the image.
+
+    The dev image (Dockerfile.dev) doesn't bundle the SPA; the UI runs from the
+    vite dev server at :5173. This replaces the bare 404 so it's obvious where
+    each URL lives.
+    """
+    body = (
+        "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
+        "<title>Tasbir — API</title>"
+        "<style>body{font-family:system-ui,Inter,sans-serif;max-width:640px;"
+        "margin:80px auto;padding:0 24px;color:#111}code{background:#f4f4f4;"
+        "padding:2px 6px;border-radius:4px}a{color:#0066cc}</style></head>"
+        "<body><h1>Tasbir API</h1>"
+        "<p>You're on the <strong>API server</strong> (port 8000). "
+        "The Tasbir Studio UI is not baked into this dev image — run the "
+        "<strong>vite dev server</strong> (docker-compose.dev.yml → "
+        "<code>frontend</code>) and open it there.</p>"
+        "<ul><li>Studio UI (dev): <a href='http://localhost:5173'>http://localhost:5173</a></li>"
+        "<li>API docs: <a href='/docs'>/docs</a></li>"
+        "<li>Health: <a href='/health'>/health</a></li></ul>"
+        "<p>In production the SPA is baked in, so <code>:8000</code> serves "
+        "everything.</p></body></html>"
+    )
+    return HTMLResponse(body)
+
+
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa_fallback(full_path: str):
-    """Serve the built SPA (with index.html fallback for client routes)."""
+    """Serve the built SPA (with index.html fallback for client routes).
+
+    When the SPA isn't baked (dev image), the root shows a pointer page
+    instead of a bare 404; unknown API subpaths still 404.
+    """
     if not _has_frontend():
+        if not full_path:
+            return _dev_index_html()
         return JSONResponse({"detail": "Not found"}, status_code=404)
     if full_path:
         candidate = (_STATIC_DIR / full_path).resolve()

@@ -32,6 +32,12 @@ async def _shared_db():
     db_path = Path(tmpdir) / "shared.db"
     settings = get_settings()
     settings.database_url = f"sqlite+aiosqlite:///{db_path}"
+    # Point the rate limiter at a dead Redis port so it FAILS OPEN (its designed
+    # behavior when Redis is unavailable). A locally running dev Redis would
+    # otherwise share the per-key token bucket and 429 the whole suite. The
+    # explicit rate-limit test mocks Redis itself, so it still exercises the
+    # 429 path.
+    settings.redis_url = "redis://127.0.0.1:1/0"
     await close_shared_engine()
 
     from sqlalchemy.ext.asyncio import create_async_engine
