@@ -19,6 +19,7 @@ networks:
 
 volumes:
   frontend-dist:
+  tasbir_data:
 
 x-shared: &shared-env
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
@@ -93,8 +94,7 @@ services:
       retries: 15
       start_period: 15s
     volumes:
-      - ./backend/config:/app/config
-      - ./backend/data:/app/data
+      - tasbir_data:/app/data
       - frontend-dist:/app/static
     mem_limit: 256m
 
@@ -114,8 +114,7 @@ services:
       SERVICE: worker
     command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
     volumes:
-      - ./backend/config:/app/config
-      - ./backend/data:/app/data
+      - tasbir_data:/app/data
     mem_limit: 512m
 
   beat:
@@ -134,8 +133,7 @@ services:
     working_dir: /app/data
     command: celery -A app.tasks.celery_app beat --loglevel=info
     volumes:
-      - ./backend/config:/app/config
-      - ./backend/data:/app/data
+      - tasbir_data:/app/data
     mem_limit: 128m
 
   frontend:

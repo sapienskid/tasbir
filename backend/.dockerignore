@@ -8,8 +8,17 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 
-# Runtime data (bind-mounted into containers)
-data/
+# Runtime data — NOT baked into the image. The seed assets (design_system/)
+# ship in the image so first boot can populate the named volume; generated
+# artifacts and the SQLite DB live only in the volume.
+data/output/
+data/backups/
+data/tasbir.db
+data/tasbir.db-shm
+data/tasbir.db-wal
+data/tasbir.db-journal
+data/celerybeat-schedule
+data/celerybeat-schedule.*
 
 # Dev artifacts
 tests/
