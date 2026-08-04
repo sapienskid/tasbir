@@ -163,6 +163,7 @@ services:
       - CRAWL4AI_API_TOKEN=${CRAWL4AI_API_TOKEN}
     depends_on:
       - automation-db
+      - flaresolverr
       - crawl4ai
       - crawl4ai-proxy
       - ntfy
@@ -210,6 +211,20 @@ services:
       - automation-net
 
   # ─── SCRAPING & UTILITY SERVICES ───────────────────────────────────────
+
+  # Anti-bot bypass proxy — n8n references FLARESOLVERR_API_URL.
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    ports:
+      - "8191:8191"
+    environment:
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info}
+      - LOG_HTML=${FLARESOLVERR_LOG_HTML:-false}
+      - TZ=${GENERIC_TIMEZONE}
+    networks:
+      - automation-net
 
   crawl4ai:
     image: unclecode/crawl4ai:latest
