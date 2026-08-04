@@ -1,0 +1,38 @@
+# Development image for api/worker/beat — hot reload, no SPA bake.
+#
+# Production bakes the built SPA into the image; dev runs the frontend via the
+# vite dev server instead (docker-compose.dev.yml), so this image only carries
+# the Python backend.
+#
+# Build context = repo root (docker build -f backend/Dockerfile.dev .)
+#
+# Hot reload is achieved by bind-mounting ./backend at /app at runtime:
+# uvicorn runs with --reload and the worker is restarted by watchfiles, so
+# source edits apply instantly — no rebuild, no CI wait, no GHCR pull.
+#
+# The container runs as a non-root user (UID/GID default 1000, matching a
+# typical host user) so every file it writes into the host bind mount is
+# host-owned — no root-owned artifacts.
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Minimal source so the editable install can resolve the package. The live
+# source replaces this at runtime via the bind mount.
+COPY backend/pyproject.toml .
+COPY backend/app ./app
+
+RUN pip install --no-cache-dir -e ".[dev]"
+
+RUN mkdir -p data/output
+
+# Run as a non-root user matching the host user. Build-time files are root
+# owned but /app is fully replaced by the bind mount at runtime; only the
+# writable data dir matters and it lives on the host.
+RUN useradd --create-home --uid 1000 dev
+USER dev
+
+EXPOSE 8000
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

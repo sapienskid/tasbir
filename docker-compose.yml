@@ -1,15 +1,7 @@
-# ─────────────────────────────────────────────────────────────────────────
 # Tasbir — production deploy from prebuilt GHCR images.
-#
-#   cp .env.example .env    # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE_KEY
-#   docker compose up -d
-#
-# Images are pulled from ghcr.io/<owner>/tasbir-* (built by the
-# .github/workflows/publish-images.yml workflow on tags / main).
+# Usage: cp .env.example .env && docker compose up -d
 # Pin a release with TASBIR_IMAGE_TAG=1.0.0, or leave unset for :latest.
-#
-# For development, run the backend + frontend directly on the host (see README).
-# ─────────────────────────────────────────────────────────────────────────
+# For development use docker-compose.dev.yml instead.
 
 name: tasbir
 
@@ -57,7 +49,6 @@ services:
     restart: unless-stopped
     networks:
       - tasbir
-    # NOTE: no host port — reachable only inside the tasbir network.
     environment:
       PORT: 4000
       RENDER_SERVICE_KEY: ${RENDER_SERVICE_KEY:-}
@@ -126,7 +117,6 @@ services:
     environment:
       <<: *shared-env
       SERVICE: beat
-      # Schedule file persists in the writable data volume.
       PYTHONPATH: /app
     working_dir: /app/data
     command: celery -A app.tasks.celery_app beat --loglevel=info
