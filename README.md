@@ -132,6 +132,9 @@ docker compose up -d             # full install / upgrade (pulls GHCR images)
   deletes on download.
 - Deployment is **local/LAN-only** (no public exposure assumed). If you ever
   expose it, put a reverse proxy with TLS in front.
+- The `api`/`worker`/`beat` containers run as **root (0:0)** by default so the
+  `tasbir_data` volume is always writable on first boot. If your host maps UID
+  1000 and you pre-chown the volume, set `TASBIR_USER=1000:1000` in `.env`.
 
 ### Health checks
 

@@ -25,7 +25,8 @@ COPY --from=frontend-build /frontend/dist /app/static
 
 # Seed assets (backend/data/design_system/) ship inside the image so a fresh
 # named volume gets them on first boot. data/output is generated at runtime.
-RUN mkdir -p data/output \
-    && chown -R 1000:1000 /app/data
+# The api/worker/beat containers run as root (0:0) by default so the named
+# volume is always writable; TASBIR_USER can override that in compose.
+RUN mkdir -p data/output
 
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

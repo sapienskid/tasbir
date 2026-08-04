@@ -72,7 +72,7 @@ services:
 
   api:
     image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-api:${TASBIR_IMAGE_TAG:-latest}
-    user: "1000:1000"
+    user: "${TASBIR_USER:-0:0}"
     restart: unless-stopped
     ports:
       - "8000:8000"
@@ -97,7 +97,7 @@ services:
 
   worker:
     image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-api:${TASBIR_IMAGE_TAG:-latest}
-    user: "1000:1000"
+    user: "${TASBIR_USER:-0:0}"
     restart: unless-stopped
     networks:
       - tasbir
@@ -116,7 +116,7 @@ services:
 
   beat:
     image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-api:${TASBIR_IMAGE_TAG:-latest}
-    user: "1000:1000"
+    user: "${TASBIR_USER:-0:0}"
     restart: unless-stopped
     networks:
       - tasbir

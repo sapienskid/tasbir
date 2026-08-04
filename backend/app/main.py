@@ -70,19 +70,40 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
     log.info("[startup] SQLite tables created/verified")
 
+    # Probe data-dir writability BEFORE seeding. A read-only volume (e.g. the
+    # containers run as a different UID than owns the named volume) otherwise
+    # fails every seed silently and boots with an empty DB.
+    try:
+        from pathlib import Path
+
+        probe = Path(settings.output_dir)
+        probe.mkdir(parents=True, exist_ok=True)
+        test_file = probe / ".write-probe"
+        test_file.write_text("ok", encoding="utf-8")
+        test_file.unlink()
+        log.info("[startup] Data dir writable: %s", probe)
+    except Exception as e:
+        log.error(
+            "[startup] DATA DIR IS NOT WRITABLE (%s). Seeds will be skipped and "
+            "the pipeline will fail. Fix volume permissions or set "
+            "TASBIR_USER to the volume owner (e.g. TASBIR_USER=0:0): %s",
+            settings.output_dir,
+            e,
+        )
+
     # Seed the default design system + template library (idempotent).
     try:
         from app.services.seeding import seed_default_design_system
         await seed_default_design_system(pool)
     except Exception as e:
-        log.warning("[startup] Design system seed failed: %s", e)
+        log.error("[startup] Design system seed FAILED: %s", e, exc_info=True)
 
     # Seed agent configs (personas/prompts/models) from YAML on first boot.
     try:
         from app.services.agents import seed_agents
         await seed_agents(pool)
     except Exception as e:
-        log.warning("[startup] Agent seed failed: %s", e)
+        log.error("[startup] Agent seed FAILED: %s", e, exc_info=True)
 
     # Seed platforms / curated fonts / runtime settings (all seed-once).
     try:
@@ -90,12 +111,12 @@ async def lifespan(app: FastAPI):
         await seed_platforms(pool)
         await seed_fonts(pool)
     except Exception as e:
-        log.warning("[startup] Platform/font seed failed: %s", e)
+        log.error("[startup] Platform/font seed FAILED: %s", e, exc_info=True)
     try:
         from app.services.settings import seed_app_settings
         await seed_app_settings(pool)
     except Exception as e:
-        log.warning("[startup] Runtime settings seed failed: %s", e)
+        log.error("[startup] Runtime settings seed FAILED: %s", e, exc_info=True)
 
     yield
     await close_shared_engine()
