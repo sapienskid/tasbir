@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir --disable-pip-version-check \
         playwright==1.61.0 \
         fastapi==0.139.2 \
         uvicorn==0.51.0 \
-    && playwright install --with-deps --only-shell chromium \
+    && CI=1 playwright install --with-deps --only-shell chromium \
     && rm -rf /var/lib/apt/lists/* \
     && pip cache purge
 
