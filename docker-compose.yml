@@ -6,11 +6,9 @@
 #
 # Images are pulled from ghcr.io/<owner>/tasbir-* (built by the
 # .github/workflows/publish-images.yml workflow on tags / main).
-# Pin a release with TASBIR_IMAGE_TAG=1.0.1, or leave unset for :latest.
+# Pin a release with TASBIR_IMAGE_TAG=1.0.0, or leave unset for :latest.
 #
-# Local development (hot reload, source build): use docker-compose.dev.yml.
-# Deploy joined to an existing network (reuse its redis): use
-# docker-compose.network.yml.
+# For development, run the backend + frontend directly on the host (see README).
 # ─────────────────────────────────────────────────────────────────────────
 
 name: tasbir

@@ -12,42 +12,6 @@ Self-hosted via Docker.
 
 ## Quick Start (Install)
 
-One command installs the whole system (prerequisites + `.env` with generated
-API keys + image build + stack start):
-
-```bash
-# From a checkout:
-bash scripts/install.sh
-
-# Or clone-and-install in one line:
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/sapienskid/tasbir/main/scripts/install.sh)"
-```
-
-The installer:
-- Checks for Docker + the compose plugin
-- Clones the repo (one-liner path) or uses your checkout
-- Creates `.env` from `.env.example`, **generating strong `API_KEYS` and
-  `RENDER_SERVICE_KEY`** and prompting for `GEMINI_API_KEY`
-- Runs `docker compose build` + `docker compose up -d`
-- Waits for `/health` and prints your API key + next steps
-
-Open http://localhost:8000 — the Tasbir Studio SPA is served by the API itself.
-API docs at http://localhost:8000/docs. Auth fails closed: every `/api/*`
-request needs `x-api-key` (set it in the Studio header dialog).
-
-> **LAN/self-hosted only.** Do not expose port 8000 to the public internet
-> without a TLS reverse proxy in front.
-
-## Manual Install (optional)
-
-```bash
-cp .env.example .env
-# Edit .env — set GEMINI_API_KEY + API_KEYS (and RENDER_SERVICE_KEY for Docker)
-docker compose up -d
-```
-
-## Deploy from prebuilt images (no build, no repo on the server)
-
 Tasbir publishes its Docker images to **GitHub Container Registry**
 (`ghcr.io/sapienskid/tasbir-*`), built automatically by CI on tags (`v*` →
 versioned + `:latest`) and pushes to `main` (`:main`).
@@ -60,15 +24,14 @@ docker compose up -d
 - Pulls `ghcr.io/sapienskid/tasbir-{api,playwright}` + `redis:7-alpine` (the api image bundles the SPA)
 - Pin a release: `TASBIR_IMAGE_TAG=1.0.0` in `.env` (defaults to `:latest`)
 - Fork/re-brand: set `TASBIR_IMAGE_OWNER=your-org` (defaults to `sapienskid`)
-- Update: `docker compose up -d` (pulls new tags)
+- Update: `docker compose pull && docker compose up -d`
 
-Compose files at a glance:
+Open http://localhost:8000 — the Tasbir Studio SPA is served by the API itself.
+API docs at http://localhost:8000/docs. Auth fails closed: every `/api/*`
+request needs `x-api-key` (set it in the Studio header dialog).
 
-| File | Use |
-|---|---|
-| `docker-compose.yml` | **Production** — GHCR image pulls, standalone stack + its own redis |
-| `docker-compose.dev.yml` | **Development** — overlay on `docker-compose.yml` for hot reload |
-| `docker-compose.network.yml` | **Production joined to an existing network** (reuses its redis, no redis here) |
+> **LAN/self-hosted only.** Do not expose port 8000 to the public internet
+> without a TLS reverse proxy in front.
 
 ## Tasbir Studio
 
@@ -77,30 +40,35 @@ A React + Vite + shadcn/ui SPA served same-origin by FastAPI:
 - Per-format Monaco HTML editor + live PNG preview + QC report
 - **Re-render** (edit → render → deterministic QC) and **Audit** (opt-in vision QC)
 - **Download PNG/HTML** (repeatable until the retention window; `?consume=true` deletes after download)
+- **Settings → Backup**: export/import the full configuration (design systems,
+  templates, platforms, fonts, agents, runtime settings) as one JSON file
 - API key stored in localStorage (`tasbir:apikey:v1`)
 
 Artifacts are **ephemeral**: they persist until the hourly TTL sweep, and an
 hourly sweep removes anything older than `OUTPUT_TTL_HOURS` (default 24h).
 
-## Hot Reload (Development)
+## Development
+
+Run the backend + frontend directly on the host (hot reload):
 
 ```bash
-# One-time: set API_KEYS + RENDER_SERVICE_KEY in .env
-cp .env.example .env   # then edit
+# Backend (API at :8000)
+cd backend
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+cp ../.env.example .env          # set GEMINI_API_KEY + API_KEYS
+uvicorn app.main:app --reload --port 8000
 
-# Live-reload stack: uvicorn --reload (api/playwright),
-# watchfiles-restarted celery (worker/beat), Vite dev server (frontend)
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-
-# UI at http://localhost:5173 · API at http://localhost:8000
+# Frontend (Vite dev server at :5173, proxies /api → :8000) — another shell
+cd frontend
+pnpm install
+pnpm run dev
 ```
 
-The dev overlay bind-mounts `./backend` and `./frontend` into the containers,
-so backend code, prompts, YAML design files, and React source all hot-reload.
-The Vite dev server proxies `/tasks` + `/generate` to the `api` service.
-Stop it with `docker compose -f docker-compose.yml -f docker-compose.dev.yml down`.
+UI at http://localhost:5173 · API at http://localhost:8000. The Vite dev
+server proxies `/api/*` to the `api` service.
 
-For a normal (non-reload) deploy: `docker compose up -d --build`.
+For a normal (non-reload) deploy: `docker compose up -d`.
 
 ## Architecture
 
@@ -148,7 +116,7 @@ metadata, handle).
 ## Production
 
 ```bash
-bash scripts/install.sh          # full install / upgrade
+docker compose up -d             # full install / upgrade (pulls GHCR images)
 ```
 
 - The Studio SPA is **built into the api image** and served at
@@ -158,10 +126,10 @@ bash scripts/install.sh          # full install / upgrade
   control without rebuilds.
 - Dependencies are pinned in `backend/pyproject.toml`; the frontend uses a
   committed `pnpm-lock.yaml`.
-- The SQLite task DB (`backend/data/tasbir.db`) and generated outputs are
-  runtime data — gitignored. Outputs persist until the hourly TTL sweep
-  (`OUTPUT_TTL_HOURS`); downloads are repeatable, `?consume=true` deletes on
-  download.
+- The SQLite task DB and generated outputs are runtime data — gitignored,
+  stored in the `tasbir_data` volume. Outputs persist until the hourly TTL
+  sweep (`OUTPUT_TTL_HOURS`); downloads are repeatable, `?consume=true`
+  deletes on download.
 - Deployment is **local/LAN-only** (no public exposure assumed). If you ever
   expose it, put a reverse proxy with TLS in front.
 
@@ -177,91 +145,43 @@ curl -s http://localhost:8000/health
 curl -s http://localhost:8000/health/ready
 ```
 
-### Backups (database)
+### Backups (configuration)
 
-The runtime database is a single SQLite file (`backend/data/tasbir.db`), the
-source of truth for design systems, templates, and tasks. Back it up regularly.
+The DB-backed configuration — design systems, templates, platforms, curated
+fonts, agent configs, and runtime settings — can be exported and imported
+through the API or the Studio (**Settings → Backup**). No shell scripts, no
+`sqlite3`, no downtime.
 
 ```bash
-# Snapshot while the stack is running (WAL-safe online backup, no downtime)
-scripts/backup-db.sh                 # → backend/data/backups/tasbir-<timestamp>.db
-scripts/backup-db.sh -o /mnt/backup  # custom output dir
-scripts/backup-db.sh -k 14           # keep only the newest 14 snapshots
+# Export the whole configuration as JSON
+curl -H "x-api-key: $API_KEYS" http://localhost:8000/api/system/export -o tasbir-backup.json
+
+# Restore it on this machine (or a fresh install) — upsert/merge, never deletes
+curl -H "x-api-key: $API_KEYS" -H "Content-Type: application/json" \
+  -X POST http://localhost:8000/api/system/import \
+  -d "$(cat tasbir-backup.json | python3 -c 'import json,sys; print(json.dumps({"payload": json.load(sys.stdin)}))')"
 ```
 
-Add a cron job (as the user owning the repo):
+The import is **non-destructive**: existing rows are overwritten by key and
+rows missing from the backup are left untouched. Tasks/audit/chats are not part
+of the backup — they are per-machine runtime data.
+
+To automate snapshots, run `curl .../export` from cron:
 
 ```cron
-0 3 * * *  cd /path/to/tasbir && scripts/backup-db.sh -k 14 >> /var/log/tasbir-backup.log 2>&1
-```
-
-**Restore** (requires `sqlite3`):
-
-```bash
-# 1. Stop the stack so nothing writes mid-restore:
-docker compose stop api worker beat
-# 2. Restore (auto-backs-up the current DB first):
-scripts/restore-db.sh backend/data/backups/tasbir-20260803-030000.db
-# 3. Start again:
-docker compose start api worker beat
+0 3 * * *  curl -fsS -H "x-api-key: $API_KEYS" http://localhost:8000/api/system/export \
+  -o /var/backups/tasbir-$(date +\%F).json
 ```
 
 ### Upgrades
 
 ```bash
-bash scripts/install.sh          # git pull + rebuild + restart (idempotent)
+docker compose pull && docker compose up -d   # pull new GHCR tags + restart
 ```
 
-or manually:
-
-```bash
-git pull
-docker compose build && docker compose up -d
-```
-
-Back up the DB before upgrading. The schema is `create_all` + idempotent
-column migrations on boot — existing data survives restarts and rebuilds.
-
-### Deploy alongside an existing stack (n8n / automation)
-
-If the server already runs a Docker stack with its own network (e.g. n8n,
-crawl4ai, linkding on an `automation-net`), Tasbir can join it so n8n can call
-the API **without exposing another host port** and **without name collisions**
-(Tasbir's internal `redis`/`playwright`/`worker` stay on its private network).
-
-The simplest way is a compose **overlay** file that:
-
-- declares your existing network as an **external** network (it must already
-  exist — the other stack created it);
-- attaches only the `api` service to it, so n8n reaches Tasbir at
-  `http://api:8000`;
-- keeps everything else (`redis`, `playwright`, `worker`, `beat`) on Tasbir's
-  private network — a server that already runs its own `redis` or `crawl4ai`
-  is unaffected;
-- still publishes port `8000` to the host for direct/cloudflared access.
-
-```yaml
-# docker-compose.override.yml (create this yourself; it's site-specific)
-networks:
-  automation-net:
-    external: true
-    name: automation-net
-services:
-  api:
-    networks:
-      - tasbir
-      - automation-net
-```
-
-```bash
-cd /path/to/tasbir
-cp .env.example .env            # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE_KEY
-docker compose up -d --build    # picks up docker-compose.override.yml automatically
-```
-
-From n8n, trigger the pipeline with an HTTP Request node:
-`POST http://api:8000/api/generate` with header `x-api-key: <API_KEYS>` and the
-JSON body documented in [AGENTS.md](AGENTS.md). Poll `GET http://api:8000/api/tasks/{id}`.
+Back up the configuration before upgrading (see above). The schema is
+`create_all` + idempotent column migrations on boot — existing data survives
+restarts and rebuilds.
 
 ### Monitoring & maintenance
 
@@ -269,7 +189,8 @@ JSON body documented in [AGENTS.md](AGENTS.md). Poll `GET http://api:8000/api/ta
 docker compose ps                    # service status + health
 docker compose logs -f api           # API logs
 docker compose logs -f worker        # pipeline worker logs
-scripts/backup-db.sh -k 14           # nightly DB snapshot
+# Nightly config snapshot (see Backups above):
+curl -fsS -H "x-api-key: $API_KEYS" http://localhost:8000/api/system/export -o /var/backups/tasbir.json
 ```
 
 Every hour, Celery beat runs `retention.sweep_expired` to remove output
@@ -278,7 +199,8 @@ artifacts and task rows older than `OUTPUT_TTL_HOURS`.
 ### CI
 
 GitHub Actions (`.github/workflows/ci.yml`) runs backend pytest + ruff and the
-frontend typecheck + build on every push/PR to `main`.
+frontend typecheck + build on every push/PR to `main`; `.github/workflows/
+publish-images.yml` builds and pushes the GHCR images.
 
 ## Development
 
@@ -290,10 +212,18 @@ cp ../.env.example .env   # Edit with your keys
 uvicorn app.main:app --reload --port 8000
 ```
 
-Run tests:
+Frontend (another shell):
 
 ```bash
-python -m pytest
+cd frontend
+pnpm install
+pnpm run dev               # Vite dev server on :5173, proxies /api → :8000
+```
+
+Run backend tests:
+
+```bash
+cd backend && python -m pytest
 ```
 
 ## Stack
@@ -302,6 +232,6 @@ python -m pytest
 - **Frontend**: React 19 + Vite + shadcn/ui + SWR + Monaco (Tasbir Studio)
 - **Rendering**: Playwright (headless Chromium, Docker, internal-only)
 - **Queue**: Celery + Redis (worker + beat for retention sweep)
-- **Storage**: SQLite (tasks) + `data/output/{task_id}/` (HTML, PNG — ephemeral)
+- **Storage**: SQLite (tasks, config — DB-backed) + `data/output/{task_id}/` (HTML, PNG — ephemeral)
 - **AI**: Gemini 3.5 Flash Lite (free tier)
-- **Config**: YAML (brand, tokens, platforms, campaigns, design-instruction)
+- **Config**: DB-backed design systems / templates / platforms / fonts / agents / settings, seeded once from YAML

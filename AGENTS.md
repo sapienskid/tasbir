@@ -569,7 +569,6 @@ tasbir/
 │       └── test_services/               ← Service tests (SSRF, sanitizer, retention, artifacts)
 │
 ├── frontend/
-│   ├── Dockerfile                       ← Node build stage for the api image (SPA source)
 │   ├── components.json                  ← shadcn/ui config (new-york, neutral)
 │   ├── package.json / pnpm-lock.yaml / vite.config.ts
 │   ├── src/
@@ -738,11 +737,12 @@ cp .env.example .env            # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE
 docker compose up -d            # pulls GHCR images + redis, starts the stack
 ```
 - `docker-compose.yml` — production (GHCR image pulls, standalone, own redis)
-- `docker-compose.dev.yml` — dev overlay (hot reload; source build)
-- `docker-compose.network.yml` — deploy joined to an existing network (reuses its redis)
 - The Studio SPA is **built into the api image** (multi-stage backend Dockerfile)
   and served at `/` — no separate frontend container. `beat` runs the hourly
   `retention.sweep_expired` sweep.
+- Configuration backups are API-based: `GET /api/system/export` /
+  `POST /api/system/import` (or the Studio **Settings → Backup** tab). No shell
+  scripts.
 
 ## API Endpoints
 
@@ -801,6 +801,17 @@ runs an opt-in vision audit of the whole slide set (one call).
 ### Agent jobs + uploads
 - `GET /agent-jobs/{id}` — poll template/design-system creation jobs
 - `POST /uploads` — validated image upload → `{mime, size, data(base64)}`
+
+### System export / import (config backup & restore)
+- `GET /api/system/export` — download the whole configuration (design systems,
+  templates, platforms, fonts, agents, runtime settings) as one JSON document.
+  Tasks/audit/chats are excluded (per-machine runtime data).
+- `POST /api/system/import` — body `{"payload": <export document>}`. Upserts
+  rows by primary key: existing rows are overwritten, rows missing from the
+  payload are left untouched (never deletes). Caches are refreshed so the
+  Studio/pipeline see imported values immediately. Response:
+  `{"applied": {"design_systems": n, "templates": n, ...}}`.
+- Available in the Studio at **Settings → Backup**.
 
 ### GET /tasks/{id}
 Response:

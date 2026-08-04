@@ -45,9 +45,6 @@ logs/
 node_modules/
 frontend/dist/
 
-# ── Server/deployment (user-specific, not part of the repo) ───────────────
-docker-compose.automation.yml
-
 # ── Databases (runtime data) ─────────────────────────────────────────────
 *.db
 *.db-shm

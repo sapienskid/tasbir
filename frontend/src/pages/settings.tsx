@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import useSWR from "swr"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -36,7 +36,9 @@ import {
   createPlatform,
   deletePlatform,
   deletePoolFont,
+  exportSystem,
   getRuntimeSettings,
+  importSystem,
   listFontPool,
   resetRuntimeSettings,
   updatePoolFont,
@@ -44,13 +46,15 @@ import {
   updateRuntimeSettings,
   type PlatformCreate,
   type PoolFontCreate,
+  type SystemSnapshot,
 } from "@/lib/api"
+import { downloadBlob } from "@/lib/api"
 
 const FAMILIES = ["square", "portrait", "story", "landscape"] as const
 const FONT_ROLES = ["sans", "serif", "display", "mono"] as const
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<"platforms" | "fonts" | "runtime">("platforms")
+  const [tab, setTab] = useState<"platforms" | "fonts" | "runtime" | "system">("platforms")
 
   return (
     <div className="grid gap-4">
@@ -60,12 +64,14 @@ export default function SettingsPage() {
           <TabsTrigger value="platforms">Platforms</TabsTrigger>
           <TabsTrigger value="fonts">Fonts</TabsTrigger>
           <TabsTrigger value="runtime">Runtime</TabsTrigger>
+          <TabsTrigger value="system">Backup</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {tab === "platforms" ? <PlatformsTab /> : null}
       {tab === "fonts" ? <FontsTab /> : null}
       {tab === "runtime" ? <RuntimeTab /> : null}
+      {tab === "system" ? <BackupTab /> : null}
     </div>
   )
 }
@@ -510,5 +516,116 @@ function RuntimeTab() {
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+// ─── System export / import (config backup & restore) ──────────────────────
+
+function BackupTab() {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [exporting, setExporting] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [applied, setApplied] = useState<Record<string, number> | null>(null)
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      const snap = await exportSystem()
+      const stamp = snap.exported_at ? snap.exported_at.replace(/[^0-9]/g, "").slice(0, 14) : new Date().toISOString().slice(0, 10)
+      downloadBlob(new Blob([JSON.stringify(snap, null, 2)], { type: "application/json" }), `tasbir-backup-${stamp}.json`)
+      toast.success("Exported full configuration")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Export failed")
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  async function handleImportFile(file: File) {
+    setImporting(true)
+    try {
+      const parsed = JSON.parse(await file.text()) as SystemSnapshot
+      if (parsed.schema_version !== 1) {
+        toast.error(`Unsupported schema version ${parsed.schema_version}`)
+        return
+      }
+      const res = await importSystem(parsed)
+      setApplied(res.applied)
+      toast.success("Imported — configuration restored")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Import failed")
+    } finally {
+      setImporting(false)
+      if (fileRef.current) fileRef.current.value = ""
+    }
+  }
+
+  const tableLabels: Record<string, string> = {
+    design_systems: "Design systems",
+    templates: "Templates",
+    platforms: "Platforms",
+    fonts: "Fonts",
+    agents: "Agents",
+    app_settings: "Runtime settings",
+  }
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Export configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <p className="text-sm text-muted-foreground">
+            Downloads every design system, template, platform, curated font, agent config, and
+            runtime setting as a single JSON file. Tasks, audit logs, and chats are not included —
+            they are per-machine runtime data.
+          </p>
+          <div>
+            <Button onClick={() => void handleExport()} disabled={exporting} size="sm">
+              {exporting ? "Exporting…" : "Export to file"}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Import configuration</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <p className="text-sm text-muted-foreground">
+            Restores a backup file. Rows are upserted by key — existing rows are overwritten, and
+            rows missing from the file are left untouched. No data is deleted.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0]
+                if (f) void handleImportFile(f)
+              }}
+            />
+            <Button size="sm" variant="outline" disabled={importing} onClick={() => fileRef.current?.click()}>
+              {importing ? "Importing…" : "Choose backup file…"}
+            </Button>
+          </div>
+          {applied ? (
+            <div className="grid gap-1 rounded-md border p-3 text-sm">
+              <p className="font-medium">Imported</p>
+              {Object.entries(applied).map(([table, n]) => (
+                <div key={table} className="flex justify-between text-muted-foreground">
+                  <span>{tableLabels[table] ?? table}</span>
+                  <span className="font-mono">{n} rows</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+    </div>
   )
 }

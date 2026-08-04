@@ -6,7 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **System export/import API** — `GET /api/system/export` snapshots the whole
+  configuration (design systems, templates, platforms, fonts, agents, runtime
+  settings) as one JSON document; `POST /api/system/import` upserts it back
+  (merge — never deletes rows missing from the payload) and refreshes the
+  in-process caches. Available in the Studio at **Settings → Backup**. Replaces
+  the old `scripts/backup-db.sh` / `scripts/restore-db.sh` SQLite snapshot flow.
+
 ### Changed
+- **Shell scripts removed** — `scripts/install.sh`, `scripts/backup-db.sh`,
+  `scripts/restore-db.sh` are gone; configuration backup/restore is now
+  API-based (`/api/system/export` + `/api/system/import`).
+- **Local-only compose variants removed** — `docker-compose.dev.yml` and
+  `docker-compose.network.yml` dropped; the production `docker-compose.yml`
+  (GHCR pulls) is the only compose file. `frontend/Dockerfile` (dev-only build
+  stage) removed — the SPA is built inside the api image.
 - **Single-image deploy** — the Studio SPA is built into the `tasbir-api`
   image (multi-stage `backend/Dockerfile`) and served at `/`; the separate
   `frontend` service, `frontend-dist` volume, and `tasbir-frontend` GHCR image

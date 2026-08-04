@@ -16,6 +16,7 @@ from app.api import (
     generate,
     health,
     platforms,
+    system,
     tasks,
     templates,
     uploads,
@@ -172,6 +173,10 @@ app.include_router(
 )
 app.include_router(
     models_api.router, prefix="/api/models", tags=["models"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    system.router, prefix="/api/system", tags=["system"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 

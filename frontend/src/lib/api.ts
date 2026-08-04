@@ -541,6 +541,30 @@ export function resetRuntimeSettings(): Promise<RuntimeSettingsResponse> {
   return apiRequest("/settings/reset", { method: "POST" })
 }
 
+// ─── System export / import (config backup & restore) ─────────────────────
+
+export interface SystemSnapshot {
+  schema_version: number
+  exported_at?: string
+  design_systems: Record<string, unknown>[]
+  templates: Record<string, unknown>[]
+  platforms: Record<string, unknown>[]
+  fonts: Record<string, unknown>[]
+  agents: Record<string, unknown>[]
+  app_settings: Record<string, unknown>[]
+}
+
+export function exportSystem(): Promise<SystemSnapshot> {
+  return apiRequest("/system/export")
+}
+
+export function importSystem(snapshot: SystemSnapshot): Promise<{ applied: Record<string, number> }> {
+  return apiRequest("/system/import", {
+    method: "POST",
+    body: JSON.stringify({ payload: snapshot }),
+  })
+}
+
 // ─── Design system API helpers ─────────────────────────────────────────────
 
 export function listDesignSystems(includeInactive = false): Promise<DesignSystem[]> {
