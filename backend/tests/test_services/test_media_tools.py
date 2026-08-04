@@ -125,7 +125,7 @@ EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F]")
 
 
 def test_curated_styles_register():
-    from app.services.tools.peep_styles import CURATED_STYLES, CURATED_STYLE_IDS
+    from app.services.tools.peep_styles import CURATED_STYLE_IDS, CURATED_STYLES
 
     assert len(CURATED_STYLES) >= 20
     for sid in CURATED_STYLE_IDS:
@@ -156,7 +156,6 @@ def test_people_styles_have_parts():
 
 
 def test_compose_peep_monochrome_and_deterministic():
-    from app.services.tools.illustrator import compose_peep
 
     a = compose_peep("post|fig", ground="white", style="open-peeps")
     b = compose_peep("post|fig", ground="white", style="open-peeps")
@@ -174,7 +173,6 @@ def test_compose_peep_monochrome_and_deterministic():
 
 
 def test_compose_peep_all_curated_styles_clean():
-    from app.services.tools.illustrator import compose_peep
     from app.services.tools.peep_styles import CURATED_STYLES
 
     for sid in CURATED_STYLES:
@@ -188,7 +186,6 @@ def test_compose_peep_all_curated_styles_clean():
 
 
 def test_compose_peep_varies_by_seed():
-    from app.services.tools.illustrator import compose_peep
 
     a = compose_peep("seed-a", style="open-peeps")
     b = compose_peep("seed-b", style="open-peeps")
@@ -196,7 +193,6 @@ def test_compose_peep_varies_by_seed():
 
 
 def test_compose_peep_pins_part():
-    from app.services.tools.illustrator import compose_peep
 
     fig = compose_peep("p", style="open-peeps", parts={"facial_hair": "moustache3"})
     assert "facialHair-moustache3" in fig
@@ -206,14 +202,12 @@ def test_compose_peep_pins_part():
 
 
 def test_compose_peep_invalid_part_ignored():
-    from app.services.tools.illustrator import compose_peep
 
     fig = compose_peep("p", style="open-peeps", parts={"facial_hair": "bogus-style"})
     assert fig.startswith('<div class="figure">')  # graceful fallback to random
 
 
 def test_compose_peep_line_palette_no_mid_grays():
-    from app.services.tools.illustrator import compose_peep
 
     fig = compose_peep("p", style="open-peeps", palette="line")
     # 2-tone mapping must not reference the mid/light tokens.
@@ -223,7 +217,6 @@ def test_compose_peep_line_palette_no_mid_grays():
 
 
 def test_compose_peep_original_palette_keeps_colors():
-    from app.services.tools.illustrator import compose_peep
 
     # "original" skips recolor → raw hex present (preview-only path).
     fig = compose_peep("p", style="open-peeps", palette="original")
@@ -232,7 +225,6 @@ def test_compose_peep_original_palette_keeps_colors():
 
 
 def test_compose_peep_unknown_palette_falls_back():
-    from app.services.tools.illustrator import compose_peep
 
     fig = compose_peep("p", style="open-peeps", palette="bogus")
     assert not HEX_RE.search(fig)  # defaulted to mono (recolored)
