@@ -45,6 +45,13 @@ logs/
 node_modules/
 frontend/dist/
 
+# ── Server/deployment (user-specific, not part of the repo) ───────────────
+docker-compose.automation.yml
+docker-compose.server.yml
+init-databases.sh
+server.yml
+crawl4ai-proxy.conf.template
+
 # ── Databases (runtime data) ─────────────────────────────────────────────
 *.db
 *.db-shm
