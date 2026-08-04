@@ -75,10 +75,18 @@ def test_tool_schema_shape():
     fn = ILLUSTRATION_TOOL["function"]
     assert fn["name"] == "illustrate"
     params = fn["parameters"]
-    assert "style" in params["properties"]
-    assert "theme" in params["properties"]
+    props = params["properties"]
+    # Curated style enum — includes anthropic + curated DiceBear styles.
+    assert "style" in props
+    style_enum = props["style"]["enum"]
+    assert "anthropic" in style_enum
+    assert "open-peeps" in style_enum
+    assert "open-doodles" not in style_enum  # removed
+    # Pinnable part params present.
+    for part in ("facial_hair", "hair", "expression", "accessory"):
+        assert part in props
     assert "theme" in params["required"]
-    assert "ground" in params["properties"]
+    assert "ground" in props
 
 
 @pytest.mark.asyncio

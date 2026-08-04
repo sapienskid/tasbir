@@ -5,7 +5,7 @@ import re
 import pytest
 
 from app.services.tools.illustrator import (
-    compose_handdrawn,
+    compose_peep,
     run_illustrate,
 )
 from app.services.tools.photo import (
@@ -115,40 +115,128 @@ async def test_call_llm_tool_loop_hits_turn_cap(monkeypatch):
     assert out == ""  # exhausted turns → no final answer
 
 HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}")
+NAMED_RE = re.compile(r'(?:fill|stroke)="(?:black|white)"')
 EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F]")
 
 
 # ---------------------------------------------------------------------------
-# Hand-drawn kits
+# DiceBear curated styles
 # ---------------------------------------------------------------------------
 
 
-def test_kit_files_vendored():
-    from app.services.tools.illustrator import _kit_files
+def test_curated_styles_register():
+    from app.services.tools.peep_styles import CURATED_STYLES, CURATED_STYLE_IDS
 
-    assert len(_kit_files("open-peeps")) >= 10
-    assert len(_kit_files("open-doodles")) >= 10
-    assert _kit_files("nonexistent") == []
+    assert len(CURATED_STYLES) >= 20
+    for sid in CURATED_STYLE_IDS:
+        info = CURATED_STYLES[sid]
+        assert info.id == sid
+        assert info.license  # every curated style has a license label
+        assert info.description
 
 
-def test_compose_handdrawn_monochrome_and_deterministic():
-    a = compose_handdrawn("open-peeps", "post|fig", "white", "focus")
-    b = compose_handdrawn("open-peeps", "post|fig", "white", "focus")
+def test_excluded_styles_not_registered():
+    from app.services.tools.peep_styles import CURATED_STYLES
+
+    # Gradients forbidden (Swiss rule), text-based, micro-canvas, CC BY.
+    for sid in ("initials", "identicon", "pixel-art", "fun-emoji", "avataaars", "planets", "constellation"):
+        assert sid not in CURATED_STYLES
+
+
+def test_people_styles_have_parts():
+    from app.services.tools.peep_styles import style_parts
+
+    parts = style_parts("open-peeps")
+    assert "facial_hair" in parts
+    assert "moustache3" in parts["facial_hair"]
+    assert "hair" in parts
+    assert len(parts["hair"]) >= 20
+    # Abstract styles expose no pinnable parts.
+    assert style_parts("blobs") == {}
+
+
+def test_compose_peep_monochrome_and_deterministic():
+    from app.services.tools.illustrator import compose_peep
+
+    a = compose_peep("post|fig", ground="white", style="open-peeps")
+    b = compose_peep("post|fig", ground="white", style="open-peeps")
     assert a == b  # deterministic
     assert 'class="figure"' in a
     assert "<svg" in a
     assert not HEX_RE.search(a)  # verifier-safe: no raw hex
-    assert "var(" in a  # recolored to brand tokens
-    assert "data-ground=\"black\"" in a  # ground-adaptive role vars
-    # kit files carry emoji in <title>/<desc> — stripped at compose time
+    assert not NAMED_RE.search(a)  # no raw named colors either
+    assert "var(--ill-" in a  # recolored to brand tokens
+    assert 'data-ground="black"' in a  # ground-adaptive role vars
+    assert "<metadata" not in a  # DiceBear RDF metadata stripped
+    assert "<!--" not in a  # comment banner stripped
     assert not EMOJI_RE.search(a)
     assert "<title" not in a.lower() and "<desc" not in a.lower()
 
 
-def test_compose_handdrawn_varies_by_seed():
-    a = compose_handdrawn("open-peeps", "seed-a", "white")
-    b = compose_handdrawn("open-peeps", "seed-b", "white")
+def test_compose_peep_all_curated_styles_clean():
+    from app.services.tools.illustrator import compose_peep
+    from app.services.tools.peep_styles import CURATED_STYLES
+
+    for sid in CURATED_STYLES:
+        for ground in ("white", "black"):
+            fig = compose_peep(f"check|{sid}|{ground}", ground=ground, style=sid)
+            assert fig.startswith('<div class="figure">'), sid
+            assert not HEX_RE.search(fig), f"{sid}: raw hex"
+            assert not NAMED_RE.search(fig), f"{sid}: named color"
+            assert "var(--ill-" in fig, f"{sid}: not recolored"
+            assert "<metadata" not in fig, f"{sid}: metadata"
+
+
+def test_compose_peep_varies_by_seed():
+    from app.services.tools.illustrator import compose_peep
+
+    a = compose_peep("seed-a", style="open-peeps")
+    b = compose_peep("seed-b", style="open-peeps")
     assert a != b
+
+
+def test_compose_peep_pins_part():
+    from app.services.tools.illustrator import compose_peep
+
+    fig = compose_peep("p", style="open-peeps", parts={"facial_hair": "moustache3"})
+    assert "facialHair-moustache3" in fig
+    # Abstract styles ignore part pinning gracefully.
+    fig2 = compose_peep("p", style="blobs", parts={"facial_hair": "moustache3"})
+    assert fig2.startswith('<div class="figure">')
+
+
+def test_compose_peep_invalid_part_ignored():
+    from app.services.tools.illustrator import compose_peep
+
+    fig = compose_peep("p", style="open-peeps", parts={"facial_hair": "bogus-style"})
+    assert fig.startswith('<div class="figure">')  # graceful fallback to random
+
+
+def test_compose_peep_line_palette_no_mid_grays():
+    from app.services.tools.illustrator import compose_peep
+
+    fig = compose_peep("p", style="open-peeps", palette="line")
+    # 2-tone mapping must not reference the mid/light tokens.
+    assert "--ill-mid" not in fig.split("</style>")[0] or "var(--ill-mid)" not in fig
+    assert "var(--ill-ink)" in fig and "var(--ill-paper)" in fig
+    assert not HEX_RE.search(fig)
+
+
+def test_compose_peep_original_palette_keeps_colors():
+    from app.services.tools.illustrator import compose_peep
+
+    # "original" skips recolor → raw hex present (preview-only path).
+    fig = compose_peep("p", style="open-peeps", palette="original")
+    assert HEX_RE.search(fig)  # colors kept intentionally
+    assert 'class="figure"' in fig
+
+
+def test_compose_peep_unknown_palette_falls_back():
+    from app.services.tools.illustrator import compose_peep
+
+    fig = compose_peep("p", style="open-peeps", palette="bogus")
+    assert not HEX_RE.search(fig)  # defaulted to mono (recolored)
+    assert "var(--ill-" in fig
 
 
 def test_run_illustrate_styles():
@@ -156,13 +244,14 @@ def test_run_illustrate_styles():
     assert anthropic.startswith("<svg")
     peep = run_illustrate({"style": "open-peeps", "theme": "growth"}, "s")
     assert 'class="figure"' in peep
-    doodle = run_illustrate({"style": "open-doodles", "theme": "play"}, "s")
-    assert 'class="figure"' in doodle
+    lorelei = run_illustrate({"style": "lorelei", "theme": "focus", "hair": "variant03"}, "s")
+    assert 'class="figure"' in lorelei
+    assert "variant03" in lorelei  # part passed through
 
 
 def test_run_illustrate_unknown_style_falls_back():
-    svg = run_illustrate({"style": "bogus", "theme": "x"}, "s")
-    assert svg.startswith("<svg")
+    fig = run_illustrate({"style": "bogus", "theme": "x"}, "s")
+    assert 'class="figure"' in fig  # defaults to open-peeps figure
 
 
 # ---------------------------------------------------------------------------

@@ -1,12 +1,12 @@
 """Media tools — LLM-callable tools the pipeline exposes to agents.
 
 - ``find_photo``    — search stock photos (Pexels / Pixabay / Wikimedia)
-- ``illustrate``    — unified illustration director (Anthropic / CC0 kits)
+- ``illustrate``    — unified illustration director (Anthropic / DiceBear)
 
 See :mod:`app.services.tools.photo` and :mod:`app.services.tools.illustrator`.
 """
 
-from app.services.tools.illustrator import ILLUSTRATE_TOOL, compose_handdrawn, run_illustrate
+from app.services.tools.illustrator import ILLUSTRATE_TOOL, compose_peep, run_illustrate
 from app.services.tools.photo import (
     CHOOSE_PHOTO_TOOL,
     FIND_PHOTO_TOOL,
@@ -30,6 +30,6 @@ __all__ = [
     "pick_candidate",
     "download_photo",
     "embed_photo_into_html",
-    "compose_handdrawn",
+    "compose_peep",
     "run_illustrate",
 ]

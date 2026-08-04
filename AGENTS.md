@@ -475,7 +475,6 @@ tasbir/
 │   │   │   ├── campaigns.yaml          ← Campaign presets (tone, ground, language)
 │   │   │   └── design-instruction.yaml ← Swiss style rules (type voices, roles, measure, archetypes)
 │   │   │   └── templates/                  ← Human-authored Jinja2 post templates + catalog.yaml
-│   │   ├── illustrations/              ← Vendored CC0 hand-drawn kits (open-peeps/, open-doodles/)
 │   │   └── output/{task_id}/           ← Generated HTML + PNG files
 │   │
 │   ├── app/
@@ -672,10 +671,16 @@ Templates and the Designer can pull media automatically via LLM tools — always
   grayscale with an attribution caption, and credits land on the task result
   as `media_credits`. Add a key via `PEXELS_API_KEY` / `PIXABAY_API_KEY`;
   Wikimedia needs none.
-- **`illustrate(style: anthropic|open-peeps|open-doodles, theme, ground)`** —
-  unified illustration director. `anthropic` is the procedural generator;
-  `open-peeps`/`open-doodles` compose vendored CC0 SVGs
-  (`backend/data/illustrations/`) recolored to `var(--color-*)`.
+- **`illustrate(style, theme, ground, facial_hair?, hair?, expression?,
+  accessory?)`** — unified illustration director. `style = "anthropic"` is the
+  procedural SVG generator; any **curated DiceBear style** (see
+  `app/services/tools/peep_styles.py` — 25 CC0/free styles across people,
+  creatures, faces, abstract shapes, landscape) is a part-based avatar rendered
+  via the official Python bindings (`dicebear-core`/`dicebear-styles`, fully
+  offline + deterministic). Output is recolored to `var(--color-*)` (default
+  `line` palette: bold 2-tone ink/paper). People/robot styles accept part pins
+  (`facial_hair`, `hair`, `expression`, `accessory` — e.g.
+  `facial_hair: "moustache3"`); abstract styles ignore pins.
 
 Triggers: a template with exactly one empty image slot and no user media runs
 a neutral photo director (it may decline); any template with

@@ -343,21 +343,25 @@ def generate_illustration_svg(
 # LLM tool integration — the generator as a callable tool
 # ---------------------------------------------------------------------------
 
-# The unified ``illustrate`` tool (Anthropic procedural OR hand-drawn CC0 kits)
-# lives in services/tools/illustrator.py; alias it here so existing importers
-# and the deterministic generator stay stable.
+# The unified ``illustrate`` tool (Anthropic procedural OR curated DiceBear
+# styles) lives in services/tools/illustrator.py; alias it here so existing
+# importers and the deterministic generator stay stable.
 from app.services.tools.illustrator import ILLUSTRATE_TOOL as ILLUSTRATION_TOOL  # noqa: E402
 
 _DIRECTOR_SYSTEM = (
     "You are the illustration director for a strict monochrome editorial "
     "design system. An illustration is OPTIONAL — add one only if it "
     "genuinely strengthens this post. If you decide one helps, call the "
-    "illustrate tool once with a style: 'anthropic' for abstract procedural "
-    "compositions, 'open-peeps' for a hand-drawn person, 'open-doodles' for a "
-    "hand-drawn scene — plus an abstract theme only (growth, flow, burst, "
-    "orbit, layers, spiral...) — no literal objects, no words/letters, no "
-    "emoji, no color terms. Keep the theme under 60 characters. If no "
-    "illustration helps, do NOT call any tool."
+    "illustrate tool once. Choose 'anthropic' for abstract procedural "
+    "compositions, or a curated DiceBear style: people styles (open-peeps, "
+    "lorelei, notionists, avataaars, bottts) for human/human-centred posts, "
+    "abstract styles (blobs, rings, stripes, waves, shapes, constellation, "
+    "planets) for data/ideas/editorial art, or 'landscape' for journey/horizon "
+    "posts. Add an abstract theme only (growth, flow, burst, orbit, layers, "
+    "spiral...) — no literal objects, no words/letters, no emoji, no color "
+    "terms. Keep the theme under 60 characters. You may pin parts on people "
+    "styles (facial_hair, hair, expression, accessory) — omit for a random "
+    "match. If no illustration helps, do NOT call any tool."
 )
 
 

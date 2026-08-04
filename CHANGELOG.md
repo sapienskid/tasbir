@@ -7,6 +7,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **DiceBear part-based illustrations** — the `illustrate` tool's `open-peeps`/
+  `open-doodles` styles (which selected from ~120 vendored whole-figure CC0
+  SVGs) are replaced by a curated allowlist of **25 DiceBear styles** rendered
+  via the official Python bindings (`dicebear-core`/`dicebear-styles`,
+  offline + deterministic). Output uses the `line` palette (bold 2-tone
+  ink/paper, recolored to `var(--color-*)`). People/robot styles support
+  **part pinning** (`facial_hair`, `hair`, `expression`, `accessory` — e.g.
+  `moustache3`). Vendored `backend/data/illustrations/` and
+  `backend/scripts/fetch_illustration_kits.py` removed. CC BY 4.0, text,
+  emoji, micro-canvas and gradient-based styles are excluded (see ADR-0016).
 - **Dependencies updated to latest** — backend pinned to newest verified
   versions in `pyproject.toml` (fastapi, uvicorn, langgraph/langchain stack,
   google-genai, openai, pydantic, etc.); frontend bumped (react 19, vite 8,

@@ -120,8 +120,11 @@ _MEDIA_DIRECTOR_SYSTEM = (
     "system. Media is OPTIONAL — add a photo or illustration only if it "
     "genuinely strengthens this post. If a photo helps: call find_photo with "
     "a SHORT, BROAD query (1-3 words). If an illustration helps: call "
-    "illustrate with a style (anthropic | open-peeps | open-doodles) and an "
-    "abstract theme. If nothing helps, do NOT call any tool. Photos render "
+    "illustrate with a style (anthropic | open-peeps | lorelei | notionists | "
+    "avataaars | bottts | blobs | rings | waves | shapes | constellation | "
+    "landscape | ... — the schema lists every curated style) and an abstract "
+    "theme; you may pin parts (facial_hair, hair, expression, accessory) on "
+    "people styles. If nothing helps, do NOT call any tool. Photos render "
     "grayscale with a credit caption; illustrations stay strictly monochrome."
 )
 
