@@ -198,6 +198,38 @@ docker compose build && docker compose up -d
 Back up the DB before upgrading. The schema is `create_all` + idempotent
 column migrations on boot — existing data survives restarts and rebuilds.
 
+### Deploy alongside an existing stack (n8n / automation)
+
+If the server already runs a Docker stack with its own network (e.g. n8n,
+crawl4ai, linkding on an `automation-net`), Tasbir can join it so n8n can call
+the API **without exposing another host port** and **without name collisions**
+(Tasbir's internal `redis`/`playwright`/`worker` stay on its private network).
+
+```bash
+cd /path/to/tasbir
+cp .env.example .env            # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE_KEY
+docker compose -f docker-compose.yml -f docker-compose.server.yml up -d --build
+```
+
+The `docker-compose.server.yml` overlay:
+
+- declares `automation-net` as an **external** network (it must already exist —
+  your other stack created it);
+- attaches only the `api` service to it, so n8n reaches Tasbir at
+  `http://api:8000`;
+- keeps everything else (`redis`, `playwright`, `worker`, `beat`, `frontend`)
+  on Tasbir's private `tasbir` network — a server that already runs its own
+  `redis` or `crawl4ai` is unaffected;
+- still publishes port `8000` to the host for direct/cloudflared access.
+
+From n8n, trigger the pipeline with an HTTP Request node:
+`POST http://api:8000/api/generate` with header `x-api-key: <API_KEYS>` and the
+JSON body documented in [AGENTS.md](AGENTS.md). Poll `GET http://api:8000/api/tasks/{id}`.
+
+> The network name is hard-coded to `automation-net` in the overlay. If yours
+> differs, edit `docker-compose.server.yml` (`name:` under `networks`) before
+> starting.
+
 ### Monitoring & maintenance
 
 ```bash
