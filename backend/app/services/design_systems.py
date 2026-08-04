@@ -94,21 +94,22 @@ def build_pipeline_payload(ds: DesignSystem) -> dict:
 
 
 def resolve_illustration_style(di: dict, api_override: str = "") -> str:
-    """Resolve the effective illustration style (API → DS default → 'compose').
+    """Resolve the effective illustration style (API → DS default → 'procedural').
 
     ``di`` is the design_instruction dict from a design system row; the DS
     default lives under ``style.illustration_style`` (DB-backed, Studio-
     editable). An explicit API override wins; unknown values fall back to the
-    DS default. Empty everywhere → ``compose`` (the scene composer).
+    DS default. Empty everywhere → ``procedural`` (the clean Anthropic-style
+    organic mark, the premium editorial default).
     """
     from app.services.tools.illustrator import ILLUSTRATE_TOOL
 
     enum = ILLUSTRATE_TOOL["function"]["parameters"]["properties"]["style"]["enum"]
     ds_default = (di.get("style") or {}).get("illustration_style") or ""
-    for candidate in (api_override, ds_default, "compose"):
+    for candidate in (api_override, ds_default, "procedural"):
         if candidate in enum:
             return candidate
-    return "compose"
+    return "procedural"
 
 
 def ds_to_dict(ds: DesignSystem, template_count: int | None = None) -> dict:

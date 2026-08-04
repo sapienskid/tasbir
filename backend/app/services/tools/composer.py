@@ -259,15 +259,15 @@ def _ctx_palette(ground: str) -> dict:
 
 
 def _arch_ascend(rng, ctx):
-    """Hero bottom-left rising; arrow + supporting motifs swept up-right."""
+    """Hero bottom-left rising; arrow + supporting motifs on a clean diagonal."""
     els = []
     if ctx["hero"]:
         els.append(ctx["hero"][0])
-    els.append(_wobble_line(rng, 60, 210, 320, 40, amp=7, steps=8))
+    els.append(_wobble_line(rng, 60, 210, 320, 40, amp=5, steps=8))
     n = min(len(ctx["motifs"]), 3)
     for i in range(n):
-        x = 140 + i * 90 + rng.uniform(-8, 8)
-        y = 200 - i * 55 + rng.uniform(-8, 8)
+        x = 150 + i * 92
+        y = 200 - i * 58
         els.append(_render_icon(ctx["motifs"][i], x, y, 34))
     if ctx["hl"]:
         els.append(_render_highlight(ctx["hl"][0], 300, 170, 60, 40, ctx["ground"]))
@@ -275,21 +275,19 @@ def _arch_ascend(rng, ctx):
 
 
 def _arch_cluster(rng, ctx):
-    """Hero centered; supporting motifs radiate around it."""
+    """Hero centered; supporting motifs radiate on an even arc (structured)."""
     els = []
     if ctx["hero"]:
         els.append(ctx["hero"][0])
     n = min(len(ctx["motifs"]), 5)
     for i in range(n):
-        a = rng.uniform(0, math.tau)
-        r = rng.uniform(90, 150)
+        a = math.pi * 1.15 + i * (math.pi * 0.7 / max(n - 1, 1))  # upper arc, even spacing
+        r = 118.0
         cx = 200 + r * math.cos(a)
-        cy = 120 + r * math.sin(a) * 0.7
-        els.append(_render_icon(ctx["motifs"][i], cx, cy, 30))
-    for h in ctx["hl"][:2]:
-        els.append(_render_highlight(
-            h, rng.uniform(60, 300), rng.uniform(30, 180), 50, 34, ctx["ground"]
-        ))
+        cy = 105 + r * math.sin(a)
+        els.append(_render_icon(ctx["motifs"][i], cx - 15, cy - 15, 30))
+    if ctx["hl"]:
+        els.append(_render_highlight(ctx["hl"][0], 300, 30, 50, 34, ctx["ground"]))
     return els
 
 
@@ -347,7 +345,7 @@ def _arch_stack(rng, ctx):
     n = min(len(ctx["motifs"]), 4)
     base = 200
     for i in range(n):
-        h = 40 + i * 30 + rng.uniform(0, 10)
+        h = 40 + i * 30
         w = 60 + i * 12
         x = 60 + i * 78
         els.append(
@@ -432,16 +430,17 @@ def _arch_burst(rng, ctx):
 
 
 def _arch_scatter(rng, ctx):
-    """Scattered motifs + highlights across the canvas (airy)."""
+    """Motifs on a clean even grid with a hero mark (structured, not random)."""
     els = []
-    for i, m in enumerate(ctx["motifs"][:6]):
-        x = rng.uniform(50, 320)
-        y = rng.uniform(40, 180)
-        els.append(_render_icon(m, x, y, 28))
-    for h in ctx["hl"][:3]:
-        els.append(_render_highlight(
-            h, rng.uniform(60, 300), rng.uniform(30, 170), 50, 32, ctx["ground"]
-        ))
+    n = min(len(ctx["motifs"]), 6)
+    for i in range(n):
+        col = i % 3
+        row = i // 3
+        x = 70 + col * 105
+        y = 50 + row * 72
+        els.append(_render_icon(ctx["motifs"][i], x, y, 28))
+    for h in ctx["hl"][:2]:
+        els.append(_render_highlight(h, 300, 40 + ctx["hl"].index(h) * 60, 50, 32, ctx["ground"]))
     if ctx["hero"]:
         els.append(ctx["hero"][0])
     return els
@@ -493,7 +492,7 @@ def _arch_wave_field(rng, ctx):
     els = []
     for row in range(3):
         y = 140 + row * 26
-        els.append(_wobble_line(rng, 40, y, 360, y + rng.uniform(-8, 8), amp=10, steps=10))
+        els.append(_wobble_line(rng, 40, y, 360, y, amp=8, steps=10))
     for i, m in enumerate(ctx["motifs"][:3]):
         els.append(_render_icon(m, 90 + i * 90, 60, 32))
     if ctx["hl"]:
@@ -569,16 +568,32 @@ def _arch_diptych(rng, ctx):
 
 
 def _arch_sun_marks(rng, ctx):
-    """Radiating hand-drawn marks from a corner (Highlights-led)."""
+    """Radiating hand-drawn marks from a corner (Highlights-led, even arc)."""
     els = []
     for i, h in enumerate(ctx["hl"][:5]):
-        a = rng.uniform(0, math.pi / 2)
-        r = 40 + i * 45
+        a = math.pi * 0.95 + i * (math.pi * 0.55 / max(len(ctx["hl"][:5]) - 1, 1))
+        r = 45 + i * 40
         x = 60 + r * math.cos(a)
         y = 200 - r * math.sin(a)
         els.append(_render_highlight(h, x, y, 50, 32, ctx["ground"]))
     if ctx["motifs"]:
         els.append(_render_icon(ctx["motifs"][0], 260, 140, 40))
+    return els
+
+
+def _arch_hero_mark(rng, ctx):
+    """ONE bold hero element centered — no scatter, no motifs.
+
+    The premium editorial default for ``compose``: a single confident mark
+    (custom category hero or DiceBear figure) fills the frame. At most one
+    small hairline underline grounds it. This is the anti-clutter rule.
+    """
+    els = []
+    if ctx["hero"]:
+        els.append(ctx["hero"][0])
+    elif ctx["motifs"]:
+        els.append(_render_icon(ctx["motifs"][0], 160, 70, 96))
+    els.append(_hairline(120, 205, 280, 205, ctx["p"]["ink"]))
     return els
 
 
@@ -618,6 +633,7 @@ for _name, _fn in {
     "diptych": _arch_diptych,
     "sun-marks": _arch_sun_marks,
     "underline": _arch_underline,
+    "hero-mark": _arch_hero_mark,
 }.items():
     _register(_name, _fn)
 
@@ -649,13 +665,14 @@ THEME_ARCHETYPES: dict[str, str] = {
 
 
 def _archetype_for(seed: str, theme: str | None) -> str:
-    rng = _rng(seed, "archetype")
+    # Default to the single-element hero mark — a bold, clean editorial figure.
+    # Scattered archetypes exist but are only used when explicitly requested.
     if theme:
         low = theme.lower()
         for key, arch in THEME_ARCHETYPES.items():
             if key in low:
                 return arch
-    return rng.choice(ARCHETYPE_IDS)
+    return "hero-mark"
 
 
 _CAT_HEROES: dict[str, str] = {
@@ -696,7 +713,7 @@ def _resolve_hero(category: str, style: str, seed: str, rng: random.Random) -> l
     slug = _CAT_HEROES.get(category.upper() or "", "spark")
     if _load_hero(slug) is None:
         return None
-    return [_render_hero(slug, 150, 50, 100, 100)]
+    return [_render_hero(slug, 110, 20, 180, 180)]
 
 
 def compose_scene(
@@ -744,7 +761,7 @@ def compose_scene(
     body = "\n    ".join(fn(rng, ctx))
 
     svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" '
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" '
         f'viewBox="0 0 400 240" preserveAspectRatio="xMidYMid meet" '
         f'role="img" aria-hidden="true">\n'
         f"  {body}\n"
@@ -753,8 +770,49 @@ def compose_scene(
     return _figure_wrapper(svg)
 
 
+# Category → default motif candidates, used by the deterministic fallback
+# (no LLM). Kept deliberately small and Swiss-safe.
+_DEFAULT_MOTIFS: dict[str, list[str]] = {
+    "WRITING": ["pen-tool", "book-open", "quote", "type"],
+    "PROJECT": ["wrench", "rocket", "hammer", "settings"],
+    "PORTFOLIO": ["image", "layout-grid", "folder", "badge-check"],
+    "NOTE": ["lightbulb", "sparkles", "sticky-note", "pen-line"],
+    "AI": ["cpu", "brain", "bot", "code-2"],
+}
+
+
+def compose_default_scene(
+    seed: str,
+    ground: str = "white",
+    category: str = "",
+) -> str:
+    """Deterministic, LLM-free fallback figure for an illustration slot.
+
+    Used when the media plan produced no entry for a slide whose template
+    renders an ``{{ illustration }}`` slot — so a layout never ships with an
+    empty art block. Picks a category-matched hero + 3 default motifs and a
+    seeded archetype; same inputs → same figure. Colors resolve through the
+    ``--ill-*`` design-system tokens like every other composed figure.
+    """
+    from app.services.tools.icon_search import icon_exists
+
+    default_motifs = _DEFAULT_MOTIFS.get(category.upper() or "", _DEFAULT_MOTIFS["NOTE"])
+    motifs = [m for m in default_motifs if icon_exists(m)]
+    return compose_scene(
+        seed=f"{seed}|fallback",
+        ground=ground,
+        archetype=None,
+        motif_names=motifs[:3],
+        highlights=["underline-1"] if _load_highlight("underline-1") else [],
+        style="compose",
+        theme="",
+        category=category,
+    )
+
+
 __all__ = [
     "ARCHETYPE_IDS",
     "THEME_ARCHETYPES",
+    "compose_default_scene",
     "compose_scene",
 ]

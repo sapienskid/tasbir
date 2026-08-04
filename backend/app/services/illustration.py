@@ -330,8 +330,10 @@ def generate_illustration_svg(
     p = _palette(ground)
     fn = ARCHETYPES[_archetype_for(seed, theme)]
     body = "\n    ".join(fn(p, rng))
+    # Declared size is 2x the 400x240 viewBox so the vector renders crisply
+    # even when the figure is displayed small in a template slot.
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="400" height="240" '
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" '
         f'viewBox="{view_box}" preserveAspectRatio="xMidYMid meet" '
         'role="img" aria-hidden="true">\n'
         f"  {body}\n"

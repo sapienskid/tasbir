@@ -16,10 +16,10 @@ style:
   emoji: false
   gradients: false
   # Default illustration style for the media plan (DB-backed, Studio-editable):
-  # "compose" (unified scene composer — preferred), "procedural" (abstract),
-  # or a curated DiceBear id (open-peeps, lorelei, notionists, bottts, blobs,
-  # initials, shapes, waves, landscape). Empty → media-plan LLM picks.
-  illustration_style: "compose"
+  # "procedural" (Anthropic-style organic mark — clean, editorial, preferred),
+  # "compose" (single hero mark), or a curated DiceBear id. Empty → media-plan
+  # LLM picks. "compose" renders ONE bold hero element, never a scatter.
+  illustration_style: "procedural"
 
 type_voice:
   display: |

@@ -6,6 +6,7 @@ import pytest
 
 from app.services.tools.composer import (
     ARCHETYPE_IDS,
+    compose_default_scene,
     compose_scene,
 )
 from app.services.tools.icon_search import search_icons
@@ -84,3 +85,24 @@ async def test_composer_dicebear_hero():
     svg = compose_scene(seed="h|1", ground="white", style="open-peeps",
                         archetype="ascend", motif_names=["rocket"])
     assert "open-peeps" in svg or len(svg) > 300
+
+
+@pytest.mark.asyncio
+async def test_composer_renders_at_2x_pixel_size():
+    """The SVG declares 800x480 (2x) while keeping the 400x240 viewBox, so
+    the vector renders crisply even when the figure is displayed small."""
+    svg = compose_scene(seed="2x|1", ground="white", archetype="cluster",
+                        motif_names=["rocket"])
+    assert 'width="800" height="480"' in svg
+    assert 'viewBox="0 0 400 240"' in svg
+
+
+@pytest.mark.asyncio
+async def test_compose_default_scene_is_deterministic_and_safe():
+    a = compose_default_scene(seed="d|1", ground="white", category="PROJECT")
+    b = compose_default_scene(seed="d|1", ground="white", category="PROJECT")
+    assert a == b
+    assert not _HEX.search(a)
+    assert not _EMOJI.search(a)
+    assert "var(--ill-ink)" in a or "var(--color-text)" in a
+    assert len(a) > 300
