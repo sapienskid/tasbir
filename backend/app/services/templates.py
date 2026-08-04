@@ -164,6 +164,7 @@ def select_template(
     templates: list[dict],
     exclude: set[str] | None = None,
     prefer: str | None = None,
+    prefer_slot: str | None = None,
 ) -> tuple[str, dict] | None:
     """Pick a template deterministically from a loaded template list.
 
@@ -172,7 +173,10 @@ def select_template(
     ``templates`` is the list of template dicts (see ``template_to_dict``) —
     a pure function, so it stays testable without a DB session. ``prefer``
     biases toward templates carrying that ``hint_tag`` (e.g. ``"media"`` /
-    ``"text"`` for carousel layout variety); falls back if none match.
+    ``"text"`` for carousel layout variety); ``prefer_slot`` biases toward
+    templates whose HTML contains a slot marker (e.g. ``"{{ illustration"``
+    so a planned illustration actually has a place to render). Both fall back
+    if none match.
     """
     exclude = exclude or set()
     candidates = {
@@ -192,6 +196,14 @@ def select_template(
         }
         if preferred:
             candidates = preferred
+
+    if prefer_slot:
+        slot_candidates = {
+            tid: e for tid, e in candidates.items()
+            if prefer_slot in (e.get("html") or "")
+        }
+        if slot_candidates:
+            candidates = slot_candidates
 
     # The strategist's hint is the strongest signal — if it names an
     # available template for this family+ground, honor it directly.

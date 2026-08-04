@@ -53,6 +53,10 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
     The media plan (built once per post by the media-plan director) decides
     which slides get an illustration and with what style/motifs. This executes
     the plan entry for the current slide, offline, cached per slide id.
+
+    If the plan produced no illustration but the template renders an
+    ``{{ illustration }}`` slot, a deterministic default scene (category hero +
+    motifs, no LLM) fills it so a layout never ships an empty art block.
     """
     cached = state.get(_ILLUSTRATION_CACHE_KEY)
     if cached:
@@ -60,19 +64,26 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
 
     fmt_id = state.get("_processing_format_id", "")
     plan = (state.get("media_plan") or {}).get(fmt_id) or {}
-    if plan.get("kind") != "illustration":
-        return ""
 
     from app.agents.orchestrator.post_cache import post_cached
     from app.services.media_plan import execute_slide_illustration
 
     async def loader() -> str:
-        return execute_slide_illustration(
-            plan,
-            seed=f"{seed or ''}|illustration|{fmt_id}",
+        if plan.get("kind") == "illustration":
+            return execute_slide_illustration(
+                plan,
+                seed=f"{seed or ''}|illustration|{fmt_id}",
+                ground=ground,
+                category=state.get("category", ""),
+                api_style=state.get("illustration_style") or "",
+            )
+        # Deterministic fallback — no plan entry, but the template has the slot.
+        from app.services.tools.composer import compose_default_scene
+
+        return compose_default_scene(
+            f"{seed or ''}|{fmt_id}",
             ground=ground,
             category=state.get("category", ""),
-            api_style=state.get("illustration_style") or "",
         )
 
     svg = await post_cached(state.get("_task_id", ""), f"illustration:{fmt_id}", loader) or ""
@@ -243,6 +254,12 @@ async def template_node_single(state: GenerationState) -> dict:
     if parsed and not state.get("verbatim"):
         layout_pref = "media" if parsed[1] % 2 == 1 else "text"
 
+    # When the media plan chose an illustration for this slide, prefer a
+    # template that actually renders an {{ illustration }} slot, so the
+    # composed figure lands on the post.
+    plan_entry = (state.get("media_plan") or {}).get(fmt_id) or {}
+    prefer_slot = "{{ illustration" if plan_entry.get("kind") == "illustration" else None
+
     # User override: honor the chosen template for its family + a supported
     # ground; otherwise fall back to deterministic selection.
     selected: tuple[str, dict] | None = None
@@ -272,7 +289,8 @@ async def template_node_single(state: GenerationState) -> dict:
                 templates = [slide_tpl]
         exclude = await get_recent_template_ids()
         selected = select_template(
-            family, ground, category, hint, seed, templates, exclude, prefer=layout_pref
+            family, ground, category, hint, seed, templates, exclude,
+            prefer=layout_pref, prefer_slot=prefer_slot,
         )
 
     if selected is None:
