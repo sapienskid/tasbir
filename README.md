@@ -46,6 +46,22 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
+## Deploy from prebuilt images (no build, no repo on the server)
+
+Tasbir publishes its Docker images to **GitHub Container Registry**
+(`ghcr.io/sapienskid/tasbir-*`), built automatically by CI on tags (`v*` →
+versioned + `:latest`) and pushes to `main` (`:main`).
+
+```bash
+cp .env.example .env            # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE_KEY
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+- Pulls `ghcr.io/sapienskid/tasbir-{api,playwright,frontend}` + `redis:7-alpine`
+- Pin a release: `TASBIR_IMAGE_TAG=1.0.1` in `.env` (defaults to `:latest`)
+- Fork/re-brand: set `TASBIR_IMAGE_OWNER=your-org` (defaults to `sapienskid`)
+- Update: `docker compose -f docker-compose.ghcr.yml up -d` (pulls new tags)
+
 ## Tasbir Studio
 
 A React + Vite + shadcn/ui SPA served same-origin by FastAPI:
