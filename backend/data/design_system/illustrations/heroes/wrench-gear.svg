@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <!-- PROJECT hero: wrench + gear -->
+  <g stroke="var(--ill-ink)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <circle cx="82" cy="38" r="18" />
+    <path d="M88 20 L96 28 M66 44 L58 36 M68 52 L78 58 M96 46 L104 54 M82 58 L82 70" />
+  </g>
+  <g fill="var(--ill-paper)" stroke="var(--ill-ink)" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M28 74 L58 44 L66 52 L36 82 Z" />
+    <path d="M28 74 L20 92 L24 96 L42 88 Z" />
+  </g>
+  <circle cx="82" cy="38" r="6" fill="var(--ill-paper)" stroke="var(--ill-ink)" stroke-width="2.5"/>
+  <g fill="var(--ill-mid)">
+    <circle cx="40" cy="40" r="3.5" />
+    <circle cx="80" cy="88" r="3.5" />
+    <circle cx="22" cy="60" r="3" />
+  </g>
+</svg>
