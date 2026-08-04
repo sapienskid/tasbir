@@ -1,0 +1,128 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Tasbir — join an EXISTING compose network (your automation-net stack).
+#
+#   docker compose -f docker-compose.network.yml up -d
+#
+# Requirements:
+#   - Your other stack (redis + automation-net) is already up. This compose
+#     has NO redis service — it reuses yours at `redis://redis:6379/0`.
+#   - Set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE_KEY in .env.
+#   - Images pull from ghcr.io/<owner>/tasbir-* (CI-built, amd64 + arm64).
+#
+# Storage: named volumes only (no host mounts). Seed assets (design_system/,
+# illustrations/) ship inside the image and populate the volume on first boot.
+# ─────────────────────────────────────────────────────────────────────────
+
+name: tasbir-net
+
+networks:
+  automation-net:
+    external: true
+
+volumes:
+  frontend-dist:
+  tasbir_data:
+
+x-shared: &shared-env
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  DATABASE_URL: sqlite+aiosqlite:///data/tasbir.db
+  REDIS_URL: redis://redis:6379/0
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  API_KEYS: ${API_KEYS:-}
+  RENDER_SERVICE_KEY: ${RENDER_SERVICE_KEY:-}
+  RENDERER_URL: http://playwright:4000
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+  RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-30}
+  IMAGE_ALLOW_HOSTS: ${IMAGE_ALLOW_HOSTS:-}
+  IMAGE_MAX_BYTES: ${IMAGE_MAX_BYTES:-10485760}
+  IMAGE_MAX_REDIRECTS: ${IMAGE_MAX_REDIRECTS:-2}
+  OUTPUT_TTL_HOURS: ${OUTPUT_TTL_HOURS:-24}
+  DELETE_ON_DOWNLOAD: ${DELETE_ON_DOWNLOAD:-false}
+  SKIP_VERIFY: ${SKIP_VERIFY:-false}
+
+services:
+  playwright:
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-playwright:${TASBIR_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    networks:
+      - automation-net
+    environment:
+      PORT: 4000
+      RENDER_SERVICE_KEY: ${RENDER_SERVICE_KEY:-}
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    mem_limit: 1.5g
+
+  api:
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-api:${TASBIR_IMAGE_TAG:-latest}
+    user: "1000:1000"
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - automation-net
+    depends_on:
+      frontend:
+        condition: service_completed_successfully
+    environment:
+      <<: *shared-env
+      SERVICE: api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=5)"]
+      interval: 10s
+      timeout: 8s
+      retries: 15
+      start_period: 15s
+    volumes:
+      - tasbir_data:/app/data
+      - frontend-dist:/app/static
+    mem_limit: 256m
+
+  worker:
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-api:${TASBIR_IMAGE_TAG:-latest}
+    user: "1000:1000"
+    restart: unless-stopped
+    networks:
+      - automation-net
+    depends_on:
+      playwright:
+        condition: service_healthy
+    environment:
+      <<: *shared-env
+      SERVICE: worker
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - tasbir_data:/app/data
+    mem_limit: 512m
+
+  beat:
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-api:${TASBIR_IMAGE_TAG:-latest}
+    user: "1000:1000"
+    restart: unless-stopped
+    networks:
+      - automation-net
+    environment:
+      <<: *shared-env
+      SERVICE: beat
+      PYTHONPATH: /app
+    working_dir: /app/data
+    command: celery -A app.tasks.celery_app beat --loglevel=info
+    volumes:
+      - tasbir_data:/app/data
+    mem_limit: 128m
+
+  frontend:
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-frontend:${TASBIR_IMAGE_TAG:-latest}
+    restart: "no"
+    networks:
+      - automation-net
+    volumes:
+      - frontend-dist:/out
+    command: ["sh", "-c", "cp -rf /static/. /out/ && echo 'frontend assets staged into volume'"]
