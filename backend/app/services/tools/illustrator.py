@@ -64,14 +64,26 @@ def _safe_ids(svg: str) -> str:
 
 
 def _build_illustrate_tool() -> dict:
-    """ILLUSTRATE_TOOL schema built from the curated style registry."""
+    """ILLUSTRATE_TOOL schema built from the curated style registry.
+
+    Styles: ``compose`` (the unified scene composer — default), ``procedural``
+    (Anthropic-style abstract), plus the curated DiceBear styles (humans,
+    robots, and a few abstract shapes). The DiceBear list is pruned to the
+    styles that fit the Swiss monochrome system (see peep_styles.py).
+    """
     from app.services.tools.peep_styles import CURATED_STYLES
 
-    style_desc = []
+    style_desc = [
+        "compose: a content-mapped editorial scene (custom hero + Lucide "
+        "motifs + hand-drawn Highlights accents), laid out deterministically. "
+        "PREFERRED — use icon_search to pick motif names first.",
+        "procedural: abstract procedural composition (growth, flow, focus). "
+        "For quiet, minimal, or abstract posts.",
+    ]
     for sid in sorted(CURATED_STYLES):
         info = CURATED_STYLES[sid]
         style_desc.append(f"{sid}: {info.description}")
-    style_enum = ["anthropic"] + sorted(CURATED_STYLES)
+    style_enum = ["compose", "procedural"] + sorted(CURATED_STYLES)
 
     def part_desc(part: str, sid: str) -> str:
         from app.services.tools.peep_styles import list_style_values
@@ -87,8 +99,7 @@ def _build_illustrate_tool() -> dict:
             "name": "illustrate",
             "description": (
                 "Create a monochrome editorial illustration for the post. Call "
-                "exactly once. Choose 'anthropic' (abstract procedural) or a "
-                "curated DiceBear style. Style options:\n" + "\n".join(style_desc)
+                "exactly once. Style options:\n" + "\n".join(style_desc)
             ),
             "parameters": {
                 "type": "object",
@@ -96,7 +107,11 @@ def _build_illustrate_tool() -> dict:
                     "style": {
                         "type": "string",
                         "enum": style_enum,
-                        "description": "Which illustration style to use.",
+                        "description": (
+                            "Which illustration style to use. Default 'compose' — "
+                            "a content-mapped scene. Use a DiceBear style only for "
+                            "human/robot-centred posts, 'procedural' for abstract."
+                        ),
                     },
                     "theme": {
                         "type": "string",
@@ -110,6 +125,43 @@ def _build_illustrate_tool() -> dict:
                         "type": "string",
                         "enum": ["white", "black"],
                         "description": "Card background.",
+                    },
+                    "archetype": {
+                        "type": "string",
+                        "description": (
+                            "For style='compose': a named composition layout "
+                            "(ascend, cluster, horizon, field, orbit, stack, "
+                            "cascade, counterpoint, measure, frame, burst, "
+                            "scatter, gate, column, cross, wave-field, ring, "
+                            "orbit-burst, grid, diptych, sun-marks, underline). "
+                            "Omit to let the theme pick one deterministically."
+                        ),
+                    },
+                    "motif_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "For style='compose': Lucide icon names from "
+                            "icon_search that match the post's subject (2-6). "
+                            "Call icon_search first to discover valid names."
+                        ),
+                    },
+                    "highlights": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "For style='compose': hand-drawn Highlights mark "
+                            "slugs (arrow-*, underline-*, sprinkle-*, loop-*, "
+                            "spiral-*, doodle-*). Optional accents."
+                        ),
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": (
+                            "The post's category label (WRITING, PROJECT, "
+                            "PORTFOLIO, NOTE, AI). Picks the custom hero subject "
+                            "for style='compose'. Optional."
+                        ),
                     },
                     "facial_hair": {
                         "type": "string",
@@ -325,19 +377,13 @@ def _map_parts(style_id: str, parts: dict) -> dict:
     return options
 
 
-def compose_peep(
+def _render_avatar_raw(
     seed: str,
-    ground: str = "white",
-    style: str = "open-peeps",
-    theme: str = "",
-    parts: dict | None = None,
+    style: str,
     palette: str = "line",
+    parts: dict | None = None,
 ) -> str:
-    """Compose a curated DiceBear avatar, recolored to the brand monochrome.
-
-    ``palette``: ``line`` (2-tone ink/paper, default), ``mono`` (4-tone), or
-    ``original`` (DiceBear colors kept — NOT verifier-safe; preview only).
-    """
+    """Render a DiceBear avatar and recolor it; return the raw ``<svg>`` (no wrapper)."""
     from dicebear import Avatar
 
     from app.services.tools.peep_styles import CURATED_STYLES, load_style
@@ -356,21 +402,52 @@ def compose_peep(
         log.warning("[illustrate] %s render failed (%s) — retrying unpinned", style, e)
         svg = Avatar(style_def, {"seed": seed or "figure"}).to_string()
     svg = _clean_svg(svg)
-    svg = _recolor_svg(svg, palette)
+    return _recolor_svg(svg, palette)
+
+
+def compose_peep(
+    seed: str,
+    ground: str = "white",
+    style: str = "open-peeps",
+    theme: str = "",
+    parts: dict | None = None,
+    palette: str = "line",
+) -> str:
+    """Compose a curated DiceBear avatar, recolored to the brand monochrome.
+
+    ``palette``: ``line`` (2-tone ink/paper, default), ``mono`` (4-tone), or
+    ``original`` (DiceBear colors kept — NOT verifier-safe; preview only).
+    """
+    svg = _render_avatar_raw(seed, style, palette, parts)
     return _figure_wrapper(svg)
 
 
 def run_illustrate(args: dict, seed: str = "") -> str:
     """Execute an ``illustrate`` tool call → figure/svg HTML fragment."""
     from app.services.illustration import generate_illustration_svg
+    from app.services.tools.composer import compose_scene
 
-    style = str(args.get("style") or "anthropic")
+    style = str(args.get("style") or "compose")
     theme = str(args.get("theme") or "")[:60]
     ground = str(args.get("ground") or "white")
     if ground not in ("white", "black"):
         ground = "white"
-    if style == "anthropic":
+
+    if style == "compose":
+        return compose_scene(
+            seed or "figure",
+            ground=ground,
+            archetype=args.get("archetype") or None,
+            motif_names=list(args.get("motif_names") or []),
+            highlights=list(args.get("highlights") or []),
+            style="compose",
+            theme=theme,
+            category=str(args.get("category") or ""),
+        )
+
+    if style == "procedural" or style == "anthropic":
         return generate_illustration_svg(seed or "figure", ground, theme=theme)
+
     parts = {
         key: args[key]
         for key in ("facial_hair", "hair", "expression", "accessory")

@@ -107,7 +107,7 @@ def _load_style_raw(style_id: str) -> str:
 
 
 CURATED_STYLES: dict[str, StyleInfo] = {k: v for k, v in {
-    # --- People ---
+    # --- People (humans — the only avatars the Swiss system uses) ---
     "open-peeps": StyleInfo(
         id="open-peeps", label="Open Peeps", license="CC0 1.0", family="people",
         description="Naive hand-drawn half-body person (Pablo Stanley). Good for posts about people, work, communities.",
@@ -116,98 +116,33 @@ CURATED_STYLES: dict[str, StyleInfo] = {k: v for k, v in {
         id="lorelei", label="Lorelei", license="CC0 1.0", family="people",
         description="Polished illustrated person with many hair/beard/glasses options. Editorial but friendly.",
     ),
-    "lorelei-neutral": StyleInfo(
-        id="lorelei-neutral", label="Lorelei Neutral", license="CC0 1.0", family="people",
-        description="Lorelei in a single neutral style (no colour variation). Clean, minimal people.",
-    ),
     "notionists": StyleInfo(
         id="notionists", label="Notionists", license="CC0 1.0", family="people",
         description="Modern editorial people with expressive gestures and outfits. Good for tech/business/explainer posts.",
     ),
-    "notionists-neutral": StyleInfo(
-        id="notionists-neutral", label="Notionists Neutral", license="CC0 1.0", family="people",
-        description="Notionists in a single neutral style. Minimal modern people.",
-    ),
+    # --- Robots (AI / developer posts) ---
     "bottts": StyleInfo(
         id="bottts", label="Bottts", license="Free for commercial use", family="people",
         description="Monochrome robot character. Good for AI, automation, developer topics.",
     ),
-    "bottts-neutral": StyleInfo(
-        id="bottts-neutral", label="Bottts Neutral", license="Free for commercial use", family="people",
-        description="Bottts robot in a single neutral style. Minimal robot.",
-    ),
-    # --- Creatures ---
-    "critters": StyleInfo(
-        id="critters", label="Critters", license="CC0 1.0", family="creature",
-        description="Whimsical abstract creature (body + eyes + mouth). Good for playful or metaphorical posts.",
-    ),
-    "sprouts": StyleInfo(
-        id="sprouts", label="Sprouts", license="CC0 1.0", family="creature",
-        description="Plant-in-a-pot creature with a face. Good for growth, sustainability, gardening metaphors.",
-    ),
-    # --- Faces ---
-    "clay": StyleInfo(
-        id="clay", label="Clay", license="CC0 1.0", family="face",
-        description="Single 3D-clay-looking face. Neutral, good for mood/identity posts.",
-    ),
-    "moods": StyleInfo(
-        id="moods", label="Moods", license="CC0 1.0", family="face",
-        description="Single blobby expressive face. Good for emotion/feeling themes.",
-    ),
-    "pixelbot": StyleInfo(
-        id="pixelbot", label="Pixelbot", license="CC0 1.0", family="face",
-        description="Pixel-style robot face. Retro-tech, good for coding/AI/retro themes.",
-    ),
-    "initial-face": StyleInfo(
-        id="initial-face", label="Initial Face", license="CC0 1.0", family="face",
-        description="Minimal geometric face. Abstract, good for identity/placeholder-like art.",
-    ),
-    # --- Abstract / shapes ---
+    # --- Abstract / shapes (Swiss-friendly geometric patterns) ---
     "blobs": StyleInfo(
         id="blobs", label="Blobs", license="CC0 1.0", family="abstract",
         description="Organic blob composition. Swiss-friendly abstract art for almost any topic.",
     ),
-    "rings": StyleInfo(
-        id="rings", label="Rings", license="CC0 1.0", family="abstract",
-        description="Concentric ring diagram. Good for cycles, orbits, layers.",
-    ),
-    "stripes": StyleInfo(
-        id="stripes", label="Stripes", license="CC0 1.0", family="abstract",
-        description="Vertical bar stripes. Strong geometric pattern for editorial headers.",
-    ),
-    "triangles": StyleInfo(
-        id="triangles", label="Triangles", license="CC0 1.0", family="abstract",
-        description="Triangle composition. Geometric, good for sharp/build themes.",
-    ),
-    "waves": StyleInfo(
-        id="waves", label="Waves", license="CC0 1.0", family="abstract",
-        description="Layered wave fields. Good for flow, growth, rhythm.",
+    "initials": StyleInfo(
+        id="initials", label="Initials", license="CC0 1.0", family="abstract",
+        description="Monochrome letter-monogram tiles. Good for identity/editorial marks.",
     ),
     "shapes": StyleInfo(
         id="shapes", label="Shapes", license="CC0 1.0", family="abstract",
         description="Collage of geometric shapes. Clean Swiss-style abstract art.",
     ),
-    "squircles": StyleInfo(
-        id="squircles", label="Squircles", license="CC0 1.0", family="abstract",
-        description="Stack of rounded-corner shapes. Soft geometric pattern.",
+    "waves": StyleInfo(
+        id="waves", label="Waves", license="CC0 1.0", family="abstract",
+        description="Layered wave fields. Good for flow, growth, rhythm.",
     ),
-    "shape-grid": StyleInfo(
-        id="shape-grid", label="Shape Grid", license="CC0 1.0", family="abstract",
-        description="Grid of squares and circles. Structural, good for systems/data themes.",
-    ),
-    "loops": StyleInfo(
-        id="loops", label="Loops", license="CC0 1.0", family="abstract",
-        description="Tiled loop pattern. Repetitive pattern, good for rhythm/automation.",
-    ),
-    "disco": StyleInfo(
-        id="disco", label="Disco", license="CC0 1.0", family="abstract",
-        description="Pentagon and pattern tiles. Retro-geometric, good for celebration/energy.",
-    ),
-    "weave": StyleInfo(
-        id="weave", label="Weave", license="CC0 1.0", family="abstract",
-        description="Woven band pattern. Good for craft, integration, connection.",
-    ),
-    # --- Landscape ---
+    # --- Landscape (journey / horizon) ---
     "landscape": StyleInfo(
         id="landscape", label="Landscape", license="CC0 1.0", family="landscape",
         description="Hills, sun and scenery. Good for journey, distance, horizon, growth-over-time.",
