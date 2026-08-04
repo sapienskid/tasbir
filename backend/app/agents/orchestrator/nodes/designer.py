@@ -115,140 +115,70 @@ def _ground_css_vars(
     )
 
 
-_MEDIA_DIRECTOR_SYSTEM = (
-    "You are the media director for a strict monochrome editorial design "
-    "system. Media is OPTIONAL — add a photo or illustration only if it "
-    "genuinely strengthens this post. If a photo helps: call find_photo with "
-    "a SHORT, BROAD query (1-3 words). If an illustration helps: call "
-    "illustrate with a style (anthropic | open-peeps | lorelei | notionists | "
-    "avataaars | bottts | blobs | rings | waves | shapes | constellation | "
-    "landscape | ... — the schema lists every curated style) and an abstract "
-    "theme; you may pin parts (facial_hair, hair, expression, accessory) on "
-    "people styles. If nothing helps, do NOT call any tool. Photos render "
-    "grayscale with a credit caption; illustrations stay strictly monochrome."
-)
-
-_MEDIA_DIRECTOR_PICK = (
-    "You are the media director for a strict monochrome editorial design "
-    "system. A shortlist of photo candidates is provided below. Call "
-    "choose_photo with the index of the single best fit for the post. If none "
-    "of them work, do NOT call the tool (decline the photo)."
-)
-
-
 async def _designer_media_director(state: GenerationState, fmt) -> None:
-    """Ask the LLM (media tools) for a photo/illustration for an LLM-designed post.
+    """Apply the media plan to an LLM-designed post (per-slide, cached).
 
-    The director decision is computed once per post (shared per-post cache) and
-    then applied to this branch's local state: a chosen photo is downloaded and
-    appended to ``state["images"]`` (so the designer's image block + renderer's
-    key substitution both see it); a chosen illustration is stored in
+    The media plan (one LLM session per post, built in the graph) decides this
+    slide's media. A chosen photo is downloaded and appended to the slide's
+    image list; a chosen illustration is composed offline and stored in
     ``state["_designer_figure"]`` for marker injection after generation.
     """
     if state.get("_designer_media_applied"):
         return
-    if state.get("images"):
-        return  # user media already present — no auto media
 
-    from app.agents.orchestrator.post_cache import post_cached
+    fmt_id = state.get("_processing_format_id", "")
+    plan = (state.get("media_plan") or {}).get(fmt_id) or {}
+    kind = plan.get("kind") or "none"
 
-    title = state.get("title", "")
-    task = (state.get("format_tasks") or {}).get(state.get("_processing_format_id", ""), {})
-    copy_data = _parse_copy(task.get("copy", ""), title)
-    category = state.get("category", "")
-    orientation = "landscape" if fmt.width > fmt.height else ("portrait" if fmt.height > fmt.width else "square")
-
-    from app.services.llm import call_llm_for_tool, call_llm_for_tools
-    from app.services.tools.illustrator import ILLUSTRATE_TOOL, run_illustrate
-    from app.services.tools.photo import (
-        CHOOSE_PHOTO_TOOL,
-        FIND_PHOTO_TOOL,
-        download_photo,
-        format_shortlist,
-        pick_candidate,
-        search_photo_candidates,
-    )
-
-    async def loader() -> dict | None:
-        user = (
-            f"Title: {title or '(untitled)'}\n"
-            f"Headline: {copy_data.get('headline', '') or '(none)'}\n"
-            f"Category: {category or '(none)'}\n"
-            f"Orientation: {orientation}\n"
-            f"Ground: {state.get('ground', 'white')}"
-        )
-
-        # Phase A — decide photo vs illustration vs none.
-        try:
-            name, args = await call_llm_for_tools(
-                agent_role="designer",
-                system_prompt=_MEDIA_DIRECTOR_SYSTEM,
-                user_prompt=user,
-                tools=[FIND_PHOTO_TOOL, ILLUSTRATE_TOOL],
-                temperature=0.7,
-                max_tokens=256,
-            )
-        except Exception as e:  # noqa: BLE001 — declined or failed
-            log.info("[designer] media director declined/failed (%s)", e)
-            return None
-
-        if name == "illustrate":
-            fig = run_illustrate(args, f"{title or ''}|designer-illustration")
-            return {"kind": "illustration", "figure": fig} if fig else None
-
-        if name != "find_photo":
-            return None
-
-        query = str(args.get("query") or "").strip()
-        if not query:
-            return None
-        shortlist = await search_photo_candidates(query, orientation, args.get("min_width"))
-        if not shortlist:
-            try:
-                args = await call_llm_for_tool(
-                    agent_role="designer",
-                    system_prompt=_MEDIA_DIRECTOR_SYSTEM,
-                    user_prompt=user + (
-                        "\n[NOTE] The previous query returned no photos. Call "
-                        "find_photo once more with a simpler, broader query — or "
-                        "do NOT call the tool to decline the photo."
-                    ),
-                    tool=FIND_PHOTO_TOOL,
-                    temperature=0.6,
-                    max_tokens=256,
-                )
-            except Exception:  # noqa: BLE001
-                return None
-            shortlist = await search_photo_candidates(str(args.get("query") or "").strip(), orientation, args.get("min_width"))
-        if not shortlist:
-            return None
-
-        # Phase B — the LLM picks from the shortlist it now sees.
-        try:
-            pick_args = await call_llm_for_tool(
-                agent_role="designer",
-                system_prompt=_MEDIA_DIRECTOR_PICK,
-                user_prompt=user + "\n\nSearch results:\n" + format_shortlist(shortlist),
-                tool=CHOOSE_PHOTO_TOOL,
-                temperature=0.4,
-                max_tokens=128,
-            )
-        except Exception:  # noqa: BLE001 — declined to pick
-            return None
-        chosen = pick_candidate(shortlist, pick_args.get("index"))
-        if not chosen:
-            return None
-        image = await download_photo(chosen)
-        if not image:
-            return None
-        return {"kind": "photo", "image": image, "candidate": chosen}
-
-    media = await post_cached(state.get("_task_id", ""), "designer_media", loader)
-    if not media:
+    # User media already present for this slide (auto-distributed) — skip.
+    slide_images = (state.get("_slide_images") or {}).get(fmt_id)
+    if slide_images is not None and slide_images:
+        state["_designer_media_applied"] = True
+        return
+    if state.get("images") and kind != "illustration":
         return
 
+    title = state.get("title", "")
+    fmt_id = state.get("_processing_format_id", "")
+    category = state.get("category", "")
+    ground = state.get("ground", "white")
+    orientation = (
+        "landscape" if fmt.width > fmt.height
+        else ("portrait" if fmt.height > fmt.width else "square")
+    )
+
     state["_designer_media_applied"] = True
-    if media.get("kind") == "photo":
+
+    if kind == "illustration":
+        from app.agents.orchestrator.post_cache import post_cached
+        from app.services.media_plan import execute_slide_illustration
+
+        async def ill_loader() -> str:
+            return execute_slide_illustration(
+                plan,
+                seed=f"{title or ''}|illustration|{fmt_id}",
+                ground=ground,
+                category=category,
+                api_style=state.get("illustration_style") or "",
+            )
+
+        fig = await post_cached(state.get("_task_id", ""), f"illustration:{fmt_id}", ill_loader)
+        if fig:
+            state["_designer_figure"] = fig
+        return
+
+    if kind == "photo":
+        from app.agents.orchestrator.post_cache import post_cached
+        from app.services.media_plan import execute_slide_photo
+
+        async def photo_loader() -> dict | None:
+            return await execute_slide_photo(
+                plan, orientation, seed=f"{title or ''}|photo|{fmt_id}"
+            )
+
+        media = await post_cached(state.get("_task_id", ""), f"photo:{fmt_id}", photo_loader)
+        if not media:
+            return
         image = media["image"]
         candidate = media.get("candidate") or {}
         images = list(state.get("images") or [])
@@ -267,8 +197,6 @@ async def _designer_media_director(state: GenerationState, fmt) -> None:
             "credit": candidate.get("attribution", ""),
         })
         state["media_credits"] = credits
-    elif media.get("kind") == "illustration":
-        state["_designer_figure"] = media["figure"]
 
 
 async def designer_node_single(state: GenerationState) -> dict:
@@ -334,7 +262,13 @@ async def designer_node_single(state: GenerationState) -> dict:
     # Auto media (photo/illustration) may add to state["images"] before the
     # image block is assembled below.
     await _designer_media_director(state, fmt)
-    images_list = state.get("images", [])
+    images_list = list(state.get("images", []))
+    # Per-slide user images (auto-distributed in the graph) take precedence for
+    # this slide; single formats fall back to the post-wide list.
+    fmt_id = state.get("_processing_format_id", "")
+    slide_images = (state.get("_slide_images") or {}).get(fmt_id)
+    if slide_images is not None:
+        images_list = list(slide_images) or images_list
 
     # Resolved design decisions (deterministic — set upstream, not by the LLM)
     ground = state.get("ground", "white")

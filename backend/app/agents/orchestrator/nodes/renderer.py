@@ -82,7 +82,10 @@ async def renderer_node_single(state: GenerationState) -> dict:
     task = format_tasks.get(fmt_id, {})
     html = task.get("html", "")
     design_tokens = state.get("design_tokens", DEFAULT_TOKEN_VALUES)
-    images = state.get("images", [])
+    # Per-slide user images (auto-distributed in the graph); fall back to the
+    # post-wide list for single formats.
+    slide_images = (state.get("_slide_images") or {}).get(fmt_id)
+    images = slide_images if slide_images is not None else state.get("images", [])
     logo = state.get("logo", "")
 
     if not html:

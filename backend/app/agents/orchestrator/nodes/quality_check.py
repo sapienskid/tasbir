@@ -354,7 +354,11 @@ async def quality_check_node_single(state: GenerationState) -> dict:
 
     # Step 1: Inject tokens, fonts, KaTeX, and images into HTML
     log.info("[verifier] Rendering %s to PNG for visual audit", fmt_id)
-    images_list = state.get("images", [])
+    # Per-slide user images (auto-distributed in the graph); fall back to the
+    # post-wide list for single formats — mirrors renderer_node_single so the
+    # preview matches the real artifact.
+    slide_images = (state.get("_slide_images") or {}).get(fmt_id)
+    images_list = slide_images if slide_images is not None else state.get("images", [])
     logo = state.get("logo", "")
     html_with_tokens = inject_tokens_into_html(html, design_tokens)
     di_config = state.get("design_instruction") or {}

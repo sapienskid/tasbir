@@ -13,6 +13,7 @@ nested dict state through a shared checkpointer.
 
 import copy
 import logging
+import re
 from collections.abc import Awaitable, Callable
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -187,9 +188,28 @@ async def process_all_formats_node(state: GenerationState) -> dict:
 
     log.info("[graph] Processing %d format(s)/slide(s) in parallel", len(runnable))
 
+    # Auto-distribute user images across carousel slides (image i → slide i,
+    # wrapping). Single formats keep the full image list.
+    all_images = list(state.get("images") or [])
+    slide_images: dict[str, list[dict]] = {}
+    for i, sid in enumerate(runnable):
+        if is_carousel(sid):
+            if all_images:
+                slide_images[sid] = [all_images[i % len(all_images)]]
+        else:
+            if all_images:
+                slide_images[sid] = all_images
+
     base_state = dict(state)
     base_state["format_tasks"] = format_tasks
     base_state["slide_context"] = slide_context
+    base_state["_slide_images"] = slide_images
+
+    # One structured media plan decides media for every slide (cached once per
+    # post). Slides already filled by a user image are skipped inside the plan.
+    from app.services.media_plan import build_media_plan
+
+    base_state["media_plan"] = await build_media_plan(base_state)
 
     results = await asyncio.gather(
         *(_run_format_chain(base_state, fmt_id) for fmt_id in runnable)
@@ -210,6 +230,36 @@ async def process_all_formats_node(state: GenerationState) -> dict:
     merged_state["verification"] = verification
 
     sequence = await _run_sequence_check(merged_state)
+
+    # Bounded duplicate-media retry: if two+ slides share the same image/SVG,
+    # force the non-first slides to 'none' (drop the dup), clear their media
+    # caches, and re-run just those branches. One pass, deterministic — no
+    # extra LLM planning call.
+    dup_slides = _duplicate_media_slides(merged_state)
+    if dup_slides:
+        log.warning("[graph] duplicate media on %s — forcing distinct media", dup_slides)
+        from app.agents.orchestrator.post_cache import post_cache_drop
+
+        # Drop this task's cached media so the retried branches recompute
+        # (a plan entry of 'none' then yields no media instead of the dup).
+        post_cache_drop(base_state.get("_task_id", ""))
+        plan = dict(base_state.get("media_plan") or {})
+        for sid in dup_slides:
+            plan[sid] = {"kind": "none"}
+        retry_base = dict(base_state)
+        retry_base["media_plan"] = plan
+        retry_results = await asyncio.gather(
+            *(_run_format_chain(retry_base, sid) for sid in dup_slides)
+        )
+        for r in retry_results:
+            merged_tasks.update(r.get("format_tasks", {}))
+            verification.update(r.get("verification", {}))
+            retry_count.update(r.get("retry_count", {}))
+            media_credits.extend(r.get("media_credits") or [])
+        merged_state["format_tasks"] = merged_tasks
+        merged_state["verification"] = verification
+        sequence = await _run_sequence_check(merged_state)
+
     return {
         "format_tasks": merged_tasks,
         "verification": verification,
@@ -217,6 +267,30 @@ async def process_all_formats_node(state: GenerationState) -> dict:
         "sequence_check": sequence,
         "media_credits": media_credits,
     }
+
+
+def _duplicate_media_slides(state: GenerationState) -> list[str]:
+    """Return carousel slide ids that share the same embedded media signature.
+
+    The FIRST slide of each duplicate group is kept; the rest are returned for
+    a forced 'none' retry. A media signature is the base64 data URI embedded in
+    the slide's HTML (images + composed SVG figures).
+    """
+    from collections import defaultdict
+
+    slide_context = state.get("slide_context") or {}
+    sig_to_slides: dict[str, list[str]] = defaultdict(list)
+    for sid in slide_context:
+        html = (state.get("format_tasks", {}).get(sid) or {}).get("html", "") or ""
+        for match in re.finditer(r"data:image/[^;]+;base64,([A-Za-z0-9+/=]+)", html):
+            sig = match.group(1)[:64]
+            sig_to_slides[sig].append(sid)
+    dup: list[str] = []
+    for sids in sig_to_slides.values():
+        unique = sorted(set(sids))
+        if len(unique) > 1:
+            dup.extend(unique[1:])
+    return dup
 
 
 async def _run_sequence_check(state: GenerationState) -> dict:
@@ -253,6 +327,23 @@ async def _run_sequence_check(state: GenerationState) -> dict:
             html = (state.get("format_tasks", {}).get(sid) or {}).get("html", "") or ""
             if f"{idx}/{total}" not in html:
                 warnings.append(f"{sid}: no '{idx}/{total}' slide counter found")
+
+    # Duplicate-media guard: the SAME image/SVG figure on 2+ slides is a hard
+    # QC failure (the old one-photo-per-post bug). Signatures are the base64
+    # data URIs embedded in each slide's HTML.
+    media_by_sig: dict[str, list[str]] = defaultdict(list)
+    for base, slides in by_base.items():
+        for sid, _ in slides:
+            html = (state.get("format_tasks", {}).get(sid) or {}).get("html", "") or ""
+            for match in re.finditer(r'data:image/[^;]+;base64,([A-Za-z0-9+/=]+)', html):
+                sig = match.group(1)[:64]
+                media_by_sig[sig].append(sid)
+    for sig, sids in media_by_sig.items():
+        if len(sids) > 1:
+            issues.append(
+                f"Duplicate media detected across slides: {', '.join(sorted(sids))} "
+                "share the same image — each slide must have distinct media"
+            )
 
     result: dict = {
         "ok": not issues,

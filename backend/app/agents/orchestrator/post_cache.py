@@ -43,3 +43,19 @@ def post_cache_clear(task_id: str) -> None:
     """Drop a task's cached media (called when the task completes/fails)."""
     if task_id in _cache:
         del _cache[task_id]
+
+
+def post_cache_drop(task_id: str, key: str | None = None) -> None:
+    """Drop one (or all) cached media entries for a task.
+
+    Used by the duplicate-media retry: the retried slide must recompute its
+    media instead of reusing the cached (duplicated) result.
+    """
+    if task_id not in _cache:
+        return
+    if key is None:
+        _cache.pop(task_id, None)
+        return
+    entry = _cache[task_id]
+    if isinstance(entry, dict):
+        entry.pop(key, None)

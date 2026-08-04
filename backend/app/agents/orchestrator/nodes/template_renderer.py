@@ -48,35 +48,31 @@ _PHOTO_CAP = 3  # max find_photo LLM calls per post
 
 
 async def _get_post_illustration(state: GenerationState, ground: str, seed: str) -> str:
-    """Return this slide/format's illustration (LLM director, cached per slide).
+    """Return this slide/format's illustration from the media plan (cached).
 
-    Runs the illustration director (the unified ``illustrate`` tool — Anthropic
-    procedural or vendored CC0 hand-drawn kits) once per carousel slide (cached
-    per format id) so each slide may get its own figure — the director decides
-    a cover figure and "necessary" interior figures, or declines.
+    The media plan (built once per post by the media-plan director) decides
+    which slides get an illustration and with what style/motifs. This executes
+    the plan entry for the current slide, offline, cached per slide id.
     """
     cached = state.get(_ILLUSTRATION_CACHE_KEY)
     if cached:
         return cached
 
-    from app.agents.orchestrator.post_cache import post_cached
-
     fmt_id = state.get("_processing_format_id", "")
+    plan = (state.get("media_plan") or {}).get(fmt_id) or {}
+    if plan.get("kind") != "illustration":
+        return ""
+
+    from app.agents.orchestrator.post_cache import post_cached
+    from app.services.media_plan import execute_slide_illustration
 
     async def loader() -> str:
-        title = state.get("title", "")
-        task = (state.get("format_tasks") or {}).get(fmt_id, {})
-        copy = _parse_copy(task.get("copy", ""))
-        category = state.get("category", "")
-        from app.services.illustration import illustration_via_tool
-
-        return await illustration_via_tool(
-            agent_role="designer",
-            title=title,
-            headline=copy.get("headline", ""),
-            category=category,
+        return execute_slide_illustration(
+            plan,
+            seed=f"{seed or ''}|illustration|{fmt_id}",
             ground=ground,
-            seed=f"{title or ''}|illustration|{fmt_id}",
+            category=state.get("category", ""),
+            api_style=state.get("illustration_style") or "",
         )
 
     svg = await post_cached(state.get("_task_id", ""), f"illustration:{fmt_id}", loader) or ""
@@ -92,46 +88,22 @@ def _orientation_for(fmt) -> str:
     return "square"
 
 
-_PHOTO_DIRECTOR_SEARCH = (
-    "You are the image director for a strict monochrome editorial design "
-    "system. A photo is OPTIONAL — add one only if it genuinely strengthens "
-    "this post (minimal, typographic, architectural, texture subjects work "
-    "best). If you decide a photo helps, call find_photo with a SHORT, BROAD "
-    "query (1-3 words). If no photo helps, do NOT call the tool. Photos "
-    "render grayscale with a small credit caption."
-)
-
-_PHOTO_DIRECTOR_SEARCH_REQUIRED = (
-    "You are the image director for a strict monochrome editorial design "
-    "system. This slide's layout REQUIRES a photo. Call find_photo with a "
-    "SHORT, BROAD query (1-3 words) matching the post's subject, then review "
-    "the shortlist and call choose_photo with the best index. If the first "
-    "search is poor, try one simpler query. Do not decline unless no photo "
-    "can be found. Photos render grayscale with a small credit caption."
-)
-
-_PHOTO_DIRECTOR_PICK = (
-    "You are the image director for a strict monochrome editorial design "
-    "system. A shortlist of photo candidates is provided below. Call "
-    "choose_photo with the index of the single best fit for the post. If none "
-    "of them work, do NOT call the tool (decline the photo)."
-)
-
-
 async def _get_post_photo(state: GenerationState, orientation: str, required: bool = False) -> dict | None:
-    """Return the post's shared auto-photo: {image, credit, candidate}.
+    """Return the slide's auto-photo per the media plan: {image, credit, candidate}.
 
-    Runs the LLM photo director ONCE per post (shared per-post cache) in a
-    bounded two-phase flow: the model searches via ``find_photo`` (one retry if
-    the first query finds nothing), then sees the shortlist and picks via
-    ``choose_photo``. Nothing is chosen deterministically by the pipeline. When
-    ``required`` the layout depends on the photo (media templates) so the model
-    is instructed to search rather than decline; a still-empty result means no
-    photo (the caller falls back to a text template).
+    The media plan decides which slides get a photo (and the query). This
+    executes the plan entry for the current slide — search + LLM pick +
+    SSRF-guarded download — cached per slide. ``required`` (media templates)
+    falls back to a plain search for the slide's headline when the plan has no
+    photo, so a media layout is never a broken half-image.
     """
     cached = state.get(_PHOTO_CACHE_KEY)
     if cached:
         return cached
+
+    fmt_id = state.get("_processing_format_id", "")
+    plan = (state.get("media_plan") or {}).get(fmt_id) or {}
+    query = str(plan.get("query") or "") if plan.get("kind") == "photo" else ""
 
     from app.agents.orchestrator.post_cache import post_cached
 
@@ -141,11 +113,12 @@ async def _get_post_photo(state: GenerationState, orientation: str, required: bo
             return None
 
         title = state.get("title", "")
-        task = (state.get("format_tasks") or {}).get(state.get("_processing_format_id", ""), {})
+        task = (state.get("format_tasks") or {}).get(fmt_id, {})
         copy = _parse_copy(task.get("copy", ""))
         category = state.get("category", "")
 
         from app.services.llm import call_llm_for_tool
+        from app.services.media_plan import execute_slide_photo
         from app.services.tools.photo import (
             CHOOSE_PHOTO_TOOL,
             FIND_PHOTO_TOOL,
@@ -165,73 +138,65 @@ async def _get_post_photo(state: GenerationState, orientation: str, required: bo
         def _query(args: dict) -> str:
             return str(args.get("query") or "").strip()
 
-        search_system = _PHOTO_DIRECTOR_SEARCH if not required else _PHOTO_DIRECTOR_SEARCH_REQUIRED
+        # Preferred path: execute the media plan's photo entry.
+        if query:
+            result = await execute_slide_photo(
+                plan, orientation, seed=f"{title or ''}|photo|{fmt_id}"
+            )
+            if result:
+                return result
+            # Plan photo failed to materialize — retry with the fallback below.
 
-        # Phase A — decide + search (one bounded retry on an empty result).
+        # Fallback (required media templates only): a bounded one-shot search.
+        if not required or (state.get(_PHOTO_CALLS_KEY) or 0) >= _PHOTO_CAP:
+            return None
+        state[_PHOTO_CALLS_KEY] = (state.get(_PHOTO_CALLS_KEY) or 0) + 1
         try:
             args = await call_llm_for_tool(
                 agent_role="designer",
-                system_prompt=search_system,
+                system_prompt=(
+                    "You are the image director for a strict monochrome editorial "
+                    "design system. This slide's layout REQUIRES a photo. Call "
+                    "find_photo with a SHORT, BROAD query (1-3 words) matching the "
+                    "post's subject, then review the shortlist and call choose_photo "
+                    "with the best index. If the first search is poor, try one "
+                    "simpler query. Do not decline unless no photo can be found."
+                ),
                 user_prompt=user,
                 tool=FIND_PHOTO_TOOL,
                 temperature=0.5,
                 max_tokens=128,
             )
-        except Exception as e:  # noqa: BLE001 — model declined or failed
-            log.info("[template] photo director declined/failed (%s)", e)
+        except Exception:  # noqa: BLE001 — declined or failed
             return None
         if not _query(args):
             return None
-        if (state.get(_PHOTO_CALLS_KEY) or 0) < _PHOTO_CAP:
-            state[_PHOTO_CALLS_KEY] = (state.get(_PHOTO_CALLS_KEY) or 0) + 1
         shortlist = await search_photo_candidates(_query(args), orientation, args.get("min_width"))
-        if not shortlist and (state.get(_PHOTO_CALLS_KEY) or 0) < _PHOTO_CAP:
-            state[_PHOTO_CALLS_KEY] = (state.get(_PHOTO_CALLS_KEY) or 0) + 1
-            retry_user = user + (
-                "\n[NOTE] The previous query returned no photos. Call find_photo "
-                "once more with a simpler, broader query — or do NOT call the "
-                "tool to decline the photo."
-            )
-            try:
-                args = await call_llm_for_tool(
-                    agent_role="designer",
-                    system_prompt=search_system,
-                    user_prompt=retry_user,
-                    tool=FIND_PHOTO_TOOL,
-                    temperature=0.5,
-                    max_tokens=128,
-                )
-            except Exception:  # noqa: BLE001 — declined on retry
-                return None
-            shortlist = await search_photo_candidates(_query(args), orientation, args.get("min_width"))
         if not shortlist:
-            log.info("[template] photo director: no results after searches")
             return None
-
-        # Phase B — the LLM picks from the shortlist it now sees.
         try:
             pick_args = await call_llm_for_tool(
                 agent_role="designer",
-                system_prompt=_PHOTO_DIRECTOR_PICK,
-                user_prompt=user + "\n\nSearch results:\n" + format_shortlist(shortlist),
+                system_prompt=(
+                    "You are the image director for a strict monochrome editorial "
+                    "design system. Pick the single best photo from the shortlist."
+                ),
+                user_prompt=user + "\n\n" + format_shortlist(shortlist),
                 tool=CHOOSE_PHOTO_TOOL,
                 temperature=0.4,
-                max_tokens=128,
+                max_tokens=96,
             )
         except Exception:  # noqa: BLE001 — declined to pick
-            log.info("[template] photo director declined the shortlist")
             return None
         chosen = pick_candidate(shortlist, pick_args.get("index"))
         if not chosen:
-            log.info("[template] photo director invalid pick")
             return None
-
         image = await download_photo(chosen)
         if not image:
             return None
         return {"image": image, "credit": chosen.get("attribution", ""), "candidate": chosen}
 
-    result = await post_cached(state.get("_task_id", ""), "photo", loader)
+    result = await post_cached(state.get("_task_id", ""), f"photo:{fmt_id}", loader)
     if result:
         state[_PHOTO_CACHE_KEY] = result
     return result
@@ -317,7 +282,11 @@ async def template_node_single(state: GenerationState) -> dict:
     tid, entry = selected
     html = entry.get("html", "")
     image_slots = entry.get("image_slots") or []
-    has_user_images = bool(state.get("images", []))
+    # Per-slide user images (auto-distributed in the graph); fall back to the
+    # post-wide list for single formats.
+    slide_images = (state.get("_slide_images") or {}).get(fmt_id)
+    user_images = slide_images if slide_images is not None else state.get("images", [])
+    has_user_images = bool(user_images)
 
     def _hint_tags(e: dict) -> set[str]:
         return {str(h).lower() for h in e.get("hint_tags", [])}

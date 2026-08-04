@@ -130,6 +130,9 @@ class GenerationState(TypedDict):
     logo: Annotated[str, _keep_first]
     # User-selected template override (auto-fallback for other families)
     template_id: Annotated[str, _keep_first]
+    # Illustration style override: "compose" | "procedural" | DiceBear id | "".
+    # Empty → the media plan (or DS default) decides.
+    illustration_style: Annotated[str, _keep_first]
     # The design system's templates, loaded once before the graph runs
     ds_templates: Annotated[list[dict[str, Any]], _keep_first_list]
 
@@ -150,6 +153,11 @@ class GenerationState(TypedDict):
     # Carousel slides: {slide_id: {"index": i, "total": n}} (populated by
     # process_all_formats when expanding instagram-carousel).
     slide_context: Annotated[dict[str, dict], _merge_dicts]
+
+    # Auto-distributed user images per slide/format (image i → slide i).
+    _slide_images: Annotated[dict[str, list[dict]], _merge_dicts]
+    # The media plan: {target_id: {kind, ...}} (one LLM session per post).
+    media_plan: Annotated[dict[str, dict], _merge_dicts]
 
     # Output
     output_paths: Annotated[dict[str, str], _merge_dicts]
@@ -227,6 +235,7 @@ def initial_state(
         "design_instruction": design_instruction or {},
         "logo": logo,
         "template_id": template_id,
+        "illustration_style": str(kwargs.get("illustration_style") or ""),
         "ds_templates": ds_templates or [],
         "strategic_brief": {},
         "post_plan": {},
@@ -236,5 +245,7 @@ def initial_state(
         "verification": {},
         "retry_count": {},
         "slide_context": {},
+        "_slide_images": {},
+        "media_plan": {},
         "output_paths": {},
     }

@@ -153,6 +153,8 @@ def _patches():
               new=AsyncMock(return_value=b"PNG")),
         patch("app.agents.orchestrator.nodes.quality_check._call_vision_llm",
               new=AsyncMock(return_value='{"pass":true,"score":90,"issues":[],"critique":"ok"}')),
+        patch("app.services.media_plan.build_media_plan",
+              new=AsyncMock(return_value={})),
     )
 
 
