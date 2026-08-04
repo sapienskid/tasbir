@@ -76,17 +76,22 @@ def test_tool_schema_shape():
     assert fn["name"] == "illustrate"
     params = fn["parameters"]
     props = params["properties"]
-    # Curated style enum — includes anthropic + curated DiceBear styles.
+    # Style enum — compose (default) + procedural + the 9 curated DiceBear styles.
     assert "style" in props
     style_enum = props["style"]["enum"]
-    assert "anthropic" in style_enum
+    assert "compose" in style_enum
+    assert "procedural" in style_enum
     assert "open-peeps" in style_enum
     assert "open-doodles" not in style_enum  # removed
+    assert "anthropic" not in style_enum  # renamed to 'procedural'
     # Pinnable part params present.
     for part in ("facial_hair", "hair", "expression", "accessory"):
         assert part in props
     assert "theme" in params["required"]
     assert "ground" in props
+    assert "motif_names" in props
+    assert "archetype" in props
+    assert "highlights" in props
 
 
 @pytest.mark.asyncio
@@ -102,7 +107,7 @@ async def test_illustration_via_tool_failure_means_no_media(monkeypatch):
 @pytest.mark.asyncio
 async def test_illustration_via_tool_uses_args(monkeypatch):
     async def _fake(agent_role=None, system_prompt="", user_prompt="", tool=None, temperature=0.7, max_tokens=1024):
-        return {"theme": "orbit", "ground": "black"}
+        return {"style": "procedural", "theme": "orbit", "ground": "black"}
 
     monkeypatch.setattr("app.services.llm.call_llm_for_tool", _fake)
     svg = await illustration_via_tool(title="T", headline="H", ground="white", seed="s|illustration")

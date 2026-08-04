@@ -41,6 +41,25 @@ class GenerateRequest(BaseModel):
     # Keep the source content verbatim: carousels split the raw text across
     # slides (no LLM paraphrase) — ideal for essays, stories, and poems.
     verbatim: bool = False
+    # Illustration style for the media plan: "compose" (default), "procedural",
+    # or a curated DiceBear id (open-peeps, lorelei, notionists, bottts, blobs,
+    # initials, shapes, waves, landscape). Empty/null → media-plan LLM pick.
+    illustration_style: str = Field(default="", max_length=64)
+
+    @field_validator("illustration_style")
+    @classmethod
+    def _validate_illustration_style(cls, v: str) -> str:
+        if not v:
+            return ""
+        from app.services.tools.illustrator import ILLUSTRATE_TOOL
+
+        enum = ILLUSTRATE_TOOL["function"]["parameters"]["properties"]["style"]["enum"]
+        if v not in enum:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown illustration_style {v!r} — choose from {enum}",
+            )
+        return v
 
     @field_validator("tags")
     @classmethod

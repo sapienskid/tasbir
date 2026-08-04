@@ -127,7 +127,8 @@ EMOJI_RE = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF\uFE0F]")
 def test_curated_styles_register():
     from app.services.tools.peep_styles import CURATED_STYLE_IDS, CURATED_STYLES
 
-    assert len(CURATED_STYLES) >= 20
+    # The keep-list: 3 humans + 1 robot + 4 abstract + landscape (see ADR-0018).
+    assert len(CURATED_STYLES) == 9
     for sid in CURATED_STYLE_IDS:
         info = CURATED_STYLES[sid]
         assert info.id == sid
@@ -135,11 +136,23 @@ def test_curated_styles_register():
         assert info.description
 
 
+def test_keep_list_styles():
+    from app.services.tools.peep_styles import CURATED_STYLES
+
+    expected = {"open-peeps", "lorelei", "notionists", "bottts",
+                "blobs", "initials", "shapes", "waves", "landscape"}
+    assert set(CURATED_STYLES) == expected
+
+
 def test_excluded_styles_not_registered():
     from app.services.tools.peep_styles import CURATED_STYLES
 
-    # Gradients forbidden (Swiss rule), text-based, micro-canvas, CC BY.
-    for sid in ("initials", "identicon", "pixel-art", "fun-emoji", "avataaars", "planets", "constellation"):
+    # Gradients forbidden (Swiss rule), text-based, micro-canvas, CC BY,
+    # and the previously-curated styles pruned to the 9-style keep-list.
+    for sid in ("identicon", "pixel-art", "fun-emoji", "avataaars", "planets",
+                "constellation", "critters", "sprouts", "clay", "moods",
+                "rings", "stripes", "triangles", "squircles", "shape-grid",
+                "loops", "disco", "weave"):
         assert sid not in CURATED_STYLES
 
 

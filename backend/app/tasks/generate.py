@@ -97,6 +97,14 @@ def generate_task(self, task_id: str, source_data: dict):
         pipeline_input["template_id"] = source_data.get("template_id") or ""
         pipeline_input["verbatim"] = bool(source_data.get("verbatim"))
 
+        # Effective illustration style: API override → DS default → compose.
+        from app.services.design_systems import resolve_illustration_style
+
+        pipeline_input["illustration_style"] = resolve_illustration_style(
+            payload.get("design_instruction") or {},
+            str(source_data.get("illustration_style") or ""),
+        )
+
         # Download URL images / pass through uploaded base64 media.
         raw_images = source_data.get("images", [])
         pipeline_input["images"] = await prepare_images(raw_images) if raw_images else []

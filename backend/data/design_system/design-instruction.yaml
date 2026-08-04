@@ -15,6 +15,11 @@ style:
   icons: false
   emoji: false
   gradients: false
+  # Default illustration style for the media plan (DB-backed, Studio-editable):
+  # "compose" (unified scene composer — preferred), "procedural" (abstract),
+  # or a curated DiceBear id (open-peeps, lorelei, notionists, bottts, blobs,
+  # initials, shapes, waves, landscape). Empty → media-plan LLM picks.
+  illustration_style: "compose"
 
 type_voice:
   display: |
@@ -167,7 +172,7 @@ do_dont:
     - "Constrain subhead/body copy to the measure (~600px at 1080) — never full-width lines"
     - "Keep hairline rules exactly 1px: hairline on white-ground, hairline-inverted on black-ground"
     - "Use generous whitespace — flexible space is intentional, not empty by accident"
-    - "A single AI-generated illustration (Anthropic-style procedural OR a hand-drawn figure from the Open Peeps / Open Doodles kits) may fill the designated illustration slot — it must stay strictly monochrome (brand grays via var(--color-*)), and photos in the image slot render grayscale with a small credit caption"
+    - "A single composed illustration (the Scene Composer: custom hero + content-mapped line motifs + hand-drawn Highlights accents — OR a procedural abstract figure, OR a curated DiceBear figure) may fill the designated illustration slot — it must stay strictly monochrome (brand grays via var(--color-*), resolved through the design system tokens), and photos in the image slot render grayscale with a small credit caption"
   dont:
     - "No hue of any kind — not even 'just a little' blue, amber, or green"
     - "No icons or decorative motifs outside the designated illustration slot"

@@ -32,6 +32,7 @@ system_prompt: |
     "category": "One of the approved category labels",
     "ground": "white or black",
     "template_hint": "The closest AVAILABLE TEMPLATES id for the composition, or empty string",
+    "content_summary": "Key themes + searchable keywords from the content, ~150 words max. Concrete nouns and topic phrases (e.g. 'rocket launch, space, engineering, orbit, countdown'). NO colors, NO emoji, NO design terms — this feeds image search and illustration selection.",
     "platform_notes": {
       "instagram-square": "Strategic note specific to this platform",
       "linkedin-post": "Strategic note specific to this platform"

@@ -249,9 +249,15 @@ def build_template_context(
     slide_total: int = 0,
 ) -> dict:
     """Build the Jinja2 render context from typed copy + design decisions."""
-    # Deterministic index numeral (editorial device, varies per post).
-    digest = int(hashlib.sha1(seed.encode("utf-8")).hexdigest()[:6], 16) if seed else 1
-    loop_index = (digest % 27) + 1
+    # Index numeral (editorial device): the SLIDE NUMBER on carousel slides
+    # (i.e. `loop_index == slide_index`), a seeded random index on single
+    # posts. Templates that render a big number (index-numeral, portrait-index,
+    # story-costs) now always show the real slide position in a carousel.
+    if slide_index > 0:
+        loop_index = slide_index
+    else:
+        digest = int(hashlib.sha1(seed.encode("utf-8")).hexdigest()[:6], 16) if seed else 1
+        loop_index = (digest % 27) + 1
 
     # Deterministic decorative glyph texture — typographic, monochrome-safe, and
     # reproducible per post (seeded), but varies across posts. Avoids hardcoding

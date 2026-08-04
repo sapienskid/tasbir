@@ -43,6 +43,10 @@ class StrategicBrief(BaseModel):
     ground: str = ""
     template_hint: str = ""
     platform_notes: dict[str, str] = {}
+    # Key themes + searchable keywords (~150 words, no colors/emoji). Feeds the
+    # media-plan director so photo searches + illustration subjects match the
+    # actual content.
+    content_summary: str = ""
 
     @field_validator("tone")
     @classmethod
@@ -79,6 +83,13 @@ def _extract_json(text: str) -> dict:
             pass
 
     raise ValueError(f"Could not extract JSON from LLM output: {text[:200]}")
+
+
+def _fallback_summary(title: str, tags: list[str]) -> str:
+    """Deterministic content summary for the fallback brief (no LLM)."""
+    parts = [title.strip()] if title.strip() else []
+    parts += [t.strip() for t in tags if t.strip()]
+    return ", ".join(parts)[:300] or "General topic summary"
 
 
 async def strategist_node(state: GenerationState) -> dict:
@@ -236,6 +247,7 @@ async def strategist_node(state: GenerationState) -> dict:
             category=category,
             ground=ground,
             platform_notes={p: f"Optimized for {p}" for p in platforms},
+            content_summary=_fallback_summary(title, state.get("tags", [])),
         )
         return {
             "strategic_brief": fallback.model_dump(),
