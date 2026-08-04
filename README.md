@@ -57,7 +57,7 @@ cp .env.example .env            # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE
 docker compose up -d
 ```
 
-- Pulls `ghcr.io/sapienskid/tasbir-{api,playwright,frontend}` + `redis:7-alpine`
+- Pulls `ghcr.io/sapienskid/tasbir-{api,playwright}` + `redis:7-alpine` (the api image bundles the SPA)
 - Pin a release: `TASBIR_IMAGE_TAG=1.0.0` in `.env` (defaults to `:latest`)
 - Fork/re-brand: set `TASBIR_IMAGE_OWNER=your-org` (defaults to `sapienskid`)
 - Update: `docker compose up -d` (pulls new tags)
@@ -151,11 +151,11 @@ metadata, handle).
 bash scripts/install.sh          # full install / upgrade
 ```
 
-- The Studio SPA is built into the `frontend` image and staged into a shared
-  volume the API serves at **http://localhost:8000** (same origin).
-- Code is baked into the images (`--build` after code changes); config
-  (`config/prompts/`) and data (`data/design_system/`, `data/output/`) are
-  bind-mounted for config-driven control without rebuilds.
+- The Studio SPA is **built into the api image** and served at
+  **http://localhost:8000** (same origin) — no separate frontend container.
+- Code is baked into the images (the api image is a multi-stage build that
+  bundles the SPA); config and data live in named volumes for config-driven
+  control without rebuilds.
 - Dependencies are pinned in `backend/pyproject.toml`; the frontend uses a
   committed `pnpm-lock.yaml`.
 - The SQLite task DB (`backend/data/tasbir.db`) and generated outputs are
@@ -235,9 +235,9 @@ The simplest way is a compose **overlay** file that:
   exist — the other stack created it);
 - attaches only the `api` service to it, so n8n reaches Tasbir at
   `http://api:8000`;
-- keeps everything else (`redis`, `playwright`, `worker`, `beat`, `frontend`)
-  on Tasbir's private network — a server that already runs its own `redis` or
-  `crawl4ai` is unaffected;
+- keeps everything else (`redis`, `playwright`, `worker`, `beat`) on Tasbir's
+  private network — a server that already runs its own `redis` or `crawl4ai`
+  is unaffected;
 - still publishes port `8000` to the host for direct/cloudflared access.
 
 ```yaml

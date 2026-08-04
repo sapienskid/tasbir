@@ -454,7 +454,7 @@ tasbir/
 │       └── ...
 │
 ├── backend/
-│   ├── Dockerfile                       ← API/worker image
+│   ├── Dockerfile                       ← API/worker image (multi-stage; SPA baked in)
 │   ├── Dockerfile.playwright            ← Slim render service (chromium headless shell)
 │   ├── .dockerignore
 │   ├── pyproject.toml                   ← pinned Python deps (single source of truth)
@@ -569,7 +569,7 @@ tasbir/
 │       └── test_services/               ← Service tests (SSRF, sanitizer, retention, artifacts)
 │
 ├── frontend/
-│   ├── Dockerfile                       ← Node build → static output (staged into volume)
+│   ├── Dockerfile                       ← Node build stage for the api image (SPA source)
 │   ├── components.json                  ← shadcn/ui config (new-york, neutral)
 │   ├── package.json / pnpm-lock.yaml / vite.config.ts
 │   ├── src/
@@ -740,8 +740,8 @@ docker compose up -d            # pulls GHCR images + redis, starts the stack
 - `docker-compose.yml` — production (GHCR image pulls, standalone, own redis)
 - `docker-compose.dev.yml` — dev overlay (hot reload; source build)
 - `docker-compose.network.yml` — deploy joined to an existing network (reuses its redis)
-- The `frontend` service stages the SPA `dist/` into a shared volume that the
-  `api` service mounts at `/app/static`. `beat` runs the hourly
+- The Studio SPA is **built into the api image** (multi-stage backend Dockerfile)
+  and served at `/` — no separate frontend container. `beat` runs the hourly
   `retention.sweep_expired` sweep.
 
 ## API Endpoints

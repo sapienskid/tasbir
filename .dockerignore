@@ -1,0 +1,35 @@
+# Root build context exclusions for the multi-stage api image.
+# (Context is the repo root so the Dockerfile can build the frontend SPA.)
+
+# VCS
+.git/
+.gitignore
+
+# Python
+backend/.venv/
+backend/**/__pycache__/
+*.py[cod]
+backend/.pytest_cache/
+backend/.ruff_cache/
+backend/*.egg-info/
+
+# Runtime data — NOT baked into the image. The seed assets (backend/data/
+# design_system/) ship in the image so first boot can populate the named
+# volume; generated artifacts and the SQLite DB live only in the volume.
+backend/data/output/
+backend/data/backups/
+backend/data/tasbir.db
+backend/data/tasbir.db-shm
+backend/data/tasbir.db-wal
+backend/data/tasbir.db-journal
+backend/data/celerybeat-schedule
+backend/data/celerybeat-schedule.*
+
+# Dev artifacts
+backend/tests/
+backend/playground-results/
+backend/tailwindcss
+
+# Frontend — only build inputs are needed; deps/output are produced in-image.
+frontend/node_modules/
+frontend/dist/

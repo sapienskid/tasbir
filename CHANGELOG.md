@@ -7,6 +7,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **Single-image deploy** — the Studio SPA is built into the `tasbir-api`
+  image (multi-stage `backend/Dockerfile`) and served at `/`; the separate
+  `frontend` service, `frontend-dist` volume, and `tasbir-frontend` GHCR image
+  are removed. Compose files and CI updated accordingly.
 - **DiceBear part-based illustrations** — the `illustrate` tool's `open-peeps`/
   `open-doodles` styles (which selected from ~120 vendored whole-figure CC0
   SVGs) are replaced by a curated allowlist of **25 DiceBear styles** rendered

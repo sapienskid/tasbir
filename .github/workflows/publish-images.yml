@@ -8,9 +8,8 @@ name: Publish Docker Images to GHCR
 #   on manual dispatch:          -> :<branch-or-ref> + :latest
 #
 # Images:
-#   ghcr.io/<owner>/tasbir-api       (backend/Dockerfile — api, worker, beat)
-#   ghcr.io/<owner>/tasbir-playwright (backend/Dockerfile.playwright)
-#   ghcr.io/<owner>/tasbir-frontend   (frontend/Dockerfile)
+#   ghcr.io/<owner>/tasbir-api         (backend/Dockerfile — api, worker, beat; SPA baked in)
+#   ghcr.io/<owner>/tasbir-playwright  (backend/Dockerfile.playwright)
 
 on:
   push:
@@ -32,14 +31,11 @@ jobs:
       matrix:
         include:
           - name: tasbir-api
-            context: ./backend
+            context: ./
             dockerfile: ./backend/Dockerfile
           - name: tasbir-playwright
             context: ./backend
             dockerfile: ./backend/Dockerfile.playwright
-          - name: tasbir-frontend
-            context: ./frontend
-            dockerfile: ./frontend/Dockerfile
     steps:
       - uses: actions/checkout@v5
 
