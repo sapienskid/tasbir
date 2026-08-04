@@ -42,14 +42,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.1
+          run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
-      - name: Enable pnpm
-        working-directory: frontend
-        run: corepack enable
       - name: Install
         working-directory: frontend
         run: pnpm install --frozen-lockfile
