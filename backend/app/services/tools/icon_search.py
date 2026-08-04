@@ -117,8 +117,10 @@ ICON_SEARCH_TOOL: dict = {
             "Search the vendored line-icon library for content-relevant motifs. "
             "Pass 1-3 short keywords (e.g. 'launch rocket', 'book writing'). "
             "Returns a numbered shortlist of icon names. Use these names in an "
-            "illustrate call with style='compose' to compose a scene. Call again "
-            "with different keywords if the shortlist is weak."
+            "illustrate call with style='compose' to compose a scene. Search at "
+            "most 2-3 times TOTAL per planning session — once you have enough "
+            "motifs, STOP searching and output the final plan. Do not refine "
+            "queries more than once."
         ),
         "parameters": {
             "type": "object",

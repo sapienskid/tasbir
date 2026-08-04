@@ -8,6 +8,7 @@ chain when a model times out / 504s / is rate-limited.
 """
 
 import asyncio
+import json
 from collections.abc import AsyncIterator
 
 from app.config import get_settings
@@ -21,6 +22,10 @@ DEFAULT_MODEL = "gemini-3.1-flash-lite"
 # legitimately take 25-90s under load; the fallback chain handles models that
 # exceed it.
 LLM_TIMEOUT = 180.0
+
+# Loop guard for call_llm_tool_loop: if the model calls the same tool with the
+# same args this many times, force a final answer instead of looping forever.
+MAX_REPEAT_TOOL = 3
 
 
 def _model_for(agent_role: str) -> str:
@@ -264,8 +269,17 @@ async def call_llm_tool_loop(
     The loop runs until the model stops calling tools (its final text is
     returned) or ``max_turns`` is exhausted. Walks the same per-agent fallback
     model chain as :func:`call_llm`. Returns "" if no model produced an answer.
+
+    Loop guard: Gemini (and similar models) can fixate on one tool and keep
+    calling it without ever emitting a final answer (see the "infinite tool
+    call loop" reports). Two defenses:
+      - a same-tool-same-input counter (circuit breaker) — after
+        ``MAX_REPEAT_TOOL`` identical calls a system message forces the final
+        answer and one more model call runs;
+      - a hard turn budget — exceeding it returns "".
     """
     import logging
+    from collections import Counter
 
     from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
     from langchain_google_genai import ChatGoogleGenerativeAI
@@ -281,6 +295,7 @@ async def call_llm_tool_loop(
 
     messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
     last_error: Exception | None = None
+
     for model in models:
         llm = ChatGoogleGenerativeAI(
             model=model,
@@ -291,6 +306,7 @@ async def call_llm_tool_loop(
         )
         try:
             bound = llm.bind_tools(tools)
+            call_counts: Counter[str] = Counter()
             for _turn in range(max_turns):
                 response = await call_llm_with_retry(bound, messages)
                 tool_calls = getattr(response, "tool_calls", None) or []
@@ -302,11 +318,41 @@ async def call_llm_tool_loop(
                     args = call.get("args") or {}
                     handler = handlers.get(name)
                     if handler is None:
-                        messages.append(ToolMessage(content=f"Unknown tool: {name}", tool_call_id=call.get("id", "")))
+                        messages.append(
+                            ToolMessage(
+                                content=f"Unknown tool: {name}",
+                                tool_call_id=call.get("id", ""),
+                            )
+                        )
                         continue
                     result = await handler(args)
                     log.info("[llm] tool %r args=%r (model %s)", name, args, model)
                     messages.append(ToolMessage(content=result or "ok", tool_call_id=call.get("id", "")))
+                    # Circuit breaker: the same tool called repeatedly with the
+                    # same input is a loop, not progress. Force the final answer.
+                    key = f"{name}:{json.dumps(args, sort_keys=True, default=str)}"
+                    call_counts[key] += 1
+                    if call_counts[key] >= MAX_REPEAT_TOOL:
+                        log.warning(
+                            "[llm] tool %r called %d times identically — forcing final answer",
+                            name, call_counts[key],
+                        )
+                        messages.append(
+                            SystemMessage(
+                                content=(
+                                    "You appear to be looping — you keep calling the "
+                                    "same tool with the same input. STOP calling tools "
+                                    "now. Output your final answer as plain text (the "
+                                    "JSON plan) immediately."
+                                )
+                            )
+                        )
+                        forced = await call_llm_with_retry(bound, messages)
+                        if getattr(forced, "tool_calls", None):
+                            log.warning("[llm] forced final answer still emitted a tool call — giving up")
+                            return ""
+                        text = _response_text(forced)
+                        return text or ""
             log.warning("[LLM] tool loop exceeded %d turns (%s)", max_turns, agent_role)
             return ""
         except Exception as e:  # noqa: BLE001

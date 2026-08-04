@@ -33,7 +33,7 @@ _PLAN_CACHE_KEY = "media_plan"
 
 # Hard caps so a run-away plan can't exhaust the budget.
 MAX_TARGETS = 14
-MAX_TURNS = 12
+MAX_TURNS = 16
 MIN_WIDTH = 800
 
 
@@ -48,10 +48,14 @@ def _plan_system_prompt() -> str:
         "- Media is OPTIONAL — prefer none over weak media.\n"
         "- One media kind per slide. Never the same image/art on two slides.\n"
         "- Photos: SHORT, BROAD queries (1-3 words) from the slide's content.\n"
-        "- Illustrations: pick Lucide motif names via icon_search that match "
-        "the slide's subject; the composer arranges them.\n"
+        "- Illustrations: prefer style='procedural' (a single clean organic "
+        "mark — editorial and premium). Only use style='compose' for a SINGLE "
+        "bold hero element; NEVER scatter multiple icons or marks.\n"
         "- Cover slide (slide 1) may get the strongest media; interior slides "
-        "vary so the sequence breathes.\n\n"
+        "vary so the sequence breathes.\n"
+        "- STOP SEARCHING once you have enough. Call icon_search at most 2-3 "
+        "times total, then output the plan. Do NOT keep refining queries — "
+        "imperfect motifs are fine.\n\n"
         "Final answer: output ONLY a JSON array of plan entries:\n"
         '[{"target": "<slide_or_format_id>", "kind": "photo|illustration|none", '
         '"query": "1-3 word search (photo only)", "motif_names": ["icon", "..."], '
@@ -163,6 +167,12 @@ async def build_media_plan(state: GenerationState) -> dict:
         shortlist = await search_photo_candidates(q, orient, args.get("min_width"))
         return format_shortlist(shortlist)
 
+    async def _handler_photo_pick(args: dict) -> str:
+        # The model picked a photo from a shortlist; the plan entry records the
+        # choice and the branch downloads it later. Never hit "Unknown tool".
+        idx = args.get("index")
+        return f"Photo #{idx} recorded. Include this photo in the plan for the current slide."
+
     async def _handler_illustrate(args: dict) -> str:
         # The model may call illustrate to preview a style; we don't execute
         # media here — the plan entry records the choice and branches execute.
@@ -176,6 +186,7 @@ async def build_media_plan(state: GenerationState) -> dict:
         handlers = {
             ICON_SEARCH_TOOL["function"]["name"]: _handler_icon,
             FIND_PHOTO_TOOL["function"]["name"]: _handler_photo,
+            CHOOSE_PHOTO_TOOL["function"]["name"]: _handler_photo_pick,
             ILLUSTRATE_TOOL["function"]["name"]: _handler_illustrate,
         }
         tools = [FIND_PHOTO_TOOL, CHOOSE_PHOTO_TOOL, ICON_SEARCH_TOOL, ILLUSTRATE_TOOL]
@@ -186,7 +197,7 @@ async def build_media_plan(state: GenerationState) -> dict:
             tools=tools,
             handlers=handlers,
             max_turns=MAX_TURNS,
-            temperature=0.5,
+            temperature=0.8,
             max_tokens=2048,
         )
 

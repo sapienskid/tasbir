@@ -4,6 +4,7 @@ import re
 
 import pytest
 
+from app.services.tools.icon_search import ICON_SEARCH_TOOL
 from app.services.tools.illustrator import (
     compose_peep,
     run_illustrate,
@@ -113,6 +114,93 @@ async def test_call_llm_tool_loop_hits_turn_cap(monkeypatch):
         max_turns=2,
     )
     assert out == ""  # exhausted turns → no final answer
+
+
+@pytest.mark.asyncio
+async def test_call_llm_tool_loop_breaks_same_tool_loop(monkeypatch):
+    """Same tool+args repeated MAX_REPEAT_TOOL times forces a final answer."""
+    from types import SimpleNamespace
+
+    from langchain_core.messages import AIMessage
+
+    from app.services.llm import MAX_REPEAT_TOOL, call_llm_tool_loop
+
+    calls = {"n": 0}
+
+    async def fake_retry(bound, messages):
+        calls["n"] += 1
+        # Every identical icon_search call → tool call, except the forced final
+        # turn which must return text (the plan).
+        if calls["n"] <= MAX_REPEAT_TOOL:
+            return AIMessage(content="", tool_calls=[
+                {"name": "icon_search", "args": {"keywords": "rocket"}, "id": f"c{calls['n']}"}
+            ])
+        return AIMessage(content='[{"target": "x", "kind": "none"}]', tool_calls=[])
+
+    monkeypatch.setattr("app.services.llm.call_llm_with_retry", fake_retry)
+    async def _cfg(name):
+        return SimpleNamespace(model="test-model", fallback_models=[])
+
+    monkeypatch.setattr("app.services.agents.get_agent_config", _cfg)
+    monkeypatch.setattr(
+        "app.services.llm.get_settings",
+        lambda: SimpleNamespace(gemini_api_key="test-key"),
+    )
+
+    async def icon_handler(args):
+        return "[0] rocket"
+
+    out = await call_llm_tool_loop(
+        agent_role="designer",
+        system_prompt="sys",
+        user_prompt="user",
+        tools=[ICON_SEARCH_TOOL],
+        handlers={"icon_search": icon_handler},
+        max_turns=10,
+    )
+    # The loop forced a final answer after MAX_REPEAT_TOOL identical calls —
+    # it did NOT run all 10 turns or return "".
+    assert out.startswith('[{"target"')
+    assert calls["n"] == MAX_REPEAT_TOOL + 1
+
+
+@pytest.mark.asyncio
+async def test_call_llm_tool_loop_forced_answer_loop_gives_up(monkeypatch):
+    """If even the forced final turn calls a tool, return ""."""
+    from types import SimpleNamespace
+
+    from langchain_core.messages import AIMessage
+
+    from app.services.llm import call_llm_tool_loop
+
+    async def always_tool(bound, messages):
+        return AIMessage(content="", tool_calls=[
+            {"name": "icon_search", "args": {"keywords": "x"}, "id": "c"}
+        ])
+
+    monkeypatch.setattr("app.services.llm.call_llm_with_retry", always_tool)
+    async def _cfg(name):
+        return SimpleNamespace(model="test-model", fallback_models=[])
+
+    monkeypatch.setattr("app.services.agents.get_agent_config", _cfg)
+    monkeypatch.setattr(
+        "app.services.llm.get_settings",
+        lambda: SimpleNamespace(gemini_api_key="test-key"),
+    )
+
+    async def icon_handler(args):
+        return "[0] x"
+
+    out = await call_llm_tool_loop(
+        agent_role="designer",
+        system_prompt="sys",
+        user_prompt="user",
+        tools=[ICON_SEARCH_TOOL],
+        handlers={"icon_search": icon_handler},
+        max_turns=10,
+    )
+    assert out == ""
+
 
 HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}")
 NAMED_RE = re.compile(r'(?:fill|stroke)="(?:black|white)"')
