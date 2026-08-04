@@ -58,7 +58,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 ```
 
 - Pulls `ghcr.io/sapienskid/tasbir-{api,playwright,frontend}` + `redis:7-alpine`
-- Pin a release: `TASBIR_IMAGE_TAG=1.0.1` in `.env` (defaults to `:latest`)
+- Pin a release: `TASBIR_IMAGE_TAG=1.0.0` in `.env` (defaults to `:latest`)
 - Fork/re-brand: set `TASBIR_IMAGE_OWNER=your-org` (defaults to `sapienskid`)
 - Update: `docker compose -f docker-compose.ghcr.yml up -d` (pulls new tags)
 
@@ -148,8 +148,8 @@ bash scripts/install.sh          # full install / upgrade
 - Code is baked into the images (`--build` after code changes); config
   (`config/prompts/`) and data (`data/design_system/`, `data/output/`) are
   bind-mounted for config-driven control without rebuilds.
-- Dependencies are pinned in `backend/pyproject.toml` and
-  `backend/requirements.txt`; the frontend uses a committed `package-lock.json`.
+- Dependencies are pinned in `backend/pyproject.toml`; the frontend uses a
+  committed `package-lock.json`.
 - The SQLite task DB (`backend/data/tasbir.db`) and generated outputs are
   runtime data — gitignored. Outputs persist until the hourly TTL sweep
   (`OUTPUT_TTL_HOURS`); downloads are repeatable, `?consume=true` deletes on

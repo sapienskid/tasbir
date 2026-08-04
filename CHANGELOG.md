@@ -6,7 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Nothing pending.
+### Changed
+- **Dependencies updated to latest** — backend pinned to newest verified
+  versions in `pyproject.toml` (fastapi, uvicorn, langgraph/langchain stack,
+  google-genai, openai, pydantic, etc.); frontend bumped (react 19, vite 8,
+  typescript 7, react-router 7.18) with a regenerated `package-lock.json`.
+  `backend/requirements.txt` removed — `pyproject.toml` is the single source
+  of truth.
+- **Repo cleanup** — removed stale design doc, dead `requirements.txt`, empty
+  dirs, stray `subagent-*` worktrees, and local caches.
+- **Single `v1.0.0` release tag** — intermediate `v1.0.1`/`v1.0.2` tags and
+  GHCR image versions removed; images re-published multi-arch (amd64+arm64)
+  as `:1.0.0` + `:latest`.
 
 ## [1.0.0] — 2026-08-03
 

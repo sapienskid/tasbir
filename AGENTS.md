@@ -457,8 +457,7 @@ tasbir/
 │   ├── Dockerfile                       ← API/worker image
 │   ├── Dockerfile.playwright            ← Slim render service (chromium headless shell)
 │   ├── .dockerignore
-│   ├── pyproject.toml
-│   ├── requirements.txt
+│   ├── pyproject.toml                   ← pinned Python deps (single source of truth)
 │   │
 │   ├── config/
 │   │   └── prompts/
