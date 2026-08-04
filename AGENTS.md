@@ -158,6 +158,10 @@ Copywriter → per-platform parallel (asyncio.gather + Semaphore), structured co
 process_all_formats → per-platform, in parallel via asyncio.gather:
   │        Each format runs an isolated branch:
   │
+  │        Media Plan → one LLM session decides per-slide media (photo/
+  │        │           illustration/none); user images auto-distributed
+  │        │           image i → slide i; built once per post, cached
+  │        │
   │        Designer → Input: copy + brief + ground + category + footer + images
   │        │           + a deterministic layout archetype (composition varies per post)
   │        │         Output: HTML with CSS variables (var(--color-*), NOT brand hex)
@@ -176,8 +180,8 @@ process_all_formats → per-platform, in parallel via asyncio.gather:
   │            [fail + retry < 2] → loop back to Designer with critique
   │
   ▼
-sequence_check → carousels: deterministic (same dims, i/N counter) + opt-in
-  │             vision set-pass (sequence_audit)
+sequence_check → carousels: deterministic (same dims, i/N counter,
+  │             duplicate-media guard) + opt-in vision set-pass
   ▼
 END (success, HTML + PNG per format ready)
 ```
@@ -509,9 +513,13 @@ tasbir/
 │   │   ├── services/
 │   │   │   ├── llm.py                   ← Gemini/OpenRouter client (+ call_llm_for_tools)
 │   │   │   ├── vision.py                ← shared Gemini Vision helper (verifier + agents)
-│   │   │   ├── tools/                   ← LLM media tools (find_photo, illustrate)
+│   │   │   ├── media_plan.py            ← per-slide media plan (one LLM session/post)
+│   │   │   ├── tools/                   ← LLM media tools (find_photo, icon_search, illustrate)
 │   │   │   │   ├── photo.py             ← find_photo tool + providers fallback + embed
-│   │   │   │   ├── illustrator.py       ← unified illustrate tool + kit composition
+│   │   │   │   ├── icon_search.py       ← deterministic Lucide catalog search
+│   │   │   │   ├── composer.py          ← Scene Composer (22 archetypes, DS-following)
+│   │   │   │   ├── illustrator.py       ← unified illustrate tool + DiceBear recolor
+│   │   │   │   ├── peep_styles.py       ← 9-style DiceBear keep-list
 │   │   │   │   └── providers/           ← pexels.py / pixabay.py / wikimedia.py
 │   │   │   ├── tokens.py                ← Token/brand/campaign/platform YAML loader + semantic vars
 │   │   │   ├── design_instruction.py    ← Swiss style loader + font link builder + archetypes
@@ -661,8 +669,15 @@ restart needed. `Reset to seed` restores the YAML seed; the YAML files in
 3. Placement options: `auto`, `background`, `top-left`, `center`, `bottom-right`
 
 ### Auto-media (LLM tools)
-Templates and the Designer can pull media automatically via LLM tools — always
-**LLM-decided and LLM-driven** (never forced, no deterministic fallback pool):
+Media is decided by a **structured per-slide media plan**: one LLM tool-loop
+session per post (`call_llm_tool_loop`, bounded ~12 turns, cached via
+`app/agents/orchestrator/post_cache.py`) produces a JSON plan
+`{target: {kind: photo|illustration|none, query, style, archetype,
+motif_names, highlights, theme}}` for every slide/format. Slides already
+filled by a user image are marked `skip`. The plan is executed in parallel by
+the per-format branches; a declined/failed media call leaves the slot empty.
+Media is always **LLM-decided** (never forced, no deterministic fallback
+pool):
 - **`find_photo(query, orientation?, min_width?)`** — returns a numbered
   **shortlist** of stock-photo candidates (Pexels → Pixabay → Wikimedia
   Commons; unkeyed providers skipped); the LLM then calls **`choose_photo(index)`**
@@ -670,25 +685,39 @@ Templates and the Designer can pull media automatically via LLM tools — always
   grayscale with an attribution caption, and credits land on the task result
   as `media_credits`. Add a key via `PEXELS_API_KEY` / `PIXABAY_API_KEY`;
   Wikimedia needs none.
-- **`illustrate(style, theme, ground, facial_hair?, hair?, expression?,
-  accessory?)`** — unified illustration director. `style = "anthropic"` is the
-  procedural SVG generator; any **curated DiceBear style** (see
-  `app/services/tools/peep_styles.py` — 25 CC0/free styles across people,
-  creatures, faces, abstract shapes, landscape) is a part-based avatar rendered
-  via the official Python bindings (`dicebear-core`/`dicebear-styles`, fully
-  offline + deterministic). Output is recolored to `var(--color-*)` (default
-  `line` palette: bold 2-tone ink/paper). People/robot styles accept part pins
-  (`facial_hair`, `hair`, `expression`, `accessory` — e.g.
-  `facial_hair: "moustache3"`); abstract styles ignore pins.
+- **`icon_search(keywords)`** — deterministic search over the vendored
+  **Lucide** library (`data/icons/lucide/`, 1,756 ISC line icons + a catalog
+  built from each icon's JSON tags/categories). Returns a shortlist of icon
+  names; no LLM in the search itself.
+- **`illustrate(style, theme, ground, motif_names?, archetype?, highlights?,
+  facial_hair?, hair?, expression?, accessory?)`** — unified illustration
+  director. Styles:
+  - `compose` (default) — the **Scene Composer** (`app/services/tools/composer.py`):
+    a deterministic editorial figure built from a custom category **hero** SVG
+    (`illustrations/heroes/`: fountain-pen, wrench-gear, frame, spark, robot),
+    **Lucide motifs** (from `icon_search`), **Highlights** CC0 hand-drawn marks
+    (`illustrations/highlights/`, 117 arrows/underlines/sprinkles/loops/...),
+    and procedural geometry, laid out under one of **22 named composition
+    archetypes**. Colors resolve through `var(--ill-*)` → `var(--color-*)`, so
+    figures follow the active design system.
+  - `procedural` — the Anthropic-style abstract SVG generator (growth, flow,
+    focus).
+  - a curated **DiceBear** style (see `app/services/tools/peep_styles.py` —
+    9 keep-list styles: open-peeps, lorelei, notionists, bottts, blobs,
+    initials, shapes, waves, landscape), rendered offline via the Python
+    bindings and recolored to `var(--color-*)` (default `line` palette).
+    People/robot styles accept part pins (`facial_hair`, `hair`, `expression`,
+    `accessory`); abstract styles ignore pins.
 
-Triggers: a template with exactly one empty image slot and no user media runs
-a neutral photo director (it may decline); any template with
-`{{ illustration | safe }}` runs a neutral illustration director. LLM-designed
-posts get both via the media director. The director prompts are neutral ("add
-media only if it genuinely strengthens the post"), multi-turn tool use runs via
-`call_llm_tool_loop`, and results are cached once per post
-(`app/agents/orchestrator/post_cache.py`). A declined/failed media call leaves
-the slot empty.
+**Style precedence**: `POST /generate` `illustration_style` → media-plan LLM
+pick → the design system's `style.illustration_style` default → `compose`.
+The `illustration_style` API value is validated against the tool's style enum.
+
+The Strategist's typed brief now includes a `content_summary` (key themes +
+searchable keywords, ~150 words) that feeds the media plan, so search queries
+and motif choices reflect the actual content. Templates with
+`{{ illustration | safe }}` or an image slot render the plan's media for that
+slide.
 
 ### Adding a template
 Templates are DB-backed (v0.5) and scoped to a design system. Prefer the
@@ -763,6 +792,7 @@ docker compose up -d            # pulls GHCR images + redis, starts the stack
   "template_id": "square-editorial-stack",
   "ratio": "square",
   "sequence_audit": false,
+  "illustration_style": "compose",
   "images": [
     {
       "url": "https://example.com/image.png",
@@ -779,7 +809,11 @@ Requires `x-api-key` header. Rate-limited per key (default 30 req/min).
 `design_system_id` selects the brand system (default `default`); `template_id`
 locks a template for matching families (auto-fallback otherwise). Images may
 also be pre-embedded: `{data, mime, alt, description, placement}` (uploaded via
-`POST /uploads`).
+`POST /uploads`). `illustration_style` (optional) overrides the illustration
+style: `compose` (scene composer, default), `procedural` (abstract), or a
+curated DiceBear id (`open-peeps`, `lorelei`, `notionists`, `bottts`, `blobs`,
+`initials`, `shapes`, `waves`, `landscape`). For carousels, uploaded images are
+auto-distributed image i → slide i (wrapping).
 
 **Planner & carousels**: `platforms: ["auto"]` lets the planner choose the
 platform set and structure. For carousels, `slides` (2-10) and `ratio`

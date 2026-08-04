@@ -23,8 +23,10 @@ COPY backend/ .
 # Bake the SPA into the image at /app/static (served by the api at /).
 COPY --from=frontend-build /frontend/dist /app/static
 
-# Seed assets (backend/data/design_system/) ship inside the image so a fresh
-# named volume gets them on first boot. data/output is generated at runtime.
+# Seed assets (backend/data/design_system/ + the vendored data/icons/) ship
+# inside the image so a fresh named volume gets them on first boot and the
+# composer's icon library is always available offline. data/output is
+# generated at runtime.
 # The api/worker/beat containers run as root (0:0) by default so the named
 # volume is always writable; TASBIR_USER can override that in compose.
 RUN mkdir -p data/output

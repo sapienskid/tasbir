@@ -7,6 +7,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Per-slide media plan** — one LLM planning session per post decides each
+  slide's media (photo / illustration / none) via a structured plan
+  (`app/services/media_plan.py`), executed in parallel per slide. Slides
+  filled by a user image are skipped. Fixes the "same image on every slide"
+  defect (see ADR-0018).
+- **Unified Scene Composer** — `app/services/tools/composer.py` assembles a
+  deterministic editorial figure from custom category heroes
+  (`illustrations/heroes/`), Lucide motifs, Highlights CC0 hand-drawn marks,
+  DiceBear figures, and procedural geometry under **22 named composition
+  archetypes**. All colors resolve through `--ill-*` → `--color-*` tokens, so
+  figures follow the active design system.
+- **Vendored Lucide icon library** — 1,756 ISC line icons in
+  `data/icons/lucide/` with a generated `icons.yaml` catalog; `icon_search`
+  tool for deterministic content-mapped motif discovery.
+- **Vendored Highlights kit** — 117 CC0 hand-drawn SVG marks in
+  `illustrations/highlights/` (arrows, underlines, sprinkles, loops, ...).
+- **`content_summary` on the Strategist brief** — key themes + searchable
+  keywords that feed the media plan's queries and motif choices.
+- **`illustration_style`** — optional `POST /generate` field and a DB-backed
+  design-system default; precedence: API → media plan → DS default → `compose`.
+- **Big numeral = slide number** — `index-numeral`, `portrait-index`, and
+  `story-costs` templates show the real slide index on carousels.
+- **User-image auto-distribution** — carousel images are assigned image i →
+  slide i (wrapping), embedded per slide.
+- **Duplicate-media QC guard** — the sequence check fingerprints embedded
+  media per slide; identical media on 2+ slides is a hard issue with a bounded
+  retry.
+
+### Changed
+- **DiceBear pruned to a 9-style keep-list** — `open-peeps`, `lorelei`,
+  `notionists`, `bottts`, `blobs`, `initials`, `shapes`, `waves`, `landscape`.
+  The `illustrate` tool's `style` enum is now `compose` | `procedural` |
+  DiceBear id; the old `anthropic` alias maps to `procedural`.
+- **Media model** — per-post photo/illustration caching replaced by the
+  per-slide media plan; the designer/template media directors consume plan
+  entries.
 - **System export/import API** — `GET /api/system/export` snapshots the whole
   configuration (design systems, templates, platforms, fonts, agents, runtime
   settings) as one JSON document; `POST /api/system/import` upserts it back

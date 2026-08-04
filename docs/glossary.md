@@ -33,11 +33,18 @@ It makes posts recognizable.
 1080px canvas, scaled by width). A proper measure keeps lines readable and
 reads as premium editorial.
 
+**Media plan** — A structured per-slide decision produced by one LLM planning
+session per post: for every slide/format it chooses *photo*, *illustration*,
+or *none* (plus the concrete query / style / motif / archetype). Slides
+already filled by a user image are marked *skip*. The plan is cached once per
+post and executed in parallel by the per-format branches.
+
 **Media tools** — LLM-callable tools that source media for a post:
-`find_photo` (Pexels / Pixabay / Wikimedia Commons) and the unified
-`illustrate` director (Anthropic procedural SVG or vendored CC0 hand-drawn
-kits — Open Peeps / Open Doodles). Output is recolored/forced to the
-monochrome brand.
+`find_photo` (Pexels / Pixabay / Wikimedia Commons), `icon_search`
+(deterministic search over the vendored Lucide library), and the unified
+`illustrate` director (`compose` scene composer, `procedural` abstract SVG,
+or a curated DiceBear style). Output is recolored/forced to the monochrome
+brand through the `--ill-*` design-system tokens.
 
 **Media credits** — Provider, photographer, license, and credit string for
 every auto-placed photo, stored on the task result (see *Attribution
@@ -45,6 +52,11 @@ caption*).
 
 **Metadata style** — 20px Inter, weight 500, tracking +0.08em, uppercase,
 secondary gray. Used for the @handle and timestamps.
+
+**Motif** — A content-mapped Lucide line icon (e.g. `rocket`, `book`,
+`chart-bar`) chosen via `icon_search` and composed into a scene. Rendered with
+`stroke: currentColor` + `color: var(--ill-ink)` so it follows the design
+system.
 
 ## O
 **One-time download** — An opt-in delivery mode: `GET
@@ -67,6 +79,12 @@ demand (`?audit=true`).
 rejects excess requests with 429, protecting the LLM free-tier quota.
 
 ## S
+**Scene composer** — The deterministic engine that assembles an editorial
+figure from up to five sources — custom category hero SVG, a DiceBear figure,
+Lucide motifs, Highlights hand-drawn marks, and procedural geometry — under a
+named *composition archetype*. A pure function of its seed, so the same
+inputs always produce the same SVG.
+
 **SSRF guard** — Validation applied to every outbound image fetch: http/https
 only, loopback/link-local/metadata blocked, LAN (RFC1918/ULA) allowed, size
 and redirect caps enforced.
