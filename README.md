@@ -10,49 +10,55 @@ Self-hosted via Docker.
 > **For design decisions**: See [docs/adr/](docs/adr/) and [docs/glossary.md](docs/glossary.md).
 > **For releases**: See [CHANGELOG.md](CHANGELOG.md).
 
-## Quick Start (Install)
+## Quick Start (Production)
 
 Tasbir publishes its Docker images to **GitHub Container Registry**
 (`ghcr.io/sapienskid/tasbir-*`), built automatically by CI on tags (`v*` →
-versioned + `:latest`) and pushes to `main` (`:main`).
-
-```bash
-cp .env.example .env            # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE_KEY
-docker compose up -d
-```
-
-- Pulls `ghcr.io/sapienskid/tasbir-{api,playwright}` + `redis:7-alpine` (the api image bundles the SPA)
-- Pin a release: `TASBIR_IMAGE_TAG=1.0.0` in `.env` (defaults to `:latest`)
-- Fork/re-brand: set `TASBIR_IMAGE_OWNER=your-org` (defaults to `sapienskid`)
-- Update: `docker compose pull && docker compose up -d`
-
-Open http://localhost:8000 — the Tasbir Studio SPA is served by the API itself.
-API docs at http://localhost:8000/docs. Auth fails closed: every `/api/*`
-request needs `x-api-key` (set it in the Studio header dialog).
-
-> **LAN/self-hosted only.** Do not expose port 8000 to the public internet
-> without a TLS reverse proxy in front.
-
-## Tasbir Studio
-
-A React + Vite + shadcn/ui SPA served same-origin by FastAPI:
-- Task list with status polling and delete
-- Per-format Monaco HTML editor + live PNG preview + QC report
-- **Re-render** (edit → render → deterministic QC) and **Audit** (opt-in vision QC)
-- **Download PNG/HTML** (repeatable until the retention window; `?consume=true` deletes after download)
-- **Settings → Backup**: export/import the full configuration (design systems,
-  templates, platforms, fonts, agents, runtime settings) as one JSON file
-- API key stored in localStorage (`tasbir:apikey:v1`)
-
-Artifacts are **ephemeral**: they persist until the hourly TTL sweep, and an
-hourly sweep removes anything older than `OUTPUT_TTL_HOURS` (default 24h).
+versioned + `:latest`) and pushes to `main` (`:main`). Production deployments
+pull these prebuilt images; see [Deploying with Docker](#deploying-with-docker)
+below for the full recipe.
 
 ## Development
 
-Run the backend + frontend directly on the host (hot reload):
+Two ways to run locally — pick whichever you prefer. Both hot-reload.
+
+### Option A — Docker dev stack (recommended)
+
+`docker-compose.dev.yml` builds `api`/`worker`/`beat` from local source with
+**hot reload** (uvicorn `--reload` + watchfiles), pulls the heavyweight
+`playwright` and `redis` images prebuilt, and serves the Studio via the vite
+dev server (HMR):
 
 ```bash
-# Backend (API at :8000)
+cp .env.example .env            # set GEMINI_API_KEY + API_KEYS
+docker compose -f docker-compose.dev.yml up --build
+```
+
+**URLs (dev):** the UI and API are two separate servers.
+
+| What | URL |
+|------|-----|
+| Studio UI (vite, HMR) | http://localhost:5173 |
+| API (FastAPI) | http://localhost:8000 |
+| API docs (Swagger) | http://localhost:8000/docs |
+| Health check | http://localhost:8000/health |
+
+The vite dev server proxies `/api/*` → `api:8000`, so the UI at :5173 talks to
+the API transparently. In the dev image the SPA is **not** baked in, so
+`:8000` serves the API only (its root shows a pointer page). Production bakes
+the SPA into the image, so there `:8000` serves everything.
+
+- `./backend` is bind-mounted at `/app`, so **you own all data**: seed assets,
+  `data/tasbir.db`, and `data/output/` are host files — no root-owned artifacts.
+- Edit backend code → api reloads instantly; the worker auto-restarts; frontend
+  edits hot-reload through vite.
+- The playwright image is pulled from GHCR (rebuilding chromium locally is slow);
+  only `api`/`worker`/`beat` build from source.
+
+### Option B — host process (no Docker)
+
+```bash
+# Backend (API at :8000) — needs redis + a render service running
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"

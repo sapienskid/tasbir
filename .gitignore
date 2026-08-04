@@ -67,3 +67,4 @@ backend/tests/coverage/
 # ── Legacy / local-only artifacts ─────────────────────────────────────────
 backend/tailwindcss
 backend/playground-results/
+.pnpm-store/
