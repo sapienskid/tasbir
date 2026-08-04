@@ -1,3 +1,18 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Tasbir — production deploy from prebuilt GHCR images.
+#
+#   cp .env.example .env    # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE_KEY
+#   docker compose up -d
+#
+# Images are pulled from ghcr.io/<owner>/tasbir-* (built by the
+# .github/workflows/publish-images.yml workflow on tags / main).
+# Pin a release with TASBIR_IMAGE_TAG=1.0.1, or leave unset for :latest.
+#
+# Local development (hot reload, source build): use docker-compose.dev.yml.
+# Deploy joined to an existing network (reuse its redis): use
+# docker-compose.network.yml.
+# ─────────────────────────────────────────────────────────────────────────
+
 name: tasbir
 
 networks:
@@ -6,6 +21,7 @@ networks:
 
 volumes:
   frontend-dist:
+  tasbir_data:
 
 x-shared: &shared-env
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
@@ -40,9 +56,7 @@ services:
     mem_limit: 128m
 
   playwright:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.playwright
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-playwright:${TASBIR_IMAGE_TAG:-latest}
     restart: unless-stopped
     networks:
       - tasbir
@@ -60,9 +74,7 @@ services:
     mem_limit: 1.5g
 
   api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-api:${TASBIR_IMAGE_TAG:-latest}
     user: "1000:1000"
     restart: unless-stopped
     ports:
@@ -85,15 +97,12 @@ services:
       retries: 15
       start_period: 15s
     volumes:
-      - ./backend/config:/app/config
-      - ./backend/data:/app/data
+      - tasbir_data:/app/data
       - frontend-dist:/app/static
     mem_limit: 256m
 
   worker:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-api:${TASBIR_IMAGE_TAG:-latest}
     user: "1000:1000"
     restart: unless-stopped
     networks:
@@ -108,14 +117,11 @@ services:
       SERVICE: worker
     command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
     volumes:
-      - ./backend/config:/app/config
-      - ./backend/data:/app/data
+      - tasbir_data:/app/data
     mem_limit: 512m
 
   beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-api:${TASBIR_IMAGE_TAG:-latest}
     user: "1000:1000"
     restart: unless-stopped
     networks:
@@ -126,19 +132,16 @@ services:
     environment:
       <<: *shared-env
       SERVICE: beat
-      # Schedule file persists in the writable data volume (image /app is root-owned).
+      # Schedule file persists in the writable data volume.
       PYTHONPATH: /app
     working_dir: /app/data
     command: celery -A app.tasks.celery_app beat --loglevel=info
     volumes:
-      - ./backend/config:/app/config
-      - ./backend/data:/app/data
+      - tasbir_data:/app/data
     mem_limit: 128m
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-frontend:${TASBIR_IMAGE_TAG:-latest}
     restart: "no"
     networks:
       - tasbir

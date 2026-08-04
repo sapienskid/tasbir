@@ -43,7 +43,7 @@ request needs `x-api-key` (set it in the Studio header dialog).
 ```bash
 cp .env.example .env
 # Edit .env — set GEMINI_API_KEY + API_KEYS (and RENDER_SERVICE_KEY for Docker)
-docker compose up -d --build
+docker compose up -d
 ```
 
 ## Deploy from prebuilt images (no build, no repo on the server)
@@ -54,13 +54,21 @@ versioned + `:latest`) and pushes to `main` (`:main`).
 
 ```bash
 cp .env.example .env            # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE_KEY
-docker compose -f docker-compose.ghcr.yml up -d
+docker compose up -d
 ```
 
 - Pulls `ghcr.io/sapienskid/tasbir-{api,playwright,frontend}` + `redis:7-alpine`
 - Pin a release: `TASBIR_IMAGE_TAG=1.0.0` in `.env` (defaults to `:latest`)
 - Fork/re-brand: set `TASBIR_IMAGE_OWNER=your-org` (defaults to `sapienskid`)
-- Update: `docker compose -f docker-compose.ghcr.yml up -d` (pulls new tags)
+- Update: `docker compose up -d` (pulls new tags)
+
+Compose files at a glance:
+
+| File | Use |
+|---|---|
+| `docker-compose.yml` | **Production** — GHCR image pulls, standalone stack + its own redis |
+| `docker-compose.dev.yml` | **Development** — overlay on `docker-compose.yml` for hot reload |
+| `docker-compose.network.yml` | **Production joined to an existing network** (reuses its redis, no redis here) |
 
 ## Tasbir Studio
 

@@ -732,13 +732,17 @@ cd frontend && pnpm install && pnpm run dev   # proxies /generate,/tasks,/health
 The API requires `x-api-key`; set `API_KEYS=...` in `backend/.env`, then paste
 the key into the Studio header dialog (stored in localStorage under `tasbir:apikey:v1`).
 
-### Rebuilding for Docker
+### Deploying with Docker (production)
 ```bash
-docker compose up -d --build
+cp .env.example .env            # set GEMINI_API_KEY + API_KEYS + RENDER_SERVICE_KEY
+docker compose up -d            # pulls GHCR images + redis, starts the stack
 ```
-The `frontend` service builds the SPA and stages `dist/` into a shared volume
-that the `api` service mounts at `/app/static`. `beat` runs the hourly
-`retention.sweep_expired` sweep.
+- `docker-compose.yml` — production (GHCR image pulls, standalone, own redis)
+- `docker-compose.dev.yml` — dev overlay (hot reload; source build)
+- `docker-compose.network.yml` — deploy joined to an existing network (reuses its redis)
+- The `frontend` service stages the SPA `dist/` into a shared volume that the
+  `api` service mounts at `/app/static`. `beat` runs the hourly
+  `retention.sweep_expired` sweep.
 
 ## API Endpoints
 

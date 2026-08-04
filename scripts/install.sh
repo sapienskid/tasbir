@@ -7,7 +7,7 @@
 #   2. Clones or uses the local repo (if run from a checkout, stays in place)
 #   3. Creates .env from .env.example if missing, generating strong API keys
 #      (API_KEYS + RENDER_SERVICE_KEY) and prompting for GEMINI_API_KEY
-#   4. docker compose build + up -d
+#   4. docker compose pull + up -d
 #   5. Waits for /health and prints the summary
 #
 # Usage:
@@ -18,7 +18,7 @@
 # Env overrides:
 #   TASBIR_DIR    install directory (default ./tasbir when cloning)
 #   GEMINI_API_KEY  provide the key without prompting (non-interactive)
-#   TASBIR_SKIP_BUILD=1  reuse existing images / skip rebuild
+#   TASBIR_SKIP_PULL=1  reuse already-pulled images / skip the pull
 
 set -euo pipefail
 
@@ -85,12 +85,12 @@ if grep -q '^GEMINI_API_KEY=$' .env; then
   fi
 fi
 
-# ── 4. Build + start ───────────────────────────────────────────────────────
-if [[ "${TASBIR_SKIP_BUILD:-0}" != "1" ]]; then
-  say "Building images (first run downloads deps + Chromium, this takes a while)…"
-  docker compose build
+# ── 4. Pull + start ───────────────────────────────────────────────────────
+if [[ "${TASBIR_SKIP_PULL:-0}" != "1" ]]; then
+  say "Pulling images from GHCR (first run downloads the backend + render images)…"
+  docker compose pull
 else
-  warn "TASBIR_SKIP_BUILD=1 — reusing existing images"
+  warn "TASBIR_SKIP_PULL=1 — reusing already-pulled images"
 fi
 
 say "Starting the stack…"
