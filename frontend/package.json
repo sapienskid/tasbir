@@ -2,6 +2,7 @@
   "name": "tasbir-studio",
   "private": true,
   "version": "1.0.0",
+  "packageManager": "pnpm@10.18.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

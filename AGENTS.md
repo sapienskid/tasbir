@@ -572,7 +572,7 @@ tasbir/
 ├── frontend/
 │   ├── Dockerfile                       ← Node build → static output (staged into volume)
 │   ├── components.json                  ← shadcn/ui config (new-york, neutral)
-│   ├── package.json / vite.config.ts
+│   ├── package.json / pnpm-lock.yaml / vite.config.ts
 │   ├── src/
 │   │   ├── main.tsx / App.tsx           ← Router + SWRConfig + ThemeProvider
 │   │   ├── lib/
@@ -716,13 +716,13 @@ Studio flow (edit / save-as-template / from-image agent). Programmatically:
 cd backend && .venv/bin/python -m pytest
 
 # Frontend (typecheck + build)
-cd frontend && npm run build
+cd frontend && pnpm run build
 ```
 
 ### Running Tasbir Studio locally
 ```bash
 cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
-cd frontend && npm run dev   # proxies /generate,/tasks,/health → :8000
+cd frontend && pnpm install && pnpm run dev   # proxies /generate,/tasks,/health → :8000
 ```
 The API requires `x-api-key`; set `API_KEYS=...` in `backend/.env`, then paste
 the key into the Studio header dialog (stored in localStorage under `tasbir:apikey:v1`).

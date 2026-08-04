@@ -10,7 +10,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Dependencies updated to latest** — backend pinned to newest verified
   versions in `pyproject.toml` (fastapi, uvicorn, langgraph/langchain stack,
   google-genai, openai, pydantic, etc.); frontend bumped (react 19, vite 8,
-  typescript 7, react-router 7.18) with a regenerated `package-lock.json`.
+  typescript 7, react-router 7.18) with a regenerated `pnpm-lock.yaml`.
   `backend/requirements.txt` removed — `pyproject.toml` is the single source
   of truth.
 - **Repo cleanup** — removed stale design doc, dead `requirements.txt`, empty

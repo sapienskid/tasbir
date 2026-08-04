@@ -149,7 +149,7 @@ bash scripts/install.sh          # full install / upgrade
   (`config/prompts/`) and data (`data/design_system/`, `data/output/`) are
   bind-mounted for config-driven control without rebuilds.
 - Dependencies are pinned in `backend/pyproject.toml`; the frontend uses a
-  committed `package-lock.json`.
+  committed `pnpm-lock.yaml`.
 - The SQLite task DB (`backend/data/tasbir.db`) and generated outputs are
   runtime data — gitignored. Outputs persist until the hourly TTL sweep
   (`OUTPUT_TTL_HOURS`); downloads are repeatable, `?consume=true` deletes on

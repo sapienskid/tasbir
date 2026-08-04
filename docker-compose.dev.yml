@@ -44,6 +44,6 @@ services:
       - "5173:5173"
     environment:
       VITE_API_PROXY: http://api:8000
-    command: sh -c "npm run dev -- --host 0.0.0.0"
+    command: sh -c "corepack enable && pnpm run dev -- --host 0.0.0.0"
     volumes:
       - ./frontend:/app
