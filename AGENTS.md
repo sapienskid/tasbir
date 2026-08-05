@@ -514,10 +514,8 @@ tasbir/
 │   │   │   ├── llm.py                   ← Gemini/OpenRouter client (+ call_llm_for_tools)
 │   │   │   ├── vision.py                ← shared Gemini Vision helper (verifier + agents)
 │   │   │   ├── media_plan.py            ← per-slide media plan (one LLM session/post)
-│   │   │   ├── tools/                   ← LLM media tools (find_photo, icon_search, illustrate)
+│   │   │   ├── tools/                   ← LLM media tools (find_photo, illustrate)
 │   │   │   │   ├── photo.py             ← find_photo tool + providers fallback + embed
-│   │   │   │   ├── icon_search.py       ← deterministic Lucide catalog search
-│   │   │   │   ├── composer.py          ← Scene Composer (22 archetypes, DS-following)
 │   │   │   │   ├── illustrator.py       ← unified illustrate tool + DiceBear recolor
 │   │   │   │   ├── peep_styles.py       ← 9-style DiceBear keep-list
 │   │   │   │   └── providers/           ← pexels.py / pixabay.py / wikimedia.py
@@ -685,23 +683,17 @@ pool):
   grayscale with an attribution caption, and credits land on the task result
   as `media_credits`. Add a key via `PEXELS_API_KEY` / `PIXABAY_API_KEY`;
   Wikimedia needs none.
-- **`icon_search(keywords)`** — deterministic search over the vendored
-  **Lucide** library (`data/icons/lucide/`, 1,756 ISC line icons + a catalog
-  built from each icon's JSON tags/categories). Returns a shortlist of icon
-  names; no LLM in the search itself.
-- **`illustrate(style, theme, ground, motif_names?, archetype?, highlights?,
-  facial_hair?, hair?, expression?, accessory?)`** — unified illustration
-  director. Styles:
-  - `compose` (default) — the **Scene Composer** (`app/services/tools/composer.py`):
-    a deterministic editorial figure built from a custom category **hero** SVG
-    (`illustrations/heroes/`: fountain-pen, wrench-gear, frame, spark, robot),
-    **Lucide motifs** (from `icon_search`), **Highlights** CC0 hand-drawn marks
-    (`illustrations/highlights/`, 117 arrows/underlines/sprinkles/loops/...),
-    and procedural geometry, laid out under one of **22 named composition
-    archetypes**. Colors resolve through `var(--ill-*)` → `var(--color-*)`, so
-    figures follow the active design system.
-  - `procedural` — the Anthropic-style abstract SVG generator (growth, flow,
-    focus).
+- **`illustrate(style, theme, ground, facial_hair?, hair?, expression?,
+  accessory?)`** — unified illustration director. Styles:
+  - `procedural` (default) — the Anthropic-style abstract SVG generator
+    (`app/services/illustration.py`): a single clean organic mark from a
+    catalog of **~35 distinct archetypes** (carrier-sun, spiral-free, orbit,
+    diptych, column, cross, horizon, bounded-field, burst, stem, waves,
+    dot-grid, mountains, wedge, rhythm-bars, …). Every composition is a pure
+    function of its seed/theme, and **every figure is auto-fit into a safe
+    inner frame** (uniform scale + center) so it can never clip out of its
+    slot box or paint on top of the copy. Colors resolve through
+    `var(--color-*)` so figures follow the active design system.
   - a curated **DiceBear** style (see `app/services/tools/peep_styles.py` —
     9 keep-list styles: open-peeps, lorelei, notionists, bottts, blobs,
     initials, shapes, waves, landscape), rendered offline via the Python
@@ -709,8 +701,22 @@ pool):
     People/robot styles accept part pins (`facial_hair`, `hair`, `expression`,
     `accessory`); abstract styles ignore pins.
 
+The old `compose` **Scene Composer** (custom hero SVGs + Lucide motifs +
+Highlights hand-drawn kit) was **removed** — its scattered-icon output read as
+amateur clip-art, and three overlapping engines (compose / procedural /
+DiceBear) produced inconsistent figures. Now there are exactly two: procedural
+(abstract, default) and DiceBear (avatars). The vendored Lucide icons and
+Highlights kit were deleted from the repo.
+
+**Rendered-preview tool feedback**: when the media-plan director calls
+`illustrate`, the tool actually renders the figure and returns **structural
+feedback** — archetype, element count, the fitted bounding box, and whether it
+fits the safe frame — so the director can iterate to a distinct,
+non-overlapping composition before committing the plan. No more no-op
+"style accepted" stubs.
+
 **Style precedence**: `POST /generate` `illustration_style` → media-plan LLM
-pick → the design system's `style.illustration_style` default → `compose`.
+pick → the design system's `style.illustration_style` default → `procedural`.
 The `illustration_style` API value is validated against the tool's style enum.
 
 The Strategist's typed brief now includes a `content_summary` (key themes +
@@ -792,7 +798,7 @@ docker compose up -d            # pulls GHCR images + redis, starts the stack
   "template_id": "square-editorial-stack",
   "ratio": "square",
   "sequence_audit": false,
-  "illustration_style": "compose",
+  "illustration_style": "procedural",
   "images": [
     {
       "url": "https://example.com/image.png",
@@ -810,9 +816,9 @@ Requires `x-api-key` header. Rate-limited per key (default 30 req/min).
 locks a template for matching families (auto-fallback otherwise). Images may
 also be pre-embedded: `{data, mime, alt, description, placement}` (uploaded via
 `POST /uploads`). `illustration_style` (optional) overrides the illustration
-style: `compose` (scene composer, default), `procedural` (abstract), or a
-curated DiceBear id (`open-peeps`, `lorelei`, `notionists`, `bottts`, `blobs`,
-`initials`, `shapes`, `waves`, `landscape`). For carousels, uploaded images are
+style: `procedural` (abstract organic mark, default), or a curated DiceBear id
+(`open-peeps`, `lorelei`, `notionists`, `bottts`, `blobs`, `initials`,
+`shapes`, `waves`, `landscape`). For carousels, uploaded images are
 auto-distributed image i → slide i (wrapping).
 
 **Planner & carousels**: `platforms: ["auto"]` lets the planner choose the

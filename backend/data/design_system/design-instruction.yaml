@@ -16,9 +16,10 @@ style:
   emoji: false
   gradients: false
   # Default illustration style for the media plan (DB-backed, Studio-editable):
-  # "procedural" (Anthropic-style organic mark — clean, editorial, preferred),
-  # "compose" (single hero mark), or a curated DiceBear id. Empty → media-plan
-  # LLM picks. "compose" renders ONE bold hero element, never a scatter.
+  # "procedural" (Anthropic-style organic mark — clean, editorial, preferred)
+  # or a curated DiceBear id (people/robot/abstract). Empty → media-plan LLM
+  # picks. Every figure is auto-fit into a safe frame so it never clips or
+  # overlaps the copy.
   illustration_style: "procedural"
 
 type_voice:
@@ -172,7 +173,7 @@ do_dont:
     - "Constrain subhead/body copy to the measure (~600px at 1080) — never full-width lines"
     - "Keep hairline rules exactly 1px: hairline on white-ground, hairline-inverted on black-ground"
     - "Use generous whitespace — flexible space is intentional, not empty by accident"
-    - "A single composed illustration (the Scene Composer: custom hero + content-mapped line motifs + hand-drawn Highlights accents — OR a procedural abstract figure, OR a curated DiceBear figure) may fill the designated illustration slot — it must stay strictly monochrome (brand grays via var(--color-*), resolved through the design system tokens), and photos in the image slot render grayscale with a small credit caption"
+    - "A single composed illustration (a procedural abstract organic figure OR a curated DiceBear figure — never a scattered collage) may fill the designated illustration slot — it must stay strictly monochrome (brand grays via var(--color-*), resolved through the design system tokens), and photos in the image slot render grayscale with a small credit caption"
   dont:
     - "No hue of any kind — not even 'just a little' blue, amber, or green"
     - "No icons or decorative motifs outside the designated illustration slot"

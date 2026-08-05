@@ -1,6 +1,6 @@
-# ADR-0018 — Per-Slide Media Plan + Unified Scene Composer
+# ADR-0018 — Per-Slide Media Plan + Unified Illustration (procedural + DiceBear)
 
-- Status: accepted
+- Status: accepted (amended 2026-08-05 — Scene Composer removed)
 - Date: 2026-08-04
 - Related: ADR-0016 (media tools), ADR-0017 (attribution policy)
 
@@ -31,100 +31,100 @@ target and the strict Swiss monochrome rules (no hex, no emoji, only
 
 - **EnigmaKit** — a Figma community file (~600 hand-drawn elements); no
   downloadable SVG source. **Rejected**.
-- **Highlights by Outdraw** — CC0, 100+ hand-drawn SVG marks (arrows,
-  underlines, sprinkles, loops, spirals, doodles, blobs, donuts, lines).
-  Single-path `fill="black"` + `fill="none"` + one accent `#4633FF`; no
-  gradients/defs. Recolors cleanly through the existing luminance mapper.
-  **Adopted** as the hand-drawn accent layer.
-- **Lucide** — ISC, 1,756 consistent stroke icons (24×24, `fill="none"`
-  `stroke="currentColor"`), each shipping `<name>.json` with tags+categories.
-  **Adopted** as the content-mapped motif library. (Tabler/Phosphor — MIT —
-  are interchangeable if more coverage is ever wanted.)
-- **unDraw / Storyset** — custom license / freemium scenes with gradients and
-  color; conflict with `gradients: false`. **Rejected**.
+- **Highlights by Outdraw** — CC0, 100+ hand-drawn SVG marks. Originally
+  adopted as the hand-drawn accent layer; later **removed** with the Scene
+  Composer (see below).
+- **Lucide** — ISC, 1,756 consistent stroke icons. Originally adopted as the
+  content-mapped motif library; later **removed** with the Scene Composer.
+- **Anthropic-style procedural** — the clean three-layer abstract system
+  (accent field + organic carrier blob + naive gestural linework). Pure
+  deterministic SVG, monochrome-safe. **Adopted** as the default engine.
+- **DiceBear curated styles** — offline, per-seed deterministic avatars,
+  recolored to brand tokens. **Adopted** for human/robot posts only.
 
 ## Decision
 
 ### 1. Per-slide media plan (one LLM session per post)
 
-New `app/services/media_plan.py`: a multi-turn tool-calling session
-(`call_llm_tool_loop`, bounded ~12 turns) produces a **structured plan**
-`{target: {kind: photo|illustration|none, query, style, archetype,
-motif_names, highlights, theme}}` for every slide/format. The plan is cached
-once per post (`post_cached("media_plan")`), skipped for slides already
-filled by a user image, and executed in parallel by the per-format branches.
+`app/services/media_plan.py`: a multi-turn tool-calling session
+(`call_llm_tool_loop`, bounded 16 turns) produces a **structured plan**
+`{target: {kind: photo|illustration|none, style, theme}}` for every
+slide/format. The plan is cached once per post (`post_cached("media_plan")`),
+skipped for slides already filled by a user image, and executed in parallel by
+the per-format branches.
 
 - **Photo** → `execute_slide_photo` (search + LLM pick + SSRF-guarded download)
-- **Illustration** → `execute_slide_illustration` (offline scene compose)
+- **Illustration** → `execute_slide_illustration` (offline)
 - **None** → slide stays clean
 
-### 2. Unified Scene Composer
+### 2. Two illustration engines (Scene Composer REMOVED)
 
-New `app/services/tools/composer.py`: a pure deterministic function
-`compose_scene(seed, ground, archetype, hero, motif_names, highlights, style,
-theme, category)` that lays out up to five element sources under a named
-**composition archetype** (22 shipped):
+The `illustrate` tool exposes `style ∈ {procedural} ∪ {open-peeps, lorelei,
+notionists, bottts, blobs, initials, shapes, waves, landscape}`:
 
-- custom category **hero** SVGs (`illustrations/heroes/`: fountain-pen,
-  wrench-gear, frame, spark, robot)
-- **DiceBear figures** (kept for humans/robots only)
-- **Lucide motifs** rendered with `stroke: currentColor` + `color:
-  var(--ill-ink)`
-- **Highlights marks** recolored through the design system tokens
-- procedural **geometry** (hairlines, wobble lines, blobs, dot grids)
+- **`procedural`** (default) — `app/services/illustration.py`: a single clean
+  organic mark from a catalog of ~35 genuinely distinct archetypes. Every
+  composition is a pure function of seed + theme; the post seed is threaded
+  into **every element's wobble** so the same theme across different posts
+  still renders different figures. Every figure is **auto-fit into a safe
+  inner frame** (uniform scale + center) so it can never clip out of its slot
+  box or paint over the copy.
+- **curated DiceBear** — humans (open-peeps, lorelei, notionists), a robot
+  (bottts), Swiss-safe abstract (blobs, initials, shapes, waves), and a
+  landscape; recolored to `var(--color-*)`. Used only for people/robot posts.
 
-The `illustrate` tool now exposes `style ∈ {compose, procedural} ∪
-{open-peeps, lorelei, notionists, bottts, blobs, initials, shapes, waves,
-landscape}` — DiceBear was **pruned from 25 to 9** styles (humans + robots +
-Swiss-safe abstract + landscape); everything else removed from the registry.
+The old **Scene Composer** (`composer.py` + Lucide motifs + Highlights kit)
+was **removed** after a quality review: its scattered-icon output read as
+amateur clip-art, and three overlapping engines produced inconsistent figures.
+The vendored Lucide icons (1,756 files) and Highlights kit were deleted from
+the repo. DiceBear was pruned from 25 to 9 styles (see `peep_styles.py`).
 
 ### 3. Design-system-following color
 
-Every composed element resolves through the ground-adaptive `--ill-*` tokens
-(which the `.figure` wrapper derives from `--color-*`). Editing a design
-token in the Studio recolors every figure with zero code change. The
-`#4633FF` Highlights accent maps to `--ill-mid` (strict monochrome).
+Every composed element resolves through `var(--color-*)` tokens (ground
+adaptive). Editing a design token in the Studio recolors every figure with
+zero code change.
 
 ### 4. Style selection precedence
 
 `POST /generate` gains `illustration_style`; the design system gains a
 `style.illustration_style` default (DB-backed). Precedence: **API override →
-media-plan LLM pick → DS default → `compose`**.
+media-plan LLM pick → DS default → `procedural`**.
 
 ### 5. Content summary
 
 The Strategist's typed brief gains `content_summary` (key themes + searchable
-keywords, ~150 words) so the media plan can build content-derived queries and
-motif choices. No extra LLM call.
+keywords, ~150 words) so the media plan can build content-derived queries.
+No extra LLM call.
 
 ### 6. Big numeral = slide number
 
 `build_template_context` sets `loop_index = slide_index` on carousel slides;
-single posts keep the seeded editorial index. `index-numeral`,
-`portrait-index`, and `story-costs` now show the real slide position.
+single posts keep the seeded editorial index.
 
 ### 7. User-image auto-distribution
 
 The graph distributes user images `image i → slide i` (wrapping) into
-`_slide_images`; each branch embeds only its own slide's image.
+`_slide_images`; each branch embeds only its own slide's image. Images with
+`placement: "background"` route the slide to a cover/background template
+(e.g. `square-cover-bg`) automatically.
 
 ### 8. Duplicate-media hard QC
 
 `_run_sequence_check` fingerprints embedded base64 media per slide; the same
-media on 2+ slides is a hard issue. A bounded retry forces the duplicate
-slides to `kind: none` (no extra LLM planning call) and re-runs those
-branches.
+media on 2+ slides is a hard issue.
 
 ## Consequences
 
-- Carousel slides now get distinct, content-derived media instead of a
-  repeated photo.
-- Illustrations are content-mapped scenes (hero + motifs + hand-drawn marks)
-  rather than avatars or abstract blobs.
-- Composed figures follow the active design system automatically.
+- Carousel slides now get distinct, content-derived media.
+- Illustrations are clean editorial marks (procedural abstract or a single
+  DiceBear figure), never scattered icon collages.
+- Figures are guaranteed in-slot (safe-frame auto-fit) and vary per post.
+- The `illustrate` tool returns **structural feedback** (archetype, element
+  count, bounding box, safe-frame compliance) so the media director iterates
+  to a distinct, non-overlapping figure instead of blind-guessing.
 - Zero API cost preserved: one planning session per post; all illustration
   assets are offline.
-- ~1.7 MiB of git size added (Lucide 1,756 SVGs + Highlights 117 SVGs +
-  catalog) — a one-time, offline-forever cost.
+- Repo got smaller: Lucide + Highlights assets deleted (~1.7 MiB removed).
 - ADR-0016's "one media decision per post" model is superseded for slides;
   the curated DiceBear allowlist is reduced to the 9 Swiss-safe styles.
