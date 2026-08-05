@@ -64,6 +64,7 @@ export default function NewTaskPage() {
   const [verbatim, setVerbatim] = useState(false)
   const [templateId, setTemplateId] = useState<string>("")
   const [templateMode, setTemplateMode] = useState<"auto" | "template" | "designer">("auto")
+  const [postType, setPostType] = useState("default")
   const [media, setMedia] = useState<Record<string, MediaEntry>>({})
   const [submitting, setSubmitting] = useState(false)
 
@@ -147,6 +148,7 @@ export default function NewTaskPage() {
           design_system_id: dsId,
           template_id: templateId,
           template_mode: templateMode,
+          post_type: postType,
           style_language: styleLang || undefined,
           images,
         }),
@@ -393,6 +395,27 @@ export default function NewTaskPage() {
                 <p className="text-xs text-muted-foreground">
                   Auto tries a template first and falls back to the AI designer; Template only
                   fails a format with no matching template; AI designer only skips templates.
+                </p>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <Label className="shrink-0">Post type</Label>
+                <Select value={postType} onValueChange={setPostType}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Editorial</SelectItem>
+                    <SelectItem value="quote">Quote</SelectItem>
+                    <SelectItem value="promo">Promo / announcement</SelectItem>
+                    <SelectItem value="event">Event</SelectItem>
+                    <SelectItem value="product">Product drop</SelectItem>
+                    <SelectItem value="comparison">Comparison</SelectItem>
+                    <SelectItem value="tutorial">Tutorial</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Steers the copy and optional extras (price / date / location / cta) the
+                  copywriter fills.
                 </p>
               </div>
               {platforms.some(isCarouselPlatform) ? (

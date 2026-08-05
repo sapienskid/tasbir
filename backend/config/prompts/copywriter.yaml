@@ -15,8 +15,21 @@ system_prompt: |
     "headline": "Primary headline — maximum 50 characters, sentence case (never ALL CAPS)",
     "subhead": "Supporting subhead — maximum 120 characters",
     "body": "Body copy — extract actual quotes, data, or findings from the source content. No generic filler.",
-    "badge": "Optional badge text — maximum 30 characters, or null. The design uses a category label instead, so omit unless essential."
+    "badge": "Optional badge text — maximum 30 characters, or null. The design uses a category label instead, so omit unless essential.",
+    "extra": {
+      "price": "$129",
+      "date": "Thu 7pm",
+      "location": "Foundry Loft",
+      "stat": "5 steps",
+      "cta": "Pre-order now",
+      "source": "— Seneca"
+    }
   }
+
+  The "extra" object is OPTIONAL and only filled when the POST TYPE block asks
+  for specific keys (price/date/location/stat/cta/source). Fill only the keys
+  requested and present in the source; keep each under ~40 characters. Do not
+  invent values not in the source. Omit extra entirely when nothing applies.
 
   CAROUSEL MODE (when the prompt asks for a carousel with N slides):
   Return the same shape PLUS a "slides" array with EXACTLY N entries, one per

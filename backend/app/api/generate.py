@@ -36,6 +36,9 @@ class GenerateRequest(BaseModel):
     category: str | None = Field(default=None, max_length=64)
     design_system_id: str = Field(default="default", max_length=64)
     template_id: str = Field(default="", max_length=64)
+    # Post type steers copy + which optional extras (price/date/location/cta)
+    # the copywriter fills. "default" is the generic editorial post.
+    post_type: str = Field(default="default", max_length=32)
     # Per-post design language override: "" = the design system's own language,
     # otherwise a design-language id applied to this post only (never persisted).
     style_language: str = Field(default="", max_length=64)
@@ -80,6 +83,19 @@ class GenerateRequest(BaseModel):
             raise HTTPException(
                 status_code=422,
                 detail="template_mode must be 'auto', 'template', or 'designer'",
+            )
+        return v
+
+    @field_validator("post_type")
+    @classmethod
+    def _validate_post_type(cls, v: str) -> str:
+        allowed = {
+            "default", "quote", "promo", "event", "product", "comparison", "tutorial",
+        }
+        if v not in allowed:
+            raise HTTPException(
+                status_code=422,
+                detail=f"post_type must be one of {sorted(allowed)}",
             )
         return v
 

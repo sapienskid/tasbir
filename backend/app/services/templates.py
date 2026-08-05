@@ -316,6 +316,7 @@ def build_template_context(
         "subhead": copy.get("subhead", ""),
         "body": copy.get("body", ""),
         "tagline": copy.get("tagline", ""),
+        "extra": copy.get("extra") or {},
         # Footer is a single @handle. footer_left is kept only for backward
         # compat with older saved templates — it renders empty.
         "footer_left": "",

@@ -383,6 +383,13 @@ async def designer_node_single(state: GenerationState) -> dict:
     copy_block = f"""HEADLINE: {headline}
 SUBHEAD: {subhead}
 BODY: {body}"""
+    extra = copy_data.get("extra") or {}
+    if isinstance(extra, dict) and extra:
+        extra_block = "\n".join(
+            f"{k.upper()}: {v}" for k, v in extra.items() if v
+        )
+        if extra_block:
+            copy_block += f"\n{extra_block}"
 
     fonts_link = build_google_fonts_link(design_tokens, di_config)
 

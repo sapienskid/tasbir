@@ -76,6 +76,18 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   color: var(--color-text-secondary);
 }
 
+.extras {
+  margin-top: {{ (width * 0.02) | round | int }}px;
+  display: flex;
+  align-items: baseline;
+  gap: {{ (width * 0.02) | round | int }}px;
+  font-family: var(--font-sans);
+  font-size: {{ (width * 0.015) | round | int }}px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -84,6 +96,12 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
     <h1 class="headline" data-slot="headline">{{ headline }}</h1>
     {% if subhead %}
     <div class="subhead" data-slot="subhead">{{ subhead }}</div>
+    {% endif %}
+    {% if extra.date or extra.location %}
+    <div class="extras">
+      {% if extra.date %}<span data-slot="extra_date">{{ extra.date }}</span>{% endif %}
+      {% if extra.location %}<span data-slot="extra_location">{{ extra.location }}</span>{% endif %}
+    </div>
     {% endif %}
     {% if footer_right %}
     <div class="footer">

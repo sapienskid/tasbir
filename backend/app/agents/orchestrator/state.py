@@ -111,6 +111,8 @@ class GenerationState(TypedDict):
     sequence_audit: Annotated[bool, _keep_first]
     # Keep the source content verbatim (carousels split raw text across slides)
     verbatim: Annotated[bool, _keep_first]
+    # Post type: default | quote | promo | event | product | comparison | tutorial
+    post_type: Annotated[str, _keep_first]
 
     # Configuration
     _task_id: Annotated[str, _keep_first]
@@ -221,6 +223,7 @@ def initial_state(
         "ratio": ratio or kwargs.get("ratio", "auto"),
         "sequence_audit": bool(sequence_audit or kwargs.get("sequence_audit", False)),
         "verbatim": bool(kwargs.get("verbatim", False)),
+        "post_type": str(kwargs.get("post_type") or "default"),
         "_task_id": _task_id,
         "design_system_id": design_system_id,
         "design_tokens": design_tokens or {},

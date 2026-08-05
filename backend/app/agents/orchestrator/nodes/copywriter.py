@@ -21,7 +21,7 @@ import logging
 import re
 from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.agents.orchestrator.state import FormatTask, GenerationState
 from app.services.agents import get_agent_config
@@ -63,8 +63,11 @@ class _CopyFields(BaseModel):
     headline: str
     subhead: str
     body: str
-    tagline: str
+    tagline: str = ""  # legacy field, never rendered — kept for stored-copy compat
     badge: str | None = None
+    # Optional post-type extras (price/date/location/stat/cta/source) — filled
+    # only when the post type calls for them; rendered by templates that opt in.
+    extra: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("headline")
     @classmethod
@@ -157,6 +160,34 @@ def _extract_json(text: str) -> dict:
     raise ValueError(f"Could not extract JSON: {text[:200]}")
 
 
+def _post_type_block(post_type: str) -> str:
+    """Instruction on which optional extras to fill for a post type."""
+    spec = {
+        "default": {},
+        "quote": {"source": "the author/source of the quote"},
+        "promo": {"cta": "a short call to action (e.g. 'Pre-order now')"},
+        "event": {"date": "date/time", "location": "venue or link"},
+        "product": {"price": "price", "cta": "call to action"},
+        "comparison": {"stat": "the key figure being compared"},
+        "tutorial": {"stat": "count or metric (e.g. '5 steps')"},
+    }[post_type]
+    if not spec:
+        return ""
+    lines = [f"POST TYPE: {post_type}"]
+    if spec:
+        lines.append(
+            "  Fill ONLY these optional extras from the source content (omit any "
+            "that aren't present):"
+        )
+        for key, hint in spec.items():
+            lines.append(f"    extra.{key} — {hint}")
+        lines.append(
+            "  extras go in the 'extra' object; keep each under ~40 characters. "
+            "Do not invent values not in the source."
+        )
+    return "\n".join(lines) + "\n"
+
+
 async def _write_copy_for_platform(
     platform_id: str,
     brief: dict,
@@ -169,6 +200,7 @@ async def _write_copy_for_platform(
     slides_count: int = 0,
     verbatim: bool = False,
     allow_emoji: bool = False,
+    post_type: str = "default",
 ) -> tuple[str, PlatformCopy]:
     """Write copy for a single platform with rate-limit semaphore."""
     fmt = get_format_info(platform_id)
@@ -249,11 +281,14 @@ async def _write_copy_for_platform(
             f"from the source content. Keep the sequence cohesive — no repetition.\n"
         )
 
+    post_type_block = _post_type_block(post_type)
+
     user_prompt = (
         f"PLATFORM: {platform_id} ({fmt.width}x{fmt.height}px)\n"
         f"{brand_block}"
         f"{campaign_block}"
         f"{carousel_block}"
+        f"{post_type_block}"
         f"STRATEGIC ANGLE: {brief.get('angle', '')}\n"
         f"AUDIENCE: {brief.get('audience', '')}\n"
         f"TONE: {brief.get('tone', 'professional')}\n"
@@ -536,6 +571,7 @@ async def copywriter_node(state: GenerationState) -> dict:
     slides_count = int(state.get("slides", 0) or 0)
     verbatim = bool(state.get("verbatim"))
     allow_emoji = bool((state.get("design_instruction") or {}).get("style", {}).get("emoji"))
+    post_type = str(state.get("post_type") or "default")
 
     # Process all platforms in parallel
     tasks = [
@@ -551,6 +587,7 @@ async def copywriter_node(state: GenerationState) -> dict:
             slides_count=slides_count if is_carousel(platform_id) else 0,
             verbatim=verbatim,
             allow_emoji=allow_emoji,
+            post_type=post_type,
         )
         for platform_id in platforms
     ]

@@ -96,6 +96,7 @@ def generate_task(self, task_id: str, source_data: dict):
         pipeline_input["ds_templates"] = await load_ds_templates(pool, ds.id)
         pipeline_input["template_id"] = source_data.get("template_id") or ""
         pipeline_input["template_mode"] = source_data.get("template_mode") or "auto"
+        pipeline_input["post_type"] = source_data.get("post_type") or "default"
         pipeline_input["verbatim"] = bool(source_data.get("verbatim"))
 
         # Per-post design-language override: apply the language's rules + palette
