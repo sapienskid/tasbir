@@ -16,9 +16,18 @@ content (Wikimedia) and requested by Pexels/Pixabay.
 **Body voice** — See *Serif voice*.
 
 ## D
+**Design language** — A reusable visual style bundle applied to a design system:
+palette rules + palette/accent tokens, type mood, decoration, emoji policy,
+photo treatment (grayscale vs full color), media policy, and the layout-archetype
+pool. DB-backed (`design_languages`); the five built-ins
+(swiss-editorial, bold-modern, dark-luxury, vibrant-pop, playful) resolve to the
+live `STYLE_PRESETS`, custom ones are user-created rows. See *Design system*.
+
+**Design system** — A brand entity: identity, tokens, categories, campaigns,
+footer handle, templates, and one design language. The Studio's primary object.
+
 **Display voice** — The signature display typeface (Space Grotesk,
-`var(--font-display)`) used only for the headline and the footer wordmark.
-It makes posts recognizable.
+`var(--font-display)`) used for the headline. It makes posts recognizable.
 
 ## G
 **Ground** — The post's background state. Only two exist: **white**
@@ -35,9 +44,15 @@ reads as premium editorial.
 
 **Media plan** — A structured per-slide decision produced by one LLM planning
 session per post: for every slide/format it chooses *photo*, *illustration*,
-or *none* (plus the concrete query / style / motif / archetype). Slides
-already filled by a user image are marked *skip*. The plan is cached once per
-post and executed in parallel by the per-format branches.
+*chart*, or *none* (plus the concrete query / style / theme / chart values).
+Slides already filled by a user image are marked *skip*. The plan is cached once
+per post and executed in parallel by the per-format branches.
+
+## P
+**Post type** — A content archetype passed to `POST /generate`
+(`default | quote | promo | event | product | comparison | tutorial`) that steers
+the copy and which optional `extra` fields (price/date/location/stat/cta/source)
+the copywriter fills. Templates render extras via `{{ extra.* }}`.
 
 **Media tools** — LLM-callable tools that source media for a post:
 `find_photo` (Pexels / Pixabay / Wikimedia Commons), `icon_search`

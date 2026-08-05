@@ -648,31 +648,38 @@ restart needed. `Reset to seed` restores the YAML seed; the YAML files in
 4. Restart the worker to pick up changes
 
 ### Design languages (style presets)
-Each design system declares a `style_language` (`style_language` key in its
-design-instruction; presets in `backend/app/services/styles.py`):
-`swiss-editorial` (default), `bold-modern`, `dark-luxury`, `vibrant-pop`,
-`playful`. The language drives the palette rules, decoration (radius /
-shadows / gradients), **emoji policy**, **photo treatment** (grayscale vs full
-color), **media policy** (photo-forward / illustration-forward / typographic),
-and the **layout-archetype pool** — every layer (designer, verifier,
-media-plan, editor-chat, copywriter) reads it instead of a hardcoded
-monochrome default. Grounds stay `white`/`black` for every language.
+Design languages are **DB-backed** (`design_languages` table): the five
+built-ins (`swiss-editorial`, `bold-modern`, `dark-luxury`, `vibrant-pop`,
+`playful`) are seeded from `backend/app/services/styles.py` and always resolve
+to the live preset (edits to `STYLE_PRESETS` propagate without reseeding);
+custom languages are Studio-manageable rows (create/delete, built-ins
+immutable). A design system references one by `style_language` and keeps a
+merged copy of its `di` + tokens, so deleting a language never breaks a system.
+
+Each language drives the palette rules, decoration (radius / shadows /
+gradients), **emoji policy**, **photo treatment** (grayscale vs full color),
+**media policy** (photo-forward / illustration-forward / typographic), and the
+**layout-archetype pool** — every layer (designer, verifier, media-plan,
+editor-chat, copywriter) reads it instead of a hardcoded monochrome default.
+Grounds stay `white`/`black` for every language.
 
 - Switch a DS in the Studio (Design language picker) or
-  `POST /design-systems/{id}/style` — this merges the preset's rules into the
-  design-instruction (preserving the user's type scale / spacing / footer),
-  provisions the optional `--color-accent` / `--color-accent-secondary` tokens
-  the style references, and seeds starter templates (`bold-modern`,
-  `vibrant-pop` currently ship square + landscape packs in
-  `backend/app/services/style_templates.py`).
-- Add a preset: define it in `STYLE_PRESETS` in `styles.py` (label, palette
-  rules, emoji/grayscale/media-policy flags, and a `di` dict with
-  style/type_voice/do_dont/layout_archetypes) + optional starter templates.
-  The rule-of-thumb: a non-monochrome DS **must** define `--color-accent`
-  (and `--color-accent-secondary`) in its tokens or accent references render
-  transparent.
+  `POST /design-systems/{id}/style` — this replaces the design system's core
+  **color tokens with the language's palette** (fonts stay user-owned),
+  refreshes the design-instruction (preserving the user's type scale / spacing
+  / footer), provisions the `--color-accent` / `--color-accent-secondary`
+  tokens the style references, and seeds starter templates (square /
+  landscape / portrait packs in `backend/app/services/style_templates.py`).
+- Custom languages: Studio **Design language → New** (name + a base preset to
+  copy), or `POST /design-languages` `{name, base, description}`. Built-ins
+  cannot be deleted.
 - Emoji is **default off**; only languages with `emoji: true` (vibrant/pop,
   playful) allow it — the verifier hard-fail is gated on that flag.
+- **Verifier**: hard gates stay deterministic (canvas, hex, emoji per language,
+  footer, category, overflow, low-contrast text); the vision audit judges
+  visual quality — a design that clears every hard gate and scores ≥75 passes
+  despite a strict `pass=false` (minor spec drift is not a hard fail).
+  `verifier.max_retries` defaults to 3.
 
 ### Overriding copy fields
 1. Set `overrides.headline`, `overrides.subhead`, etc. in the API request
@@ -850,17 +857,53 @@ style: `procedural` (abstract organic mark, default), or a curated DiceBear id
 `shapes`, `waves`, `landscape`). For carousels, uploaded images are
 auto-distributed image i → slide i (wrapping).
 
+Other optional fields:
+- `template_mode` — `auto` (default; template first, LLM fallback) | `template`
+  (never call the designer — fail a format with no match) | `designer` (skip
+  templates, always LLM design).
+- `style_language` — per-post design-language override ("" = the design
+  system's own language). Applied in-memory for this post only, never mutates
+  the design system.
+- `post_type` — `default` | `quote` | `promo` | `event` | `product` |
+  `comparison` | `tutorial`. Steers copy + which optional `extra` fields
+  (price/date/location/stat/cta/source) the copywriter fills; templates render
+  them via `{{ extra.* }}` (`ad-card`: price+cta; `landscape-pull`:
+  date+location).
+
 **Planner & carousels**: `platforms: ["auto"]` lets the planner choose the
 platform set and structure. For carousels, `slides` (2-10) and `ratio`
 (`square` | `portrait` | `auto`) set the frame count/aspect; `ratio: "auto"`
 or an unpinned `slides` delegates to the planner. `sequence_audit: true`
 runs an opt-in vision audit of the whole slide set (one call).
 
+**Media**: the media-plan director decides per-slide media. For conceptual/
+abstract subjects it skips photo search and uses an abstract illustration;
+`kind: "chart"` renders a deterministic token-only bar chart for stat-led posts
+(comparison/tutorial). Illustrations and charts render in templates with a slot
+(`slide`, `ad-card`). If a planned photo can't materialize, the slot fills with
+a procedural figure instead of shipping empty.
+
 ### Design systems API
 - `GET /design-systems` · `POST /design-systems` · `GET/PUT/DELETE /design-systems/{id}`
 - `POST/DELETE /design-systems/{id}/logo` (multipart, raster only)
 - `POST /design-systems/{id}/preview` → `{html}` (live sample render)
 - `POST /design-systems/from-input` (multipart form + optional reference/logo images) → `{job_id}`
+- `GET /design-systems/styles` → the design languages (built-ins + customs) with
+  palette/accent tokens, emoji/grayscale flags (the Studio picker source)
+- `POST /design-systems/{id}/style` → `{style_language}` applies a language to the
+  system: replaces the core color tokens with the language's palette, adds accent
+  tokens, seeds starter templates, and backfills identity if missing
+
+### Design languages API
+- `GET /design-languages` · `POST /design-languages` (custom language `{name,
+  base, description}` — copies a base language's rules) · `PUT /design-languages/{id}`
+  · `DELETE /design-languages/{id}`
+- The five built-ins (`swiss-editorial`, `bold-modern`, `dark-luxury`,
+  `vibrant-pop`, `playful`) are immutable and always resolve to the live preset
+  (`styles.STYLE_PRESETS`); custom languages are DB rows and deletable.
+- A language bundles palette + accent tokens, emoji/grayscale/media policy, and
+  the design-instruction (style/type_voice/do_dont/archetypes). Applying one
+  replaces the system's color tokens (fonts stay user-owned).
 
 ### Templates API
 - `GET /templates?design_system_id=&family=` · `POST /templates` · `GET/PUT/DELETE /templates/{id}`
@@ -948,6 +991,11 @@ frontend offers `html` for review before re-rendering (review-then-render).
 Re-injects tokens/fonts/KaTeX/images, renders PNG, runs deterministic + overflow
 checks. `?audit=true` also runs the vision audit (opt-in to save quota). Skips
 the designer LLM. Response: `{"format", "pass", "quality": {"score", "issues", "critique"}, "png_b64"}`.
+
+### POST /tasks/{id}/formats/{fmt}/retry
+Re-runs the **designer LLM** for one format (with the previous verifier critique),
+then re-renders and re-audits — the manual retry for formats left in
+`needs_retry`. Response: `{"format", "pass", "score", "issues", "critique", "html_path", "png_path", "template_id"}`.
 
 ### POST /tasks/{id}/formats/{fmt}/template
 ```json

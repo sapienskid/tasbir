@@ -32,6 +32,15 @@ n8n Webhook → FastAPI → Celery + Redis → LangGraph Pipeline → HTML + PNG
 
 ## Phase Progress
 
+> **Current state (v1.0.0):** the earlier YAML-only phases are superseded.
+> Design systems, templates, design languages, platforms, fonts, agents, and
+> runtime settings are all DB-backed and Studio-editable (YAML files only seed
+> first boot). The pipeline adds five design languages (palette-switching),
+> post types with structured copy extras, deterministic token-only bar charts,
+> slot-based illustrations, a lenient-but-deterministic verifier (score ≥75
+> passes minor spec drift), manual per-format retry, and per-post language
+> override. Phases below are historical milestones.
+
 ### Phase 1: Foundation — Docker + API
 - [x] `docker-compose.yml` with core services (API, worker, Redis, Playwright)
 - [x] FastAPI app skeleton with health check
