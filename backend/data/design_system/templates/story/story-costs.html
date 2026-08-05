@@ -44,24 +44,27 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   font-size: {{ (22 * tscale) | round | int }}px;
 }
 body[data-ground="black"] .mark { background: var(--color-text-inverted); color: var(--color-bg-inverted); }
-}
 
 /* seeded typographic glyph texture — monochrome, varies per post */
 .grid {
   position: absolute;
-  top: {{ (height * 0.2) | round | int }}px;
+  top: {{ (height * 0.16) | round | int }}px;
   left: {{ (width * 0.07) | round | int }}px;
   right: {{ (width * 0.07) | round | int }}px;
+  height: {{ (height * 0.24) | round | int }}px;
+  overflow: hidden;
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: {{ (height * 0.03) | round | int }}px {{ (width * 0.025) | round | int }}px;
-  font-size: {{ (34 * tscale) | round | int }}px;
+  grid-auto-rows: 1fr;
+  align-items: center;
+  gap: {{ (height * 0.02) | round | int }}px {{ (width * 0.02) | round | int }}px;
+  font-size: {{ (26 * tscale) | round | int }}px;
   font-weight: 500;
   color: var(--color-text-tertiary);
   pointer-events: none;
 }
 body[data-ground="black"] .grid { color: var(--color-text-secondary); }
-.grid span { text-align: center; }
+.grid span { text-align: center; line-height: 1; }
 
 .kicker {
   margin-top: auto;
