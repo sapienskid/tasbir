@@ -826,6 +826,7 @@ docker compose up -d            # pulls GHCR images + redis, starts the stack
   "template_id": "square-editorial-stack",
   "ratio": "square",
   "sequence_audit": false,
+  "post_type": "product",
   "illustration_style": "procedural",
   "images": [
     {
