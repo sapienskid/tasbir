@@ -22,7 +22,7 @@ style:
   max_weights_per_family: 2       # two weights max per typeface
   shadows: false
   border_radius: "0px"
-  illustrations: false
+  illustrations: true
   icons: false
   emoji: false
   gradients: false

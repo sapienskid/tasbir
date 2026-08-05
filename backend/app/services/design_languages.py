@@ -115,17 +115,29 @@ async def list_languages(
     from app.db.repositories.design_languages import DesignLanguageRepository
 
     rows = await DesignLanguageRepository(db).list(include_inactive=include_inactive)
-    return [_row_definition(r) for r in rows]
+    out: list[LanguageDefinition] = []
+    for r in rows:
+        # Built-ins are code-defined — always the live preset definition so
+        # STYLE_PRESETS edits (palette, flags, di) propagate without reseeding.
+        preset = _preset_definition(r.id)
+        if preset is not None:
+            out.append(preset)
+        else:
+            out.append(_row_definition(r))
+    return out
 
 
 async def get_language(db: AsyncSession, language_id: str) -> LanguageDefinition | None:
-    """A language by id — DB row first, built-in preset fallback."""
+    """A language by id — built-in presets (live) first, custom DB row fallback."""
+    preset = _preset_definition(language_id)
+    if preset is not None:
+        return preset
     from app.db.repositories.design_languages import DesignLanguageRepository
 
     row = await DesignLanguageRepository(db).get_by_id(language_id)
     if row is not None:
         return _row_definition(row)
-    return _preset_definition(language_id)
+    return None
 
 
 async def create_custom_language(

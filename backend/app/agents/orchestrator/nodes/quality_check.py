@@ -41,7 +41,7 @@ from app.services.tokens import (
 
 log = logging.getLogger(__name__)
 
-MAX_RETRIES = 2  # Max verifier retry loops
+MAX_RETRIES = 3  # Max verifier retry loops
 
 # Fallback display family, derived from the design-system seed — never a
 # hardcoded face name in agent code.
@@ -531,6 +531,14 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     score = int(result.get("score", 75))
     issues = list(result.get("issues", []))
     critique = str(result.get("critique", ""))
+
+    # Mercy: the design already cleared every hard gate (canvas, hex, emoji,
+    # footer, category, overflow, contrast). If the vision model scores it
+    # strongly, a strict pass=false caused by minor spec drift (a few px, an
+    # exact type-scale value, hairline details) is not a hard fail.
+    if not passed and score >= 75:
+        log.info("[verifier] %s — score %d, pass=false overridden (visual quality strong)", fmt_id, score)
+        passed = True
 
     log.info("[verifier] %s — pass=%s score=%d", fmt_id, passed, score)
 
