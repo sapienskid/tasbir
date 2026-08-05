@@ -170,6 +170,17 @@ export interface RerenderResponse {
   png_b64: string
 }
 
+export interface RetryResponse {
+  format: string
+  pass: boolean
+  score: number
+  issues: string[]
+  critique: string
+  html_path: string
+  png_path: string | null
+  template_id: string | null
+}
+
 export interface GenerateResponse {
   task_id: string
   status: string
@@ -571,6 +582,13 @@ export function listDesignSystems(includeInactive = false): Promise<DesignSystem
   return apiRequest(`/design-systems${includeInactive ? "?include_inactive=true" : ""}`)
 }
 
+export function createDesignSystem(name: string, description = ""): Promise<DesignSystem> {
+  return apiRequest("/design-systems", {
+    method: "POST",
+    body: JSON.stringify({ name, description }),
+  })
+}
+
 export function getDesignSystem(id: string): Promise<DesignSystem> {
   return apiRequest(`/design-systems/${id}`)
 }
@@ -580,6 +598,67 @@ export function updateDesignSystem(id: string, patch: Partial<DesignSystem>): Pr
     method: "PUT",
     body: JSON.stringify(patch),
   })
+}
+
+export function deleteDesignSystem(id: string): Promise<void> {
+  return apiRequest(`/design-systems/${id}`, { method: "DELETE" })
+}
+
+export interface StyleLanguage {
+  id: string
+  label: string
+  description: string
+  emoji: boolean
+  accent: boolean
+  grayscale: boolean
+  media_policy: string
+  accent_tokens: Record<string, string>
+  palette_tokens: Record<string, string>
+}
+
+export function listStyleLanguages(): Promise<StyleLanguage[]> {
+  return apiRequest("/design-systems/styles")
+}
+
+export function applyStyleLanguage(
+  id: string,
+  styleLanguage: string
+): Promise<DesignSystem & { seeded_templates: string[] }> {
+  return apiRequest(`/design-systems/${id}/style`, {
+    method: "POST",
+    body: JSON.stringify({ style_language: styleLanguage }),
+  })
+}
+
+export interface DesignLanguage {
+  id: string
+  name: string
+  description: string
+  emoji: boolean
+  grayscale: boolean
+  accent: boolean
+  media_policy: string
+  accent_tokens: Record<string, string>
+  palette_tokens: Record<string, string>
+}
+
+export function listDesignLanguages(): Promise<DesignLanguage[]> {
+  return apiRequest("/design-languages")
+}
+
+export function createDesignLanguage(
+  name: string,
+  base: string,
+  description = ""
+): Promise<DesignLanguage> {
+  return apiRequest("/design-languages", {
+    method: "POST",
+    body: JSON.stringify({ name, base, description }),
+  })
+}
+
+export function deleteDesignLanguage(id: string): Promise<void> {
+  return apiRequest(`/design-languages/${id}`, { method: "DELETE" })
 }
 
 export async function uploadLogo(id: string, file: File): Promise<{ has_logo: boolean }> {

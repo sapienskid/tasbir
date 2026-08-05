@@ -10,6 +10,7 @@ from app.api import (
     agent_jobs,
     agents,
     chat,
+    design_languages,
     design_systems,
     font_pool,
     fonts,
@@ -127,6 +128,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.error("[startup] Platform/font seed FAILED: %s", e, exc_info=True)
     try:
+        from app.services.design_languages import seed_design_languages
+
+        await seed_design_languages(pool)
+    except Exception as e:
+        log.error("[startup] Design-language seed FAILED: %s", e, exc_info=True)
+    try:
         from app.services.settings import seed_app_settings
         await seed_app_settings(pool)
     except Exception as e:
@@ -168,6 +175,10 @@ app.include_router(
 )
 app.include_router(
     design_systems.router, prefix="/api/design-systems", tags=["design-systems"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    design_languages.router, prefix="/api/design-languages", tags=["design-languages"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 app.include_router(

@@ -39,6 +39,10 @@ class DesignSystemUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class DesignSystemStyleRequest(BaseModel):
+    style_language: str = Field(min_length=1, max_length=64)
+
+
 async def _count_templates(db: AsyncSession, ds_id: str) -> int:
     rows = await TemplateRepository(db).list(ds_id, include_inactive=True)
     return len(rows)
@@ -76,9 +80,113 @@ async def create_design_system(
             "description": request.description,
             "source": "manual",
             "is_active": True,
+            **ds_service.new_design_system_defaults(request.name),
         },
     )
     return ds_service.ds_to_dict(ds, template_count=0)
+
+
+@router.get("/styles")
+async def list_style_languages(db: AsyncSession = Depends(get_db)):
+    """List the design languages (built-in presets + user-created customs)."""
+    from app.services.design_languages import list_languages
+
+    langs = await list_languages(db)
+    return [
+        {
+            "id": d.id,
+            "label": d.name,
+            "description": d.description,
+            "emoji": d.emoji,
+            "accent": d.accent,
+            "grayscale": d.grayscale,
+            "media_policy": d.media_policy,
+            "accent_tokens": d.accent_tokens,
+            "palette_tokens": d.palette_tokens,
+        }
+        for d in langs
+    ]
+
+
+@router.post("/{ds_id}/style")
+async def apply_design_system_style(
+    ds_id: str, request: DesignSystemStyleRequest, db: AsyncSession = Depends(get_db)
+):
+    """Switch a design system to a design language (preset or custom).
+
+    Applies the language's rules to the design_instruction (preserving the
+    user's type scale/spacing/footer), replaces the core color tokens with the
+    language's palette, provisions accent tokens, and seeds starter templates
+    for families the system lacks.
+    """
+    from app.services.design_languages import apply_language, get_language
+    from app.services.style_templates import (
+        remove_other_style_templates,
+        seed_style_templates,
+    )
+
+    lang = await get_language(db, request.style_language)
+    if lang is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown design language {request.style_language!r}",
+        )
+
+    repo = DesignSystemRepository(db)
+    ds = await repo.get_by_id(ds_id)
+    if not ds:
+        raise NotFoundError(f"Design system {ds_id!r} not found")
+
+    new_di = await apply_language(db, request.style_language, ds.design_instruction or {})
+    tokens = dict(ds.tokens or {})
+    # The language's core palette (bg/text/border/radius/shadow) replaces the
+    # design system's color tokens — switching styles visibly changes the
+    # palette. Fonts are preserved (user-owned).
+    palette = lang.palette_tokens or {}
+    if palette:
+        for var, value in palette.items():
+            tokens[var] = value
+    new_accent = lang.accent_tokens or {}
+    if new_accent:
+        for var, value in new_accent.items():
+            tokens[var] = value
+    else:
+        # Monochrome style — strip accent tokens left by a previous colorful style.
+        tokens.pop("--color-accent", None)
+        tokens.pop("--color-accent-secondary", None)
+
+    # A pre-existing bare system (created before create seeded a baseline) gets
+    # its missing identity fields backfilled so it is never incomplete.
+    baseline = ds_service.new_design_system_defaults(ds.name or ds.id)
+    updates: dict = {"design_instruction": new_di, "tokens": tokens}
+    if not ds.categories:
+        updates["categories"] = baseline["categories"]
+    if not ds.campaigns:
+        updates["campaigns"] = baseline["campaigns"]
+    if not (ds.brand or {}).get("name"):
+        updates["brand"] = baseline["brand"]
+
+    # The style's preferred ground (dark-luxury → black, others → white) should
+    # drive the default campaign, or posts resolve to white via the seed's
+    # "default" campaign and the language's identity is lost.
+    campaigns = dict(ds.campaigns or baseline["campaigns"])
+    default_campaign = campaigns.get("default")
+    if isinstance(default_campaign, dict):
+        default_campaign = dict(default_campaign)
+        default_campaign["ground"] = new_di.get("default_ground") or "white"
+        campaigns["default"] = default_campaign
+        updates["campaigns"] = campaigns
+
+    await remove_other_style_templates(db, ds_id, request.style_language)
+    seeded = await seed_style_templates(db, ds_id, request.style_language)
+    # Restyling the default system takes it out of seed control.
+    if ds_id == ds_service.DEFAULT_ID and ds.source == "seed":
+        updates["source"] = "manual"
+    updated = await repo.update(ds_id, updates)
+    return {
+        **ds_service.ds_to_dict(updated, template_count=await _count_templates(db, ds_id)),
+        "seeded_templates": seeded,
+    }
 
 
 @router.get("/{ds_id}")
@@ -104,6 +212,11 @@ async def update_design_system(
     issues = ds_service.validate_design_system(data)
     if issues:
         raise HTTPException(status_code=422, detail="; ".join(issues))
+
+    # Editing the default system hands ownership from the seed to the Studio —
+    # the startup seed-sync must not revert the change on the next restart.
+    if ds.id == ds_service.DEFAULT_ID and ds.source == "seed":
+        data.setdefault("source", "manual")
 
     updated = await repo.update(ds_id, data)
     return ds_service.ds_to_dict(updated, template_count=await _count_templates(db, ds_id))

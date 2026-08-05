@@ -10,6 +10,7 @@ from app.models.agent_job import AgentJob  # noqa: E402, F401
 from app.models.app_setting import AppSetting  # noqa: E402, F401
 from app.models.audit_log import AuditLog  # noqa: E402, F401
 from app.models.chat import ChatMessage, ChatThread  # noqa: E402, F401
+from app.models.design_language import DesignLanguage  # noqa: E402, F401
 from app.models.design_system import DesignSystem  # noqa: E402, F401
 from app.models.font import Font  # noqa: E402, F401
 from app.models.platform import Platform  # noqa: E402, F401

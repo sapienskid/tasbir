@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import { ArrowLeft, Loader2, Plus, Save, Search, Trash2, Wand2 } from "lucide-react"
+import { ArrowLeft, Loader2, Plus, RefreshCw, Save, Search, Trash2, Wand2 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -29,12 +29,21 @@ import { Dropzone } from "@/components/tasks/dropzone"
 import { FontPickerDialog } from "@/components/design-system/font-picker"
 import { ZoomableFrame } from "@/components/tasks/preview-frame"
 import {
+  applyStyleLanguage,
+  createDesignLanguage,
+  createDesignSystem,
   createDesignSystemFromInput,
+  deleteDesignLanguage,
+  deleteDesignSystem,
   getDesignSystem,
+  listDesignLanguages,
+  listStyleLanguages,
   removeLogo,
   updateDesignSystem,
   uploadLogo,
+  type DesignLanguage,
   type DesignSystem,
+  type StyleLanguage,
 } from "@/lib/api"
 import { useDesignSystems } from "@/hooks/use-library"
 
@@ -92,10 +101,29 @@ export default function DesignSystemsPage() {
   const [draft, setDraft] = useState<DesignSystem | null>(null)
   const [saving, setSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
+  const [newOpen, setNewOpen] = useState(false)
+  const [newMode, setNewMode] = useState<"blank" | "ai">("blank")
+  const [newName, setNewName] = useState("")
+  const [newDesc, setNewDesc] = useState("")
+  const [creatingNew, setCreatingNew] = useState(false)
   const [fontPickerKey, setFontPickerKey] = useState<string | null>(null)
+  const [styles, setStyles] = useState<StyleLanguage[]>([])
+  const [applyingStyle, setApplyingStyle] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [langOpen, setLangOpen] = useState(false)
+  const [langs, setLangs] = useState<DesignLanguage[]>([])
+  const [langNewName, setLangNewName] = useState("")
+  const [langBase, setLangBase] = useState("")
+  const [langCreating, setLangCreating] = useState(false)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [dsId, setDsId] = useState<string>(() => searchParams.get("ds") ?? "")
+
+  useEffect(() => {
+    listStyleLanguages()
+      .then(setStyles)
+      .catch(() => setStyles([]))
+  }, [])
 
   function applyFontFamily(key: string, family: string) {
     setDraft((prev) => {
@@ -184,6 +212,159 @@ export default function DesignSystemsPage() {
     }
   }
 
+  const currentStyle = useMemo(
+    () =>
+      styles.find(
+        (s) => s.id === (draft?.design_instruction?.style_language ?? "")
+      ) ?? null,
+    [styles, draft]
+  )
+
+  async function handleApplyStyle(lang: string) {
+    if (!draft) return
+    if (lang === currentStyle?.id) {
+      toast.info(`${currentStyle?.label ?? lang} is already active`)
+      return
+    }
+    const chosen = styles.find((s) => s.id === lang) ?? null
+    setApplyingStyle(true)
+
+    // Optimistic update — reflect the choice instantly so the UI never looks
+    // frozen, even before the round-trip returns.
+    setDraft((prev) => {
+      if (!prev) return prev
+      const di = prev.design_instruction ?? {}
+      const style: Record<string, unknown> = { ...((di.style ?? {}) as Record<string, unknown>) }
+      if (chosen) {
+        style.name = chosen.label
+        style.emoji = chosen.emoji
+        style.accent = chosen.accent ? "accent" : "none"
+      }
+      const nextTokens = { ...(prev.tokens ?? {}) }
+      // Apply the style's core palette + accent tokens so the Tokens tab and
+      // any preview change the moment the language is picked.
+      for (const [key, value] of Object.entries(chosen?.palette_tokens ?? {})) {
+        nextTokens[key] = value
+      }
+      delete nextTokens["--color-accent"]
+      delete nextTokens["--color-accent-secondary"]
+      if (chosen) Object.assign(nextTokens, chosen.accent_tokens)
+      return {
+        ...prev,
+        design_instruction: { ...di, style_language: lang, style },
+        tokens: nextTokens,
+      }
+    })
+
+    try {
+      const fresh = await applyStyleLanguage(draft.id, lang)
+      setDraft(structuredClone(fresh))
+      void mutate()
+      const seeded = fresh.seeded_templates?.length ?? 0
+      const bits: string[] = []
+      if (chosen) {
+        bits.push(chosen.emoji ? "emoji allowed" : "no emoji")
+        bits.push(chosen.grayscale ? "photos grayscale" : "photos full color")
+        const accentCount = Object.keys(chosen.accent_tokens ?? {}).length
+        if (accentCount) bits.push(`${accentCount} accent token(s)`)
+      }
+      if (seeded) bits.push(`${seeded} starter template(s)`)
+      toast.success(
+        `Applied ${chosen?.label ?? lang}${bits.length ? ` — ${bits.join(", ")}` : ""}`
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not apply style")
+      // Roll the optimistic change back to server truth so nothing lingers.
+      try {
+        const truth = await getDesignSystem(draft.id)
+        setDraft(structuredClone(truth))
+      } catch {
+        /* keep optimistic state; server may be unreachable */
+      }
+    } finally {
+      setApplyingStyle(false)
+    }
+  }
+
+  async function retryStyles() {
+    try {
+      setStyles(await listStyleLanguages())
+    } catch {
+      toast.error("Could not load design languages")
+    }
+  }
+
+  async function openLangManager() {
+    setLangOpen(true)
+    try {
+      setLangs(await listDesignLanguages())
+    } catch {
+      toast.error("Could not load design languages")
+    }
+  }
+
+  async function handleCreateLang() {
+    const name = langNewName.trim()
+    if (!name || !langBase) return
+    setLangCreating(true)
+    try {
+      await createDesignLanguage(name, langBase)
+      setLangNewName("")
+      setLangs(await listDesignLanguages())
+      setStyles(await listStyleLanguages())
+      toast.success(`Created design language ${name}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create design language")
+    } finally {
+      setLangCreating(false)
+    }
+  }
+
+  async function handleDeleteLang(id: string) {
+    try {
+      await deleteDesignLanguage(id)
+      setLangs(await listDesignLanguages())
+      setStyles(await listStyleLanguages())
+      toast.success("Design language deleted")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete design language")
+    }
+  }
+
+  async function handleDelete() {
+    if (!draft) return
+    try {
+      await deleteDesignSystem(draft.id)
+      toast.success(`Deleted ${draft.name}`)
+      setDeleteOpen(false)
+      setDraft(null)
+      setDsId("")
+      void mutate()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not delete design system")
+      setDeleteOpen(false)
+    }
+  }
+
+  async function handleCreateNew() {
+    const name = newName.trim()
+    if (!name) return
+    setCreatingNew(true)
+    try {
+      const created = await createDesignSystem(name, newDesc.trim())
+      setNewOpen(false)
+      setNewName("")
+      setNewDesc("")
+      setDsId(created.id)
+      void mutate()
+      toast.success(`Created ${created.name} — now pick a design language`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not create design system")
+    } finally {
+      setCreatingNew(false)
+    }
+  }
+
   if (isLoading && !systems) {
     return <p className="text-sm text-muted-foreground">Loading…</p>
   }
@@ -193,12 +374,12 @@ export default function DesignSystemsPage() {
       <div className="grid gap-4">
         <h1 className="text-xl font-semibold">Design Systems</h1>
         <p className="text-sm text-muted-foreground">
-          No design systems yet — create one with the brand builder.
+          No design systems yet — create one (blank or with the AI brand builder).
         </p>
         <div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Wand2 aria-hidden="true" className="size-4" />
-            Create with AI
+          <Button onClick={() => setNewOpen(true)}>
+            <Plus aria-hidden="true" className="size-4" />
+            New design system
           </Button>
         </div>
       </div>
@@ -222,21 +403,26 @@ export default function DesignSystemsPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={current?.id ?? ""} onValueChange={(v) => setDsId(v)}>
-            <SelectTrigger className="w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {activeSystems.map((s) => (
-                <SelectItem key={s.id} value={s.id}>
-                  {s.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Wand2 aria-hidden="true" className="size-4" />
-            Create with AI
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Design system
+            </span>
+            <Select value={current?.id ?? ""} onValueChange={(v) => setDsId(v)}>
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {activeSystems.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="outline" onClick={() => setNewOpen(true)}>
+            <Plus aria-hidden="true" className="size-4" />
+            New design system
           </Button>
         </div>
       </div>
@@ -258,18 +444,119 @@ export default function DesignSystemsPage() {
                 {draft.source}
               </Badge>
             </div>
-            <Button onClick={() => void save()} disabled={saving}>
-              {saving ? (
-                <>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Saving…
-                </>
-              ) : (
-                <>
-                  <Save aria-hidden="true" className="size-4" /> Save
-                </>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => void save()} disabled={saving}>
+                {saving ? (
+                  <>
+                    <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Saving…
+                  </>
+                ) : (
+                  <>
+                    <Save aria-hidden="true" className="size-4" /> Save
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Delete design system"
+                title={draft.id === "default" ? "The default design system cannot be deleted" : "Delete this design system"}
+                onClick={() => {
+                  if (draft.id === "default") {
+                    toast.info("The default design system cannot be deleted")
+                    return
+                  }
+                  setDeleteOpen(true)
+                }}
+              >
+                <Trash2 aria-hidden="true" className="size-4 text-destructive" />
+              </Button>
+            </div>
           </div>
+
+          <Card>
+            <CardContent className="flex flex-wrap items-center gap-4 p-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Design language
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => {
+                    setLangNewName("")
+                    setLangBase("")
+                    void openLangManager()
+                  }}
+                >
+                  <Plus aria-hidden="true" className="size-3.5" />
+                  New
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => void openLangManager()}
+                >
+                  Manage
+                </Button>
+                <Select
+                  value={currentStyle?.id ?? ""}
+                  onValueChange={(v) => void handleApplyStyle(v)}
+                  disabled={applyingStyle}
+                >
+                  <SelectTrigger className="w-48">
+                    <SelectValue placeholder="Select a design language" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {styles.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {styles.length === 0 && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    aria-label="Reload design languages"
+                    onClick={() => void retryStyles()}
+                  >
+                    <RefreshCw aria-hidden="true" className="size-4" />
+                  </Button>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">
+                  {currentStyle?.label ?? "No design language selected"}
+                </p>                <p className="text-xs text-muted-foreground">
+                  {currentStyle
+                    ? `${currentStyle.description} ${
+                        currentStyle.emoji ? "Emoji allowed. " : "No emoji. "
+                      }${
+                        currentStyle.grayscale ? "Photos render grayscale." : "Photos render full color."
+                      }`
+                    : "A design language is the visual style preset applied to THIS design system (its palette rules, type mood, decoration, media). It is a setting of the design system — not a separate design system. You can switch it anytime."}
+                </p>
+                {currentStyle && (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    {Object.entries({ ...currentStyle.palette_tokens, ...currentStyle.accent_tokens })
+                      .filter(([k]) => k.startsWith("--color") && !k.endsWith("inverted"))
+                      .map(([k, v]) => (
+                        <span
+                          key={k}
+                          title={`${k}: ${v}`}
+                          className="size-5 rounded-full border"
+                          style={{ backgroundColor: v }}
+                        />
+                      ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           <Tabs defaultValue="brand">
             <TabsList className="flex-wrap">
@@ -583,6 +870,206 @@ export default function DesignSystemsPage() {
           navigate(`/jobs/${jobId}`)
         }}
       />
+
+      {draft && (
+        <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete design system</DialogTitle>
+              <DialogDescription>
+                This permanently deletes <span className="font-medium">{draft.name}</span>{" "}
+                and all of its templates. This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={() => void handleDelete()}>
+                <Trash2 aria-hidden="true" className="size-4" /> Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      <Dialog open={newOpen} onOpenChange={setNewOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>New design system</DialogTitle>
+            <DialogDescription>
+              A design system is a brand's identity (name, tokens, categories, campaigns)
+              plus the design language that styles its posts.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setNewMode("blank")}
+              className={`rounded-md border p-3 text-left transition-colors ${
+                newMode === "blank" ? "border-primary bg-primary/5" : "hover:bg-muted"
+              }`}
+            >
+              <p className="text-sm font-medium">Blank system</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Creates an empty brand shell (Swiss by default). You fill in the
+                identity, tokens, and pick a design language yourself.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setNewMode("ai")}
+              className={`rounded-md border p-3 text-left transition-colors ${
+                newMode === "ai" ? "border-primary bg-primary/5" : "hover:bg-muted"
+              }`}
+            >
+              <p className="text-sm font-medium">Generate with AI</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The brand builder designs a complete system for you from a few
+                fields and optional reference/logo images.
+              </p>
+            </button>
+          </div>
+
+          {newMode === "blank" ? (
+            <div className="grid gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="new-ds-name">Name</Label>
+                <Input
+                  id="new-ds-name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="e.g. Acme"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handleCreateNew()
+                  }}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="new-ds-desc">Description (optional)</Label>
+                <Textarea
+                  id="new-ds-desc"
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  rows={2}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              You'll be asked for a name, industry, audience, handle, and optional
+              reference / logo images. The AI builds the brand, tokens, campaigns,
+              and starter templates. Runs as a background job.
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNewOpen(false)}>
+              Cancel
+            </Button>
+            {newMode === "blank" ? (
+              <Button onClick={() => void handleCreateNew()} disabled={creatingNew || !newName.trim()}>
+                {creatingNew ? (
+                  <>
+                    <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Creating…
+                  </>
+                ) : (
+                  "Create"
+                )}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  setNewOpen(false)
+                  setCreateOpen(true)
+                }}
+              >
+                <Wand2 aria-hidden="true" className="size-4" />
+                Open AI brand builder
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={langOpen} onOpenChange={setLangOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Design languages</DialogTitle>
+            <DialogDescription>
+              A design language is a reusable visual style bundle. Built-in languages
+              can't be deleted; you can add custom ones based on any language.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-2">
+            {langs.map((l) => {
+              const builtIn = styles.some((s) => s.id === l.id && s.label === l.name)
+              return (
+                <div key={l.id} className="flex items-center justify-between rounded-md border p-2.5">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{l.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {l.id} · {l.emoji ? "emoji" : "no emoji"} ·{" "}
+                      {l.grayscale ? "grayscale" : "color"} photos
+                    </p>
+                  </div>
+                  {!builtIn ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Delete ${l.name}`}
+                      onClick={() => void handleDeleteLang(l.id)}
+                    >
+                      <Trash2 aria-hidden="true" className="size-4 text-destructive" />
+                    </Button>
+                  ) : (
+                    <Badge variant="outline">built-in</Badge>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="grid gap-2 border-t pt-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              New custom language
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                value={langNewName}
+                onChange={(e) => setLangNewName(e.target.value)}
+                placeholder="Name (e.g. Warm Editorial)"
+              />
+              <Select value={langBase} onValueChange={setLangBase}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Based on…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {styles.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              onClick={() => void handleCreateLang()}
+              disabled={langCreating || !langNewName.trim() || !langBase}
+            >
+              {langCreating ? (
+                <>
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" /> Creating…
+                </>
+              ) : (
+                "Create language"
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

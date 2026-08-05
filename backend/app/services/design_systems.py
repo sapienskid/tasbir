@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -71,11 +72,66 @@ def validate_design_system(data: dict) -> list[str]:
         if bad:
             issues.append(f"design_instruction allowed_grounds {bad} invalid")
 
+    language = di.get("style_language") or ""
+    if language and not isinstance(language, str):
+        issues.append("design_instruction style_language must be a string")
+
     return issues
+
+
+def new_design_system_defaults(name: str) -> dict:
+    """A complete, immediately-usable baseline for a newly created design system.
+
+    A bare create (name only) is NOT usable: no brand identity, no categories,
+    no campaigns, no design instruction. This seeds the Swiss editorial
+    baseline + starter taxonomy so a fresh system renders real posts. The user
+    can switch the style language (Design language picker) and edit identity
+    later.
+    """
+    import yaml
+
+    from app.config import get_settings
+    from app.services.design_instruction import load_design_instruction
+    from app.services.styles import apply_style_preset
+    from app.services.tokens import (
+        DEFAULT_CATEGORIES,
+        DEFAULT_TOKEN_VALUES,
+        SEMANTIC_VAR_ROLES,
+        load_tokens,
+    )
+
+    settings = get_settings()
+    tokens = load_tokens(settings.tokens_path) or dict(DEFAULT_TOKEN_VALUES)
+    di = load_design_instruction(
+        Path(settings.design_system_dir) / "design-instruction.yaml"
+    )
+    di = apply_style_preset("swiss-editorial", di)
+
+    campaigns: dict = {}
+    try:
+        with open(settings.campaigns_path, encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+        if isinstance(raw, dict):
+            campaigns = raw
+    except Exception:  # noqa: BLE001 — missing file → empty campaigns
+        campaigns = {}
+
+    return {
+        "brand": {"name": name},
+        "footer": {"left": "", "right": ""},
+        "categories": [dict(c) for c in DEFAULT_CATEGORIES],
+        "overrides": {},
+        "tokens": tokens,
+        "token_roles": dict(SEMANTIC_VAR_ROLES),
+        "campaigns": campaigns,
+        "design_instruction": di,
+    }
 
 
 def build_pipeline_payload(ds: DesignSystem) -> dict:
     """Build the dicts the pipeline consumes from a design system row."""
+    from app.services.styles import normalize_design_instruction
+
     tokens = dict(DEFAULT_TOKEN_VALUES)
     tokens.update(ds.tokens or {})
     brand = ds.brand or {}
@@ -88,7 +144,7 @@ def build_pipeline_payload(ds: DesignSystem) -> dict:
         "categories": ds.categories or [],
         "overrides": ds.overrides or {},
         "campaigns": ds.campaigns or {},
-        "design_instruction": ds.design_instruction or {},
+        "design_instruction": normalize_design_instruction(ds.design_instruction),
         "logo": logo_data_uri(ds),
     }
 
@@ -205,20 +261,17 @@ _SAMPLE_COPY = {
     "subhead": "White space is the rhythm between ideas; a grid gives it a voice.",
     "body": "A grid sets order and a measure sets pace. Constrain the line, free "
     "the reader, and let the whitespace do its work.",
-    "tagline": "No. 12 — On grids",
     "badge": None,
 }
 
 
 def _generic_preview_html(width: int, height: int, footer: dict) -> str:
     """A minimal sample layout using only var(--color-*) / var(--font-*)."""
-    left = (footer or {}).get("left", "")
     right = (footer or {}).get("right", "")
     footer_block = (
         f'<div class="rule"></div><div class="footer">'
-        f'<span class="wordmark">{left}</span>'
         f'<span class="handle">{right}</span></div>'
-        if left and right
+        if right
         else ""
     )
     css = "\n".join([
@@ -257,13 +310,8 @@ def _generic_preview_html(width: int, height: int, footer: dict) -> str:
         ".spacer { flex: 1; }",
         ".rule { border-top: 1px solid var(--color-border); }",
         ".footer {",
-        "  display: flex; justify-content: space-between;",
+        "  display: flex; justify-content: flex-start;",
         "  align-items: baseline; padding-top: 24px;",
-        "}",
-        ".wordmark {",
-        "  font-family: var(--font-display); font-size: 24px;",
-        "  font-weight: 500; letter-spacing: -0.01em;",
-        "  text-transform: uppercase;",
         "}",
         ".handle {",
         "  font-size: 20px; font-weight: 500; letter-spacing: 0.08em;",

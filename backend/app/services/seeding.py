@@ -169,6 +169,13 @@ async def sync_seed_design_system(pool: async_sessionmaker[AsyncSession]) -> dic
             summary["design_system"].append("created default")
             return summary
 
+        # The Studio owns the rows after first boot. While the default system
+        # is still seed-owned (untouched), re-apply YAML edits on restart;
+        # once a user edits it (Studio save / style apply marks it manual),
+        # never clobber their changes with the seed.
+        if ds.source != "seed":
+            summary["design_system"].append("skipped (user-owned)")
+
         desired = {
             "name": "Default",
             "brand": brand_data.get("brand", {}),
@@ -180,10 +187,11 @@ async def sync_seed_design_system(pool: async_sessionmaker[AsyncSession]) -> dic
             "campaigns": campaigns,
             "design_instruction": di_config,
         }
-        changed = {k: v for k, v in desired.items() if getattr(ds, k) != v}
-        if changed:
-            await ds_repo.update(_DEFAULT_ID, changed)
-            summary["design_system"] = list(changed.keys())
+        if ds.source == "seed":
+            changed = {k: v for k, v in desired.items() if getattr(ds, k) != v}
+            if changed:
+                await ds_repo.update(_DEFAULT_ID, changed)
+                summary["design_system"] = list(changed.keys())
 
         tpl_repo = TemplateRepository(session)
         catalog = load_template_catalog().get("templates", {})

@@ -42,8 +42,10 @@ SEMANTIC_VAR_ROLES: dict[str, str] = {
     "--color-text-tertiary": "tertiary text — light gray, use sparingly",
     "--color-border": "hairline rule on light ground",
     "--color-border-inverted": "hairline rule on black ground",
+    "--color-accent": "optional single accent hue for emphasis — defined only for non-monochrome design languages",
+    "--color-accent-secondary": "optional secondary accent hue — used with --color-accent only",
     "--font-sans": "interface sans — Inter (category, metadata, handle only)",
-    "--font-display": "signature display typeface — for the headline and footer wordmark ONLY",
+    "--font-display": "signature display typeface — for the headline ONLY",
     "--font-serif": "editorial serif text face — for the subhead and body copy ONLY",
 }
 
