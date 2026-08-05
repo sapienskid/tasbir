@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -81,6 +82,9 @@ class DOMNode:
 
     # SVG content (for .math and .diagram elements)
     svg_content: str | None = None
+
+    # Parent reference (set during parsing, used by contrast resolution)
+    parent: "DOMNode | None" = None
 
     # Children
     children: list["DOMNode"] = field(default_factory=list)
@@ -243,6 +247,126 @@ async def detect_overflow(
     return issues
 
 
+# --- Contrast (legibility) ----------------------------------------------------
+
+# WCAG contrast floor for "clearly broken" text — near-invisible copy that is
+# the same colour as its background. Intentional decorative grays (e.g. a large
+# index numeral) sit above this; body text that blends into the background does
+# not.
+_MIN_CONTRAST = 1.8
+# Skip text this short (decorative glyphs, "i/N" counters, single letters).
+_MIN_TEXT_LEN = 3
+
+
+def _parse_rgba(color: str):
+    """Parse 'rgb()/rgba()/#RRGGBB/#RGB' -> (r, g, b, a) or None."""
+    m = re.match(r"rgba?\(([^)]+)\)", color.strip())
+    if m:
+        parts = [p.strip() for p in m.group(1).split(",")]
+        try:
+            a = float(parts[3]) if len(parts) > 3 else 1.0
+            return int(parts[0]), int(parts[1]), int(parts[2]), a
+        except ValueError:
+            return None
+    m = re.match(r"#([0-9a-fA-F]{6})\b", color.strip())
+    if m:
+        h = m.group(1)
+        return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), 1.0
+    m = re.match(r"#([0-9a-fA-F]{3})\b", color.strip())
+    if m:
+        h = m.group(1)
+        return int(h[0] * 2, 16), int(h[1] * 2, 16), int(h[2] * 2, 16), 1.0
+    return None
+
+
+def _relative_luminance(r: int, g: int, b: int) -> float:
+    def _f(c: float) -> float:
+        c /= 255.0
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * _f(r) + 0.7152 * _f(g) + 0.0722 * _f(b)
+
+
+def _contrast_ratio(l1: float, l2: float) -> float:
+    hi, lo = max(l1, l2), min(l1, l2)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _blend(
+    fg: tuple[int, int, int, float], bg: tuple[int, int, int, float]
+) -> tuple[int, int, int, float]:
+    """Overlay fg (with alpha) onto bg; return the resulting color (alpha=1)."""
+    a = fg[3] + bg[3] * (1 - fg[3])
+    if a <= 0:
+        return (0, 0, 0, 0.0)
+    r = (fg[0] * fg[3] + bg[0] * bg[3] * (1 - fg[3])) / a
+    g = (fg[1] * fg[3] + bg[1] * bg[3] * (1 - fg[3])) / a
+    b = (fg[2] * fg[3] + bg[2] * bg[3] * (1 - fg[3])) / a
+    return (int(r), int(g), int(b), 1.0)
+
+
+def _effective_background(node: DOMNode) -> tuple[int, int, int, float] | None:
+    """Walk node + ancestors for the nearest solid background color.
+
+    Returns None when the effective background is a gradient/image/transparent
+    chain (contrast can't be computed — the vision verifier covers those).
+    """
+    cur: DOMNode | None = node
+    while cur is not None:
+        if cur.has_gradient or (cur.background_image or "").strip() not in ("", "none"):
+            return None
+        parsed = _parse_rgba(cur.background_color)
+        if parsed and parsed[3] > 0.01:
+            return parsed
+        cur = cur.parent
+    return None
+
+
+def _collect_contrast_issues(node: DOMNode, issues: list[str]) -> None:
+    if node.tag in ("svg", "path", "circle", "rect", "line"):
+        return
+    text = (node.text or "").strip()
+    if len(text) >= _MIN_TEXT_LEN and not text.isdigit():
+        bg = _effective_background(node)
+        if bg is not None:
+            fg = _parse_rgba(node.color)
+            if fg is not None:
+                # Blend the text's own alpha onto the background.
+                fg = _blend(fg, bg)
+                if fg[3] > 0.01:
+                    ratio = _contrast_ratio(
+                        _relative_luminance(*fg[:3]), _relative_luminance(*bg[:3])
+                    )
+                    if ratio < _MIN_CONTRAST:
+                        cls = ".".join(node.class_list) or node.tag
+                        issues.append(
+                            f"Low-contrast text: '{text[:40]}' ('.{cls}') is nearly "
+                            f"the same colour as its background (contrast "
+                            f"{ratio:.2f}:1) — text must be clearly legible."
+                        )
+    for child in node.children:
+        _collect_contrast_issues(child, issues)
+
+
+async def detect_low_contrast(
+    html: str,
+    width: int = 1080,
+    height: int = 1080,
+) -> list[str]:
+    """Detect text that is nearly the same colour as its background.
+
+    Uses the DOM extractor's computed styles. Text over images/gradients is
+    skipped (the vision verifier audits those); only solid-background text that
+    is effectively invisible is reported.
+    """
+    root = await extract_dom_tree(html, width, height)
+    if root is None:
+        return []
+    issues: list[str] = []
+    _collect_contrast_issues(root, issues)
+    return issues
+
+
 def _parse_dom_node(data: dict) -> DOMNode:
     """Recursively parse a raw DOM dict into DOMNode objects."""
     node = DOMNode(
@@ -292,6 +416,8 @@ def _parse_dom_node(data: dict) -> DOMNode:
     )
 
     for child_data in data.get("children", []):
-        node.children.append(_parse_dom_node(child_data))
+        child = _parse_dom_node(child_data)
+        child.parent = node
+        node.children.append(child)
 
     return node

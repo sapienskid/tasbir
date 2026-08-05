@@ -168,15 +168,14 @@ def _build_design_system_context(
 
     if category:
         lines.append(f"  Required category label (tracked uppercase): {category}")
-    if footer.get("left") and footer.get("right"):
+    if footer.get("right"):
         lines.append(
-            f"  Required footer row: '{footer['left']}' left · '{footer['right']}' right, "
-            "hairline rule above, metadata size"
+            f"  Required footer handle: '{footer['right']}', metadata size"
         )
         lines.append(
-            "  Footer note: the footer text is verified present programmatically — "
-            "audit its placement, the hairline rule, and styling ONLY. Do not report "
-            "the footer as 'missing' unless the rule or text is actually absent."
+            "  Footer note: the footer handle is verified present programmatically — "
+            "audit its placement and styling ONLY. Do not report the footer as "
+            "'missing' unless the handle is actually absent."
         )
 
     # Token values (the verifier sees actual values — it's the auditor)
@@ -213,6 +212,7 @@ def _run_deterministic_checks(
     canvas_width: int = 1080,
     canvas_height: int = 1080,
     display_family: str = _DEFAULT_DISPLAY_FAMILY,
+    allow_emoji: bool = False,
 ) -> list[str]:
     """Check for hard design-system violations WITHOUT an LLM.
 
@@ -220,7 +220,7 @@ def _run_deterministic_checks(
     and retried. These encode the spec's non-negotiable rules:
       - the canvas is a styled, correctly-sized document
       - the signature display face is actually used (headline/wordmark)
-      - no emoji / decorative unicode symbols
+      - no emoji / decorative unicode symbols (unless the DS style allows)
       - no raw hex colors in real styles (must use var(--color-*))
       - footer name + handle present (when configured)
       - approved category label present (when configured)
@@ -253,13 +253,14 @@ def _run_deterministic_checks(
             "must be used on the headline and footer wordmark"
         )
 
-    # 1. Emoji / decorative symbols
-    emoji_matches = _EMOJI_RE.findall(html)
-    if emoji_matches:
-        issues.append(
-            f"Emoji/decorative unicode symbols detected (forbidden): "
-            f"{sorted(set(emoji_matches))[:6]}"
-        )
+    # 1. Emoji / decorative symbols (per design language)
+    if not allow_emoji:
+        emoji_matches = _EMOJI_RE.findall(html)
+        if emoji_matches:
+            issues.append(
+                f"Emoji/decorative unicode symbols detected (forbidden): "
+                f"{sorted(set(emoji_matches))[:6]}"
+            )
 
     # 2. Raw hex colors in real CSS. Strip :root blocks first — they are
     #    removed by the token injector before rendering, so hex inside a
@@ -274,9 +275,7 @@ def _run_deterministic_checks(
                 f"{sorted(set(hex_found))[:6]}"
             )
 
-    # 3. Footer presence
-    if footer.get("left") and footer["left"].lower() not in html.lower():
-        issues.append(f"Footer name '{footer['left']}' is missing from the design")
+    # 3. Footer handle presence
     if footer.get("right") and footer["right"].lower() not in html.lower():
         issues.append(f"Footer handle '{footer['right']}' is missing from the design")
 
@@ -324,8 +323,16 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # is a hard spec failure — fix and retry.
     display_value = design_tokens.get("--font-display") or DEFAULT_TOKEN_VALUES["--font-display"]
     display_family = display_value.split(",")[0].strip()
+    di_config = state.get("design_instruction") or {}
+    allow_emoji = bool((di_config.get("style") or {}).get("emoji"))
     check_issues = _run_deterministic_checks(
-        html, footer, category, fmt.width, fmt.height, display_family
+        html,
+        footer,
+        category,
+        fmt.width,
+        fmt.height,
+        display_family,
+        allow_emoji=allow_emoji,
     )
     if check_issues:
         log.warning("[verifier] Deterministic violations for %s: %s", fmt_id, check_issues)
@@ -408,6 +415,36 @@ async def quality_check_node_single(state: GenerationState) -> dict:
                     **task,
                     "quality_score": 30,
                     "quality_issues": overflow_issues,
+                    "status": "needs_retry",
+                }
+            },
+            "verification": verification,
+            "retry_count": new_retry_count,
+        }
+
+    # Step 1c: Legibility — text must never blend into its background. Text over
+    # images/gradients is skipped here (the vision audit covers those).
+    from app.services.dom_extractor import detect_low_contrast
+
+    contrast_issues = await detect_low_contrast(html_with_tokens, fmt.width, fmt.height)
+    if contrast_issues:
+        log.warning("[verifier] Low-contrast text for %s: %s", fmt_id, contrast_issues)
+        _save_html_preview(task_id, fmt_id, html_with_tokens)
+        verification = dict(state.get("verification", {}))
+        verification[fmt_id] = {
+            "pass": False,
+            "score": 35,
+            "issues": contrast_issues,
+            "critique": "Illegible text. Fix: " + "; ".join(contrast_issues),
+        }
+        new_retry_count = dict(state.get("retry_count", {}))
+        new_retry_count[fmt_id] = retry_count + 1
+        return {
+            "format_tasks": {
+                fmt_id: {
+                    **task,
+                    "quality_score": 35,
+                    "quality_issues": contrast_issues,
                     "status": "needs_retry",
                 }
             },
