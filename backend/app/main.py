@@ -134,6 +134,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.error("[startup] Design-language seed FAILED: %s", e, exc_info=True)
     try:
+        from app.services.seeding import migrate_stored_design_instructions
+
+        await migrate_stored_design_instructions(pool)
+    except Exception as e:
+        log.error("[startup] Design-instruction migration FAILED: %s", e, exc_info=True)
+    try:
         from app.services.settings import seed_app_settings
         await seed_app_settings(pool)
     except Exception as e:

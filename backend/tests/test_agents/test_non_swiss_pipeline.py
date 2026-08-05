@@ -42,6 +42,7 @@ def _vibrant_state(**kw):
         design_tokens=dict(TOKENS),
         token_roles={},
         design_instruction=dict(VIBRANT_DI),
+        ground="white",
         footer={"left": "", "right": "@B"},
         categories=[{"name": "WRITING"}],
         **kw,
@@ -141,3 +142,49 @@ def test_vibrant_tokens_flow_into_output_html():
     html = Path(html_path).read_text(encoding="utf-8")
     assert "--color-accent" in html
     assert "FF2D78" in html  # accent injected via tokens
+
+
+def test_non_swiss_template_first_path():
+    """A vibrant-tagged starter template is selected + renders token-only HTML."""
+    from app.services.style_templates import STARTER_TEMPLATES
+
+    state = _vibrant_state()
+    state["ds_templates"] = [
+        {
+            "id": "vibrant-pop-square",
+            "family": "square",
+            "grounds": ["white", "black"],
+            "categories": [],
+            "hint_tags": ["style", "vibrant-pop"],
+            "weight": 1.0,
+            "description": "",
+            "html": STARTER_TEMPLATES["vibrant-pop"]["square"],
+            "image_slots": [],
+            "has_logo_slot": False,
+            "design_system_id": "x",
+        }
+    ]
+    state["format_tasks"]["instagram-square"]["copy"] = (
+        '{"headline":"Vibrant Idea","subhead":"","body":"B","tagline":"","badge":null}'
+    )
+    with ExitStack() as stack:
+        stack.enter_context(
+            patch(
+                "app.agents.orchestrator.nodes.quality_check.render_to_png",
+                new=AsyncMock(return_value=b"PNG"),
+            )
+        )
+        stack.enter_context(
+            patch(
+                "app.agents.orchestrator.nodes.quality_check._call_vision_llm",
+                new=AsyncMock(return_value='{"pass":true,"score":95,"issues":[],"critique":"ok"}'),
+            )
+        )
+        stack.enter_context(
+            patch("app.services.media_plan.build_media_plan", new=AsyncMock(return_value={}))
+        )
+        out = asyncio.run(_run_format_chain(state, "instagram-square"))
+
+    ft = out["format_tasks"]["instagram-square"]
+    assert ft["template_id"] == "vibrant-pop-square"  # style-tagged selection
+    assert ft["status"] == "verified"

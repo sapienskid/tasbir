@@ -293,3 +293,38 @@ async def seed_fonts(pool: async_sessionmaker[AsyncSession]) -> int:
         log.info("[seed] Created %d font row(s)", created)
     await refresh_font_pool(pool)
     return created
+
+
+async def migrate_stored_design_instructions(
+    pool: async_sessionmaker[AsyncSession],
+) -> int:
+    """Upgrade legacy/imported design-system rows to the modern schema.
+
+    Rows created before design languages / photo policy existed store a
+    design_instruction without ``style_language`` or ``photo`` (and possibly
+    stale wording). This re-applies the row's active language bundle —
+    refreshing language fields (style/type_voice/do_dont/archetypes) while
+    preserving the user's structural fields (type_scale/spacing/footer).
+    Current rows (which already have both keys) are left untouched. Idempotent.
+    """
+    from app.db.repositories.design_systems import DesignSystemRepository
+    from app.services.design_languages import apply_language
+    from app.services.styles import normalize_design_instruction
+
+    changed = 0
+    async with pool() as session:
+        repo = DesignSystemRepository(session)
+        rows = await repo.list(include_inactive=True)
+        for ds in rows:
+            di = ds.design_instruction or {}
+            if "style_language" in di and "photo" in di:
+                continue
+            new_di = normalize_design_instruction(di)
+            lang_id = new_di.get("style_language") or "swiss-editorial"
+            new_di = await apply_language(session, lang_id, new_di)
+            if new_di != di:
+                await repo.update(ds.id, {"design_instruction": new_di})
+                changed += 1
+    if changed:
+        log.info("[seed] Migrated %d design-system instruction(s) to the modern schema", changed)
+    return changed
