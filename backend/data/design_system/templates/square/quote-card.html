@@ -87,19 +87,11 @@ body[data-ground="black"] .subhead { color: var(--color-text-secondary); }
 .footer {
   width: 100%;
   margin-top: auto;
-  border-top: 1px solid var(--color-border);
   padding-top: {{ (width * 0.02) | round | int }}px;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
 }
-body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
-.wordmark {
-  font-family: var(--font-display);
-  font-size: {{ (24 * tscale) | round | int }}px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
 }
 .handle {
   font-size: {{ (20 * tscale) | round | int }}px;
@@ -117,21 +109,12 @@ body[data-ground="black"] .footer { border-color: var(--color-border-inverted); 
     {% if subhead %}
     <div class="subhead" data-slot="subhead">{{ subhead }}</div>
     {% endif %}
-    {% if tagline %}
-    <div class="cta">
-      <span class="cta-label" data-slot="tagline">{{ tagline }}</span>
-      <span class="arrow">
-        <svg width="{{ (width * 0.03) | round | int }}" height="{{ (width * 0.03) | round | int }}" viewBox="0 0 24 24" fill="none">
-          <path d="M18 6 6 18M6 6h12v12" stroke="var(--color-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </span>
-    </div>
-    {% endif %}
 
+    {% if footer_right %}
     <div class="footer">
-      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
       <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
     </div>
+    {% endif %}
   </div>
 </body>
 </html>

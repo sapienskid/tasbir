@@ -48,7 +48,6 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 /* quiet lower region — meta low, tighter now that type is scaled up */
 .lower {
   margin-top: {{ (height * 0.04) | round | int }}px;
-  border-top: 1px solid var(--color-border);
   padding-top: {{ (width * 0.022) | round | int }}px;
   display: flex;
   justify-content: space-between;
@@ -60,8 +59,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
-body[data-ground="black"] .lower { border-color: var(--color-border-inverted); }
-.wordmark { font-family: var(--font-display); letter-spacing: -0.01em; color: var(--color-text); }
+
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -74,10 +72,11 @@ body[data-ground="black"] .lower { border-color: var(--color-border-inverted); }
     {% if body %}
     <div class="body" data-slot="body">{{ body }}</div>
     {% endif %}
+    {% if footer_right %}
     <div class="lower">
-      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
       <span data-slot="footer_right">{{ footer_right }}</span>
     </div>
+    {% endif %}
   </div>
 </body>
 </html>

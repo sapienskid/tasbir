@@ -44,12 +44,6 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   font-size: {{ (22 * tscale) | round | int }}px;
 }
 body[data-ground="black"] .mark { background: var(--color-text-inverted); color: var(--color-bg-inverted); }
-.brandname {
-  font-family: var(--font-display);
-  font-size: {{ (26 * tscale) | round | int }}px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
 }
 
 /* seeded typographic glyph texture — monochrome, varies per post */
@@ -115,7 +109,6 @@ body[data-ground="black"] .headline {
   <div class="card">
     <div class="brandrow">
       <span class="mark">{{ loop_index }}</span>
-      <span class="brandname" data-slot="footer_left">{{ footer_left }}</span>
     </div>
 
     <div class="grid">
@@ -124,14 +117,13 @@ body[data-ground="black"] .headline {
 
     <div class="kicker" data-slot="kicker">{{ kicker }}</div>
     <h1 class="headline" data-slot="headline">{{ headline }}</h1>
-    {% if tagline %}
-    <div style="margin-top:{{ (height * 0.02) | round | int }}px;font-size:{{ (24 * tscale) | round | int }}px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:var(--color-text-secondary);" data-slot="tagline">{{ tagline }}</div>
-    {% endif %}
 
+    {% if meta or footer_right %}
     <div class="footerrow">
       <span style="color:var(--color-text-tertiary);font-size:{{ (20 * tscale) | round | int }}px;">{{ meta }}</span>
       <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
     </div>
+    {% endif %}
   </div>
 </body>
 </html>

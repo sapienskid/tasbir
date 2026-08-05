@@ -53,10 +53,8 @@ body[data-ground="black"] .image { border-color: var(--color-border-inverted); }
 
 /* lower-third band: rule + body + footer */
 .band {
-  border-top: 1px solid var(--color-border);
   padding-top: {{ (width * 0.03) | round | int }}px;
 }
-body[data-ground="black"] .band { border-color: var(--color-border-inverted); }
 
 .body {
   font-size: {{ (30 * tscale) | round | int }}px;
@@ -82,7 +80,7 @@ body[data-ground="black"] .band { border-color: var(--color-border-inverted); }
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
-.wordmark { font-family: var(--font-display); letter-spacing: -0.01em; color: var(--color-text); }
+
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -100,10 +98,11 @@ body[data-ground="black"] .band { border-color: var(--color-border-inverted); }
       {% if body %}
       <div class="body" data-slot="body">{{ body }}</div>
       {% endif %}
+      {% if footer_right %}
       <div class="footer-row">
-        <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
         <span data-slot="footer_right">{{ footer_right }}</span>
       </div>
+      {% endif %}
     </div>
   </div>
 </body>

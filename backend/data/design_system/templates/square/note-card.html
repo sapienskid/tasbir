@@ -65,7 +65,6 @@ body[data-ground="black"] .frame { border-color: var(--color-border-inverted); }
 .footnote {
   margin-top: auto;
   padding-top: {{ (width * 0.022) | round | int }}px;
-  border-top: 1px solid var(--color-border);
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -76,8 +75,8 @@ body[data-ground="black"] .frame { border-color: var(--color-border-inverted); }
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
-body[data-ground="black"] .footnote { border-color: var(--color-border-inverted); }
-.wordmark { font-family: var(--font-display); letter-spacing: -0.01em; color: var(--color-text); }
+.handle { color: var(--color-text-secondary); }
+
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -85,7 +84,6 @@ body[data-ground="black"] .footnote { border-color: var(--color-border-inverted)
   <div class="sheet">
     <div class="topline">
       <span data-slot="kicker">{{ kicker }}</span>
-      <span data-slot="footer_right">{{ footer_right }}</span>
     </div>
     <div class="spacer"></div>
     <h1 class="headline" data-slot="headline">{{ headline }}</h1>
@@ -95,10 +93,11 @@ body[data-ground="black"] .footnote { border-color: var(--color-border-inverted)
     {% if body %}
     <div class="body" data-slot="body">{{ body }}</div>
     {% endif %}
+    {% if footer_right %}
     <div class="footnote">
-      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
-      {% if tagline %}<span data-slot="tagline">{{ tagline }}</span>{% endif %}
+      <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
     </div>
+    {% endif %}
   </div>
 </body>
 </html>

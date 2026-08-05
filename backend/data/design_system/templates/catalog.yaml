@@ -179,7 +179,7 @@ templates:
     - product
     - doc
     weight: 1.0
-    description: 'Product ad card: category + wordmark row, display headline, serif sub,
+    description: 'Product ad card: category row, display headline, serif sub,
       monochrome line-art, footer row with handle + url.'
     file: landscape/ad-card.html
   story-costs:

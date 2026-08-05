@@ -62,19 +62,11 @@ body[data-ground="black"] .spine-bar { background: var(--color-text-inverted); }
 body[data-ground="black"] .source-line { color: var(--color-text-secondary); }
 
 .footer {
-  border-top: 1px solid var(--color-border);
   padding-top: {{ (width * 0.02) | round | int }}px;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
 }
-body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
-.wordmark {
-  font-family: var(--font-display);
-  font-size: {{ (width * 0.024) | round | int }}px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
 }
 .handle {
   font-family: var(--font-sans);
@@ -98,10 +90,11 @@ body[data-ground="black"] .footer { border-color: var(--color-border-inverted); 
       <div class="source-line" data-slot="subhead" style="text-transform:none;letter-spacing:0;font-family:var(--font-serif);font-size:{{ (width * 0.032) | round | int }}px;font-weight:400;color:var(--color-text-secondary);max-width:{{ (width * 0.62) | round | int }}px;line-height:1.4;margin-top:{{ (width * 0.05) | round | int }}px;">{{ subhead }}</div>
       {% endif %}
     </div>
+    {% if footer_right %}
     <div class="footer">
-      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
       <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
     </div>
+    {% endif %}
   </div>
 </body>
 </html>

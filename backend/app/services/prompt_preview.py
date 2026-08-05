@@ -116,7 +116,7 @@ async def _build_user_prompt(name: str, payload: dict) -> str:
             else ""
         )
         brand_block = (
-            f"BRAND: {brand.get('name', '')}\nTAGLINE: {brand.get('tagline', '')}\n"
+            f"BRAND: {brand.get('name', '')}\n"
             f"MISSION: {brand.get('mission', '')}\nSTORY: {brand.get('story', '')}\n"
             if brand.get("name")
             else ""
@@ -138,7 +138,7 @@ async def _build_user_prompt(name: str, payload: dict) -> str:
 
     if name == "copywriter":
         brand_block = (
-            f"BRAND: {brand.get('name', '')}\nTAGLINE: {brand.get('tagline', '')}\n"
+            f"BRAND: {brand.get('name', '')}\n"
             if brand.get("name")
             else ""
         )
@@ -187,16 +187,13 @@ async def _build_user_prompt(name: str, payload: dict) -> str:
         )
         ground = brief.get("ground", "white")
         category = brief.get("category", "")
-        footer_left = footer.get("left", "")
         footer_right = footer.get("right", "")
         footer_block = (
-            "FOOTER ROW (REQUIRED on every format):\n"
-            f"  Left (SIGNATURE WORDMARK): {footer_left} — display face "
-            "(var(--font-display)), ~24px, weight 500, tight tracking, uppercase\n"
-            f"  Right: {footer_right} — metadata style (tracked uppercase, secondary gray)\n"
-            "  1px hairline rule above, then 24px gap, bottom-anchored\n"
-            if footer_left and footer_right
-            else "FOOTER ROW: (footer text not configured — omit)\n"
+            "FOOTER (handle only):\n"
+            f"  {footer_right} — metadata style (tracked uppercase, secondary gray), "
+            "small and quiet at the very bottom. Never the brand name, never a wordmark.\n"
+            if footer_right
+            else "FOOTER: (footer handle not configured — omit)\n"
         )
         category_block = (
             f"CATEGORY LABEL (EXACT — tracked uppercase, category role size): {category}\n"
@@ -250,7 +247,6 @@ async def _build_user_prompt(name: str, payload: dict) -> str:
     if name == "brand_vision":
         form = {
             "name": brand.get("name", "Sample Brand"),
-            "tagline": brand.get("tagline", ""),
             "mission": brand.get("mission", ""),
             "industry": "Technology",
             "audience": "Design-minded builders",

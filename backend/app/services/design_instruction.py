@@ -16,6 +16,11 @@ import yaml
 log = logging.getLogger(__name__)
 
 DEFAULT_DESIGN_INSTRUCTION: dict = {
+    "style_language": "swiss-editorial",
+    "photo": {
+        "grayscale": True,
+        "media_policy": "photo-forward",
+    },
     "style": {
         "name": "Swiss / International Typographic Style",
         "palette": "monochrome",
@@ -31,7 +36,7 @@ DEFAULT_DESIGN_INSTRUCTION: dict = {
         "gradients": False,
     },
     "type_voice": {
-        "display": "Space Grotesk (var(--font-display)) is the signature display voice. Use it ONLY for the headline and the footer wordmark.",
+        "display": "Space Grotesk (var(--font-display)) is the signature display voice. Use it ONLY for the headline.",
         "serif": "Source Serif 4 (var(--font-serif)) is the editorial text voice. It carries the subhead and body copy.",
         "body": "Inter (var(--font-sans)) is the quiet interface voice — category label, metadata, and the footer handle.",
     },
@@ -96,7 +101,7 @@ DEFAULT_DESIGN_INSTRUCTION: dict = {
         "do": [
             "Left-align everything, always",
             "Use weight and size for hierarchy — never color",
-            "THREE VOICES: display (Space Grotesk) for headline + wordmark; serif (Source Serif 4) for subhead + body; sans (Inter) for category, metadata, handle",
+            "THREE VOICES: display (Space Grotesk) for headline; serif (Source Serif 4) for subhead + body; sans (Inter) for category, metadata, handle",
             "Constrain subhead/body copy to the measure (~600px at 1080) — never full-width lines",
             "Keep hairline rules exactly 1px: hairline on white-ground, hairline-inverted on black-ground",
             "Use generous whitespace — flexible space is intentional, not empty by accident",
@@ -107,7 +112,7 @@ DEFAULT_DESIGN_INSTRUCTION: dict = {
             "No centering",
             "No more than 2 weights per family (Space Grotesk 500+700, Source Serif 4 400, Inter 500)",
             "Never use the display face for body, subhead, category, or metadata text",
-            "Never use the serif for headlines, category labels, metadata, or the wordmark",
+            "Never use the serif for headlines, category labels, or metadata",
             "No shadows, gradients, borders-with-radius, or any softening effect",
             "No third color, ever — if a post needs emphasis, use weight or size",
         ],
@@ -193,8 +198,7 @@ def build_google_fonts_link(tokens: dict, config: dict) -> str:
     """Build a Google Fonts <link> for every family in the type system.
 
     Each family's weights come from the type-scale roles (matched by the
-    role's `family` field) plus the footer wordmark. Only families actually
-    referenced are loaded.
+    role's `family` field). Only families actually referenced are loaded.
     """
     roles = config.get("type_scale", {}).get("roles", {})
     wm = config.get("footer", {}).get("wordmark", {})
@@ -251,7 +255,6 @@ def format_design_instruction_block(config: dict) -> str:
     st = config.get("style", {})
     ts = config.get("type_scale", {})
     sp = config.get("spacing", {})
-    ft = config.get("footer", {})
     tv = config.get("type_voice", {})
     dd = config.get("do_dont", {})
     img_rules = config.get("images", {})
@@ -260,14 +263,13 @@ def format_design_instruction_block(config: dict) -> str:
     lines = [
         f"DESIGN SYSTEM — {st.get('name', 'SWISS / INTERNATIONAL TYPOGRAPHIC STYLE').upper()}",
         "",
-        "--- PALETTE (STRICTLY MONOCHROME) ---",
-        f"  Palette: {st.get('palette', 'monochrome')} — pure black/white/gray only, NO hue ever",
-        f"  Allowed grounds: {', '.join(st.get('allowed_grounds', ['white', 'black']))}",
+    ]
+    from app.services.styles import build_style_rules_block
+
+    lines.append(build_style_rules_block(config))
+    lines += [
+        "",
         f"  Max weights per family: {st.get('max_weights_per_family', 2)}",
-        f"  Shadows: {_yn(st.get('shadows', False))}",
-        f"  Border radius: {st.get('border_radius', '0px')} — no rounded corners",
-        f"  Illustrations/icons: {_yn(st.get('illustrations', False))}",
-        f"  Gradients: {_yn(st.get('gradients', False))}",
         "",
         "--- TYPE VOICE (THREE FAMILIES — READ THIS) ---",
     ]
@@ -295,7 +297,6 @@ def format_design_instruction_block(config: dict) -> str:
             f"{r.get('case', 'sentence')} · line-height {r.get('line_height', 1.3)}{measure_txt}"
         )
 
-    wm = ft.get("wordmark", {})
     lines += [
         "",
         "--- SPACING (8px base grid — every value a multiple of 8) ---",
@@ -306,12 +307,11 @@ def format_design_instruction_block(config: dict) -> str:
         f"  Headline → body gap: {sp.get('gap_headline_body', 32)}px",
         f"  Rule → footer gap: {sp.get('gap_footer_rule', 24)}px",
         "",
-        "--- FOOTER (every format) ---",
-        f"  {ft.get('rule', '1px hairline')} above footer, {ft.get('gap', 24)}px gap",
-        "  Left: brand NAME as a signature wordmark — display face, tight tracking,",
-        f"        {wm.get('size', 24)}px · weight {wm.get('weight', 500)} · tracking {wm.get('tracking', '-0.01em')} · uppercase",
-        "  Right: @handle in metadata style (var(--font-sans), tracked uppercase, secondary gray)",
-        "  No logo, no mark, no icon — typography is the signature.",
+        "--- FOOTER (every format — handle only) ---",
+        "  No rule/border above the footer — just the handle, small and quiet",
+        "  A single @handle in metadata style (var(--font-sans), tracked uppercase,",
+        "  secondary gray), small and quiet at the bottom. NEVER the brand name or",
+        "  a wordmark — the handle is the only footer element.",
         "",
         "--- DO ---",
     ]
@@ -385,12 +385,20 @@ def format_format_layout_block(
 def pick_layout_archetype(config: dict, seed: str) -> tuple[str, str]:
     """Deterministically pick a layout archetype from the config.
 
-    The seed (e.g. title + format) makes the choice stable for the same input
-    but different across posts, so layouts vary without breaking reproducibility.
+    Supports per-style archetype pools: when ``layout_archetypes`` contains a
+    key equal to the active ``style_language`` (a dict), that pool is used;
+    otherwise the flat list is used. The seed (e.g. title + format) makes the
+    choice stable for the same input but different across posts, so layouts
+    vary without breaking reproducibility.
     """
     import hashlib
 
-    archetypes = config.get("layout_archetypes", {})
+    la = config.get("layout_archetypes", {}) or {}
+    language = config.get("style_language") or ""
+    if language and isinstance(la.get(language), dict):
+        archetypes = la[language]
+    else:
+        archetypes = la
     if not archetypes:
         return "editorial-stack", ""
     keys = list(archetypes.keys())

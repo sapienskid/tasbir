@@ -24,7 +24,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   flex-direction: column;
 }
 
-/* top row: category left, brand wordmark right */
+/* top row: category + handle row */
 .toprow {
   display: flex;
   align-items: baseline;
@@ -36,13 +36,6 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
-}
-.wordmark {
-  font-family: var(--font-display);
-  font-size: {{ (24 * tscale) | round | int }}px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
 }
 
 /* middle: display column left, line-art right */
@@ -76,13 +69,11 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 .right svg { max-width: 100%; }
 
 .footer {
-  border-top: 1px solid var(--color-border);
   padding-top: {{ (height * 0.022) | round | int }}px;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
-body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
 .dots { display: flex; align-items: center; gap: 10px; }
 .dot { width: 10px; height: 10px; background: var(--color-text-tertiary); }
 .dot.dark { background: var(--color-text); }
@@ -107,7 +98,6 @@ body[data-ground="black"] .footer { border-color: var(--color-border-inverted); 
   <div class="card">
     <div class="toprow">
       <span class="kicker" data-slot="kicker">{{ kicker }}</span>
-      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
     </div>
 
     <div class="middle">
@@ -139,6 +129,7 @@ body[data-ground="black"] .footer { border-color: var(--color-border-inverted); 
       </div>
     </div>
 
+    {% if footer_right or meta %}
     <div class="footer">
       <div class="dots">
         <span class="dot dark"></span>
@@ -149,6 +140,7 @@ body[data-ground="black"] .footer { border-color: var(--color-border-inverted); 
       </div>
       <span class="meta" data-slot="meta">{{ meta }}</span>
     </div>
+    {% endif %}
   </div>
 </body>
 </html>

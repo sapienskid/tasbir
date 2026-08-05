@@ -56,22 +56,13 @@ body[data-ground="black"] .over-rule { background: var(--color-border-inverted);
   max-width: {{ (width * 0.62) | round | int }}px;
 }
 
-/* footer band — rule + wordmark/handle, bottom-anchored */
+/* footer band — rule + handle, bottom-anchored */
 .footer { margin-top: auto; }
-.rule { border-top: 1px solid var(--color-border); }
-body[data-ground="black"] .rule { border-color: var(--color-border-inverted); }
 .footer-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: baseline;
   padding-top: {{ (width * 0.024) | round | int }}px;
-}
-.wordmark {
-  font-family: var(--font-display);
-  font-size: {{ (width * 0.024) | round | int }}px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
 }
 .handle {
   font-family: var(--font-sans);
@@ -97,16 +88,13 @@ body[data-ground="black"] .rule { border-color: var(--color-border-inverted); }
     {% if body %}
     <div class="body" data-slot="body">{{ body }}</div>
     {% endif %}
-    {% if tagline %}
-    <div class="body" data-slot="tagline" style="margin-top:{{ (width * 0.05) | round | int }}px; font-family: var(--font-sans); font-size:{{ (width * 0.021) | round | int }}px; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; color: var(--color-text-secondary);">{{ tagline }}</div>
-    {% endif %}
+    {% if footer_right %}
     <div class="footer">
-      <div class="rule"></div>
-      <div class="footer-row">
-        <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
+        <div class="footer-row">
         <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
       </div>
     </div>
+    {% endif %}
   </div>
 </body>
 </html>

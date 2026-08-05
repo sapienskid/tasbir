@@ -70,25 +70,10 @@ body[data-ground="black"] .index { color: var(--color-text-secondary); }
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
-  border-top: 1px solid var(--color-border);
   padding-top: {{ (width * 0.02) | round | int }}px;
   margin-top: {{ (width * 0.06) | round | int }}px;
 }
-body[data-ground="black"] .meta-line { border-color: var(--color-border-inverted); }
 
-.footer-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-top: {{ (width * 0.022) | round | int }}px;
-}
-.wordmark {
-  font-family: var(--font-display);
-  font-size: {{ (width * 0.024) | round | int }}px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  text-transform: uppercase;
-}
 .handle {
   font-family: var(--font-sans);
   font-size: {{ (width * 0.020) | round | int }}px;
@@ -108,16 +93,12 @@ body[data-ground="black"] .meta-line { border-color: var(--color-border-inverted
     {% if body %}
     <div style="margin-top:{{ (width * 0.04) | round | int }}px; font-size:{{ (width * 0.026) | round | int }}px; line-height:1.5; color:var(--color-text-secondary); max-width:{{ (width * 0.62) | round | int }}px;" data-slot="body">{{ body }}</div>
     {% endif %}
-    {% if tagline %}
-    <div class="tagline" data-slot="tagline" style="margin-top:{{ (width * 0.045) | round | int }}px; font-family:var(--font-sans); font-size:{{ (width * 0.021) | round | int }}px; font-weight:500; letter-spacing:0.12em; text-transform:uppercase; color:var(--color-text-secondary);">{{ tagline }}</div>
-    {% endif %}
+    {% if meta or footer_right %}
     <div class="meta-line">
       <span data-slot="meta">{{ meta }}</span>
       <span data-slot="footer_right">{{ footer_right }}</span>
     </div>
-    <div class="footer-row">
-      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
-    </div>
+    {% endif %}
   </div>
 </body>
 </html>

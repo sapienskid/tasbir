@@ -67,7 +67,6 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  border-top: 1px solid var(--color-border);
   padding-top: {{ (width * 0.012) | round | int }}px;
   font-family: var(--font-sans);
   font-size: {{ (width * 0.014) | round | int }}px;
@@ -76,8 +75,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
-body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
-.wordmark { font-family: var(--font-display); letter-spacing: -0.01em; color: var(--color-text); }
+
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -87,10 +85,11 @@ body[data-ground="black"] .footer { border-color: var(--color-border-inverted); 
     {% if subhead %}
     <div class="subhead" data-slot="subhead">{{ subhead }}</div>
     {% endif %}
+    {% if footer_right %}
     <div class="footer">
-      <span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
       <span data-slot="footer_right">{{ footer_right }}</span>
     </div>
+    {% endif %}
   </div>
 </body>
 </html>

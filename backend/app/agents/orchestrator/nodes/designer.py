@@ -255,7 +255,6 @@ async def designer_node_single(state: GenerationState) -> dict:
     headline = copy_data.get("headline", "")
     subhead = copy_data.get("subhead", "")
     body = copy_data.get("body", "")
-    tagline = copy_data.get("tagline", "")
 
     brand_info = state.get("brand_info", {})
     campaign = state.get("campaign", {})
@@ -305,7 +304,7 @@ async def designer_node_single(state: GenerationState) -> dict:
             f"(readable on its own) while continuing the sequence: give it a clear "
             f"mini-headline in the display voice, keep the body short, and NEVER let "
             f"text clip at the canvas edge. Include a small '{i}/{n}' counter in "
-            f"metadata style at a bottom corner or beside the tagline.\n\n"
+            f"metadata style at a bottom corner.\n\n"
         )
 
     category_block = (
@@ -314,16 +313,16 @@ async def designer_node_single(state: GenerationState) -> dict:
         else "CATEGORY LABEL: none\n"
     )
 
-    footer_block = "FOOTER ROW (REQUIRED on every format):\n"
-    if footer_left and footer_right:
+    footer_block = "FOOTER (handle only):\n"
+    if footer_right:
         footer_block += (
-            f"  Left (SIGNATURE WORDMARK): {footer_left} — display face "
-            "(var(--font-display)), ~24px, weight 500, tight tracking, uppercase\n"
-            f"  Right: {footer_right} — metadata style (var(--font-sans), tracked uppercase, secondary gray)\n"
-            "  1px hairline rule above, then 24px gap, bottom-anchored\n"
+            f"  {footer_right} — metadata style (var(--font-sans), tracked uppercase, "
+            "secondary gray), small and quiet at the very bottom. It must fit fully "
+            "inside the canvas — never overflow the right or bottom edge. "
+            "Never the brand name, never a wordmark.\n"
         )
     else:
-        footer_block += "  (footer text not configured — omit)\n"
+        footer_block += "  (footer handle not configured — omit)\n"
 
     # Image metadata with data-image-key markers and placement
     images_block = ""
@@ -373,7 +372,7 @@ async def designer_node_single(state: GenerationState) -> dict:
     if state.get("_designer_figure"):
         figure_block = (
             "\nPREPARED ILLUSTRATION:\n"
-            "  The system has prepared a monochrome illustration for this post. "
+            "  The system has prepared an illustration for this post. "
             "Place this marker exactly once where it fits best (a balanced corner "
             "or side, keeping text dominant):\n"
             "  <div data-illustration></div>\n"
@@ -383,8 +382,7 @@ async def designer_node_single(state: GenerationState) -> dict:
 
     copy_block = f"""HEADLINE: {headline}
 SUBHEAD: {subhead}
-BODY: {body}
-TAGLINE: {tagline}"""
+BODY: {body}"""
 
     fonts_link = build_google_fonts_link(design_tokens, di_config)
 
@@ -521,10 +519,6 @@ def _build_fallback_html(
     ts_subhead = scaled.get("subhead", {}).get("size", 36)
     ts_body = scaled.get("body", {}).get("size", 28)
     ts_metadata = scaled.get("metadata", {}).get("size", 20)
-    wm = di.get("footer", {}).get("wordmark", {})
-    wm_size = wm.get("size", 24)
-    wm_tracking = wm.get("tracking", "-0.01em")
-    wm_weight = wm.get("weight", 500)
     spacing = di.get("spacing", {})
     margin = spacing.get("margin", 64)
     gap = spacing.get("gap_headline_body", 32)
@@ -540,20 +534,16 @@ def _build_fallback_html(
     headline = escape(copy_data.get("headline", "Untitled"))
     subhead = escape(copy_data.get("subhead", ""))
     body = escape(copy_data.get("body", ""))
-    tagline = escape(copy_data.get("tagline", ""))
     category = escape(category)
     footer_left = escape(footer_left)
     footer_right = escape(footer_right)
 
     body_block = f'<div class="body-text">{body}</div>' if body else ""
     subhead_block = f'<div class="subhead">{subhead}</div>' if subhead else ""
-    tagline_block = f'<div class="tagline">{tagline}</div>' if tagline else ""
     category_block = f'<div class="kicker">{category}</div>' if category else ""
     footer_block = (
-        f'<div class="rule"></div>\n'
-        f'  <div class="footer"><span class="wordmark">{footer_left}</span>'
-        f'<span class="handle">{footer_right}</span></div>'
-        if footer_left and footer_right
+        f'<div class="footer"><span class="handle">{footer_right}</span></div>'
+        if footer_right
         else ""
     )
 
@@ -609,28 +599,12 @@ body {{
   margin-bottom: {gap}px;
   max-width: {measure}px;
 }}
-.tagline {{
-  font-size: {ts_metadata}px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var({v['secondary']});
-  margin-bottom: {gap}px;
-}}
 .spacer {{ flex: 1; }}
-.rule {{ border-top: 1px solid var({v['border']}); }}
 .footer {{
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: baseline;
   padding-top: {spacing.get('gap_footer_rule', 24)}px;
-}}
-.wordmark {{
-  font-family: var(--font-display);
-  font-size: {wm_size}px;
-  font-weight: {wm_weight};
-  letter-spacing: {wm_tracking};
-  text-transform: uppercase;
 }}
 .handle {{
   font-size: {ts_metadata}px;
@@ -646,7 +620,6 @@ body {{
   <div class="headline">{headline}</div>
   {subhead_block}
   {body_block}
-  {tagline_block}
   <div class="spacer"></div>
   {footer_block}
 </body>
