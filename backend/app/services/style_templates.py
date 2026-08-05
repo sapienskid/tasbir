@@ -157,6 +157,71 @@ body[data-ground="black"] .footer { border-color: var(--color-border-inverted); 
 </body>
 </html>
 """,
+        "portrait": """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px; height: {{ height }}px; overflow: hidden; margin: 0;
+  background: var(--color-bg); color: var(--color-text);
+  font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
+  padding: {{ (width * 0.08) | round | int }}px;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+.sheet { height: 100%; display: flex; flex-direction: column; }
+.kicker {
+  font-family: var(--font-sans); font-size: {{ (width * 0.024) | round | int }}px;
+  font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+.headline {
+  font-family: var(--font-display); font-size: {{ (width * 0.105) | round | int }}px;
+  font-weight: 700; letter-spacing: -0.02em; line-height: 0.98;
+  margin-top: {{ (width * 0.05) | round | int }}px;
+  max-width: {{ (width * 0.95) | round | int }}px;
+}
+.accent-rule {
+  width: {{ (width * 0.18) | round | int }}px; height: {{ (width * 0.014) | round | int }}px;
+  background: var(--color-accent); margin-top: {{ (width * 0.06) | round | int }}px;
+}
+.body {
+  margin-top: {{ (width * 0.06) | round | int }}px; font-family: var(--font-serif);
+  font-size: {{ (width * 0.032) | round | int }}px; line-height: 1.45;
+  color: var(--color-text-secondary); max-width: {{ (width * 0.8) | round | int }}px;
+}
+.spacer { flex: 1; }
+.footer {
+  display: flex; justify-content: flex-start; align-items: baseline;
+  padding-top: {{ (width * 0.02) | round | int }}px;
+}
+.handle {
+  font-size: {{ (width * 0.02) | round | int }}px; font-weight: 500;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--color-text-secondary);
+}
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="sheet">
+    <div class="kicker" data-slot="kicker">{{ kicker }}</div>
+    <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+    <div class="accent-rule"></div>
+    {% if body %}
+    <div class="body" data-slot="body">{{ body }}</div>
+    {% elif subhead %}
+    <div class="body" data-slot="subhead">{{ subhead }}</div>
+    {% endif %}
+    <div class="spacer"></div>
+    {% if footer_right %}
+    <div class="footer">
+      <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>
+""",
     },
     "vibrant-pop": {
         "square": """<!DOCTYPE html>
@@ -308,12 +373,88 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 </body>
 </html>
 """,
+        "portrait": """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  width: {{ width }}px; height: {{ height }}px; overflow: hidden; margin: 0;
+  background: var(--color-bg); color: var(--color-text);
+  font-family: var(--font-sans); -webkit-font-smoothing: antialiased;
+  padding: {{ (width * 0.07) | round | int }}px;
+}
+body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
+.sheet { height: 100%; display: flex; flex-direction: column; }
+.panel {
+  flex: 1; border-radius: {{ (width * 0.06) | round | int }}px;
+  padding: {{ (width * 0.09) | round | int }}px;
+  display: flex; flex-direction: column;
+  background: linear-gradient(150deg, var(--color-accent), var(--color-accent-secondary));
+}
+.panel .kicker, .panel .headline, .panel .body { color: var(--color-bg); }
+.kicker {
+  font-family: var(--font-sans); font-size: {{ (width * 0.026) | round | int }}px;
+  font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+.headline {
+  font-family: var(--font-display); font-size: {{ (width * 0.085) | round | int }}px;
+  font-weight: 800; letter-spacing: -0.015em; line-height: 1.0;
+  margin-top: {{ (width * 0.05) | round | int }}px;
+}
+.body {
+  margin-top: {{ (width * 0.05) | round | int }}px;
+  font-family: var(--font-serif); font-size: {{ (width * 0.03) | round | int }}px;
+  line-height: 1.45; color: var(--color-text-secondary);
+  max-width: {{ (width * 0.82) | round | int }}px;
+}
+.panel .body { color: var(--color-bg); }
+.spacer { flex: 1; }
+.footer {
+  display: flex; justify-content: flex-start; align-items: baseline;
+  margin-top: {{ (width * 0.04) | round | int }}px;
+  padding-top: {{ (width * 0.02) | round | int }}px;
+  border-top: 1px solid var(--color-border);
+}
+body[data-ground="black"] .footer { border-color: var(--color-border-inverted); }
+.handle {
+  font-size: {{ (width * 0.02) | round | int }}px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase; color: var(--color-text-secondary);
+}
+</style>
+</head>
+<body {% if ground == "black" %}data-ground="black"{% endif %}>
+  <div class="sheet">
+    <div class="panel">
+      <span class="kicker" data-slot="kicker">{{ kicker }}</span>
+      <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+      {% if body %}
+      <div class="body" data-slot="body">{{ body }}</div>
+      {% elif subhead %}
+      <div class="body" data-slot="subhead">{{ subhead }}</div>
+      {% endif %}
+      <div class="spacer"></div>
+    </div>
+    {% if footer_right %}
+    <div class="footer">
+      <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>
+""",
     },
 }
 
 
 async def seed_style_templates(
-    db, ds_id: str, style_language: str, families: tuple[str, ...] = ("square", "landscape")
+    db,
+    ds_id: str,
+    style_language: str,
+    families: tuple[str, ...] = ("square", "landscape", "portrait"),
 ) -> list[str]:
     """Insert starter templates for a style into a design system.
 
