@@ -121,6 +121,38 @@ class TestSelection:
         _, entry = selection
         assert "media" not in {str(h).lower() for h in entry.get("hint_tags", [])}
 
+    def test_prefer_background_routes_to_cover_slot(self):
+        # A background hint must land on a template tagged with the
+        # cover/background slot (e.g. square-cover-bg) when one is available.
+        tpls = [
+            {"id": "square-editorial-stack", "family": "square",
+             "grounds": ["white", "black"], "hint_tags": ["text"],
+             "html": "<div class='text'>x</div>"},
+            {"id": "square-cover-bg", "family": "square",
+             "grounds": ["white", "black"], "hint_tags": ["media", "cover", "background"],
+             "html": "<div class='bg'><img data-image-key='0'></div>"},
+        ]
+        selection = select_template(
+            "square", "white", "PROJECT", "", "seed", tpls, prefer="background"
+        )
+        assert selection is not None
+        tid, entry = selection
+        assert tid == "square-cover-bg"
+        assert "background" in {str(h).lower() for h in entry.get("hint_tags", [])}
+
+    def test_prefer_background_falls_back_when_no_cover(self):
+        # No cover template → still returns a square template (never None).
+        tpls = [
+            {"id": "square-editorial-stack", "family": "square",
+             "grounds": ["white", "black"], "hint_tags": ["text"],
+             "html": "<div class='text'>x</div>"},
+        ]
+        selection = select_template(
+            "square", "white", "PROJECT", "", "seed", tpls, prefer="background"
+        )
+        assert selection is not None
+        assert selection[0] == "square-editorial-stack"
+
     def test_category_boost(self):
         selection = select_template("landscape", "white", "PORTFOLIO", "", "seed", _catalog_templates())
         # PORTFOLIO maps to both landscape-split and landscape-ad-card.

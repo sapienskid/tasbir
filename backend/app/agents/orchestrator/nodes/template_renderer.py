@@ -51,12 +51,12 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
     """Return this slide/format's illustration from the media plan (cached).
 
     The media plan (built once per post by the media-plan director) decides
-    which slides get an illustration and with what style/motifs. This executes
+    which slides get an illustration and with what style/theme. This executes
     the plan entry for the current slide, offline, cached per slide id.
 
     If the plan produced no illustration but the template renders an
-    ``{{ illustration }}`` slot, a deterministic default scene (category hero +
-    motifs, no LLM) fills it so a layout never ships an empty art block.
+    ``{{ illustration }}`` slot, a deterministic procedural figure (seeded by
+    title+format, no LLM) fills it so a layout never ships an empty art block.
     """
     cached = state.get(_ILLUSTRATION_CACHE_KEY)
     if cached:
@@ -77,13 +77,22 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
                 category=state.get("category", ""),
                 api_style=state.get("illustration_style") or "",
             )
-        # Deterministic fallback — no plan entry, but the template has the slot.
-        from app.services.tools.composer import compose_default_scene
+        # If the plan asked for a photo (or no media) but the template still
+        # renders an illustration slot, DON'T inject a procedural figure here —
+        # the slide's media is a photo, and a spiral/rectangle on top of it
+        # would be wrong. Leave the slot empty; the photo path fills the image
+        # slot instead.
+        if plan.get("kind") == "photo":
+            return ""
+        # Deterministic fallback — no plan entry at all, but the template has
+        # the slot, so a seeded procedural figure fills it (never an empty art
+        # block).
+        from app.services.illustration import generate_illustration_svg
 
-        return compose_default_scene(
+        return generate_illustration_svg(
             f"{seed or ''}|{fmt_id}",
             ground=ground,
-            category=state.get("category", ""),
+            theme=state.get("category", "") or None,
         )
 
     svg = await post_cached(state.get("_task_id", ""), f"illustration:{fmt_id}", loader) or ""
@@ -256,9 +265,28 @@ async def template_node_single(state: GenerationState) -> dict:
 
     # When the media plan chose an illustration for this slide, prefer a
     # template that actually renders an {{ illustration }} slot, so the
-    # composed figure lands on the post.
+    # composed figure lands on the post. When it chose a photo, prefer a
+    # template with a real image slot (data-image-key) so the photo actually
+    # lands on the post instead of being dropped for a procedural fallback.
     plan_entry = (state.get("media_plan") or {}).get(fmt_id) or {}
-    prefer_slot = "{{ illustration" if plan_entry.get("kind") == "illustration" else None
+    plan_kind = plan_entry.get("kind") or ""
+    if plan_kind == "illustration":
+        prefer_slot = "{{ illustration"
+    elif plan_kind == "photo":
+        prefer_slot = "data-image-key"
+    else:
+        prefer_slot = None
+
+    # When the user asked for a full-bleed background image (placement:
+    # "background"), route to a template with a cover/background slot (e.g.
+    # square-cover-bg) so the image actually fills the frame. A template_id
+    # override still wins below.
+    slide_images = (state.get("_slide_images") or {}).get(fmt_id)
+    user_images = slide_images if slide_images is not None else state.get("images", [])
+    prefer_background = any(
+        str(img.get("placement") or "").strip().lower() == "background"
+        for img in (user_images or [])
+    )
 
     # User override: honor the chosen template for its family + a supported
     # ground; otherwise fall back to deterministic selection.
@@ -290,7 +318,8 @@ async def template_node_single(state: GenerationState) -> dict:
         exclude = await get_recent_template_ids()
         selected = select_template(
             family, ground, category, hint, seed, templates, exclude,
-            prefer=layout_pref, prefer_slot=prefer_slot,
+            prefer=("background" if prefer_background else layout_pref),
+            prefer_slot=prefer_slot,
         )
 
     if selected is None:
