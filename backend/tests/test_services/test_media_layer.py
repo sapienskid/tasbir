@@ -86,7 +86,7 @@ def test_user_image_distribution_graph_side():
         {"data": "img2", "mime": "image/png", "alt": "b"},
     ]
     state["strategic_brief"] = {"content_summary": "x"}
-    state["design_instruction"] = {"style": {"illustration_style": "compose"}}
+    state["design_instruction"] = {"style": {"illustration_style": "procedural"}}
 
     def good_html(agent_role, system_prompt, user_prompt, temperature, max_tokens):
         import re

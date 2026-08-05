@@ -1,6 +1,7 @@
 """Tests for the Media Plan Director (per-slide media decisions)."""
 
 import json
+import re
 
 import pytest
 
@@ -11,6 +12,8 @@ from app.services.media_plan import (
     build_media_plan,
     execute_slide_illustration,
 )
+
+HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}")
 
 
 def _state(**overrides) -> dict:
@@ -26,7 +29,7 @@ def _state(**overrides) -> dict:
         platforms=["instagram-carousel"],
         slides=2,
         ratio="square",
-        design_instruction={"style": {"illustration_style": "compose"}},
+        design_instruction={"style": {"illustration_style": "procedural"}},
     )
     state["format_tasks"] = {
         "instagram-carousel": {
@@ -45,12 +48,13 @@ def _state(**overrides) -> dict:
 def test_parse_plan_valid():
     raw = (
         '[{"target": "instagram-carousel-1", "kind": "illustration", '
-        '"style": "compose", "motif_names": ["rocket", "chart-bar"]}, '
+        '"style": "procedural", "theme": "launch"}, '
         '{"target": "instagram-carousel-2", "kind": "none"}]'
     )
     plan = _parse_plan(raw)
     assert plan[0]["kind"] == "illustration"
-    assert plan[0]["motif_names"] == ["rocket", "chart-bar"]
+    assert plan[0]["style"] == "procedural"
+    assert plan[0]["theme"] == "launch"
     assert plan[1]["kind"] == "none"
 
 
@@ -103,12 +107,12 @@ def test_extract_targets_marks_filled():
 
 def test_execute_slide_illustration_compiles():
     svg = execute_slide_illustration(
-        {"kind": "illustration", "style": "compose", "motif_names": ["rocket"],
-         "archetype": "cluster", "highlights": [], "theme": "launch"},
+        {"kind": "illustration", "style": "procedural", "theme": "launch"},
         seed="x|ill", ground="white", category="PROJECT",
     )
-    assert "var(--ill-ink)" in svg or "var(--color-text)" in svg
-    assert svg.strip().startswith("<div class=\"figure\">")
+    assert "var(--color-text)" in svg or "var(--color-text-inverted)" in svg
+    assert svg.strip().startswith("<svg")
+    assert not HEX_RE.search(svg)
 
 
 @pytest.mark.asyncio
@@ -147,11 +151,45 @@ async def test_build_media_plan_parses_llm_output(monkeypatch):
     async def _fake(*args, **kwargs):
         return (
             '[{"target": "instagram-carousel-1", "kind": "illustration", '
-            '"style": "compose", "motif_names": ["rocket"], "theme": "launch"}]'
+            '"style": "procedural", "theme": "launch"}]'
         )
 
     monkeypatch.setattr("app.services.llm.call_llm_tool_loop", _fake)
     plan = await build_media_plan(state)
     entry = plan["instagram-carousel-1"]
     assert entry["kind"] == "illustration"
-    assert entry["motif_names"] == ["rocket"]
+    assert entry["style"] == "procedural"
+
+
+@pytest.mark.asyncio
+async def test_illustrate_handler_returns_rendered_feedback(monkeypatch):
+    """The illustrate tool returns real structural feedback, not a no-op ack.
+
+    The media director must see the actual figure (element count, bounding
+    box, safe-frame compliance) so it can iterate to a distinct, non-clipping
+    composition before committing the plan.
+    """
+    state = _state()
+    state["format_tasks"] = {
+        **_slide_task("instagram-carousel-1", "A", "B"),
+    }
+    state["_slide_images"] = {}
+
+    captured: dict = {}
+
+    async def _fake(*args, **kwargs):
+        handlers = kwargs["handlers"]
+        captured["feedback"] = await handlers["illustrate"](
+            {"style": "procedural", "theme": "orbit", "ground": "white"}
+        )
+        return '[{"target": "instagram-carousel-1", "kind": "none"}]'
+
+    monkeypatch.setattr("app.services.llm.call_llm_tool_loop", _fake)
+    await build_media_plan(state)
+
+    fb = captured["feedback"]
+    assert "Rendered style='procedural'" in fb
+    assert "Archetype:" in fb
+    assert "Element count:" in fb
+    assert "bbox x0=" in fb
+    assert "Within safe slot: True" in fb

@@ -3,8 +3,10 @@
 Instead of the old "one photo/illustration per post" model (which put the same
 image on every carousel slide), the director produces a **structured plan** in
 one multi-turn tool-calling session: for every slide/format it picks photo,
-illustration, or none, and records the concrete choices (search query, icon
-names, archetype, DiceBear style, Highlights accents).
+illustration, or none, and records the concrete choices (search query, style,
+theme). The ``illustrate`` tool call actually renders a preview and returns
+structural feedback (element count, bounding box, safe-frame compliance) so
+the director can iterate to a distinct, non-overlapping figure.
 
 The plan is cached once per post (``post_cached("media_plan")``) and executed
 in parallel by the per-format branches. Slides already filled by a user image
@@ -42,26 +44,38 @@ def _plan_system_prompt() -> str:
         "You are the media director for a strict monochrome editorial design "
         "system. Decide the media for EVERY slide of the post in ONE planning "
         "session. For each slide choose exactly one: a photo (find_photo then "
-        "choose_photo), a composed illustration (icon_search then illustrate "
-        "with style='compose'), or no media.\n\n"
+        "choose_photo), an illustration (illustrate), or no media.\n\n"
+        "DECIDE BY SUBJECT — photo first, illustration only when a photo is "
+        "wrong:\n"
+        "- PHOTO (STRONGLY preferred) when the post is about something concrete "
+        "and visual: a place, object, person, animal, building, product, "
+        "landscape, city, event, food, device. A real photo is the strongest "
+        "media this system has — use it unless the subject is purely abstract.\n"
+        "- ILLUSTRATION (procedural abstract mark) only when the subject is "
+        "abstract and has no concrete visual: an idea, a process, a metric, "
+        "a feeling, a concept, math, code. Prefer style='procedural' (a single "
+        "clean organic mark). Use a DiceBear style only when the slide is "
+        "genuinely about people or a robot.\n"
+        "- NONE when the slide reads best as pure typography (a quote, a "
+        "statistic, a callout) — media would dilute it.\n\n"
         "Rules:\n"
-        "- Media is OPTIONAL — prefer none over weak media.\n"
         "- One media kind per slide. Never the same image/art on two slides.\n"
-        "- Photos: SHORT, BROAD queries (1-3 words) from the slide's content.\n"
-        "- Illustrations: prefer style='procedural' (a single clean organic "
-        "mark — editorial and premium). Only use style='compose' for a SINGLE "
-        "bold hero element; NEVER scatter multiple icons or marks.\n"
+        "- Photos: SHORT, BROAD queries (1-3 words) from the slide's concrete "
+        "subject — e.g. 'mountain river', 'city street', 'coffee cup'. Never "
+        "a sentence.\n"
+        "- When in doubt between photo and illustration, choose PHOTO.\n"
         "- Cover slide (slide 1) may get the strongest media; interior slides "
         "vary so the sequence breathes.\n"
-        "- STOP SEARCHING once you have enough. Call icon_search at most 2-3 "
-        "times total, then output the plan. Do NOT keep refining queries — "
-        "imperfect motifs are fine.\n\n"
+        "- STOP SEARCHING once you have enough. Call illustrate at most 2-3 "
+        "times total to preview a style, look at the feedback the tool "
+        "returns, then output the plan. Do NOT keep re-calling tools — "
+        "imperfect media is fine.\n\n"
         "Final answer: output ONLY a JSON array of plan entries:\n"
         '[{"target": "<slide_or_format_id>", "kind": "photo|illustration|none", '
-        '"query": "1-3 word search (photo only)", "motif_names": ["icon", "..."], '
-        '"style": "compose|procedural|open-peeps|lorelei|notionists|bottts|blobs|'
-        'initials|shapes|waves|landscape", "archetype": "optional", '
-        '"highlights": ["arrow-1", ...], "theme": "short theme"}]'
+        '"query": "1-3 word search (photo only)", '
+        '"style": "procedural|open-peeps|lorelei|notionists|bottts|blobs|'
+        'initials|shapes|waves|landscape", "theme": "short theme (procedural '
+        'only)"}]'
     )
 
 
@@ -142,8 +156,7 @@ async def build_media_plan(state: GenerationState) -> dict:
 
     from app.agents.orchestrator.post_cache import post_cached
     from app.services.llm import call_llm_tool_loop
-    from app.services.tools.icon_search import ICON_SEARCH_TOOL, format_icon_shortlist, search_icons
-    from app.services.tools.illustrator import ILLUSTRATE_TOOL
+    from app.services.tools.illustrator import ILLUSTRATE_TOOL, run_illustrate
     from app.services.tools.photo import (
         CHOOSE_PHOTO_TOOL,
         FIND_PHOTO_TOOL,
@@ -152,10 +165,6 @@ async def build_media_plan(state: GenerationState) -> dict:
     )
 
     task_id = state.get("_task_id", "")
-
-    async def _handler_icon(args: dict) -> str:
-        q = str(args.get("keywords") or "")
-        return format_icon_shortlist(search_icons(q, 10))
 
     async def _handler_photo(args: dict) -> str:
         q = str(args.get("query") or "").strip()
@@ -174,22 +183,54 @@ async def build_media_plan(state: GenerationState) -> dict:
         return f"Photo #{idx} recorded. Include this photo in the plan for the current slide."
 
     async def _handler_illustrate(args: dict) -> str:
-        # The model may call illustrate to preview a style; we don't execute
-        # media here — the plan entry records the choice and branches execute.
-        style = str(args.get("style") or "compose")
+        """Execute the illustrate call and give the director real feedback.
+
+        Instead of a no-op acceptance string, we actually render the figure and
+        return structural metrics (arcaype, element count, bounding box,
+        safe-frame compliance). The director sees what it picked and can
+        iterate to a distinct, non-overlapping figure before committing the plan.
+        """
+        from app.services.illustration import generate_figure_metrics
+
+        style = str(args.get("style") or "procedural")
+        theme = str(args.get("theme") or "")[:60]
+        ground = str(args.get("ground") or state.get("ground") or "white")
+        if ground not in ("white", "black"):
+            ground = "white"
+        preview_seed = f"{task_id or 'plan'}|preview|{style}|{theme or 'none'}"
+
+        fragment = run_illustrate(
+            {"style": style, "theme": theme, "ground": ground}, seed=preview_seed
+        )
+        metrics: dict = {}
+        if style in ("procedural", "anthropic"):
+            metrics = generate_figure_metrics(preview_seed, ground, theme)
+        # DiceBear figures can't be measured the same way, so report what we know.
+        el_count = fragment.count("<path") + fragment.count("<circle") if fragment else 0
+
+        box = metrics.get("box")
+        box_str = (
+            f"bbox x0={box['x0']} y0={box['y0']} x1={box['x1']} y1={box['y1']}"
+            if box
+            else "bbox n/a (DiceBear)"
+        )
         return (
-            f"Style '{style}' accepted. Include this illustration in the plan "
-            "for the current slide."
+            f"Rendered style='{style}' theme='{theme or ''}' on {ground} ground.\n"
+            f"Archetype: {metrics.get('archetype') or '(DiceBear)'}\n"
+            f"Element count: {metrics.get('element_count') or el_count}\n"
+            f"{box_str}\n"
+            f"Within safe slot: {metrics.get('within_safe', 'n/a')}\n"
+            "Record this style/theme in the plan entry for the current slide if "
+            "it fits the post; otherwise try a different theme or style."
         )
 
     async def loader() -> str:
         handlers = {
-            ICON_SEARCH_TOOL["function"]["name"]: _handler_icon,
             FIND_PHOTO_TOOL["function"]["name"]: _handler_photo,
             CHOOSE_PHOTO_TOOL["function"]["name"]: _handler_photo_pick,
             ILLUSTRATE_TOOL["function"]["name"]: _handler_illustrate,
         }
-        tools = [FIND_PHOTO_TOOL, CHOOSE_PHOTO_TOOL, ICON_SEARCH_TOOL, ILLUSTRATE_TOOL]
+        tools = [FIND_PHOTO_TOOL, CHOOSE_PHOTO_TOOL, ILLUSTRATE_TOOL]
         return await call_llm_tool_loop(
             agent_role="designer",
             system_prompt=_plan_system_prompt(),
@@ -209,7 +250,10 @@ async def build_media_plan(state: GenerationState) -> dict:
             continue  # never overwrite a skip entry
         if tid in {t["id"] for t in llm_targets}:
             plan[tid] = entry
-    log.info("[media_plan] planned %d targets (%d entries)", len(llm_targets), len(parsed))
+    log.info(
+        "[media_plan] planned %d targets (%d entries): %s",
+        len(llm_targets), len(parsed), parsed,
+    )
     return plan
 
 
@@ -245,10 +289,7 @@ def _parse_plan(raw: str) -> list[dict]:
             "target": tid,
             "kind": kind,
             "query": str(entry.get("query") or "")[:80],
-            "style": str(entry.get("style") or "compose")[:40],
-            "archetype": str(entry.get("archetype") or "")[:40],
-            "motif_names": [str(m)[:40] for m in (entry.get("motif_names") or [])][:6],
-            "highlights": [str(h)[:40] for h in (entry.get("highlights") or [])][:5],
+            "style": str(entry.get("style") or "procedural")[:40],
             "theme": str(entry.get("theme") or "")[:60],
         })
     return out
@@ -308,21 +349,9 @@ def execute_slide_illustration(
     api_style: str = "",
 ) -> str:
     """Execute an illustration plan entry → figure HTML fragment (offline)."""
-    from app.services.tools.composer import compose_scene
     from app.services.tools.illustrator import run_illustrate
 
-    style = plan_entry.get("style") or api_style or "compose"
-    if style == "compose":
-        return compose_scene(
-            seed,
-            ground=ground,
-            archetype=plan_entry.get("archetype") or None,
-            motif_names=plan_entry.get("motif_names") or [],
-            highlights=plan_entry.get("highlights") or [],
-            style="compose",
-            theme=plan_entry.get("theme") or "",
-            category=category,
-        )
+    style = plan_entry.get("style") or api_style or "procedural"
     return run_illustrate(
         {"style": style, "theme": plan_entry.get("theme") or "", "ground": ground},
         seed=seed,
