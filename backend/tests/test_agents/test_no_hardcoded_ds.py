@@ -59,7 +59,12 @@ AGENT_FILES = [
     "app/services/prompt_preview.py",
 ]
 
-_KNOWN_TOKENS = set(DEFAULT_TOKEN_VALUES)
+_KNOWN_TOKENS = set(DEFAULT_TOKEN_VALUES) | {
+    # Optional accent tokens: only present when a (non-monochrome) design
+    # system defines them, but prompts may reference them generically.
+    "--color-accent",
+    "--color-accent-secondary",
+}
 
 
 def _prompt_files():

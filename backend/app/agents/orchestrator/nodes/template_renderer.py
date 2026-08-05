@@ -138,7 +138,7 @@ async def _get_post_photo(state: GenerationState, orientation: str, required: bo
         category = state.get("category", "")
 
         from app.services.llm import call_llm_for_tool
-        from app.services.media_plan import execute_slide_photo
+        from app.services.media_plan import _photo_grayscale, execute_slide_photo
         from app.services.tools.photo import (
             CHOOSE_PHOTO_TOOL,
             FIND_PHOTO_TOOL,
@@ -147,6 +147,8 @@ async def _get_post_photo(state: GenerationState, orientation: str, required: bo
             pick_candidate,
             search_photo_candidates,
         )
+
+        grayscale = _photo_grayscale(state)
 
         user = (
             f"Title: {title or '(untitled)'}\n"
@@ -161,7 +163,10 @@ async def _get_post_photo(state: GenerationState, orientation: str, required: bo
         # Preferred path: execute the media plan's photo entry.
         if query:
             result = await execute_slide_photo(
-                plan, orientation, seed=f"{title or ''}|photo|{fmt_id}"
+                plan,
+                orientation,
+                seed=f"{title or ''}|photo|{fmt_id}",
+                grayscale=grayscale,
             )
             if result:
                 return result
@@ -175,10 +180,10 @@ async def _get_post_photo(state: GenerationState, orientation: str, required: bo
             args = await call_llm_for_tool(
                 agent_role="designer",
                 system_prompt=(
-                    "You are the image director for a strict monochrome editorial "
-                    "design system. This slide's layout REQUIRES a photo. Call "
-                    "find_photo with a SHORT, BROAD query (1-3 words) matching the "
-                    "post's subject, then review the shortlist and call choose_photo "
+                    "You are the image director for this design system. This "
+                    "slide's layout REQUIRES a photo. Call find_photo with a "
+                    "SHORT, BROAD query (1-3 words) matching the post's "
+                    "subject, then review the shortlist and call choose_photo "
                     "with the best index. If the first search is poor, try one "
                     "simpler query. Do not decline unless no photo can be found."
                 ),
@@ -191,15 +196,17 @@ async def _get_post_photo(state: GenerationState, orientation: str, required: bo
             return None
         if not _query(args):
             return None
-        shortlist = await search_photo_candidates(_query(args), orientation, args.get("min_width"))
+        shortlist = await search_photo_candidates(
+            _query(args), orientation, args.get("min_width"), grayscale=grayscale
+        )
         if not shortlist:
             return None
         try:
             pick_args = await call_llm_for_tool(
                 agent_role="designer",
                 system_prompt=(
-                    "You are the image director for a strict monochrome editorial "
-                    "design system. Pick the single best photo from the shortlist."
+                    "You are the image director for this design system. Pick "
+                    "the single best photo from the shortlist."
                 ),
                 user_prompt=user + "\n\n" + format_shortlist(shortlist),
                 tool=CHOOSE_PHOTO_TOOL,
@@ -235,6 +242,7 @@ async def template_node_single(state: GenerationState) -> dict:
     brief = state.get("strategic_brief", {})
     hint = str(brief.get("template_hint", "") or "")
     seed = f"{state.get('title', '')}|{fmt_id}"
+    style_language = (state.get("design_instruction") or {}).get("style_language") or ""
 
     format_tasks = state.get("format_tasks", {})
     task = format_tasks.get(fmt_id, {})
@@ -320,6 +328,7 @@ async def template_node_single(state: GenerationState) -> dict:
             family, ground, category, hint, seed, templates, exclude,
             prefer=("background" if prefer_background else layout_pref),
             prefer_slot=prefer_slot,
+            style_language=style_language or None,
         )
 
     if selected is None:
@@ -351,7 +360,8 @@ async def template_node_single(state: GenerationState) -> dict:
                 if t.get("family") == family and "media" not in _hint_tags(t)
             ]
             reselected = (
-                select_template(family, ground, category, hint, seed, text_tpls, exclude, prefer="text")
+                select_template(family, ground, category, hint, seed, text_tpls, exclude,
+                                prefer="text", style_language=style_language or None)
                 if text_tpls else None
             )
             if reselected:
@@ -390,10 +400,14 @@ async def template_node_single(state: GenerationState) -> dict:
         )
         rendered = render_template_html(html, context)
         if auto_photo:
+            from app.services.media_plan import _photo_grayscale
             from app.services.tools.photo import embed_photo_into_html
 
             rendered = embed_photo_into_html(
-                rendered, auto_photo["image"], auto_photo.get("credit", "")
+                rendered,
+                auto_photo["image"],
+                auto_photo.get("credit", ""),
+                grayscale=_photo_grayscale(state),
             )
     except Exception as e:
         log.warning("[template] Render failed for %s (%s): %s", fmt_id, tid, e)

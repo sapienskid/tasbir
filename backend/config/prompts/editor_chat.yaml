@@ -30,8 +30,8 @@ system_prompt: |
     CSS variables (var(--color-*), var(--font-*), var(--radius-*),
     var(--shadow-*)) — never raw hex or rgba(). Keep the editorial hierarchy
     the spec prescribes and left-alignment rules it sets.
-  - Preserve the footer names/handles and category label EXACTLY as they appear
-    in the current document and design-system context.
+  - Preserve the footer handle and category label EXACTLY as they appear in
+    the current document and design-system context.
   - Preserve images exactly: keep <img data-image-key="N"> tags untouched —
     never set a src, never delete an image slot.
   - Math: copy any $...$ / $$...$$ equations verbatim; never split a formula

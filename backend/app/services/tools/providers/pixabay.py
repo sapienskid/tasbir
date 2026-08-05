@@ -6,8 +6,9 @@ Pixabay requires:
   - search responses cached for 24h       -> in-process TTL cache below
   - attribution shown when results are displayed
 
-We prefer ``colors=grayscale`` (the brand is monochrome) and fall back to full
-colour when grayscale returns nothing (the template grayscales it anyway).
+When the design language is monochrome we prefer ``colors=grayscale`` and fall
+back to full colour on empty results (the pipeline grayscales it anyway). For
+color languages the search is full colour only.
 """
 
 from __future__ import annotations
@@ -76,16 +77,22 @@ async def search_pixabay(
     query: str,
     orientation: str = "landscape",
     per_page: int = 10,
+    grayscale: bool = True,
 ) -> list[dict]:
-    """Return normalized Pixabay candidates, honoring the 24h cache rule."""
+    """Return normalized Pixabay candidates, honoring the 24h cache rule.
+
+    ``grayscale=True`` tries ``colors=grayscale`` first and widens to colour
+    on empty results (monochrome brands). ``grayscale=False`` searches full
+    colour only (color design languages).
+    """
     key = get_settings().pixabay_api_key
     if not key:
         log.info("[pixabay] no API key configured")
         return []
 
-    # Grayscale first (brand-appropriate); widen to colour on empty results.
-    for grayscale in (True, False):
-        ck = (query, orientation, grayscale)
+    # Grayscale first (monochrome brands); widen to colour on empty results.
+    for want_gray in ((True, False) if grayscale else (False,)):
+        ck = (query, orientation, want_gray)
         now = time.time()
         if ck in _cache:
             expires, cached = _cache[ck]
@@ -93,10 +100,10 @@ async def search_pixabay(
                 hits = cached
             else:
                 del _cache[ck]
-                hits = await _search_once(key, query, orientation, grayscale, per_page)
+                hits = await _search_once(key, query, orientation, want_gray, per_page)
                 _cache[ck] = (now + _TTL, hits)
         else:
-            hits = await _search_once(key, query, orientation, grayscale, per_page)
+            hits = await _search_once(key, query, orientation, want_gray, per_page)
             _cache[ck] = (now + _TTL, hits)
         if hits:
             return hits

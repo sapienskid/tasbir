@@ -39,31 +39,27 @@ MAX_TURNS = 16
 MIN_WIDTH = 800
 
 
-def _plan_system_prompt() -> str:
+def _photo_grayscale(state: GenerationState) -> bool:
+    """Whether photos render grayscale for the active design language."""
+    di = state.get("design_instruction") or {}
+    return bool((di.get("photo") or {}).get("grayscale", True))
+
+
+def _plan_system_prompt(state: GenerationState) -> str:
+    from app.services.styles import media_director_guidance
+
+    guidance = media_director_guidance(state.get("design_instruction") or {})
     return (
-        "You are the media director for a strict monochrome editorial design "
-        "system. Decide the media for EVERY slide of the post in ONE planning "
-        "session. For each slide choose exactly one: a photo (find_photo then "
-        "choose_photo), an illustration (illustrate), or no media.\n\n"
-        "DECIDE BY SUBJECT — photo first, illustration only when a photo is "
-        "wrong:\n"
-        "- PHOTO (STRONGLY preferred) when the post is about something concrete "
-        "and visual: a place, object, person, animal, building, product, "
-        "landscape, city, event, food, device. A real photo is the strongest "
-        "media this system has — use it unless the subject is purely abstract.\n"
-        "- ILLUSTRATION (procedural abstract mark) only when the subject is "
-        "abstract and has no concrete visual: an idea, a process, a metric, "
-        "a feeling, a concept, math, code. Prefer style='procedural' (a single "
-        "clean organic mark). Use a DiceBear style only when the slide is "
-        "genuinely about people or a robot.\n"
-        "- NONE when the slide reads best as pure typography (a quote, a "
-        "statistic, a callout) — media would dilute it.\n\n"
+        "You are the media director for this post's design system. Decide the "
+        "media for EVERY slide of the post in ONE planning session. For each "
+        "slide choose exactly one: a photo (find_photo then choose_photo), an "
+        "illustration (illustrate), or no media.\n\n"
+        f"STYLE MEDIA GUIDANCE: {guidance}\n\n"
         "Rules:\n"
         "- One media kind per slide. Never the same image/art on two slides.\n"
         "- Photos: SHORT, BROAD queries (1-3 words) from the slide's concrete "
         "subject — e.g. 'mountain river', 'city street', 'coffee cup'. Never "
         "a sentence.\n"
-        "- When in doubt between photo and illustration, choose PHOTO.\n"
         "- Cover slide (slide 1) may get the strongest media; interior slides "
         "vary so the sequence breathes.\n"
         "- STOP SEARCHING once you have enough. Call illustrate at most 2-3 "
@@ -83,10 +79,13 @@ def _build_user_prompt(state: GenerationState, targets: list[dict]) -> str:
     """Assemble the per-slide context: content summary + each slide's copy."""
     brief = state.get("strategic_brief") or {}
     summary = str(brief.get("content_summary") or "")
+    di = state.get("design_instruction") or {}
+    language = di.get("style_language") or ""
     lines = [
         f"TITLE: {state.get('title', '') or '(untitled)'}",
         f"CATEGORY: {state.get('category', '') or '(none)'}",
         f"GROUND: {state.get('ground', 'white')}",
+        f"STYLE LANGUAGE: {language or 'custom'}",
         f"CONTENT SUMMARY: {summary or '(none)'}",
         "",
         "SLIDES TO PLAN:",
@@ -173,7 +172,9 @@ async def build_media_plan(state: GenerationState) -> dict:
         orient = str(args.get("orientation") or "landscape")
         if orient not in ("landscape", "portrait", "square"):
             orient = "landscape"
-        shortlist = await search_photo_candidates(q, orient, args.get("min_width"))
+        shortlist = await search_photo_candidates(
+            q, orient, args.get("min_width"), grayscale=_photo_grayscale(state)
+        )
         return format_shortlist(shortlist)
 
     async def _handler_photo_pick(args: dict) -> str:
@@ -233,7 +234,7 @@ async def build_media_plan(state: GenerationState) -> dict:
         tools = [FIND_PHOTO_TOOL, CHOOSE_PHOTO_TOOL, ILLUSTRATE_TOOL]
         return await call_llm_tool_loop(
             agent_role="designer",
-            system_prompt=_plan_system_prompt(),
+            system_prompt=_plan_system_prompt(state),
             user_prompt=_build_user_prompt(state, llm_targets),
             tools=tools,
             handlers=handlers,
@@ -300,7 +301,9 @@ def _parse_plan(raw: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-async def execute_slide_photo(plan_entry: dict, orientation: str, seed: str) -> dict | None:
+async def execute_slide_photo(
+    plan_entry: dict, orientation: str, seed: str, grayscale: bool = True
+) -> dict | None:
     """Execute a photo plan entry → {image, credit, candidate} or None."""
     from app.services.llm import call_llm_for_tool
     from app.services.tools.photo import (
@@ -314,7 +317,7 @@ async def execute_slide_photo(plan_entry: dict, orientation: str, seed: str) -> 
     query = str(plan_entry.get("query") or "").strip()
     if not query:
         return None
-    shortlist = await search_photo_candidates(query, orientation)
+    shortlist = await search_photo_candidates(query, orientation, grayscale=grayscale)
     if not shortlist:
         return None
     user = f"Choose the single best photo from the shortlist for query: {query!r}"
@@ -322,8 +325,8 @@ async def execute_slide_photo(plan_entry: dict, orientation: str, seed: str) -> 
         args = await call_llm_for_tool(
             agent_role="designer",
             system_prompt=(
-                "You are the photo director for a strict monochrome editorial "
-                "system. Pick the single best photo from the shortlist."
+                "You are the photo director for this design system. Pick the "
+                "single best photo from the shortlist."
             ),
             user_prompt=user + "\n\n" + format_shortlist(shortlist),
             tool=CHOOSE_PHOTO_TOOL,

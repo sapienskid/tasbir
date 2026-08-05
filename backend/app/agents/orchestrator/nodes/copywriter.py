@@ -168,6 +168,7 @@ async def _write_copy_for_platform(
     overrides: dict | None = None,
     slides_count: int = 0,
     verbatim: bool = False,
+    allow_emoji: bool = False,
 ) -> tuple[str, PlatformCopy]:
     """Write copy for a single platform with rate-limit semaphore."""
     fmt = get_format_info(platform_id)
@@ -225,10 +226,7 @@ async def _write_copy_for_platform(
     # Build brand + campaign context
     brand_block = ""
     if brand_info and brand_info.get("name"):
-        brand_block = (
-            f"BRAND: {brand_info.get('name', '')}\n"
-            f"TAGLINE: {brand_info.get('tagline', '')}\n"
-        )
+        brand_block = f"BRAND: {brand_info.get('name', '')}\n"
 
     campaign_block = ""
     if campaign and campaign.get("name"):
@@ -263,6 +261,11 @@ async def _write_copy_for_platform(
         f"SOURCE TITLE: {title}\n"
         f"SOURCE CONTENT (excerpt):\n{content[:2000]}"
     )
+    if allow_emoji:
+        user_prompt += (
+            "\n\nEMOJI: this design language allows emoji. You may use them "
+            "sparingly for tone — never in the headline."
+        )
 
     sem = await _get_copy_semaphore()
     raw = None
@@ -532,6 +535,7 @@ async def copywriter_node(state: GenerationState) -> dict:
     overrides = state.get("overrides")
     slides_count = int(state.get("slides", 0) or 0)
     verbatim = bool(state.get("verbatim"))
+    allow_emoji = bool((state.get("design_instruction") or {}).get("style", {}).get("emoji"))
 
     # Process all platforms in parallel
     tasks = [
@@ -546,6 +550,7 @@ async def copywriter_node(state: GenerationState) -> dict:
             overrides,
             slides_count=slides_count if is_carousel(platform_id) else 0,
             verbatim=verbatim,
+            allow_emoji=allow_emoji,
         )
         for platform_id in platforms
     ]

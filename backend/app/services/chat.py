@@ -149,6 +149,10 @@ async def run_chat_turn(
     ds_context = _build_design_system_context(
         tokens, design_instruction, footer, category, ground
     )
+    emoji_rule = (
+        "allowed" if bool((design_instruction.get("style") or {}).get("emoji"))
+        else "forbidden (no emoji or unicode decorative symbols)"
+    )
     prompt_cfg = await get_agent_config("editor_chat")
 
     html_excerpt = current
@@ -167,8 +171,9 @@ async def run_chat_turn(
         "Reply conversationally. If the user wants a change, return ONLY valid "
         'JSON: {"reply": "<your message>", "changed": bool, '
         '"html": "<complete replacement HTML document or null>"}. '
-        "The html must keep the canvas-pinned width/height, use var(--color-*) "
-        "and var(--font-*) exclusively (no raw hex, no emoji), and include a "
+        f"The html must keep the canvas-pinned width/height, use var(--color-*) "
+        f"and var(--font-*) exclusively (no raw hex), and emoji are {emoji_rule}. "
+        "It must include a "
         "<style> block. Return html:null when only a conversational reply is "
         "needed. If you return json, reply MUST be the prose inside that JSON."
     )

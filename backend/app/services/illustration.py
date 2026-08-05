@@ -947,13 +947,12 @@ def generate_figure_metrics(seed: str, ground: str, theme: str | None) -> dict:
 from app.services.tools.illustrator import ILLUSTRATE_TOOL as ILLUSTRATION_TOOL  # noqa: E402
 
 _DIRECTOR_SYSTEM = (
-    "You are the illustration director for a strict monochrome editorial "
-    "design system. An illustration is OPTIONAL — add one only if it "
-    "genuinely strengthens this post. If you decide one helps, call the "
-    "illustrate tool once. Choose 'procedural' for abstract organic "
-    "compositions (the default — most posts), or a curated DiceBear style: "
-    "people styles (open-peeps, lorelei, notionists, bottts) for "
-    "human/human-centred posts, abstract styles (blobs, shapes, waves, "
+    "You are the illustration director for this design system. An illustration "
+    "is OPTIONAL — add one only if it genuinely strengthens this post. If you "
+    "decide one helps, call the illustrate tool once. Choose 'procedural' for "
+    "abstract organic compositions (the default — most posts), or a curated "
+    "DiceBear style: people styles (open-peeps, lorelei, notionists, bottts) "
+    "for human/human-centred posts, abstract styles (blobs, shapes, waves, "
     "landscape) for data/ideas/editorial art, or 'landscape' for "
     "journey/horizon posts. Add an abstract theme only (growth, flow, burst, "
     "orbit, layers, spiral...) — no literal objects, no words/letters, no "

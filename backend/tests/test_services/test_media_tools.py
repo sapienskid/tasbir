@@ -455,3 +455,15 @@ def test_embed_photo_into_html_no_marker_unchanged():
     html = "<html><body>plain</body></html>"
     out = embed_photo_into_html(html, {"data": "x", "mime": "image/png", "alt": ""}, "Credit")
     assert out == html
+
+
+def test_embed_photo_into_html_color_leaves_filter_off():
+    html = '<body><img data-image-key="0" /></body>'
+    out = embed_photo_into_html(
+        html, {"data": "x", "mime": "image/jpeg", "alt": ""}, "Credit", grayscale=False
+    )
+    assert "grayscale(1)" not in out
+    assert "object-fit:cover" in out
+    # Default (grayscale=True) still injects the filter.
+    default = embed_photo_into_html(html, {"data": "x", "mime": "image/jpeg", "alt": ""}, "Credit")
+    assert "grayscale(1)" in default

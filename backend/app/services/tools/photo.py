@@ -37,8 +37,8 @@ FIND_PHOTO_TOOL: dict = {
             "shortlist of candidates. Then call choose_photo with the index of "
             "the best fit, or call find_photo again with a REFINED query if none "
             "fit. Use SHORT, BROAD queries (1-3 words, e.g. 'minimal architecture' "
-            "'paper texture') — long phrases rarely match. The photo is shown "
-            "grayscale and credited on the post."
+            "'paper texture') — long phrases rarely match. The photo is "
+            "credited on the post."
         ),
         "parameters": {
             "type": "object",
@@ -100,12 +100,14 @@ async def search_photo_candidates(
     orientation: str = "landscape",
     min_width: int | None = None,
     limit: int = 8,
+    grayscale: bool = True,
 ) -> list[dict]:
     """Search providers directly for the exact query; return normalized candidates.
 
     Providers are tried in fallback order until one yields usable results.
     No query rewriting, no generic fallback pool — a miss reports "no results"
-    so the LLM can refine its own query.
+    so the LLM can refine its own query. ``grayscale`` biases Pixabay toward
+    monochrome results (the pipeline still applies the treatment at render).
     """
     orientation = orientation if orientation in ("landscape", "portrait", "square") else "landscape"
     min_w = min_width or MIN_WIDTHS.get(orientation, 800)
@@ -113,6 +115,13 @@ async def search_photo_candidates(
     seen: dict[str, dict] = {}
     for fn in (search_pexels, search_pixabay, search_wikimedia):
         try:
+            cands = await fn(
+                query,
+                orientation=orientation,
+                per_page=max(6, limit),
+                grayscale=grayscale,
+            )
+        except TypeError:
             cands = await fn(query, orientation=orientation, per_page=max(6, limit))
         except Exception as e:  # noqa: BLE001
             log.warning("[photo] provider %s failed: %s", fn.__name__, e)
@@ -178,15 +187,19 @@ def pick_candidate(candidates: list[dict], index) -> dict | None:
 # Download + embed
 # ---------------------------------------------------------------------------
 
-_AUTO_STYLE = (
-    "<style>.auto-photo{position:relative;display:block;width:100%;height:100%}"
-    ".auto-photo img{display:block;width:100%;height:100%;object-fit:cover;"
-    "filter:grayscale(1) contrast(1.05)}"
-    ".auto-photo .credit{position:absolute;bottom:6px;right:8px;"
-    "font-family:var(--font-sans);font-size:10px;letter-spacing:.04em;"
-    "text-transform:uppercase;color:var(--color-text-tertiary);"
-    "background:var(--color-bg);padding:2px 6px}</style>"
-)
+def _auto_style(grayscale: bool) -> str:
+    """Guard style for embedded auto-photos. Grayscale is per design language."""
+    img_filter = "filter:grayscale(1) contrast(1.05)" if grayscale else ""
+    return (
+        "<style>.auto-photo{position:relative;display:block;width:100%;height:100%}"
+        f".auto-photo img{{display:block;width:100%;height:100%;object-fit:cover"
+        f";{img_filter}}}"
+        ".auto-photo .credit{position:absolute;bottom:6px;right:8px;"
+        "font-family:var(--font-sans);font-size:10px;letter-spacing:.04em;"
+        "text-transform:uppercase;color:var(--color-text);"
+        "background:var(--color-bg);padding:2px 6px}</style>"
+    )
+
 
 _IMG_SLOT_RE = re.compile(r'<img\b[^>]*\bdata-image-key="(\d+)"[^>]*>', re.IGNORECASE)
 _EL_SLOT_RE = re.compile(r'<([a-z][\w-]*)\b[^>]*\bdata-image-key="(\d+)"[^>]*>', re.IGNORECASE)
@@ -228,13 +241,16 @@ async def download_photo(candidate: dict) -> dict | None:
         return None
 
 
-def embed_photo_into_html(html: str, image: dict, credit: str) -> str:
-    """Fill the first ``data-image-key`` marker with a grayscale photo + credit.
+def embed_photo_into_html(
+    html: str, image: dict, credit: str, grayscale: bool = True
+) -> str:
+    """Fill the first ``data-image-key`` marker with a photo + credit.
 
     For ``<img data-image-key="N">`` markers (the template/designer norm) the
     surrounding slot element is preserved and only the ``<img>`` is replaced, so
     the template's own box sizing keeps working. The credit overlays the image's
-    bottom-right corner; a guard style is injected once.
+    bottom-right corner; a guard style is injected once. ``grayscale`` follows
+    the design language (False leaves the photo in full color).
     """
     b64 = image.get("data", "")
     mime = image.get("mime", "image/jpeg")
@@ -255,6 +271,7 @@ def embed_photo_into_html(html: str, image: dict, credit: str) -> str:
         )
     if replaced is html:
         return html
+    auto_style = _auto_style(grayscale)
     if "<head>" in replaced:
-        return replaced.replace("<head>", f"<head>{_AUTO_STYLE}", 1)
-    return _AUTO_STYLE + replaced
+        return replaced.replace("<head>", f"<head>{auto_style}", 1)
+    return auto_style + replaced

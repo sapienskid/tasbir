@@ -16,6 +16,24 @@ from app.services.media_plan import (
 HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}")
 
 
+def test_plan_system_prompt_reflects_style_language():
+    """The media director reads the DS design language, not a monochrome default."""
+    from app.services.media_plan import _plan_system_prompt
+    from app.services.styles import apply_style_preset
+
+    vibrant = _state()
+    vibrant["design_instruction"] = apply_style_preset("vibrant-pop", {})
+    prompt_v = _plan_system_prompt(vibrant)
+    assert "full color" in prompt_v
+    assert "emoji are allowed" in prompt_v
+    assert "monochrome editorial" not in prompt_v
+
+    swiss = _state()
+    swiss["design_instruction"] = apply_style_preset("swiss-editorial", {})
+    prompt_s = _plan_system_prompt(swiss)
+    assert "grayscale" in prompt_s
+
+
 def _state(**overrides) -> dict:
     slides = [
         {"headline": "Launch day", "subhead": "", "body": "Rocket lifts off",

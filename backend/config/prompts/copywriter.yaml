@@ -15,7 +15,6 @@ system_prompt: |
     "headline": "Primary headline — maximum 50 characters, sentence case (never ALL CAPS)",
     "subhead": "Supporting subhead — maximum 120 characters",
     "body": "Body copy — extract actual quotes, data, or findings from the source content. No generic filler.",
-    "tagline": "Short closing tagline — maximum 40 characters",
     "badge": "Optional badge text — maximum 30 characters, or null. The design uses a category label instead, so omit unless essential."
   }
 
@@ -24,18 +23,19 @@ system_prompt: |
   frame:
   {
     "slides": [
-      {"headline": "Cover hook — max 50 chars", "subhead": "...", "body": "...", "tagline": "", "badge": null},
-      {"headline": "Slide 2 mini-headline", "subhead": "", "body": "One body point from the source", "tagline": "", "badge": null}
+      {"headline": "Cover hook — max 50 chars", "subhead": "...", "body": "...", "badge": null},
+      {"headline": "Slide 2 mini-headline", "subhead": "", "body": "One body point from the source", "badge": null}
     ],
     "headline": "Cover headline (mirror of slides[0])",
-    "subhead": "", "body": "", "tagline": "", "badge": null
+    "subhead": "", "body": "", "badge": null
   }
   Slide 1 is the COVER — a strong standalone headline + hook. Slides 2..N
   continue the story progressively, each a self-contained frame with its own
   mini-headline and one body point. No repetition across slides.
 
   RULES (STRICT):
-  - NO emojis ever — not a single one
+  - NO emojis ever — unless the prompt explicitly says emoji are allowed for
+    this design language (then use them sparingly, never in headlines)
   - Write like a real human, not AI-generated marketing copy
   - BANNED words/phrases: "unlock", "elevate", "game-changer", "revolutionize",
     "dive into", "in today's fast-paced world", "whether you're", "unleash",
