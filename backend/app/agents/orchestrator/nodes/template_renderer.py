@@ -290,10 +290,21 @@ async def template_node_single(state: GenerationState) -> dict:
     # lands on the post instead of being dropped for a procedural fallback.
     plan_entry = (state.get("media_plan") or {}).get(fmt_id) or {}
     plan_kind = plan_entry.get("kind") or ""
-    if plan_kind == "illustration":
+    # When the copy carries post-type extras (price/cta/date/location), prefer a
+    # template that renders {{ extra.* }} so they appear as styled elements
+    # rather than only inside the body copy. ad-card hosts both extras and the
+    # illustration slot, so a planned figure/chart is not lost.
+    extra_keys = [k for k, v in (copy.get("extra") or {}).items() if v]
+    if extra_keys:
+        prefer_slot = "{{ extra"
+    elif plan_kind == "illustration":
         prefer_slot = "{{ illustration"
     elif plan_kind == "photo":
         prefer_slot = "data-image-key"
+    elif plan_kind == "chart":
+        # Charts render into the illustration slot — route to a slot template
+        # so the bar chart actually lands on the post.
+        prefer_slot = "{{ illustration"
     else:
         prefer_slot = None
 
