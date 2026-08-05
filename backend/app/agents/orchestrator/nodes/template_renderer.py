@@ -78,12 +78,20 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
                 api_style=state.get("illustration_style") or "",
             )
         # If the plan asked for a photo (or no media) but the template still
-        # renders an illustration slot, DON'T inject a procedural figure here —
-        # the slide's media is a photo, and a spiral/rectangle on top of it
-        # would be wrong. Leave the slot empty; the photo path fills the image
-        # slot instead.
+        # renders an illustration slot, DON'T inject a procedural figure on top
+        # of a real photo. If the photo failed to materialize (empty search /
+        # no keys), fill the slot with a procedural figure so the layout never
+        # ships an empty art block.
         if plan.get("kind") == "photo":
-            return ""
+            if state.get(_PHOTO_CACHE_KEY):
+                return ""
+            from app.services.illustration import generate_illustration_svg
+
+            return generate_illustration_svg(
+                f"{seed or ''}|{fmt_id}",
+                ground=ground,
+                theme=state.get("category", "") or None,
+            )
         # Deterministic fallback — no plan entry at all, but the template has
         # the slot, so a seeded procedural figure fills it (never an empty art
         # block).
