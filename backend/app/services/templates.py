@@ -165,6 +165,7 @@ def select_template(
     exclude: set[str] | None = None,
     prefer: str | None = None,
     prefer_slot: str | None = None,
+    style_language: str | None = None,
 ) -> tuple[str, dict] | None:
     """Pick a template deterministically from a loaded template list.
 
@@ -175,8 +176,10 @@ def select_template(
     biases toward templates carrying that ``hint_tag`` (e.g. ``"media"`` /
     ``"text"`` for carousel layout variety); ``prefer_slot`` biases toward
     templates whose HTML contains a slot marker (e.g. ``"{{ illustration"``
-    so a planned illustration actually has a place to render). Both fall back
-    if none match.
+    so a planned illustration actually has a place to render); ``style_language``
+    restricts to templates tagged with the active design language when any
+    exist, so a restyled DS produces on-style posts. All fall back if none
+    match.
     """
     exclude = exclude or set()
     candidates = {
@@ -187,6 +190,15 @@ def select_template(
     }
     if not candidates:
         return None
+
+    if style_language:
+        styled = {
+            tid: e
+            for tid, e in candidates.items()
+            if style_language in {str(h).lower() for h in e.get("hint_tags", [])}
+        }
+        if styled:
+            candidates = styled
 
     if prefer:
         preferred = {
@@ -304,7 +316,9 @@ def build_template_context(
         "subhead": copy.get("subhead", ""),
         "body": copy.get("body", ""),
         "tagline": copy.get("tagline", ""),
-        "footer_left": (footer or {}).get("left", ""),
+        # Footer is a single @handle. footer_left is kept only for backward
+        # compat with older saved templates — it renders empty.
+        "footer_left": "",
         "footer_right": (footer or {}).get("right", ""),
         "ground": ground if ground in ("white", "black") else "white",
         "width": width,
