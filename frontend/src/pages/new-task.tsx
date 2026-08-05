@@ -19,9 +19,11 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import {
   apiRequest,
+  listStyleLanguages,
   uploadMedia,
   type GenerateResponse,
   type DesignSystem,
+  type StyleLanguage,
   type Template,
 } from "@/lib/api"
 import { useDesignSystems, useTemplates, useTemplatePreview } from "@/hooks/use-library"
@@ -49,6 +51,8 @@ export default function NewTaskPage() {
 
   const [step, setStep] = useState(0)
   const [dsId, setDsId] = useState<string>("")
+  const [styles, setStyles] = useState<StyleLanguage[]>([])
+  const [styleLang, setStyleLang] = useState<string>("")
   const [title, setTitle] = useState("")
   const [content, setContent] = useState("")
   const [category, setCategory] = useState("")
@@ -59,6 +63,7 @@ export default function NewTaskPage() {
   const [sequenceAudit, setSequenceAudit] = useState(false)
   const [verbatim, setVerbatim] = useState(false)
   const [templateId, setTemplateId] = useState<string>("")
+  const [templateMode, setTemplateMode] = useState<"auto" | "template" | "designer">("auto")
   const [media, setMedia] = useState<Record<string, MediaEntry>>({})
   const [submitting, setSubmitting] = useState(false)
 
@@ -76,6 +81,12 @@ export default function NewTaskPage() {
       setDsId(preferred.id)
     }
   }, [activeSystems, dsId])
+
+  useEffect(() => {
+    listStyleLanguages()
+      .then(setStyles)
+      .catch(() => setStyles([]))
+  }, [])
 
   const families = useMemo(
     () => [...new Set(platforms.map((p) => familyOfPlatform(p)).filter(Boolean))],
@@ -135,6 +146,8 @@ export default function NewTaskPage() {
           verbatim,
           design_system_id: dsId,
           template_id: templateId,
+          template_mode: templateMode,
+          style_language: styleLang || undefined,
           images,
         }),
       })
@@ -229,7 +242,10 @@ export default function NewTaskPage() {
             {activeSystems.map((s) => (
               <button
                 key={s.id}
-                onClick={() => setDsId(s.id)}
+                onClick={() => {
+                  setDsId(s.id)
+                  setStyleLang("")
+                }}
                 className={`flex items-center justify-between rounded-md border p-4 text-left transition-colors ${
                   dsId === s.id ? "border-primary bg-muted/50" : "hover:bg-muted/30"
                 }`}
@@ -237,12 +253,34 @@ export default function NewTaskPage() {
                 <div>
                   <p className="font-medium">{s.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {s.description || s.id} · {s.template_count ?? "?"} templates
+                    {s.description || s.id} · {s.template_count ?? "?"} templates ·{" "}
+                    {(s.design_instruction as { style_language?: string } | undefined)?.style_language ??
+                      "swiss-editorial"}
                   </p>
                 </div>
                 {dsId === s.id ? <Check aria-hidden="true" className="size-4 text-primary" /> : null}
               </button>
             ))}
+            {styles.length > 0 && (
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Label className="shrink-0 text-xs text-muted-foreground">
+                  Design language (optional override)
+                </Label>
+                <Select value={styleLang} onValueChange={setStyleLang}>
+                  <SelectTrigger className="w-56">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Use this system's language</SelectItem>
+                    {styles.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex justify-end">
               <Button onClick={() => setStep(1)} disabled={!dsId}>
                 Continue <ArrowRight aria-hidden="true" className="size-4" />
@@ -339,6 +377,23 @@ export default function NewTaskPage() {
                     )
                   })}
                 </div>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <Label className="shrink-0">Template mode</Label>
+                <Select value={templateMode} onValueChange={(v) => setTemplateMode(v as typeof templateMode)}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">Auto (template, then AI)</SelectItem>
+                    <SelectItem value="template">Template only</SelectItem>
+                    <SelectItem value="designer">AI designer only</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Auto tries a template first and falls back to the AI designer; Template only
+                  fails a format with no matching template; AI designer only skips templates.
+                </p>
               </div>
               {platforms.some(isCarouselPlatform) ? (
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">

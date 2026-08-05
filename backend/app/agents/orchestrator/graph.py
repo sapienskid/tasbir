@@ -86,6 +86,9 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
         await record_audit(task_id, agent_name, decision=decision, critique=critique)
 
     use_template = True
+    template_mode = local.get("template_mode") or "auto"
+    if template_mode == "designer":
+        use_template = False
     max_retries = int(
         await get_runtime_setting("verifier.max_retries", MAX_RETRIES)
     )
@@ -101,7 +104,20 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
 
         fmt_task = local.get("format_tasks", {}).get(fmt_id, {})
         if not fmt_task.get("html"):
-            # No template matched (or copy missing) → LLM designer.
+            # No template matched (or copy missing) → LLM designer, unless the
+            # caller pinned template-mode.
+            if template_mode == "template":
+                log.info("[graph] template-mode: no template for %s — marking failed", fmt_id)
+                _apply_updates(local, {
+                    "format_tasks": {
+                        fmt_id: {
+                            **fmt_task,
+                            "status": "error",
+                            "error": "template_mode='template' but no template matched this format",
+                        }
+                    }
+                })
+                break
             _apply_updates(local, await designer_node_single(local))
             await _audit(
                 "designer",
@@ -127,7 +143,7 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
         if status in ("verified", "error", "failed"):
             break
         if status == "needs_retry":
-            if use_template:
+            if use_template and template_mode != "template":
                 # Chosen template failed QC (e.g. overflow) → LLM designer.
                 use_template = False
                 fmt_task["html"] = None

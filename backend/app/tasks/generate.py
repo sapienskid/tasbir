@@ -95,7 +95,35 @@ def generate_task(self, task_id: str, source_data: dict):
         # The design system's active template library (selection input).
         pipeline_input["ds_templates"] = await load_ds_templates(pool, ds.id)
         pipeline_input["template_id"] = source_data.get("template_id") or ""
+        pipeline_input["template_mode"] = source_data.get("template_mode") or "auto"
         pipeline_input["verbatim"] = bool(source_data.get("verbatim"))
+
+        # Per-post design-language override: apply the language's rules + palette
+        # to THIS post only (in-memory), without changing the design system.
+        override = str(source_data.get("style_language") or "")
+        if override:
+            async with pool() as session:
+                from app.services.design_languages import apply_language, get_language
+
+                lang = await get_language(session, override)
+                if lang is not None:
+                    di = await apply_language(
+                        session, override, payload.get("design_instruction") or {}
+                    )
+                    tokens = dict(pipeline_input["design_tokens"])
+                    for var, value in (lang.palette_tokens or {}).items():
+                        tokens[var] = value
+                    for var, value in (lang.accent_tokens or {}).items():
+                        tokens[var] = value
+                    pipeline_input["design_instruction"] = di
+                    pipeline_input["design_tokens"] = tokens
+                    log.info(
+                        "[generate] %s uses per-post language override %r", task_id, override
+                    )
+                else:
+                    log.warning(
+                        "[generate] unknown style_language override %r ignored", override
+                    )
 
         # Effective illustration style: API override → DS default → compose.
         from app.services.design_systems import resolve_illustration_style
@@ -164,6 +192,7 @@ def generate_task(self, task_id: str, source_data: dict):
                 "html_path": ft.get("html_path", ""),
                 "template_id": ft.get("template_id"),
                 "error": ft.get("error"),
+                "copy": ft.get("copy", ""),
             }
             for fmt_id, ft in format_tasks.items()
             # Carousel base entries only hold the slide copy — the slides

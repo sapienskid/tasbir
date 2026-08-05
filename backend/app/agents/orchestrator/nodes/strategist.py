@@ -92,6 +92,13 @@ def _fallback_summary(title: str, tags: list[str]) -> str:
     return ", ".join(parts)[:300] or "General topic summary"
 
 
+def _ds_default_ground(state: GenerationState) -> str:
+    """The design language's preferred ground (style.default_ground)."""
+    di = state.get("design_instruction") or {}
+    default = (di.get("style") or {}).get("default_ground") or "white"
+    return default if default in ("white", "black") else "white"
+
+
 async def strategist_node(state: GenerationState) -> dict:
     """Analyze content and produce a structured strategic brief."""
     prompt_cfg = await get_agent_config("strategist")
@@ -104,7 +111,6 @@ async def strategist_node(state: GenerationState) -> dict:
     # Build brand + campaign context
     brand_info = state.get("brand_info", {})
     campaign = state.get("campaign", {})
-
     brand_block = ""
     if brand_info.get("name"):
         brand_block = (
@@ -207,7 +213,12 @@ async def strategist_node(state: GenerationState) -> dict:
             log.warning("[strategist] Category '%s' not approved — falling back to WRITING", category)
             category = "WRITING"
 
-        ground = resolve_ground(campaign, category, categories, default="white")
+        ground = resolve_ground(
+            campaign,
+            category,
+            categories,
+            default=_ds_default_ground(state),
+        )
         brief.category = category
         brief.ground = ground
 
@@ -238,7 +249,12 @@ async def strategist_node(state: GenerationState) -> dict:
         category = override_category.upper() if override_category else "WRITING"
         if not category_matches(category, categories):
             category = "WRITING"
-        ground = resolve_ground(campaign, category, categories, default="white")
+        ground = resolve_ground(
+            campaign,
+            category,
+            categories,
+            default=_ds_default_ground(state),
+        )
         fallback = StrategicBrief(
             angle=f"Key insights from: {title}",
             audience="General audience interested in this topic",

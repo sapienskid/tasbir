@@ -36,6 +36,13 @@ class GenerateRequest(BaseModel):
     category: str | None = Field(default=None, max_length=64)
     design_system_id: str = Field(default="default", max_length=64)
     template_id: str = Field(default="", max_length=64)
+    # Per-post design language override: "" = the design system's own language,
+    # otherwise a design-language id applied to this post only (never persisted).
+    style_language: str = Field(default="", max_length=64)
+    # How the per-format chain produces HTML: "auto" (template first, LLM
+    # designer fallback), "template" (never call the designer LLM — fail a
+    # format if no template matches), "designer" (skip templates, always LLM).
+    template_mode: str = Field(default="auto", max_length=16)
     overrides: dict[str, str] = Field(default_factory=dict)
     images: list[ImageRequest] = Field(default_factory=list, max_length=8)
     # Keep the source content verbatim: carousels split the raw text across
@@ -65,6 +72,16 @@ class GenerateRequest(BaseModel):
     @classmethod
     def _cap_tag_length(cls, v: list[str]) -> list[str]:
         return [t[:100] for t in v]
+
+    @field_validator("template_mode")
+    @classmethod
+    def _validate_template_mode(cls, v: str) -> str:
+        if v not in ("auto", "template", "designer"):
+            raise HTTPException(
+                status_code=422,
+                detail="template_mode must be 'auto', 'template', or 'designer'",
+            )
+        return v
 
     @field_validator("overrides")
     @classmethod

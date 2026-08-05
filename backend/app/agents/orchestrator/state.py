@@ -130,6 +130,8 @@ class GenerationState(TypedDict):
     logo: Annotated[str, _keep_first]
     # User-selected template override (auto-fallback for other families)
     template_id: Annotated[str, _keep_first]
+    # How the per-format chain produces HTML: auto | template | designer
+    template_mode: Annotated[str, _keep_first]
     # Illustration style override: "compose" | "procedural" | DiceBear id | "".
     # Empty → the media plan (or DS default) decides.
     illustration_style: Annotated[str, _keep_first]
@@ -235,6 +237,7 @@ def initial_state(
         "design_instruction": design_instruction or {},
         "logo": logo,
         "template_id": template_id,
+        "template_mode": str(kwargs.get("template_mode") or "auto"),
         "illustration_style": str(kwargs.get("illustration_style") or ""),
         "ds_templates": ds_templates or [],
         "strategic_brief": {},
