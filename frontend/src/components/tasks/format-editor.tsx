@@ -19,13 +19,16 @@ import {
   FileImage,
   MoreVertical,
   PanelRight,
+  RefreshCw,
   Save,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
   apiRequest,
   downloadBlob,
+  fetchBlob,
   type RerenderResponse,
+  type RetryResponse,
   type TaskDetail,
 } from "@/lib/api"
 import { formatLabel } from "@/components/tasks/format-utils"
@@ -196,6 +199,37 @@ export function FormatEditor({
     [format, taskId, draft, mode, cachePng, cacheHtml, onMutate]
   )
 
+  const handleRetry = useCallback(async () => {
+    setRerendering(true)
+    try {
+      const res = await apiRequest<RetryResponse>(
+        `/tasks/${taskId}/formats/${format}/retry`,
+        { method: "POST" }
+      )
+      // Refresh the editor with the freshly designed HTML + PNG.
+      const fresh = await prefetchFormat(format)
+      if (fresh) setDraft(fresh)
+      try {
+        const png = await fetchBlob(`/tasks/${taskId}/files/${format}.png`)
+        if (png) cachePng(format, URL.createObjectURL(png))
+      } catch {
+        /* PNG may be unavailable — gallery will retry from the file */
+      }
+      setQc({
+        score: res.score,
+        issues: res.issues,
+        critique: res.critique,
+        status: res.pass ? "verified" : "needs_review",
+      })
+      toast.success(res.pass ? "Retry passed verification" : "Retry done — still has issues")
+      onMutate()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Retry failed")
+    } finally {
+      setRerendering(false)
+    }
+  }, [taskId, format, prefetchFormat, cachePng, onMutate])
+
   const applyHtml = useCallback(
     (html: string) => {
       setDraft(html)
@@ -300,6 +334,16 @@ export function FormatEditor({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void handleRetry()}
+            disabled={rerendering}
+            title="Re-run the designer LLM with the verifier critique, then re-verify"
+          >
+            <RefreshCw aria-hidden="true" className="size-4" />
+            Retry designer
+          </Button>
           <Button
             size="sm"
             onClick={() => void handleRerender(false)}

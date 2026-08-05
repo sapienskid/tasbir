@@ -328,8 +328,12 @@ async def rerender_format(
     issues = _run_deterministic_checks(
         html, footer, category, fmt.width, fmt.height, display_family
     )
+    from app.services.dom_extractor import detect_low_contrast
+
     overflow = await detect_overflow(html, fmt.width, fmt.height)
     issues.extend(overflow)
+    contrast = await detect_low_contrast(html, fmt.width, fmt.height)
+    issues.extend(contrast)
 
     passed = not issues
     score = 100 if passed else 20
@@ -412,6 +416,33 @@ async def rerender_format(
         "quality": {"score": score, "issues": issues, "critique": critique},
         "png_b64": base64.b64encode(png_bytes).decode("ascii") if png_bytes else "",
     }
+
+
+@router.post("/{task_id}/formats/{fmt_id}/retry")
+async def retry_format(
+    task_id: str,
+    fmt_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-run the designer LLM for one format, then re-verify (full audit).
+
+    A fresh design attempt with the previous verifier critique fed back — the
+    manual retry for formats left in ``needs_retry`` / ``needs_review``.
+    """
+    from app.config import get_settings
+    from app.services.format_retry import run_retry
+
+    repo = TaskRepository(db)
+    task = await repo.get_by_id(task_id)
+    if not task:
+        raise NotFoundError(f"Task {task_id} not found")
+    if task.status in ("pending", "running"):
+        raise HTTPException(status_code=409, detail="Task is still processing")
+
+    validated = validate_platforms([fmt_id])
+    fmt_id = validated[0]
+    result = await run_retry(db, task, fmt_id, get_settings())
+    return result
 
 
 @router.post("/{task_id}/formats/{fmt_id}/template")
@@ -508,7 +539,6 @@ async def save_as_template(
         "headline": slots.get("headline", ""),
         "subhead": slots.get("subhead", ""),
         "body": slots.get("body", ""),
-        "tagline": slots.get("tagline", ""),
         "badge": None,
     }
     context = build_template_context(
@@ -538,7 +568,7 @@ async def save_as_template(
     image_slots, has_logo_slot = scan_template_features(template_html)
     data = {
         "design_system_id": design_system_id,
-        "name": slots.get("footer_left", "") or request.name or template_id,
+        "name": slots.get("footer_right", "") or request.name or template_id,
         "family": family,
         "grounds": ["white", "black"] if 'data-ground="black"' in html else ["white"],
         "categories": [slots.get("kicker", "").upper()] if slots.get("kicker") else [],
