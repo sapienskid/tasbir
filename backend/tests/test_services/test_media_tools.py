@@ -4,7 +4,6 @@ import re
 
 import pytest
 
-from app.services.tools.icon_search import ICON_SEARCH_TOOL
 from app.services.tools.illustrator import (
     compose_peep,
     run_illustrate,
@@ -129,11 +128,11 @@ async def test_call_llm_tool_loop_breaks_same_tool_loop(monkeypatch):
 
     async def fake_retry(bound, messages):
         calls["n"] += 1
-        # Every identical icon_search call → tool call, except the forced final
+        # Every identical find_photo call → tool call, except the forced final
         # turn which must return text (the plan).
         if calls["n"] <= MAX_REPEAT_TOOL:
             return AIMessage(content="", tool_calls=[
-                {"name": "icon_search", "args": {"keywords": "rocket"}, "id": f"c{calls['n']}"}
+                {"name": "find_photo", "args": {"query": "minimal"}, "id": f"c{calls['n']}"}
             ])
         return AIMessage(content='[{"target": "x", "kind": "none"}]', tool_calls=[])
 
@@ -147,15 +146,15 @@ async def test_call_llm_tool_loop_breaks_same_tool_loop(monkeypatch):
         lambda: SimpleNamespace(gemini_api_key="test-key"),
     )
 
-    async def icon_handler(args):
-        return "[0] rocket"
+    async def photo_handler(args):
+        return "[0] minimal"
 
     out = await call_llm_tool_loop(
         agent_role="designer",
         system_prompt="sys",
         user_prompt="user",
-        tools=[ICON_SEARCH_TOOL],
-        handlers={"icon_search": icon_handler},
+        tools=[FIND_PHOTO_TOOL],
+        handlers={"find_photo": photo_handler},
         max_turns=10,
     )
     # The loop forced a final answer after MAX_REPEAT_TOOL identical calls —
@@ -175,7 +174,7 @@ async def test_call_llm_tool_loop_forced_answer_loop_gives_up(monkeypatch):
 
     async def always_tool(bound, messages):
         return AIMessage(content="", tool_calls=[
-            {"name": "icon_search", "args": {"keywords": "x"}, "id": "c"}
+            {"name": "find_photo", "args": {"query": "x"}, "id": "c"}
         ])
 
     monkeypatch.setattr("app.services.llm.call_llm_with_retry", always_tool)
@@ -188,15 +187,15 @@ async def test_call_llm_tool_loop_forced_answer_loop_gives_up(monkeypatch):
         lambda: SimpleNamespace(gemini_api_key="test-key"),
     )
 
-    async def icon_handler(args):
+    async def photo_handler(args):
         return "[0] x"
 
     out = await call_llm_tool_loop(
         agent_role="designer",
         system_prompt="sys",
         user_prompt="user",
-        tools=[ICON_SEARCH_TOOL],
-        handlers={"icon_search": icon_handler},
+        tools=[FIND_PHOTO_TOOL],
+        handlers={"find_photo": photo_handler},
         max_turns=10,
     )
     assert out == ""

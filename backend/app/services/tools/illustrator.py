@@ -2,7 +2,7 @@
 
 One tool the LLM calls for every post that needs a figure:
 
-  - ``anthropic``  → the procedural Anthropic-style SVG generator
+  - ``procedural`` → the procedural Anthropic-style SVG generator (default)
   - curated styles → DiceBear avatar generators (people / creatures / faces /
                      abstract shapes / landscape), fully offline + deterministic
 
@@ -66,24 +66,23 @@ def _safe_ids(svg: str) -> str:
 def _build_illustrate_tool() -> dict:
     """ILLUSTRATE_TOOL schema built from the curated style registry.
 
-    Styles: ``compose`` (the unified scene composer — default), ``procedural``
-    (Anthropic-style abstract), plus the curated DiceBear styles (humans,
-    robots, and a few abstract shapes). The DiceBear list is pruned to the
-    styles that fit the Swiss monochrome system (see peep_styles.py).
+    Styles: ``procedural`` (Anthropic-style abstract, the default) plus the
+    curated DiceBear styles (humans, robots, abstract shapes, landscape). The
+    DiceBear list is pruned to the styles that fit the Swiss monochrome system
+    (see peep_styles.py). The old ``compose`` scene composer was removed — all
+    figures come from ``procedural`` or a DiceBear style.
     """
     from app.services.tools.peep_styles import CURATED_STYLES
 
     style_desc = [
-        "compose: a content-mapped editorial scene (custom hero + Lucide "
-        "motifs + hand-drawn Highlights accents), laid out deterministically. "
-        "PREFERRED — use icon_search to pick motif names first.",
-        "procedural: abstract procedural composition (growth, flow, focus). "
-        "For quiet, minimal, or abstract posts.",
+        "procedural: abstract procedural composition (a single clean organic "
+        "mark — growth, flow, focus). The premium editorial default; use for "
+        "most posts. Theme steers the archetype.",
     ]
     for sid in sorted(CURATED_STYLES):
         info = CURATED_STYLES[sid]
         style_desc.append(f"{sid}: {info.description}")
-    style_enum = ["compose", "procedural"] + sorted(CURATED_STYLES)
+    style_enum = ["procedural"] + sorted(CURATED_STYLES)
 
     def part_desc(part: str, sid: str) -> str:
         from app.services.tools.peep_styles import list_style_values
@@ -99,7 +98,7 @@ def _build_illustrate_tool() -> dict:
             "name": "illustrate",
             "description": (
                 "Create a monochrome editorial illustration for the post. Call "
-                "exactly once. Style options:\n" + "\n".join(style_desc)
+                "with one of these styles:\n" + "\n".join(style_desc)
             ),
             "parameters": {
                 "type": "object",
@@ -108,60 +107,25 @@ def _build_illustrate_tool() -> dict:
                         "type": "string",
                         "enum": style_enum,
                         "description": (
-                            "Which illustration style to use. Default 'compose' — "
-                            "a content-mapped scene. Use a DiceBear style only for "
-                            "human/robot-centred posts, 'procedural' for abstract."
+                            "Which illustration style to use. Default "
+                            "'procedural' — a clean abstract organic mark, for "
+                            "almost every post. Use a DiceBear style only for "
+                            "human/robot-centred posts."
                         ),
                     },
                     "theme": {
                         "type": "string",
                         "description": (
-                            "Short abstract theme steering the composition — e.g. "
-                            "'growth', 'flow', 'focus'. No objects, no text, no "
-                            "colour words."
+                            "Short abstract theme steering the composition (only "
+                            "used by 'procedural') — e.g. 'growth', 'flow', "
+                            "'focus', 'orbital'. No objects, no text, no colour "
+                            "words."
                         ),
                     },
                     "ground": {
                         "type": "string",
                         "enum": ["white", "black"],
                         "description": "Card background.",
-                    },
-                    "archetype": {
-                        "type": "string",
-                        "description": (
-                            "For style='compose': a named composition layout "
-                            "(ascend, cluster, horizon, field, orbit, stack, "
-                            "cascade, counterpoint, measure, frame, burst, "
-                            "scatter, gate, column, cross, wave-field, ring, "
-                            "orbit-burst, grid, diptych, sun-marks, underline). "
-                            "Omit to let the theme pick one deterministically."
-                        ),
-                    },
-                    "motif_names": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            "For style='compose': Lucide icon names from "
-                            "icon_search that match the post's subject (2-6). "
-                            "Call icon_search first to discover valid names."
-                        ),
-                    },
-                    "highlights": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            "For style='compose': hand-drawn Highlights mark "
-                            "slugs (arrow-*, underline-*, sprinkle-*, loop-*, "
-                            "spiral-*, doodle-*). Optional accents."
-                        ),
-                    },
-                    "category": {
-                        "type": "string",
-                        "description": (
-                            "The post's category label (WRITING, PROJECT, "
-                            "PORTFOLIO, NOTE, AI). Picks the custom hero subject "
-                            "for style='compose'. Optional."
-                        ),
                     },
                     "facial_hair": {
                         "type": "string",
@@ -425,25 +389,12 @@ def compose_peep(
 def run_illustrate(args: dict, seed: str = "") -> str:
     """Execute an ``illustrate`` tool call → figure/svg HTML fragment."""
     from app.services.illustration import generate_illustration_svg
-    from app.services.tools.composer import compose_scene
 
-    style = str(args.get("style") or "compose")
+    style = str(args.get("style") or "procedural")
     theme = str(args.get("theme") or "")[:60]
     ground = str(args.get("ground") or "white")
     if ground not in ("white", "black"):
         ground = "white"
-
-    if style == "compose":
-        return compose_scene(
-            seed or "figure",
-            ground=ground,
-            archetype=args.get("archetype") or None,
-            motif_names=list(args.get("motif_names") or []),
-            highlights=list(args.get("highlights") or []),
-            style="compose",
-            theme=theme,
-            category=str(args.get("category") or ""),
-        )
 
     if style == "procedural" or style == "anthropic":
         return generate_illustration_svg(seed or "figure", ground, theme=theme)
