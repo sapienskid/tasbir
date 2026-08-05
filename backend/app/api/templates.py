@@ -39,7 +39,6 @@ SAMPLE_COPY = {
     "subhead": "White space is the rhythm between ideas; a grid gives it a voice.",
     "body": "A grid sets order and a measure sets pace. Constrain the line, free "
     "the reader, and let the whitespace do its work.",
-    "tagline": "No. 12 — On grids",
     "badge": None,
 }
 
@@ -111,7 +110,8 @@ async def _validate_render(
 
     width, height = DIMS.get(family, DIMS["square"])
     tokens = dict(DEFAULT_TOKEN_VALUES)
-    footer = {"left": "SABIN POKHAREL", "right": "@SAPIENSKID"}
+    # Neutral sample footer (a handle only) — never a hardcoded brand identity.
+    footer = {"left": "", "right": "@handle"}
     ground = grounds[0] if grounds and grounds[0] in ("white", "black") else "white"
 
     context = build_template_context(
@@ -299,13 +299,13 @@ async def _render_preview_html(
     width, height = DIMS.get(family, DIMS["square"])
     tokens = dict(DEFAULT_TOKEN_VALUES)
     di = {}
-    footer = {"left": "SABIN POKHAREL", "right": "@SAPIENSKID"}
+    footer = {"left": "", "right": "@handle"}
     logo = ""
     image_slots: list[dict] = []
     if ds:
         tokens.update(ds.tokens or {})
         di = ds.design_instruction or {}
-        footer = ds.footer or footer
+        footer = ds.footer or {}
         logo = logo_data_uri(ds)
         image_slots, _ = scan_template_features(html)
 

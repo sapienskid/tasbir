@@ -2,6 +2,17 @@
 # Encodes the Swiss / International Typographic Style for Sabin Pokharel.
 # Injected into designer & verifier prompts at runtime. No code changes needed.
 
+# The active design language (see app/services/styles.py for the preset
+# library). A DS can switch to bold-modern / dark-luxury / vibrant-pop /
+# playful — the prompts, photo treatment, emoji rule, and archetype pool all
+# follow it. Grounds remain white/black for every language.
+style_language: "swiss-editorial"
+
+# Photo treatment for this language.
+photo:
+  grayscale: true                 # photos render grayscale (monochrome brands)
+  media_policy: "photo-forward"    # photo | illustration | typographic bias
+
 style:
   name: "Swiss / International Typographic Style"
   palette: "monochrome"           # strictly grayscale — no hue of any kind
@@ -25,7 +36,7 @@ style:
 type_voice:
   display: |
     Space Grotesk (var(--font-display)) is the signature display voice.
-    Use it ONLY for the headline and the footer wordmark. Big, tight,
+    Use it ONLY for the headline. Big, tight,
     confident — this is what makes the post recognizable.
   serif: |
     Source Serif 4 (var(--font-serif)) is the editorial text voice. It
@@ -48,7 +59,7 @@ type_scale:
     story: 1.45
     landscape: 1.0
   # Sizes are at base_canvas_width; scale by width/1080 for other formats.
-  # THREE voices: display (headline + wordmark), serif (subhead + body),
+  # THREE voices: display (headline), serif (subhead + body),
   # sans (category + metadata + handle). Per-family max 2 weights.
   roles:
     category:
@@ -169,7 +180,7 @@ do_dont:
   do:
     - "Left-align everything, always"
     - "Use weight and size for hierarchy — never color"
-    - "THREE VOICES: display (Space Grotesk) for headline + wordmark; serif (Source Serif 4) for subhead + body; sans (Inter) for category, metadata, handle"
+    - "THREE VOICES: display (Space Grotesk) for headline; serif (Source Serif 4) for subhead + body; sans (Inter) for category, metadata, handle"
     - "Constrain subhead/body copy to the measure (~600px at 1080) — never full-width lines"
     - "Keep hairline rules exactly 1px: hairline on white-ground, hairline-inverted on black-ground"
     - "Use generous whitespace — flexible space is intentional, not empty by accident"
@@ -180,6 +191,6 @@ do_dont:
     - "No centering"
     - "No more than 2 weights per family (Space Grotesk 500+700, Source Serif 4 400, Inter 500)"
     - "Never use the display face for body, subhead, category, or metadata text"
-    - "Never use the serif for headlines, category labels, metadata, or the wordmark"
+    - "Never use the serif for headlines, category labels, or metadata"
     - "No shadows, gradients, borders-with-radius, or any softening effect"
     - "No third color, ever — if a post needs emphasis, use weight or size"

@@ -132,9 +132,9 @@ def test_fallback_html_is_monochrome_and_swiss():
     # Uses CSS variables — no hardcoded hex
     assert "var(--color-bg)" in fb
     assert "#" not in fb.replace("<!DOCTYPE", "")
-    # Has category label and footer
+    # Has category label and footer handle (never the brand name)
     assert "NOTE" in fb
-    assert "SABIN POKHAREL" in fb
+    assert "SABIN POKHAREL" not in fb
     assert "@SAPIENSKID" in fb
 
 
@@ -155,7 +155,8 @@ def test_fallback_html_uses_three_family_system():
     )
     assert "var(--font-display)" in fb
     assert "var(--font-serif)" in fb
-    assert ".headline" in fb and ".wordmark" in fb
+    assert ".headline" in fb and ".handle" in fb
+    assert ".wordmark" not in fb
     assert "max-width: 600px" in fb
     # All three families come from the design system's tokens, not literals.
     assert "Space+Grotesk" in fb
@@ -258,7 +259,25 @@ def test_deterministic_checks_catch_violations():
     assert "hex color" in joined
     assert "Emoji" in joined
     assert "WRITING" in joined  # category missing
-    assert "SABIN POKHAREL" in joined  # footer missing
+    assert "Footer handle '@X'" in joined  # footer handle missing
+
+
+def test_deterministic_checks_emoji_gate_per_style():
+    """Playful/vibrant design languages may allow emoji — the hard fail is gated."""
+    html = ('<html><style>body{width:1080px;height:1080px;background:var(--color-bg)}'
+            '</style><body style="width:1080px;height:1080px">'
+            '<div class="kicker">WRITING</div><h1 class="headline">H</h1>'
+            '<span>SABIN POKHAREL</span><span>@X</span> ✨</body></html>')
+    issues = _run_deterministic_checks(
+        html, {"left": "SABIN POKHAREL", "right": "@X"}, "WRITING", 1080, 1080,
+        allow_emoji=True,
+    )
+    assert not any("emoji" in i.lower() for i in issues)
+    # Default (allow_emoji=False) still rejects the emoji.
+    issues_default = _run_deterministic_checks(
+        html, {"left": "SABIN POKHAREL", "right": "@X"}, "WRITING", 1080, 1080
+    )
+    assert any("emoji" in i.lower() for i in issues_default)
 
 
 def test_deterministic_checks_ignore_designer_root_block():

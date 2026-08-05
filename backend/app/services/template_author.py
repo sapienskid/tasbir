@@ -43,7 +43,6 @@ SAMPLE_COPY = {
     "subhead": "White space is the rhythm between ideas; a grid gives it a voice.",
     "body": "A grid sets order and a measure sets pace. Constrain the line, free "
     "the reader, and let the whitespace do its work.",
-    "tagline": "No. 12 — On grids",
     "badge": None,
 }
 

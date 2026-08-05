@@ -270,9 +270,11 @@ brand:
     twitter: "username"
     linkedin: "username"
 
-# Footer row — rendered on every post (bottom-anchored, hairline rule above).
+# Footer — a single @handle rendered on every post (small metadata style,
+# bottom-anchored, hairline rule above). Only `right` renders; `left` is kept
+# only for backward compatibility with older saved templates.
 footer:
-  left: "SABIN POKHAREL"
+  left: ""
   right: "@SAPIENSKID"
 
 # Approved category labels — every post has exactly one. Optional per-category
@@ -372,7 +374,7 @@ style:
   gradients: false
 
 type_voice:
-  display: "Space Grotesk (var(--font-display)) is the signature display voice — headline + footer wordmark ONLY"
+  display: "Space Grotesk (var(--font-display)) is the signature display voice — headline ONLY"
   serif: "Source Serif 4 (var(--font-serif)) is the editorial text voice — subhead + body copy"
   body: "Inter (var(--font-sans)) is the quiet interface voice — category, metadata, handle"
 
@@ -405,16 +407,16 @@ footer:
   rule: "1px hairline"
   gap: 24
   style: "metadata"
-  wordmark: {family: display, size: 24, weight: 500, tracking: "-0.01em", case: "uppercase"}
 
 do_dont:
-  do: ["Left-align everything, always", "THREE voices: display (Space Grotesk) headline+wordmark, serif (Source Serif 4) subhead+body, sans (Inter) category/metadata/handle", "Constrain body copy to the measure", "..."]
+  do: ["Left-align everything, always", "THREE voices: display (Space Grotesk) headline, serif (Source Serif 4) subhead+body, sans (Inter) category/metadata/handle", "Constrain body copy to the measure", "..."]
   dont: ["No hue of any kind", "No icons/illustrations", "No centering", "Never use display face for body/subhead/category", "Never use serif for headline/category/metadata", "Max 2 weights per family", "No shadows/gradients/rounded corners", "..."]
 ```
 
 The full Swiss / International Typographic Style — three type voices (Space
 Grotesk display + Source Serif 4 editorial + Inter interface), named type
-roles, 8px spacing grid, per-format margins, body measure, footer wordmark,
+roles, 8px spacing grid, per-format margins, body measure, and a single
+handle footer,
 and the do/don't checklist. Injected verbatim into the designer and verifier
 prompts.
 
@@ -439,8 +441,7 @@ prompts.
 
 Strictly grayscale — no `--color-primary`/`secondary`/`accent`. Three type
 voices: `--font-sans` (Inter, category/metadata/handle), `--font-display`
-(Space Grotesk, headline + wordmark), `--font-serif` (Source Serif 4,
-subhead + body).
+(Space Grotesk, headline), `--font-serif` (Source Serif 4, subhead + body).
 
 ## Directory Structure
 
@@ -645,6 +646,33 @@ restart needed. `Reset to seed` restores the YAML seed; the YAML files in
 2. The pipeline picks one deterministically per post (seeded by title + format)
 3. The verifier audits within any approved archetype — update `verifier.yaml`/design-instruction `do_dont` if the new archetype changes constraints
 4. Restart the worker to pick up changes
+
+### Design languages (style presets)
+Each design system declares a `style_language` (`style_language` key in its
+design-instruction; presets in `backend/app/services/styles.py`):
+`swiss-editorial` (default), `bold-modern`, `dark-luxury`, `vibrant-pop`,
+`playful`. The language drives the palette rules, decoration (radius /
+shadows / gradients), **emoji policy**, **photo treatment** (grayscale vs full
+color), **media policy** (photo-forward / illustration-forward / typographic),
+and the **layout-archetype pool** — every layer (designer, verifier,
+media-plan, editor-chat, copywriter) reads it instead of a hardcoded
+monochrome default. Grounds stay `white`/`black` for every language.
+
+- Switch a DS in the Studio (Design language picker) or
+  `POST /design-systems/{id}/style` — this merges the preset's rules into the
+  design-instruction (preserving the user's type scale / spacing / footer),
+  provisions the optional `--color-accent` / `--color-accent-secondary` tokens
+  the style references, and seeds starter templates (`bold-modern`,
+  `vibrant-pop` currently ship square + landscape packs in
+  `backend/app/services/style_templates.py`).
+- Add a preset: define it in `STYLE_PRESETS` in `styles.py` (label, palette
+  rules, emoji/grayscale/media-policy flags, and a `di` dict with
+  style/type_voice/do_dont/layout_archetypes) + optional starter templates.
+  The rule-of-thumb: a non-monochrome DS **must** define `--color-accent`
+  (and `--color-accent-secondary`) in its tokens or accent references render
+  transparent.
+- Emoji is **default off**; only languages with `emoji: true` (vibrant/pop,
+  playful) allow it — the verifier hard-fail is gated on that flag.
 
 ### Overriding copy fields
 1. Set `overrides.headline`, `overrides.subhead`, etc. in the API request

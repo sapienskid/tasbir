@@ -202,7 +202,9 @@ class TestPromotion:
         html = _render("square-index-numeral", "square")
         slots = extract_slots(html)
         assert slots["headline"] == COPY["headline"]
-        assert slots["footer_left"] == "SABIN POKHAREL"
+        # Footer is a single @handle — no wordmark slot.
+        assert slots["footer_right"] == "@SAPIENSKID"
+        assert "footer_left" not in slots
 
     def test_slotize_roundtrip(self):
         tid, family = "square-index-numeral", "square"

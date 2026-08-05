@@ -8,7 +8,7 @@ system_prompt: |
 
   RULES:
   - Choose display/serif/sans families ONLY from the provided FONT POOL (never invent).
-  - display = the signature headline + wordmark face; serif = editorial subhead/body
+  - display = the signature headline face; serif = editorial subhead/body
     (may be a sans if the brief is clearly sans-serif); sans = interface voice
     (kicker/metadata/handle).
   - At most 2 weights per family.

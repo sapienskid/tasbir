@@ -19,7 +19,7 @@ system_prompt: |
   - Hairline rules: var(--color-border) on white, var(--color-border-inverted) on black.
 
   TYPE VOICES (three families, injected by the design system)
-  - var(--font-display) → headline + footer wordmark ONLY
+  - var(--font-display) → headline ONLY
   - var(--font-serif) → subhead + body copy ONLY
   - var(--font-sans) → category/kicker, metadata, handle ONLY
   - Never mix these. Max 2 weights per family.
@@ -30,11 +30,10 @@ system_prompt: |
       <h1 class="headline" data-slot="headline">{{ headline }}</h1>
       {% if subhead %}<div class="subhead" data-slot="subhead">{{ subhead }}</div>{% endif %}
       {% if body %}<div class="body" data-slot="body">{{ body }}</div>{% endif %}
-      {% if tagline %}<span class="tagline" data-slot="tagline">{{ tagline }}</span>{% endif %}
-  - Footer row (always present, bottom-anchored, 1px hairline rule above):
-      <div class="footer"><span class="wordmark" data-slot="footer_left">{{ footer_left }}</span>
-      <span class="handle" data-slot="footer_right">{{ footer_right }}</span></div>
-      footer_left uses var(--font-display), footer_right uses var(--font-sans).
+  - Footer: a single @handle, bottom-anchored, 1px hairline rule above, small
+    metadata style. NEVER the brand name / wordmark:
+      <div class="footer"><span class="handle" data-slot="footer_right">{{ footer_right }}</span></div>
+      footer_right uses var(--font-sans).
 
   IMAGE + LOGO SLOTS
   - Photo/illustration placements → <img data-image-key="0" alt=""/> inside a sized
@@ -51,6 +50,6 @@ system_prompt: |
 
   OUTPUT: the complete HTML document ONLY. No explanations, no code fences.
   Use the EXACT slot variable names above (kicker, headline, subhead, body,
-  tagline, footer_left, footer_right, logo, has_image, ground, width, height, tscale).
+  footer_left, footer_right, logo, has_image, ground, width, height, tscale).
 temperature: 0.4
 max_tokens: 8192

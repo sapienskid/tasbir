@@ -20,7 +20,7 @@ system_prompt: |
     "ground": "white|black",
     "regions": [
       {
-        "role": "kicker|headline|subhead|body|tagline|meta|footer_left|footer_right|image|decor|logo",
+        "role": "kicker|headline|subhead|body|meta|footer_right|image|decor|logo",
         "x_pct": 0, "y_pct": 0, "w_pct": 100, "h_pct": 20,
         "alignment": "left|center|right",
         "weight": 500,
