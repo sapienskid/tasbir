@@ -62,6 +62,11 @@ def _plan_system_prompt(state: GenerationState) -> str:
         "(procedural) — a photo search on an abstract idea usually comes up "
         "empty. Do not waste turns on it, and never leave a slide bare when an "
         "abstract illustration fits.\n"
+        "- If the post is about numbers/comparison/steps (metrics, rankings, "
+        "before/after, counts) and you have 2-6 concrete values, you may use "
+        "kind=\"chart\" with a \"chart\" object: "
+        '{"values": [<numbers>], "labels": ["A", "B", ...], "title": "<short>"}. '
+        "Charts render as a clean monochrome bar chart — great for stat-led posts.\n"
         "- Photos: SHORT, BROAD queries (1-3 words) from the slide's concrete "
         "subject — e.g. 'mountain river', 'city street', 'coffee cup'. Never "
         "a sentence.\n"
@@ -282,7 +287,7 @@ def _parse_plan(raw: str) -> list[dict]:
         return []
     if not isinstance(data, list):
         return []
-    valid_kinds = {"photo", "illustration", "none"}
+    valid_kinds = {"photo", "illustration", "chart", "none"}
     out: list[dict] = []
     for entry in data:
         if not isinstance(entry, dict):
@@ -291,12 +296,18 @@ def _parse_plan(raw: str) -> list[dict]:
         kind = str(entry.get("kind") or "none")
         if not tid or kind not in valid_kinds:
             continue
+        chart = entry.get("chart") if isinstance(entry.get("chart"), dict) else {}
         out.append({
             "target": tid,
             "kind": kind,
             "query": str(entry.get("query") or "")[:80],
             "style": str(entry.get("style") or "procedural")[:40],
             "theme": str(entry.get("theme") or "")[:60],
+            "chart": {
+                "values": (chart.get("values") or [])[:8],
+                "labels": (chart.get("labels") or [])[:8],
+                "title": str(chart.get("title") or "")[:60],
+            },
         })
     return out
 
@@ -366,8 +377,25 @@ def execute_slide_illustration(
     )
 
 
+def execute_slide_chart(plan_entry: dict, ground: str) -> str:
+    """Execute a chart plan entry → token-only bar-chart SVG fragment."""
+    from app.services.charts import generate_chart_svg
+
+    chart = plan_entry.get("chart") or {}
+    values = chart.get("values") or []
+    labels = chart.get("labels") or []
+    title = chart.get("title") or ""
+    svg = generate_chart_svg(values, labels, ground, title)
+    return (
+        '<div class="figure" style="--ill-ink:var(--color-text);'
+        '--ill-paper:var(--color-bg);width:100%;height:100%">'
+        f"<style>.figure svg{{width:100%;height:100%;display:block}}</style>{svg}</div>"
+    )
+
+
 __all__ = [
     "build_media_plan",
+    "execute_slide_chart",
     "execute_slide_illustration",
     "execute_slide_photo",
 ]

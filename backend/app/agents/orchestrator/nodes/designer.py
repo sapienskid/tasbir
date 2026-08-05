@@ -167,6 +167,14 @@ async def _designer_media_director(state: GenerationState, fmt) -> None:
             state["_designer_figure"] = fig
         return
 
+    if kind == "chart":
+        from app.services.media_plan import execute_slide_chart
+
+        fig = execute_slide_chart(plan, ground)
+        if fig:
+            state["_designer_figure"] = fig
+        return
+
     if kind == "photo":
         from app.agents.orchestrator.post_cache import post_cached
         from app.services.media_plan import execute_slide_photo

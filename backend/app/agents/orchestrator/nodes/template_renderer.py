@@ -77,6 +77,10 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
                 category=state.get("category", ""),
                 api_style=state.get("illustration_style") or "",
             )
+        if plan.get("kind") == "chart":
+            from app.services.media_plan import execute_slide_chart
+
+            return execute_slide_chart(plan, ground)
         # If the plan asked for a photo (or no media) but the template still
         # renders an illustration slot, DON'T inject a procedural figure on top
         # of a real photo. If the photo failed to materialize (empty search /
