@@ -4,7 +4,7 @@ name: Publish Docker Images to GHCR
 # so a server can deploy with `image:` pulls — no repo clone needed on the box.
 #
 #   on tag push:       v1.0.0 -> ghcr.io/<owner>/tasbir-api:1.0.0 + :latest
-#   on push to main:             -> :main (rolling dev image)
+#   on push to main:             -> :main + :latest (rolling dev image)
 #   on manual dispatch:          -> :<branch-or-ref> + :latest
 #
 # Images:
@@ -49,7 +49,7 @@ jobs:
             VERSION="${GITHUB_REF_NAME#v}"
             TAGS="$TAGS,$IMAGE:$VERSION,$IMAGE:latest"
           elif [[ "${{ github.ref_name }}" == "main" ]]; then
-            TAGS="$TAGS,$IMAGE:main"
+            TAGS="$TAGS,$IMAGE:main,$IMAGE:latest"
           else
             REF="${GITHUB_REF_NAME//\//-}"
             TAGS="$TAGS,$IMAGE:$REF,$IMAGE:latest"
