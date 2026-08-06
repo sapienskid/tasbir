@@ -270,7 +270,7 @@ def test_detect_elements():
 
 
 def test_apply_hidden_nulls_context():
-    from app.services.templates import apply_hidden, build_template_context
+    from app.services.templates import build_template_context
 
     ctx = build_template_context(
         {"headline": "H", "body": "B", "extra": {"cta": "Go"}},

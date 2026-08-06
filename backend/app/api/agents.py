@@ -42,7 +42,10 @@ class AgentUpdate(BaseModel):
             if not v or not _MODEL_RE.match(v) or len(v) > 128:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Invalid model id {v!r} — use e.g. 'gemini-3.5-flash-lite' or 'provider/model'",
+                    detail=(
+                        f"Invalid model id {v!r} — use e.g. 'gemini-3.5-flash-lite' "
+                        "or 'provider/model'"
+                    ),
                 )
         return v
 

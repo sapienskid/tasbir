@@ -232,7 +232,10 @@ async def generate(request: GenerateRequest, db: AsyncSession = Depends(get_db))
             if tid and tid not in known_template_ids:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Unknown template {tid!r} for design system {ds_id!r} (platform {pid!r})",
+                    detail=(
+                        f"Unknown template {tid!r} for design system "
+                        f"{ds_id!r} (platform {pid!r})"
+                    ),
                 )
 
         _check("(global)", request.template_id)

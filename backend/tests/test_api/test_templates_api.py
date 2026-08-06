@@ -92,10 +92,12 @@ def _conditional_html() -> str:
         ".headline{font-family:var(--font-display);font-size:70px}"
         "</style></head>"
         "<body {% if ground == \"black\" %}data-ground=\"black\"{% endif %}>"
-        "{% if subhead %}<div class=\"subhead\" data-slot=\"subhead\">{{ subhead }}</div>{% endif %}"
+        "{% if subhead %}<div class=\"subhead\" data-slot=\"subhead\">"
+        "{{ subhead }}</div>{% endif %}"
         "{% if body %}<div class=\"body\" data-slot=\"body\">{{ body }}</div>{% endif %}"
         "<h1 class=\"headline\" data-slot=\"headline\">{{ headline }}</h1>"
-        "{% if footer_right %}<span class=\"handle\" data-slot=\"footer_right\">{{ footer_right }}</span>{% endif %}"
+        "{% if footer_right %}<span class=\"handle\" data-slot=\"footer_right\">"
+        "{{ footer_right }}</span>{% endif %}"
         "</body></html>"
     )
 

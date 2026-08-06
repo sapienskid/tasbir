@@ -161,6 +161,30 @@ async def call_llm(
             log.error("[LLM] OpenRouter fallback also failed: %s", or_err)
     raise last_error or RuntimeError("LLM call failed")
 
+
+async def _call_openrouter(
+    api_key: str,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    import openai
+
+    client = openai.AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
+    response = await client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return response.choices[0].message.content or ""
+
+
 async def call_llm_for_tool(
     agent_role: str,
     system_prompt: str,

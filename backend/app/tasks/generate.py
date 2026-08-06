@@ -33,14 +33,14 @@ def generate_task(self, task_id: str, source_data: dict):
             await repo.update_status(task_id=task_id, status="running")
 
         async def _execute() -> None:
-    
+
             from app.config import get_settings
             from app.services.design_systems import build_pipeline_payload, load_ds_templates
             from app.services.image_loader import prepare_images
             from app.services.tokens import DEFAULT_TOKEN_VALUES
-    
+
             settings = get_settings()
-    
+
             # Design system drives tokens, brand, footer, categories, campaigns,
             # design-instruction, and the logo. Defaults to the seeded system.
             ds_id = source_data.get("design_system_id") or "default"
@@ -55,9 +55,9 @@ def generate_task(self, task_id: str, source_data: dict):
                         ds = await DesignSystemRepository(s2).get_by_id("default")
                 if ds is None:
                     raise RuntimeError("No design system available (seed failed)")
-    
+
             payload = build_pipeline_payload(ds)
-    
+
             # Setup pipeline input
             pipeline_input = dict(source_data)
             pipeline_input["_task_id"] = task_id
@@ -74,14 +74,14 @@ def generate_task(self, task_id: str, source_data: dict):
                     "logo": payload["logo"],
                 }
             )
-    
+
             # Overrides: brand/system-level, then API request (highest priority)
             request_overrides = source_data.get("overrides", {}) or {}
             pipeline_input["overrides"] = {
                 **(payload.get("overrides") or {}),
                 **request_overrides,
             }
-    
+
             # Campaign preset from this design system's campaigns map.
             campaign_name = source_data.get("campaign", "default")
             campaigns = payload.get("campaigns") or {}
@@ -89,11 +89,11 @@ def generate_task(self, task_id: str, source_data: dict):
                 campaign_name, campaigns.get("default", {})
             )
             pipeline_input["campaign_name"] = campaign_name
-    
+
             # Category override from API request (highest priority)
             if source_data.get("category"):
                 pipeline_input["category"] = source_data["category"]
-    
+
             # The design system's active template library (selection input).
             pipeline_input["ds_templates"] = await load_ds_templates(pool, ds.id)
             pipeline_input["template_id"] = source_data.get("template_id") or ""
@@ -101,14 +101,14 @@ def generate_task(self, task_id: str, source_data: dict):
             pipeline_input["template_mode"] = source_data.get("template_mode") or "auto"
             pipeline_input["post_type"] = source_data.get("post_type") or "default"
             pipeline_input["verbatim"] = bool(source_data.get("verbatim"))
-    
+
             # Per-post design-language override: apply the language's rules + palette
             # to THIS post only (in-memory), without changing the design system.
             override = str(source_data.get("style_language") or "")
             if override:
                 async with pool() as session:
                     from app.services.design_languages import apply_language, get_language
-    
+
                     lang = await get_language(session, override)
                     if lang is not None:
                         di = await apply_language(
@@ -128,15 +128,15 @@ def generate_task(self, task_id: str, source_data: dict):
                         log.warning(
                             "[generate] unknown style_language override %r ignored", override
                         )
-    
+
             # Effective illustration style: API override → DS default → procedural.
             from app.services.design_systems import resolve_illustration_style
-    
+
             pipeline_input["illustration_style"] = resolve_illustration_style(
                 payload.get("design_instruction") or {},
                 str(source_data.get("illustration_style") or ""),
             )
-    
+
             # Download URL images / pass through uploaded base64 media.
             raw_images = source_data.get("images", [])
             pipeline_input["images"] = await prepare_images(raw_images) if raw_images else []
@@ -145,10 +145,10 @@ def generate_task(self, task_id: str, source_data: dict):
                 pid: (await prepare_images(imgs) if imgs else [])
                 for pid, imgs in raw_platform_images.items()
             }
-    
+
             try:
                 last_pct = {"value": -1}
-    
+
                 async def _on_progress(pct: int, label: str) -> None:
                     if pct == last_pct["value"]:
                         return
@@ -160,12 +160,15 @@ def generate_task(self, task_id: str, source_data: dict):
                             )
                     except Exception as e:  # noqa: BLE001
                         log.warning("[generate_task] progress write failed: %s", e)
-    
+
                 state = await run_pipeline(
                     pipeline_input, progress_callback=_on_progress
                 )
             except Exception as e:
-                log.error("[generate_task] Pipeline failed for task %s: %s", task_id, e, exc_info=True)
+                log.error(
+                    "[generate_task] Pipeline failed for task %s: %s",
+                    task_id, e, exc_info=True,
+                )
                 async with pool() as session:
                     await TaskRepository(session).update_status(
                         task_id=task_id, status="failed", error=str(e),
@@ -173,15 +176,15 @@ def generate_task(self, task_id: str, source_data: dict):
                 from app.agents.orchestrator.post_cache import post_cache_clear
                 post_cache_clear(task_id)
                 return
-    
+
             from pathlib import Path
-    
+
             from app.agents.orchestrator.post_cache import post_cache_clear
-    
+
             post_cache_clear(task_id)
-    
+
             output_dir = Path(settings.output_dir) / task_id
-    
+
             output_paths = {}
             if output_dir.exists():
                 for f in output_dir.iterdir():
@@ -189,12 +192,12 @@ def generate_task(self, task_id: str, source_data: dict):
                         fmt_id = f.stem
                         ext = f.suffix.lstrip(".")
                         output_paths.setdefault(fmt_id, {})[ext] = str(f)
-    
+
             brief = state.get("strategic_brief", {})
             format_tasks = state.get("format_tasks", {})
-    
+
             from app.services.formats import is_carousel_base
-    
+
             platform_results = {
                 fmt_id: {
                     "status": ft.get("status", "unknown"),
@@ -210,7 +213,7 @@ def generate_task(self, task_id: str, source_data: dict):
                 # themselves (instagram-carousel-N / -portrait-N) are the outputs.
                 if not (is_carousel_base(fmt_id) and not ft.get("html_path"))
             }
-    
+
             async with pool() as session:
                 await TaskRepository(session).update_status(
                     task_id=task_id,
@@ -224,7 +227,7 @@ def generate_task(self, task_id: str, source_data: dict):
                         "media_credits": state.get("media_credits") or [],
                     },
                 )
-    
+
             log.info("[generate_task] Task %s completed. Outputs: %s", task_id, output_paths)
 
         try:
