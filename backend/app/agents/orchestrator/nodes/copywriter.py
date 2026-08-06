@@ -560,6 +560,11 @@ def _slides_from_overrides(overrides: dict, content: str, title: str, n: int) ->
 
 async def copywriter_node(state: GenerationState) -> dict:
     """Write platform-optimized copy for all requested platforms in parallel."""
+    # Retry-from-failure: copy for every platform is already present.
+    if state.get("resume_mode") and all(
+        (ft.get("copy") or "") for ft in state.get("format_tasks", {}).values()
+    ):
+        return {}
     prompt_cfg = await get_agent_config("copywriter")
     brief = state.get("strategic_brief", {})
     content = state.get("content", "")

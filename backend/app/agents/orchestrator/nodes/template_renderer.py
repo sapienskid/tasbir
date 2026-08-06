@@ -322,6 +322,7 @@ async def template_node_single(state: GenerationState) -> dict:
     # User override: honor the chosen template for its family + a supported
     # ground; otherwise fall back to deterministic selection.
     selected: tuple[str, dict] | None = None
+    exclude: set[str] = set()
     if user_template_id:
         entry = next(
             (t for t in templates if t.get("id") == user_template_id), None

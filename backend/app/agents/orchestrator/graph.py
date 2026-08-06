@@ -178,12 +178,24 @@ async def process_all_formats_node(state: GenerationState) -> dict:
     slide_context: dict[str, dict] = {}
     runnable: list[str] = []
 
+    def _resumed_verified(ft: dict) -> bool:
+        """A format already verified on a previous run — skip its chain on retry."""
+        return (
+            bool(state.get("resume_mode"))
+            and ft.get("status") == "verified"
+            and bool(ft.get("html_path"))
+        )
+
+    resumed_skipped: dict[str, dict] = {}
     for fmt_id in platforms:
         if is_carousel(fmt_id):
             copy = format_tasks.get(fmt_id, {}).get("copy", "")
             slides = _extract_slides(copy)
             if not slides:
                 # No slide copy produced — fall back to a single-frame design.
+                if _resumed_verified(format_tasks.get(fmt_id, {})):
+                    resumed_skipped[fmt_id] = format_tasks[fmt_id]
+                    continue
                 runnable.append(fmt_id)
                 continue
             base_meta = {
@@ -191,6 +203,10 @@ async def process_all_formats_node(state: GenerationState) -> dict:
             }
             for i, slide_copy in enumerate(slides, start=1):
                 sid = carousel_slide_id(fmt_id, i)
+                existing = format_tasks.get(sid, {})
+                if _resumed_verified(existing):
+                    resumed_skipped[sid] = existing
+                    continue
                 format_tasks[sid] = {
                     **base_meta,
                     "status": "waiting",
@@ -200,6 +216,9 @@ async def process_all_formats_node(state: GenerationState) -> dict:
                 runnable.append(sid)
             format_tasks.pop(fmt_id, None)  # base carousel entry is not an output
         else:
+            if _resumed_verified(format_tasks.get(fmt_id, {})):
+                resumed_skipped[fmt_id] = format_tasks[fmt_id]
+                continue
             runnable.append(fmt_id)
 
     log.info("[graph] Processing %d format(s)/slide(s) in parallel", len(runnable))
@@ -236,7 +255,7 @@ async def process_all_formats_node(state: GenerationState) -> dict:
         *(_run_format_chain(base_state, fmt_id) for fmt_id in runnable)
     )
 
-    merged_tasks = {}
+    merged_tasks = dict(resumed_skipped)
     verification = {}
     retry_count = {}
     media_credits: list[dict] = []
@@ -487,11 +506,42 @@ def build_pipeline() -> StateGraph:
 pipeline = build_pipeline()
 
 
+def _apply_resume(state: dict, resume: dict) -> None:
+    """Pre-populate state from a failed run so the pipeline resumes downstream.
+
+    Skips strategist/planner/copywriter (their outputs are present) and lets
+    ``process_all_formats`` re-run only the formats that didn't verify.
+    """
+    for key in ("strategic_brief", "post_plan", "sequence_check"):
+        if resume.get(key):
+            state[key] = resume[key]
+    if resume.get("category"):
+        state["category"] = resume["category"]
+    if resume.get("ground") in ("white", "black"):
+        state["ground"] = resume["ground"]
+    if resume.get("platforms"):
+        state["platforms"] = list(resume["platforms"])
+    if resume.get("slides") is not None:
+        state["slides"] = int(resume["slides"])
+    for fmt_id, ft in (resume.get("format_tasks") or {}).items():
+        cur = state["format_tasks"].get(fmt_id, {})
+        merged = dict(cur)
+        for k, v in ft.items():
+            if v is not None:
+                merged[k] = v
+        merged.setdefault("copy", "")
+        state["format_tasks"][fmt_id] = merged
+    state["resume_mode"] = True
+
+
 async def run_pipeline(
     input_data: dict,
     progress_callback: Callable[[int, str], Awaitable[None]] | None = None,
+    resume_state: dict | None = None,
 ) -> dict:
     state = initial_state(**input_data)
+    if resume_state:
+        _apply_resume(state, resume_state)
     config = {"configurable": {"thread_id": input_data.get("_task_id", "default")}}
     seen_progress = 0
 

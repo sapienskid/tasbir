@@ -423,6 +423,75 @@ async def rerender_format(
     }
 
 
+def _build_resume_state(task) -> dict:
+    """Reconstruct pipeline state from a failed run's stored result.
+
+    Feeds back the strategic brief, post plan, per-format copy (and carousel
+    base copy) so the strategist/planner/copywriter LLM steps are skipped on
+    retry, and only unverified formats are re-designed.
+    """
+    from app.services.formats import parse_carousel_slide
+
+    result = task.result or {}
+    brief = result.get("strategic_brief") or {}
+    post_plan = result.get("post_plan") or {}
+    source = task.source_data or {}
+
+    resume_tasks: dict[str, dict] = {}
+    for fmt_id, r in (result.get("platforms") or {}).items():
+        if parse_carousel_slide(fmt_id):
+            continue  # the base carousel copy covers the slide set
+        resume_tasks[fmt_id] = {
+            "copy": r.get("copy", ""),
+            "status": r.get("status"),
+            "html_path": r.get("html_path", ""),
+            "quality_score": r.get("quality_score", 0),
+            "quality_issues": r.get("quality_issues", []),
+            "template_id": r.get("template_id"),
+            "error": r.get("error"),
+        }
+    for base_id, copy_json in (result.get("carousel_bases") or {}).items():
+        resume_tasks[base_id] = {"copy": copy_json, "status": "copy_ready"}
+
+    return {
+        "strategic_brief": brief,
+        "post_plan": post_plan,
+        "category": brief.get("category") or source.get("category") or "",
+        "ground": brief.get("ground") or "white",
+        "platforms": post_plan.get("platforms") or source.get("platforms") or [],
+        "slides": int(post_plan.get("slides") or 0),
+        "sequence_check": result.get("sequence_check") or {},
+        "format_tasks": resume_tasks,
+    }
+
+
+@router.post("/{task_id}/retry")
+async def retry_task(task_id: str, db: AsyncSession = Depends(get_db)):
+    """Re-run a failed task, resuming from where it failed.
+
+    Pre-seeds the pipeline with the stored strategic brief, post plan, and
+    per-format copy, so the strategist/planner/copywriter LLM steps are skipped.
+    Formats that already verified keep their artifacts; only unverified formats
+    are re-designed and re-checked.
+    """
+    from app.tasks.generate import generate_task
+
+    repo = TaskRepository(db)
+    task = await repo.get_by_id(task_id)
+    if not task:
+        raise NotFoundError(f"Task {task_id} not found")
+    if task.status in ("pending", "running"):
+        raise HTTPException(status_code=409, detail="Task is still processing")
+
+    resume = _build_resume_state(task)
+    source = dict(task.source_data or {})
+    source["resume_state"] = resume
+    await repo.save_source_data(task_id=task_id, source_data=source)
+    await repo.update_status(task_id=task_id, status="pending")
+    generate_task.delay(task_id, source)
+    return {"task_id": task_id, "status": "pending"}
+
+
 @router.post("/{task_id}/formats/{fmt_id}/retry")
 async def retry_format(
     task_id: str,

@@ -152,3 +152,36 @@ def test_process_all_formats_merges_every_platform():
     assert set(fts.keys()) == {"instagram-square", "linkedin-post"}
     for p, ft in fts.items():
         assert ft["status"] == "verified", f"{p} not verified: {ft['status']}"
+
+
+def test_apply_resume_prepopulates_state():
+    """A retry feeds the stored brief/plan/copy back so the LLM nodes skip."""
+    from app.agents.orchestrator.graph import _apply_resume
+
+    state = _base_state()
+    _apply_resume(state, {
+        "strategic_brief": {"category": "WRITING", "ground": "white", "angle": "a"},
+        "post_plan": {
+            "post_type": "single", "ratio": "square", "slides": 0,
+            "platforms": ["instagram-square", "linkedin-post"],
+        },
+        "category": "WRITING",
+        "ground": "white",
+        "platforms": ["instagram-square", "linkedin-post"],
+        "slides": 0,
+        "format_tasks": {
+            "instagram-square": {
+                "copy": '{"headline":"H","body":"B"}', "status": "verified",
+                "html_path": "/o/instagram-square.html",
+            },
+            "linkedin-post": {
+                "copy": '{"headline":"H2","body":"B2"}', "status": "needs_retry",
+                "html_path": "",
+            },
+        },
+    })
+    assert state["resume_mode"] is True
+    assert state["strategic_brief"]["category"] == "WRITING"
+    assert state["format_tasks"]["instagram-square"]["status"] == "verified"
+    assert state["format_tasks"]["instagram-square"]["html_path"] == "/o/instagram-square.html"
+    assert state["format_tasks"]["linkedin-post"]["copy"]

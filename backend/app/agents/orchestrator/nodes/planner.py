@@ -108,6 +108,9 @@ def _build_user_prompt(state: GenerationState, auto: bool, platforms: list[str],
 
 async def planner_node(state: GenerationState) -> dict:
     """Resolve the post plan (LLM when undecided, else deterministic)."""
+    # Retry-from-failure: the plan is already present from the failed run.
+    if state.get("post_plan"):
+        return {}
     prompt_cfg = await get_agent_config("planner")
     raw_platforms = state.get("platforms", [])
     auto = "auto" in raw_platforms

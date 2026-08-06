@@ -101,6 +101,9 @@ def _ds_default_ground(state: GenerationState) -> str:
 
 async def strategist_node(state: GenerationState) -> dict:
     """Analyze content and produce a structured strategic brief."""
+    # Retry-from-failure: the brief is already present from the failed run.
+    if state.get("strategic_brief"):
+        return {}
     prompt_cfg = await get_agent_config("strategist")
     content = state.get("content", "")
     title = state.get("title", "")

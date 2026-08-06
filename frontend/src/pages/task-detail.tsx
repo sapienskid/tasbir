@@ -18,7 +18,7 @@ import { SaveTemplateDialog } from "@/components/tasks/save-template-dialog"
 import { GalleryView } from "@/components/tasks/artifact-gallery"
 import { FormatEditor } from "@/components/tasks/format-editor"
 import { formatDims } from "@/lib/platforms"
-import { ArrowLeft, Trash2 } from "lucide-react"
+import { ArrowLeft, RotateCcw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useTask, useTaskProgress } from "@/hooks/use-task"
 import { apiRequest, ApiError, fetchBlob, fetchText, downloadBlob } from "@/lib/api"
@@ -145,6 +145,16 @@ export default function TaskDetailPage() {
     }
   }, [taskId, navigate])
 
+  const retryTask = useCallback(async () => {
+    try {
+      await apiRequest(`/tasks/${taskId}/retry`, { method: "POST" })
+      toast.success("Retrying — resuming from where it failed")
+      void mutate()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Retry failed")
+    }
+  }, [taskId, mutate])
+
   // Revoke prefetched object URLs on unmount.
   useEffect(() => {
     return () => {
@@ -195,8 +205,12 @@ export default function TaskDetailPage() {
       </div>
 
       {task.status === "failed" ? (
-        <div className="rounded-md border border-destructive/50 p-4 text-sm text-destructive">
-          {task.error ?? "Task failed"}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-destructive/50 p-4 text-sm">
+          <p className="text-destructive">{task.error ?? "Task failed"}</p>
+          <Button size="sm" variant="outline" onClick={() => void retryTask()}>
+            <RotateCcw aria-hidden="true" className="size-4" />
+            Retry
+          </Button>
         </div>
       ) : null}
 

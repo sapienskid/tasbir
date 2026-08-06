@@ -188,6 +188,9 @@ class GenerationState(TypedDict):
     _slide_images: Annotated[dict[str, list[dict]], _merge_dicts]
     # The media plan: {target_id: {kind, ...}} (one LLM session per post).
     media_plan: Annotated[dict[str, dict], _merge_dicts]
+    # Set when a retry resumed from a failed run — nodes skip completed work
+    # and verified formats are not re-rendered.
+    resume_mode: Annotated[bool, _keep_first]
 
     # Output
     output_paths: Annotated[dict[str, str], _merge_dicts]
@@ -282,5 +285,6 @@ def initial_state(
         "slide_context": {},
         "_slide_images": {},
         "media_plan": {},
+        "resume_mode": False,
         "output_paths": {},
     }

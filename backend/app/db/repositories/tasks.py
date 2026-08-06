@@ -37,6 +37,16 @@ class TaskRepository:
         await self.session.refresh(task)
         return task
 
+    async def save_source_data(self, task_id: str, source_data: dict) -> None:
+        """Replace a task's stored source_data (e.g. with a resume_state)."""
+        stmt = (
+            update(GenerationTask)
+            .where(GenerationTask.id == task_id)
+            .values(source_data=source_data)
+        )
+        await self.session.execute(stmt)
+        await self.session.commit()
+
     async def update_status(
         self,
         task_id: str,

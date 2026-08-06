@@ -162,7 +162,9 @@ def generate_task(self, task_id: str, source_data: dict):
                         log.warning("[generate_task] progress write failed: %s", e)
 
                 state = await run_pipeline(
-                    pipeline_input, progress_callback=_on_progress
+                    pipeline_input,
+                    progress_callback=_on_progress,
+                    resume_state=pipeline_input.get("resume_state"),
                 )
             except Exception as e:
                 log.error(
@@ -213,6 +215,13 @@ def generate_task(self, task_id: str, source_data: dict):
                 # themselves (instagram-carousel-N / -portrait-N) are the outputs.
                 if not (is_carousel_base(fmt_id) and not ft.get("html_path"))
             }
+            # Carousel base copy is kept separately so a retry can re-expand the
+            # slide set without re-running the copywriter.
+            carousel_bases = {
+                fmt_id: ft.get("copy", "")
+                for fmt_id, ft in format_tasks.items()
+                if is_carousel_base(fmt_id)
+            }
 
             async with pool() as session:
                 await TaskRepository(session).update_status(
@@ -224,6 +233,7 @@ def generate_task(self, task_id: str, source_data: dict):
                         "post_plan": state.get("post_plan", {}),
                         "sequence_check": state.get("sequence_check", {}),
                         "platforms": platform_results,
+                        "carousel_bases": carousel_bases,
                         "media_credits": state.get("media_credits") or [],
                     },
                 )
