@@ -68,6 +68,8 @@ async def lifespan(app: FastAPI):
         await conn.run_sync(_ensure_column, "generation_tasks", "edited_html", "JSON")
         await conn.run_sync(_ensure_column, "generation_tasks", "progress", "JSON")
         await conn.run_sync(_ensure_column, "agents", "fallback_models", "JSON")
+        await conn.run_sync(_ensure_column, "templates", "hidden_elements", "JSON")
+        await conn.run_sync(_ensure_column, "templates", "media_position", "VARCHAR(16)")
     await engine.dispose()
     log.info("[startup] SQLite tables created/verified")
 

@@ -55,5 +55,6 @@ def sweep_expired() -> None:
             if result.rowcount:
                 log.info("[retention] Purged %d expired task record(s)", result.rowcount)
 
-    if expired_ids:
-        asyncio.run(_purge_db())
+    # Always purge DB rows — a task whose files were consumed (or removed in an
+    # earlier sweep) has no output dir, so gating on expired dirs would leak it.
+    asyncio.run(_purge_db())

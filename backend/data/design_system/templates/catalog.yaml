@@ -119,6 +119,23 @@ templates:
     description: Headline in the top third, body in a measure column, large quiet
       lower region with index meta.
     file: portrait/portrait-split.html
+  portrait-split-media:
+    family: portrait
+    grounds:
+    - white
+    - black
+    categories:
+    - PORTFOLIO
+    - PROJECT
+    - WRITING
+    hint_tags:
+    - media
+    - split
+    - image
+    weight: 1.0
+    description: 'Vertical split: a measured editorial column on the left, a tall
+      full-height photo column on the right (Quanta-style). Hairline rule between.'
+    file: portrait/split-media.html
   story-lower-third:
     family: story
     grounds:
@@ -136,52 +153,24 @@ templates:
     description: Headline in the upper third clearing platform UI; content + footer
       in a designed lower-third band.
     file: story/story-lower-third.html
-  landscape-split:
+  landscape-split-media:
     family: landscape
     grounds:
     - white
     - black
     categories:
     - PORTFOLIO
+    - PROJECT
+    - WRITING
     hint_tags:
-    - landscape
+    - media
     - split
-    - two-column
+    - image
     weight: 1.0
-    description: 'Vertical rule splits the card: display headline left, serif measure
-      right, footer spanning.'
-    file: landscape/landscape-split.html
-  landscape-pull:
-    family: landscape
-    grounds:
-    - white
-    - black
-    categories:
-    - PROJECT
-    hint_tags:
-    - landscape
-    - pull
-    - headline
-    weight: 1.0
-    description: Big bottom-left headline, tracked meta top-right, footer rule — tight
-      horizontal poster.
-    file: landscape/landscape-pull.html
-  landscape-ad-card:
-    family: landscape
-    grounds:
-    - white
-    - black
-    categories:
-    - PROJECT
-    - PORTFOLIO
-    hint_tags:
-    - ad
-    - product
-    - doc
-    weight: 1.0
-    description: 'Product ad card: category row, display headline, serif sub,
-      monochrome line-art, footer row with handle + url.'
-    file: landscape/ad-card.html
+    description: 'Landscape vertical split: a measured editorial column on the left,
+      a tall full-height photo column on the right (Quanta-style). Hairline rule
+      between. The landscape family''s media-forward editorial layout.'
+    file: landscape/split-media.html
   story-costs:
     family: story
     grounds:

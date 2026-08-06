@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
@@ -17,6 +18,11 @@ log = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Model ids look like "gemini-3.5-flash-lite" or an OpenRouter id
+# "provider/model". Reject whitespace and obviously malformed typos so a
+# bad id fails fast at the API instead of 500ing every pipeline call.
+_MODEL_RE = re.compile(r"^[a-z0-9]+(?:[.\-/_][a-z0-9]+)*$")
+
 
 class AgentUpdate(BaseModel):
     persona: str | None = None
@@ -27,6 +33,31 @@ class AgentUpdate(BaseModel):
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=None, ge=64, le=65536)
     is_active: bool | None = None
+
+    @field_validator("model")
+    @classmethod
+    def _validate_model(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip()
+            if not v or not _MODEL_RE.match(v) or len(v) > 128:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Invalid model id {v!r} — use e.g. 'gemini-3.5-flash-lite' or 'provider/model'",
+                )
+        return v
+
+    @field_validator("fallback_models")
+    @classmethod
+    def _validate_fallbacks(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return None
+        cleaned: list[str] = []
+        for m in v:
+            m = m.strip()
+            if not m or not _MODEL_RE.match(m) or len(m) > 128:
+                raise HTTPException(status_code=422, detail=f"Invalid fallback model id {m!r}")
+            cleaned.append(m)
+        return cleaned
 
 
 # ---------------------------------------------------------------------------

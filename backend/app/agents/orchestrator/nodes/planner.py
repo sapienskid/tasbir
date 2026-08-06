@@ -17,7 +17,6 @@ from app.agents.orchestrator.state import GenerationState, PostPlan
 from app.services.agents import get_agent_config
 from app.services.formats import (
     CAROUSEL_FORMAT,
-    PORTRAIT_CAROUSEL_FORMAT,
     is_carousel_base,
 )
 from app.services.llm import call_llm
@@ -146,14 +145,12 @@ async def planner_node(state: GenerationState) -> dict:
     else:
         plan = _synthesize_plan(platforms, slides_in, ratio_in)
 
-    # Resolve the concrete platform set (carousel base follows the ratio).
+    # Resolve the concrete platform set. The user's chosen carousel platform id
+    # is authoritative for its aspect (instagram-carousel = square,
+    # instagram-carousel-portrait = portrait) — `ratio` never overrides it.
+    # Only a carousel planned without an explicit platform gets the square base.
     resolved = [p for p in plan.platforms if p != "auto"]
     if plan.post_type == "carousel":
-        if plan.ratio == "portrait":
-            resolved = [
-                PORTRAIT_CAROUSEL_FORMAT if is_carousel_base(p) else p
-                for p in resolved
-            ]
         if not any(is_carousel_base(p) for p in resolved):
             resolved.insert(0, CAROUSEL_FORMAT)
     elif plan.post_type == "story":

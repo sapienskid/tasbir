@@ -17,6 +17,7 @@ from app.agents.orchestrator.state import GenerationState
 from app.services.design_instruction import (
     build_google_fonts_link,
     inject_fonts_into_html,
+    photo_grayscale,
     substitute_image_keys,
     substitute_logo,
 )
@@ -116,8 +117,11 @@ async def renderer_node_single(state: GenerationState) -> dict:
     # 2. Inject KaTeX for math rendering
     html = inject_katex_into_html(html)
 
-    # 3. Embed images as base64 via data-image-key markers
-    html = substitute_image_keys(html, images)
+    # 3. Embed images as base64 via data-image-key markers (honoring the design
+    #    language's photo treatment — grayscale for monochrome systems).
+    html = substitute_image_keys(
+        html, images, grayscale=photo_grayscale(state.get("design_instruction"))
+    )
 
     # 3b. Embed the design system logo via data-logo markers
     html = substitute_logo(html, logo)

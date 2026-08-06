@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowLeft, ArrowRight, Check, ImagePlus, Link2, Loader2, Wand2 } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, ImagePlus, Link2, Loader2, Wand2, X } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,11 +37,35 @@ function isCarouselPlatform(p: string): boolean {
 
 const STEPS = ["Design System", "Content", "Template", "Media"]
 
+const POST_TYPE_LABELS: Record<string, string> = {
+  default: "Editorial",
+  quote: "Quote",
+  promo: "Promo / announcement",
+  event: "Event",
+  product: "Product drop",
+  comparison: "Comparison",
+  tutorial: "Tutorial",
+}
+
+/** Clearer labels for the carousel platforms (aspect encoded in the id). */
+function platformLabel(p: { id: string; name: string }): string {
+  if (p.id === "instagram-carousel") return "Instagram carousel 1:1"
+  if (p.id === "instagram-carousel-portrait") return "Instagram carousel 4:5"
+  return p.name || p.id
+}
+
+interface PlatformOverride {
+  post_type?: string
+  template_id?: string
+}
+
 interface MediaEntry {
   data?: string
   mime?: string
   url?: string
   alt: string
+  placement?: string
+  description?: string
 }
 
 export default function NewTaskPage() {
@@ -59,13 +83,17 @@ export default function NewTaskPage() {
   const [campaign, setCampaign] = useState("default")
   const [platforms, setPlatforms] = useState<string[]>(["instagram-square"])
   const [slides, setSlides] = useState(3)
-  const [ratio, setRatio] = useState<"square" | "portrait" | "auto">("square")
   const [sequenceAudit, setSequenceAudit] = useState(false)
   const [verbatim, setVerbatim] = useState(false)
   const [templateId, setTemplateId] = useState<string>("")
   const [templateMode, setTemplateMode] = useState<"auto" | "template" | "designer">("auto")
   const [postType, setPostType] = useState("default")
-  const [media, setMedia] = useState<Record<string, MediaEntry>>({})
+  // Step-2 gallery scope: "__all__" applies a template post-wide, a platform id
+  // assigns a template to that one platform (visual per-platform selection).
+  const [templateScope, setTemplateScope] = useState<string>("__all__")
+  const [platformOverrides, setPlatformOverrides] = useState<Record<string, PlatformOverride>>({})
+  // Per-platform media uploads: {platform_id: {slot_key: MediaEntry}}.
+  const [media, setMedia] = useState<Record<string, Record<string, MediaEntry>>>({})
   const [submitting, setSubmitting] = useState(false)
 
   const activeSystems = useMemo(
@@ -73,7 +101,7 @@ export default function NewTaskPage() {
     [systems]
   )
   const ds: DesignSystem | undefined = activeSystems.find((s) => s.id === dsId)
-  const { data: templates, isLoading: tplLoading } = useTemplates(dsId || null)
+  const { data: templates, error: templatesError, isLoading: tplLoading } = useTemplates(dsId || null)
 
   // Auto-select the only (or default) design system.
   useEffect(() => {
@@ -93,22 +121,87 @@ export default function NewTaskPage() {
     () => [...new Set(platforms.map((p) => familyOfPlatform(p)).filter(Boolean))],
     [platforms]
   )
-  const gallery = useMemo(
-    () =>
-      (templates ?? []).filter(
-        (t) =>
-          families.includes(t.family) &&
-          (!verbatim || t.supports_text !== false) // verbatim needs a body slot
-      ),
-    [templates, families, verbatim]
+  const scopeFamily = useMemo(
+    () => (templateScope === "__all__" ? null : familyOfPlatform(templateScope) || null),
+    [templateScope]
   )
+  const gallery = useMemo(() => {
+    const fams = scopeFamily ? [scopeFamily] : families
+    return (templates ?? []).filter(
+      (t) =>
+        fams.includes(t.family) &&
+        (!verbatim || t.supports_text !== false) // verbatim needs a body slot
+    )
+  }, [templates, families, scopeFamily, verbatim])
   const selected = useMemo(
     () => (templates ?? []).find((t) => t.id === templateId),
     [templates, templateId]
   )
+  const concretePlatforms = useMemo(() => platforms.filter((p) => p !== "auto"), [platforms])
+  const platformById = useMemo(() => {
+    const map: Record<string, { id: string; name: string }> = {}
+    for (const p of dbPlatforms) map[p.id] = p
+    return map
+  }, [dbPlatforms])
+
+  /** The template that actually applies to a platform (override or global). */
+  function effectiveTemplate(pid: string): Template | undefined {
+    const overrideId = platformOverrides[pid]?.template_id
+    if (overrideId) return (templates ?? []).find((t) => t.id === overrideId)
+    if (selected && selected.family === familyOfPlatform(pid)) return selected
+    return undefined
+  }
+
+  /** The effective template id for a platform ("" = auto). */
+  function effectiveTemplateId(pid: string): string {
+    return effectiveTemplate(pid)?.id ?? ""
+  }
+
+  /** Assign a template visually. scope "__all__" → global; else per-platform. */
+  function pickTemplate(scope: string, tid: string) {
+    if (scope === "__all__") {
+      setTemplateId(tid)
+    } else {
+      setPlatformOverride(scope, { template_id: tid || undefined })
+    }
+  }
+
+  /** Whether a card is the active choice for the current scope. */
+  function isTemplateSelected(scope: string, tid: string): boolean {
+    if (scope === "__all__") return templateId === tid
+    return (platformOverrides[scope]?.template_id ?? "") === tid
+  }
+
+  /** Platforms explicitly assigned this template id (for gallery badges). */
+  function assignedPlatforms(tid: string): string[] {
+    return Object.entries(platformOverrides)
+      .filter(([, v]) => v.template_id === tid)
+      .map(([pid]) => pid)
+  }
 
   function togglePlatform(p: string, checked: boolean) {
-    setPlatforms((prev) => (checked ? [...prev, p] : prev.filter((x) => x !== p)))
+    setPlatforms((prev) => {
+      const next = checked ? [...prev, p] : prev.filter((x) => x !== p)
+      if (!checked) {
+        setPlatformOverrides((overrides) => {
+          const copy = { ...overrides }
+          delete copy[p]
+          return copy
+        })
+      }
+      return next
+    })
+  }
+
+  function setPlatformOverride(pid: string, patch: Partial<PlatformOverride>) {
+    setPlatformOverrides((prev) => {
+      const cur = prev[pid] ?? {}
+      const next = { ...cur, ...patch }
+      const copy = { ...prev }
+      if (next.post_type || next.template_id) copy[pid] = next
+      else delete copy[pid]
+      return copy
+    })
   }
 
   async function submit() {
@@ -122,17 +215,41 @@ export default function NewTaskPage() {
     }
     setSubmitting(true)
     try {
-      const images = Object.entries(media)
-        .filter(([, v]) => v.data || v.url)
-        .map(([key, v]) => ({
-          data: v.data || undefined,
-          mime: v.mime,
-          url: v.url || undefined,
-          alt: v.alt || `Image ${key}`,
-          description: "",
-          placement: "auto",
-        }))
+      const allImages: Array<{
+        data?: string
+        mime?: string
+        url?: string
+        alt: string
+        description: string
+        placement: string
+      }> = []
+      const platformImages: Record<string, typeof allImages> = {}
+      for (const [pid, slots] of Object.entries(media)) {
+        const list = Object.entries(slots)
+          .filter(([, v]) => v.data || v.url)
+          .map(([slotKey, v]) => ({
+            data: v.data || undefined,
+            mime: v.mime,
+            url: v.url || undefined,
+            alt: v.alt || `Image ${slotKey}`,
+            description: v.description ?? "",
+            placement: v.placement ?? "auto",
+          }))
+        if (list.length > 0) {
+          platformImages[pid] = list
+          allImages.push(...list)
+        }
+      }
       const hasCarousel = platforms.some(isCarouselPlatform)
+      const config = Object.entries(platformOverrides)
+        .filter(([, v]) => v.post_type || v.template_id)
+        .reduce<Record<string, PlatformOverride>>((acc, [pid, v]) => {
+          acc[pid] = {
+            ...(v.post_type ? { post_type: v.post_type } : {}),
+            ...(v.template_id ? { template_id: v.template_id } : {}),
+          }
+          return acc
+        }, {})
       const res = await apiRequest<GenerateResponse>("/generate", {
         method: "POST",
         body: JSON.stringify({
@@ -142,15 +259,17 @@ export default function NewTaskPage() {
           campaign,
           platforms,
           slides: hasCarousel ? slides : undefined,
-          ratio,
           sequence_audit: sequenceAudit,
           verbatim,
           design_system_id: dsId,
           template_id: templateId,
           template_mode: templateMode,
           post_type: postType,
+          platforms_config: Object.keys(config).length > 0 ? config : undefined,
           style_language: styleLang || undefined,
-          images,
+          images: allImages.length > 0 ? allImages : undefined,
+          platform_images:
+            Object.keys(platformImages).length > 0 ? platformImages : undefined,
         }),
       })
       toast.success("Task queued")
@@ -162,17 +281,43 @@ export default function NewTaskPage() {
     }
   }
 
-  async function handleMediaUpload(slotKey: string, file: File) {
+  async function handleMediaUpload(pid: string, slotKey: string, file: File) {
     try {
       const res = await uploadMedia(file)
-      setMedia((prev) => ({ ...prev, [slotKey]: { data: res.data, mime: res.mime, alt: "" } }))
+      setMedia((prev) => ({
+        ...prev,
+        [pid]: {
+          ...(prev[pid] ?? {}),
+          [slotKey]: {
+            ...(prev[pid]?.[slotKey] ?? { alt: "", placement: "auto" }),
+            data: res.data,
+            mime: res.mime,
+            url: undefined,
+          },
+        },
+      }))
       toast.success("Image uploaded")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed")
     }
   }
 
-  const hasMediaStep = Boolean(selected?.image_slots?.length)
+  function setSlotMedia(pid: string, slotKey: string, patch: Partial<MediaEntry>) {
+    setMedia((prev) => ({
+      ...prev,
+      [pid]: {
+        ...(prev[pid] ?? {}),
+        [slotKey]: { ...(prev[pid]?.[slotKey] ?? { alt: "", placement: "auto" }), ...patch },
+      },
+    }))
+  }
+
+  // Media step surfaces every selected platform's effective template slots.
+  const mediaPlatforms = concretePlatforms.filter((pid) => {
+    const t = effectiveTemplate(pid)
+    return Boolean(t && (t.image_slots?.length ?? 0) > 0)
+  })
+  const hasMediaStep = mediaPlatforms.length > 0
 
   if (dsLoading && !systems) {
     return <p className="text-sm text-muted-foreground">Loading…</p>
@@ -247,6 +392,10 @@ export default function NewTaskPage() {
                 onClick={() => {
                   setDsId(s.id)
                   setStyleLang("")
+                  // Templates are scoped per design system — a stale choice
+                  // from another DS would 422 on submit.
+                  setTemplateId("")
+                  setPlatformOverrides({})
                 }}
                 className={`flex items-center justify-between rounded-md border p-4 text-left transition-colors ${
                   dsId === s.id ? "border-primary bg-muted/50" : "hover:bg-muted/30"
@@ -337,7 +486,7 @@ export default function NewTaskPage() {
                   <div key={p.id} className="flex items-center gap-2 text-sm">
                     <Checkbox id={`nt-${p.id}`} checked={platforms.includes(p.id)} onCheckedChange={(c) => togglePlatform(p.id, c === true)} />
                     <Label htmlFor={`nt-${p.id}`} className="font-normal">
-                      {p.name || p.id}
+                      {platformLabel(p)}
                     </Label>
                   </div>
                 ))}
@@ -435,21 +584,6 @@ export default function NewTaskPage() {
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <Label htmlFor="nt-ratio" className="shrink-0">
-                      Ratio
-                    </Label>
-                    <Select value={ratio} onValueChange={(v) => setRatio(v as typeof ratio)}>
-                      <SelectTrigger id="nt-ratio" className="w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="square">square 1:1</SelectItem>
-                        <SelectItem value="portrait">portrait 4:5</SelectItem>
-                        <SelectItem value="auto">auto</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center gap-2">
                     <Checkbox
                       id="nt-seqaudit"
                       checked={sequenceAudit}
@@ -459,6 +593,99 @@ export default function NewTaskPage() {
                       sequence audit (vision)
                     </Label>
                   </div>
+                </div>
+              ) : null}
+              {concretePlatforms.length > 0 ? (
+                <div className="mt-4 grid gap-3">
+                  <Label className="text-xs text-muted-foreground">
+                    Per-platform settings (optional) — override the post-wide post
+                    type / template for a platform; unlisted platforms inherit the
+                    global choices above.
+                  </Label>
+                  {concretePlatforms.map((pid) => {
+                    const family = familyOfPlatform(pid)
+                    const override = platformOverrides[pid] ?? {}
+                    return (
+                      <div key={pid} className="grid gap-3 rounded-md border p-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm font-medium">
+                            {platformLabel(platformById[pid] ?? { id: pid, name: pid })}
+                          </Label>
+                          <Badge variant="outline" className="text-[10px]">
+                            {family}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="grid gap-1.5">
+                            <Label className="text-[11px] text-muted-foreground">
+                              Post type
+                            </Label>
+                            <Select
+                              value={override.post_type ?? "__inherit__"}
+                              onValueChange={(v) =>
+                                setPlatformOverride(pid, {
+                                  post_type: v === "__inherit__" ? undefined : v,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__inherit__">
+                                  Inherit ({POST_TYPE_LABELS[postType] ?? postType})
+                                </SelectItem>
+                                {Object.entries(POST_TYPE_LABELS).map(([key, label]) => (
+                                  <SelectItem key={key} value={key}>
+                                    {label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid gap-1.5">
+                            <Label className="text-[11px] text-muted-foreground">
+                              Template
+                            </Label>
+                            <div className="flex items-center gap-1 rounded-md border px-2 py-1.5">
+                              <span className="min-w-0 flex-1 truncate text-xs">
+                                {effectiveTemplateId(pid) ? (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {effectiveTemplateId(pid)}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-muted-foreground">Auto</span>
+                                )}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => {
+                                  setTemplateScope(pid)
+                                  setStep(2)
+                                }}
+                              >
+                                Change
+                              </Button>
+                              {override.template_id ? (
+                                <button
+                                  type="button"
+                                  title="Reset to auto"
+                                  className="text-muted-foreground hover:text-foreground"
+                                  onClick={() =>
+                                    setPlatformOverride(pid, { template_id: undefined })
+                                  }
+                                >
+                                  <X aria-hidden="true" className="size-3.5" />
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               ) : null}
             </div>
@@ -476,9 +703,41 @@ export default function NewTaskPage() {
 
       {step === 2 ? (
         <div className="grid gap-4">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <Label className="shrink-0 text-muted-foreground">
+              Template applies to
+            </Label>
+            <Select value={templateScope} onValueChange={setTemplateScope}>
+              <SelectTrigger className="w-64">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All platforms (post-wide)</SelectItem>
+                {concretePlatforms.map((pid) => (
+                  <SelectItem key={pid} value={pid}>
+                    {platformLabel(platformById[pid] ?? { id: pid, name: pid })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {scopeFamily ? (
+              <Badge variant="outline" className="text-[10px]">
+                {scopeFamily} family
+              </Badge>
+            ) : null}
+          </div>
           <p className="text-sm text-muted-foreground">
             Templates for <Badge variant="outline">{ds?.name}</Badge> matching{" "}
-            {families.join(", ")}. "Auto" lets the pipeline pick.
+            {scopeFamily ?? families.join(", ")}. "Auto" lets the pipeline pick.
+            {Object.keys(platformOverrides).length > 0 ? (
+              <>
+                {" "}
+                Per-platform overrides are set for{" "}
+                {Object.keys(platformOverrides).length} platform
+                {Object.keys(platformOverrides).length > 1 ? "s" : ""} and take
+                precedence.
+              </>
+            ) : null}
             {verbatim ? " Verbatim mode shows text-capable templates only." : ""}
             {" "}Every carousel slide shows its i/N counter.
           </p>
@@ -488,70 +747,89 @@ export default function NewTaskPage() {
                 <Skeleton key={i} className="h-64 w-[280px]" />
               ))}
             </div>
+          ) : templatesError ? (
+            <p className="rounded-md border border-destructive/40 p-4 text-sm text-destructive">
+              Failed to load templates:{" "}
+              {templatesError instanceof Error ? templatesError.message : "unknown error"}
+            </p>
           ) : (
             <div className="flex flex-wrap justify-center gap-4">
               <div
                 role="button"
                 tabIndex={0}
-                onClick={() => setTemplateId("")}
+                onClick={() => pickTemplate(templateScope, "")}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault()
-                    setTemplateId("")
+                    pickTemplate(templateScope, "")
                   }
                 }}
                 className={`flex w-[280px] cursor-pointer flex-col items-center justify-center gap-2 rounded-md border p-4 text-center transition-colors ${
-                  templateId === "" ? "border-primary bg-muted/50" : "hover:bg-muted/30"
+                  templateScope === "__all__"
+                    ? templateId === ""
+                      ? "border-primary bg-muted/50"
+                      : "hover:bg-muted/30"
+                    : !platformOverrides[templateScope]?.template_id
+                      ? "border-primary bg-muted/50"
+                      : "hover:bg-muted/30"
                 }`}
               >
                 <Wand2 aria-hidden="true" className="size-6 text-muted-foreground" />
                 <span className="text-sm font-medium">Auto</span>
                 <span className="text-xs text-muted-foreground">Pipeline picks the best match</span>
               </div>
-              {gallery.map((t) => (
-                <div
-                  key={t.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setTemplateId(t.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault()
-                      setTemplateId(t.id)
-                    }
-                  }}
-                  className={`flex w-[280px] cursor-pointer flex-col gap-2 rounded-md border p-2 transition-colors ${
-                    templateId === t.id ? "border-primary" : "hover:border-muted-foreground/40"
-                  }`}
-                >
-                  <TemplatePreviewCard t={t} />
-                  <div className="flex items-center justify-between gap-2 px-1">
-                    <span className="truncate text-xs font-medium">{t.id}</span>
-                    <div className="flex shrink-0 items-center gap-1">
-                      {verbatim && t.supports_text !== false ? (
-                        <Badge variant="secondary" className="text-[10px]">
-                          text
-                        </Badge>
-                      ) : null}
-                      {t.image_slots.length > 0 ? (
+              {gallery.map((t) => {
+                const assigned = assignedPlatforms(t.id)
+                return (
+                  <div
+                    key={t.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => pickTemplate(templateScope, t.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        pickTemplate(templateScope, t.id)
+                      }
+                    }}
+                    className={`flex w-[280px] cursor-pointer flex-col gap-2 rounded-md border p-2 transition-colors ${
+                      isTemplateSelected(templateScope, t.id)
+                        ? "border-primary"
+                        : "hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    <TemplatePreviewCard t={t} />
+                    <div className="flex items-center justify-between gap-2 px-1">
+                      <span className="truncate text-xs font-medium">{t.id}</span>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {assigned.length > 0 ? (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {assigned.length} platform{assigned.length > 1 ? "s" : ""}
+                          </Badge>
+                        ) : null}
+                        {verbatim && t.supports_text !== false ? (
+                          <Badge variant="secondary" className="text-[10px]">
+                            text
+                          </Badge>
+                        ) : null}
                         <Badge variant="outline" className="text-[10px]">
-                          image
+                          {t.family}
                         </Badge>
-                      ) : null}
-                      <Badge variant="outline" className="text-[10px]">
-                        {t.family}
-                      </Badge>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
           <div className="flex justify-between">
             <Button variant="ghost" onClick={() => setStep(1)}>
               Back
             </Button>
-            <Button onClick={() => setStep(hasMediaStep ? 3 : 4)} disabled={!templateId && gallery.length === 0}>
+            <Button
+              onClick={() => setStep(hasMediaStep ? 3 : 4)}
+              disabled={templateMode === "template" && !templateId && gallery.length === 0}
+            >
               {hasMediaStep ? "Add Media" : "Generate"}
               <ArrowRight aria-hidden="true" className="size-4" />
             </Button>
@@ -567,47 +845,79 @@ export default function NewTaskPage() {
               <Label>Media slots</Label>
             </div>
             <p className="text-sm text-muted-foreground">
-              This template declares {selected?.image_slots.length} image slot(s) — upload or paste a URL for each.
+              Upload or paste a URL per platform. Images apply to that platform's
+              template; carousels distribute image i → slide i.
             </p>
-            {(selected?.image_slots ?? []).map((slot, i) => {
-              const entry = media[slot.key]
+            {mediaPlatforms.map((pid) => {
+              const t = effectiveTemplate(pid)
+              const slots = t?.image_slots ?? []
               return (
-                <div key={slot.key} className="grid gap-2 rounded-md border p-4">
+                <div key={pid} className="grid gap-3 rounded-md border p-4">
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Slot {slot.key} · {slot.hint}
+                    {platformLabel(platformById[pid] ?? { id: pid, name: pid })} ·{" "}
+                    {t?.id ?? "auto"}
                   </Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground hover:bg-muted/30">
-                      <ImagePlus aria-hidden="true" className="size-4" />
-                      {entry?.data ? "Replace image" : "Upload image"}
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/gif"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0]
-                          if (f) void handleMediaUpload(slot.key, f)
-                        }}
-                      />
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <Link2 aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
-                      <Input
-                        placeholder="https://… image URL"
-                        value={entry?.url ?? ""}
-                        onChange={(e) =>
-                          setMedia((prev) => ({ ...prev, [slot.key]: { ...prev[slot.key], url: e.target.value } }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <Input
-                    placeholder={`Alt text for slot ${slot.key}${i === 0 ? " (optional)" : ""}`}
-                    value={entry?.alt ?? ""}
-                    onChange={(e) =>
-                      setMedia((prev) => ({ ...prev, [slot.key]: { ...prev[slot.key], alt: e.target.value } }))
-                    }
-                  />
+                  {slots.map((slot) => {
+                    const entry = media[pid]?.[slot.key]
+                    return (
+                      <div key={slot.key} className="grid gap-2">
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed p-3 text-sm text-muted-foreground hover:bg-muted/30">
+                            <ImagePlus aria-hidden="true" className="size-4" />
+                            {entry?.data ? "Replace image" : "Upload image"}
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp,image/gif"
+                              className="hidden"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0]
+                                if (f) void handleMediaUpload(pid, slot.key, f)
+                              }}
+                            />
+                          </label>
+                          <div className="flex items-center gap-2">
+                            <Link2 aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+                            <Input
+                              placeholder="https://… image URL"
+                              value={entry?.url ?? ""}
+                              onChange={(e) =>
+                                setSlotMedia(pid, slot.key, { url: e.target.value, data: undefined })
+                              }
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Input
+                            placeholder="Alt text (optional)"
+                            value={entry?.alt ?? ""}
+                            onChange={(e) => setSlotMedia(pid, slot.key, { alt: e.target.value })}
+                          />
+                          <Select
+                            value={entry?.placement ?? "auto"}
+                            onValueChange={(v) => setSlotMedia(pid, slot.key, { placement: v })}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Placement" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="auto">Auto</SelectItem>
+                              <SelectItem value="background">Background (full-bleed)</SelectItem>
+                              <SelectItem value="top-left">Top-left</SelectItem>
+                              <SelectItem value="center">Center</SelectItem>
+                              <SelectItem value="bottom-right">Bottom-right</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Input
+                          placeholder="Description / placement note (optional)"
+                          value={entry?.description ?? ""}
+                          onChange={(e) =>
+                            setSlotMedia(pid, slot.key, { description: e.target.value })
+                          }
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
               )
             })}

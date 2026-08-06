@@ -9,7 +9,6 @@ chain when a model times out / 504s / is rate-limited.
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
 
 from app.config import get_settings
 
@@ -27,13 +26,11 @@ LLM_TIMEOUT = 180.0
 # same args this many times, force a final answer instead of looping forever.
 MAX_REPEAT_TOOL = 3
 
-
 def _model_for(agent_role: str) -> str:
     """Resolve the model for a role — DB agent row first, MODEL_ROUTES fallback."""
     from app.services.agents import resolve_model
 
     return resolve_model(agent_role)
-
 
 def get_llm(agent_role: str = "strategist", temperature: float = 0.7, max_tokens: int | None = None):
     """Get a LangChain ChatGoogleGenerativeAI instance for the given role.
@@ -54,7 +51,6 @@ def get_llm(agent_role: str = "strategist", temperature: float = 0.7, max_tokens
         max_tokens=max_tokens,
         max_retries=0,
     )
-
 
 async def call_llm_with_retry(llm, messages, max_retries=3, agent_role: str = ""):
     """Call an LLM with retry on 429 rate limit errors (server retryDelay).
@@ -101,7 +97,6 @@ async def call_llm_with_retry(llm, messages, max_retries=3, agent_role: str = ""
             break
 
     raise last_error or RuntimeError("LLM call failed")
-
 
 async def call_llm(
     agent_role: str,
@@ -166,7 +161,6 @@ async def call_llm(
             log.error("[LLM] OpenRouter fallback also failed: %s", or_err)
     raise last_error or RuntimeError("LLM call failed")
 
-
 async def call_llm_for_tool(
     agent_role: str,
     system_prompt: str,
@@ -190,7 +184,6 @@ async def call_llm_for_tool(
         max_tokens=max_tokens,
     )
     return args
-
 
 async def call_llm_for_tools(
     agent_role: str,
@@ -250,7 +243,6 @@ async def call_llm_for_tools(
 
     log.warning("[LLM] tool-calling has no OpenRouter fallback; skipping (agent %s)", agent_role)
     raise last_error or RuntimeError("LLM tool call failed")
-
 
 async def call_llm_tool_loop(
     agent_role: str,
@@ -363,7 +355,6 @@ async def call_llm_tool_loop(
         log.warning("[LLM] tool loop exhausted all models for %s", agent_role)
     return ""
 
-
 def _response_text(response) -> str:
     """Extract text from a LangChain AIMessage content (str or blocks)."""
     if isinstance(response.content, str):
@@ -378,91 +369,3 @@ def _response_text(response) -> str:
         return "".join(texts)
     return str(response.content)
 
-
-async def call_llm_stream(
-    agent_role: str,
-    system_prompt: str,
-    user_prompt: str,
-    temperature: float = 0.7,
-    max_tokens: int = 2000,
-) -> AsyncIterator[str]:
-    """Stream response from LLM. Yields text chunks as they arrive."""
-    from langchain_core.messages import HumanMessage, SystemMessage
-
-    llm = get_llm(agent_role=agent_role, temperature=temperature, max_tokens=max_tokens)
-
-    try:
-        async for chunk in llm.astream([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]):
-            if not chunk.content:
-                continue
-            if isinstance(chunk.content, str):
-                yield chunk.content
-            elif isinstance(chunk.content, list):
-                for block in chunk.content:
-                    if isinstance(block, str):
-                        yield block
-                    elif isinstance(block, dict) and block.get("type") == "text":
-                        yield block.get("text", "")
-    except Exception as gemini_error:
-        settings = get_settings()
-        if settings.openrouter_api_key:
-            async for chunk in _call_openrouter_stream(
-                api_key=settings.openrouter_api_key,
-                model=_model_for(agent_role),
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            ):
-                yield chunk
-        else:
-            raise gemini_error
-
-
-async def _call_openrouter(
-    api_key: str,
-    model: str,
-    system_prompt: str,
-    user_prompt: str,
-    temperature: float,
-    max_tokens: int,
-) -> str:
-    import openai
-
-    client = openai.AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    return response.choices[0].message.content or ""
-
-
-async def _call_openrouter_stream(
-    api_key: str,
-    model: str,
-    system_prompt: str,
-    user_prompt: str,
-    temperature: float,
-    max_tokens: int,
-) -> AsyncIterator[str]:
-    import openai
-
-    client = openai.AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
-    stream = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=True,
-    )
-    async for chunk in stream:
-        if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content

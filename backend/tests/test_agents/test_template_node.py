@@ -65,6 +65,48 @@ def test_auto_fallback_for_other_family():
     asyncio.run(run())
 
 
+def test_per_platform_template_override_wins_over_global():
+    """A platform's template_id beats the post-wide template_id for that format."""
+
+    async def run():
+        templates = await _templates()
+        square = next(t for t in templates if t["family"] == "square")
+        landscape = next(t for t in templates if t["family"] == "landscape")
+        state = _state(
+            ds_templates=templates,
+            template_id=landscape["id"],
+            platforms_config={"instagram-square": {"template_id": square["id"]}},
+        )
+        state["_processing_format_id"] = "instagram-square"
+        state["format_tasks"]["instagram-square"]["copy"] = COPY
+        out = await template_node_single(state)
+        ft = out["format_tasks"]["instagram-square"]
+        assert ft["template_id"] == square["id"]
+        assert ft["status"] == "html_ready"
+
+    asyncio.run(run())
+
+
+def test_carousel_slide_resolves_base_platform_override():
+    """instagram-carousel-N honors the base platform's platforms_config entry."""
+
+    async def run():
+        templates = await _templates()
+        square = next(t for t in templates if t["family"] == "square")
+        state = _state(
+            ds_templates=templates,
+            platforms_config={"instagram-carousel": {"template_id": square["id"]}},
+        )
+        state["_processing_format_id"] = "instagram-carousel-1"
+        state["format_tasks"]["instagram-carousel-1"] = {"copy": COPY}
+        out = await template_node_single(state)
+        ft = out["format_tasks"]["instagram-carousel-1"]
+        assert ft["template_id"] == square["id"]
+        assert ft["status"] == "html_ready"
+
+    asyncio.run(run())
+
+
 def test_logo_passed_into_context():
     async def run():
         templates = await _templates()

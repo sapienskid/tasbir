@@ -155,9 +155,9 @@ class TestSelection:
 
     def test_category_boost(self):
         selection = select_template("landscape", "white", "PORTFOLIO", "", "seed", _catalog_templates())
-        # PORTFOLIO maps to both landscape-split and landscape-ad-card.
+        # PORTFOLIO maps to the landscape vertical-split template.
         assert selection is not None
-        assert selection[0] in {"landscape-split", "landscape-ad-card"}
+        assert selection[0] == "landscape-split-media"
 
     def test_hint_boost(self):
         selection = select_template("square", "white", "", "note-card", "seed", _catalog_templates())
@@ -216,7 +216,7 @@ class TestPromotion:
         assert "<!DOCTYPE html>" in tpl
 
     def test_slotize_parameterizes_canvas(self):
-        html = _render("landscape-split", "landscape")
+        html = _render("landscape-split-media", "landscape")
         tpl = slotize_html(html)
         assert "width: {{ width }}px" in tpl
         assert "height: {{ height }}px" in tpl
@@ -238,7 +238,7 @@ class TestPromotion:
     def test_render_promoted_template_roundtrip(self):
         from jinja2 import Environment
 
-        html = _render("landscape-split", "landscape")
+        html = _render("landscape-split-media", "landscape")
         tpl = slotize_html(html)
         env = Environment(autoescape=True)
         w, h = DIMS["landscape"]
@@ -254,6 +254,97 @@ def test_format_family_mapping():
     assert format_family("instagram-story") == "story"
     assert format_family("linkedin-post") == "landscape"
     assert format_family("twitter-card") == "landscape"
+
+
+def test_detect_elements():
+    from app.services.templates import detect_elements
+
+    html = (
+        "{% if subhead %}x{% endif %}{% if body %}y{% endif %}"
+        "{% if ground == 'black' %}z{% endif %}{% if not meta %}n{% endif %}"
+        "{% if footer_right or badge %}f{% endif %}"
+    )
+    # footer_right is mandatory (the verifier requires the handle) — not a toggle.
+    assert detect_elements(html) == ["subhead", "body", "badge"]
+    assert detect_elements("<div>no conditions</div>") == []
+
+
+def test_apply_hidden_nulls_context():
+    from app.services.templates import apply_hidden, build_template_context
+
+    ctx = build_template_context(
+        {"headline": "H", "body": "B", "extra": {"cta": "Go"}},
+        "WRITING", "white", {"right": "@H"}, 1080, 1080, True, seed="t",
+        hidden=["body", "has_image", "extra.cta"],
+    )
+    assert ctx["body"] == ""
+    assert ctx["has_image"] is False
+    assert ctx["extra"] == {}
+
+
+def test_media_position_flows_into_context_and_validates():
+    from app.services.templates import build_template_context
+
+    ctx = build_template_context(
+        {"headline": "H"}, "WRITING", "white", {}, 1080, 1080, True, seed="t",
+        media_position="left",
+    )
+    assert ctx["media_position"] == "left"
+    bad = build_template_context(
+        {"headline": "H"}, "WRITING", "white", {}, 1080, 1080, True, seed="t",
+        media_position="diagonal",
+    )
+    assert bad["media_position"] == "auto"
+
+
+def test_split_templates_render_every_placement():
+    """The 4 placement-parametric templates must pass QC in all 4 placements."""
+    from app.agents.orchestrator.nodes.quality_check import _run_deterministic_checks
+    from app.services.templates import build_template_context, render_template_file
+
+    rels = {
+        "square": "square/split-media.html",
+        "portrait": "portrait/split-media.html",
+        "portrait-index": "portrait/portrait-index.html",
+        "landscape": "landscape/split-media.html",
+    }
+    dims = {"square": (1080, 1080), "portrait": (1080, 1350), "landscape": (1200, 627)}
+    copy = {
+        "headline": "The Measure of a Column Is a Quiet Contract of Type",
+        "subhead": "White space is the rhythm between ideas.",
+        "body": "A grid sets order and a measure sets pace.",
+        "tagline": "", "badge": None, "extra": {},
+    }
+    for label, rel in rels.items():
+        fam = "portrait" if label in ("portrait", "portrait-index") else label
+        w, h = dims[fam]
+        for pos in ("auto", "left", "right", "top", "bottom"):
+            ctx = build_template_context(
+                dict(copy), "WRITING", "white", FOOTER, w, h, True, seed="t",
+                family=fam, media_position=pos,
+            )
+            html = render_template_file(rel, ctx)
+            assert 'data-image-key="0"' in html, f"{label}/{pos} missing media zone"
+            issues = _run_deterministic_checks(html, FOOTER, "WRITING", w, h, "Space Grotesk")
+            assert not issues, f"{label}/{pos}: {issues}"
+
+
+def test_substitute_image_keys_grayscale_policy():
+    """Embedded user photos honor the design language's photo treatment."""
+    from app.services.design_instruction import photo_grayscale, substitute_image_keys
+
+    img = [{"data": "AAAA", "mime": "image/png", "alt": "x"}]
+    gray = substitute_image_keys('<img data-image-key="0" alt=""/>', img, grayscale=True)
+    color = substitute_image_keys('<img data-image-key="0" alt=""/>', img, grayscale=False)
+    assert "filter:grayscale(1)" in gray
+    assert "filter:grayscale(1)" not in color
+    # element marker → replaced with a grayscaled <img>
+    el = substitute_image_keys('<div data-image-key="0"></div>', img, grayscale=True)
+    assert "<img" in el and "filter:grayscale(1)" in el
+    # swiss = grayscale; vibrant-pop = full color
+    assert photo_grayscale({"photo": {"grayscale": True}}) is True
+    assert photo_grayscale({"photo": {"grayscale": False}}) is False
+    assert photo_grayscale({}) is True  # monochrome default
 
 
 @pytest.mark.asyncio

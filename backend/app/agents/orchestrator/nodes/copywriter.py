@@ -572,6 +572,7 @@ async def copywriter_node(state: GenerationState) -> dict:
     verbatim = bool(state.get("verbatim"))
     allow_emoji = bool((state.get("design_instruction") or {}).get("style", {}).get("emoji"))
     post_type = str(state.get("post_type") or "default")
+    platforms_config = state.get("platforms_config") or {}
 
     # Process all platforms in parallel
     tasks = [
@@ -587,7 +588,8 @@ async def copywriter_node(state: GenerationState) -> dict:
             slides_count=slides_count if is_carousel(platform_id) else 0,
             verbatim=verbatim,
             allow_emoji=allow_emoji,
-            post_type=post_type,
+            post_type=(platforms_config.get(platform_id, {}) or {}).get("post_type")
+            or post_type,
         )
         for platform_id in platforms
     ]

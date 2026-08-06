@@ -16,20 +16,42 @@ body {
 }
 body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
 
-/* Placement-parametric split: right/left = side-by-side, top/bottom = stacked.
-   The media comes after the text in the DOM; flex-direction flips its side. */
+/* Placement-parametric portrait split. Default top = image above text; the
+   media comes first in the DOM, so column keeps it on top and the other
+   directions flip it. */
 .card {
   height: 100%;
   display: flex;
-  flex-direction: {% if media_position == "left" %}row-reverse{% elif media_position == "top" %}column-reverse{% elif media_position == "bottom" %}column{% else %}row{% endif %};
+  flex-direction: {% if media_position == "bottom" %}column-reverse{% elif media_position == "left" %}row-reverse{% elif media_position == "right" %}row{% else %}column{% endif %};
 }
+
+/* media zone — image owns a 42%-of-the-axis block (top/bottom height, or the
+   left/right width), rule on the edge it sits against */
+.media {
+  flex: 0 0 42%;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  {% if media_position == "bottom" %}border-top: 1px solid var(--color-border);
+  {% elif media_position == "left" %}border-right: 1px solid var(--color-border);
+  {% elif media_position == "right" %}border-left: 1px solid var(--color-border);
+  {% else %}border-bottom: 1px solid var(--color-border);{% endif %}
+}
+body[data-ground="black"] .media {
+  {% if media_position == "bottom" %}border-top-color: var(--color-border-inverted);
+  {% elif media_position == "left" %}border-right-color: var(--color-border-inverted);
+  {% elif media_position == "right" %}border-left-color: var(--color-border-inverted);
+  {% else %}border-bottom-color: var(--color-border-inverted);{% endif %}
+}
+.media img, .media svg { display: block; width: 100%; height: 100%; object-fit: cover; }
 
 .text {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: {{ (height * 0.06) | round | int }}px {{ (width * 0.05) | round | int }}px;
+  padding: {{ (width * 0.06) | round | int }}px {{ (width * 0.07) | round | int }}px;
   display: flex;
   flex-direction: column;
 }
@@ -44,22 +66,22 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 .headline {
   margin-top: {{ (width * 0.03) | round | int }}px;
   font-family: var(--font-display);
-  font-size: {{ (width * 0.072) | round | int }}px;
+  font-size: {{ (width * 0.074) | round | int }}px;
   font-weight: 700;
   letter-spacing: -0.015em;
-  line-height: 0.98;
+  line-height: 1.0;
   max-width: 92%;
 }
 .subhead {
   margin-top: {{ (width * 0.03) | round | int }}px;
   font-family: var(--font-serif);
-  font-size: {{ (width * 0.033) | round | int }}px;
+  font-size: {{ (width * 0.032) | round | int }}px;
   line-height: 1.35;
   color: var(--color-text);
   max-width: 86%;
 }
 .body {
-  margin-top: {{ (width * 0.025) | round | int }}px;
+  margin-top: {{ (width * 0.02) | round | int }}px;
   font-family: var(--font-serif);
   font-size: {{ (width * 0.027) | round | int }}px;
   line-height: 1.5;
@@ -68,7 +90,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
 }
 .footer {
   margin-top: auto;
-  padding-top: {{ (width * 0.024) | round | int }}px;
+  padding-top: {{ (width * 0.02) | round | int }}px;
 }
 .handle {
   font-family: var(--font-sans);
@@ -78,30 +100,13 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
-
-/* media zone — the hairline rule follows the media to its edge */
-.media {
-  flex: 0 0 42%;
-  min-width: 0;
-  min-height: 0;
-  position: relative;
-  overflow: hidden;
-  {% if media_position == "left" %}border-right: 1px solid var(--color-border);
-  {% elif media_position == "top" %}border-bottom: 1px solid var(--color-border);
-  {% elif media_position == "bottom" %}border-top: 1px solid var(--color-border);
-  {% else %}border-left: 1px solid var(--color-border);{% endif %}
-}
-body[data-ground="black"] .media {
-  {% if media_position == "left" %}border-right-color: var(--color-border-inverted);
-  {% elif media_position == "top" %}border-bottom-color: var(--color-border-inverted);
-  {% elif media_position == "bottom" %}border-top-color: var(--color-border-inverted);
-  {% else %}border-left-color: var(--color-border-inverted);{% endif %}
-}
-.media img, .media svg { display: block; width: 100%; height: 100%; object-fit: cover; }
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
   <div class="card">
+    {% if has_image %}
+    <div class="media"><img data-image-key="0" alt=""/></div>
+    {% endif %}
     <div class="text">
       <span class="kicker" data-slot="kicker">{{ kicker }}</span>
       <h1 class="headline" data-slot="headline">{{ headline }}</h1>
@@ -117,9 +122,6 @@ body[data-ground="black"] .media {
       </div>
       {% endif %}
     </div>
-    {% if has_image %}
-    <div class="media"><img data-image-key="0" alt=""/></div>
-    {% endif %}
   </div>
 </body>
 </html>

@@ -262,6 +262,7 @@ async def rerender_format(
     from app.services.design_instruction import (
         build_google_fonts_link,
         inject_fonts_into_html,
+        photo_grayscale,
         substitute_image_keys,
     )
     from app.services.dom_extractor import detect_overflow, render_to_png
@@ -313,7 +314,10 @@ async def rerender_format(
         html = inject_katex_into_html(html)
     html = inject_tokens_into_html(html, tokens)
     html = inject_fonts_into_html(html, build_google_fonts_link(tokens, design_instruction))
-    html = substitute_image_keys(html, (task.source_data or {}).get("images") or [])
+    html = substitute_image_keys(
+        html, (task.source_data or {}).get("images") or [],
+        grayscale=photo_grayscale(design_instruction),
+    )
 
     # Deterministic checks (no LLM cost)
     display_value = tokens.get("--font-display", "Space Grotesk, Inter, sans-serif")
@@ -326,7 +330,8 @@ async def rerender_format(
     )
 
     issues = _run_deterministic_checks(
-        html, footer, category, fmt.width, fmt.height, display_family
+        html, footer, category, fmt.width, fmt.height, display_family,
+        allow_emoji=bool((design_instruction.get("style") or {}).get("emoji")),
     )
     from app.services.dom_extractor import detect_low_contrast
 
@@ -441,7 +446,10 @@ async def retry_format(
 
     validated = validate_platforms([fmt_id])
     fmt_id = validated[0]
-    result = await run_retry(db, task, fmt_id, get_settings())
+    try:
+        result = await run_retry(db, task, fmt_id, get_settings())
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     return result
 
 

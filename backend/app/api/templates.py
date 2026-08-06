@@ -16,7 +16,9 @@ from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.templates import TemplateRepository
 from app.services.design_systems import DEFAULT_ID, logo_data_uri
 from app.services.templates import (
+    VALID_MEDIA_POSITIONS,
     build_template_context,
+    detect_elements,
     render_template_html,
     scan_template_features,
 )
@@ -63,6 +65,10 @@ def _entry(row) -> dict:
         "description": row.description,
         "image_slots": row.image_slots,
         "has_logo_slot": bool(row.has_logo_slot),
+        "hidden_elements": row.hidden_elements or [],
+        "media_position": (row.media_position or "auto")
+        if (row.media_position or "auto") in VALID_MEDIA_POSITIONS
+        else "auto",
         "supports_text": "{{ body" in (row.html or ""),
         "has_illustration_slot": "{{ illustration" in (row.html or ""),
         "source": row.source,
@@ -83,6 +89,8 @@ class TemplateCreate(BaseModel):
     weight: float = Field(default=1.0, ge=0.1, le=10.0)
     description: str = Field(default="", max_length=2000)
     html: str = Field(min_length=50, max_length=500_000)
+    hidden_elements: list[str] = Field(default_factory=list)
+    media_position: str = Field(default="auto", max_length=16)
 
 
 class TemplateUpdate(BaseModel):
@@ -94,13 +102,24 @@ class TemplateUpdate(BaseModel):
     weight: float | None = Field(default=None, ge=0.1, le=10.0)
     description: str | None = Field(default=None, max_length=2000)
     html: str | None = Field(default=None, min_length=50, max_length=500_000)
+    hidden_elements: list[str] | None = None
+    media_position: str | None = Field(default=None, max_length=16)
     is_active: bool | None = None
 
 
 async def _validate_render(
-    db: AsyncSession, html: str, family: str, grounds: list[str]
+    db: AsyncSession,
+    html: str,
+    family: str,
+    grounds: list[str],
+    media_position: str = "auto",
+    hidden: list[str] | None = None,
 ) -> list[str]:
-    """Render with sample copy + overflow check. Returns issues ([] = ok)."""
+    """Render with sample copy + overflow check. Returns issues ([] = ok).
+
+    Renders with the template's effective media placement so a chosen position
+    that overflows is caught on save.
+    """
     from app.services.design_instruction import (
         build_google_fonts_link,
         inject_fonts_into_html,
@@ -116,7 +135,7 @@ async def _validate_render(
 
     context = build_template_context(
         dict(SAMPLE_COPY), "WRITING", ground, footer, width, height, False,
-        seed="validate", family=family,
+        seed="validate", family=family, media_position=media_position, hidden=hidden,
     )
     try:
         rendered = render_template_html(html, context)
@@ -130,6 +149,22 @@ async def _validate_render(
         log.warning("[templates] overflow check skipped (render service): %s", e)
         overflow = []
     return overflow
+
+
+def _validate_controls(html: str, hidden: list[str], media_position: str) -> None:
+    """422 on unknown element names or an invalid media position."""
+    if media_position not in VALID_MEDIA_POSITIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"media_position must be one of {sorted(VALID_MEDIA_POSITIONS)}",
+        )
+    known = set(detect_elements(html))
+    unknown = [h for h in hidden if h not in known]
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown hidden element(s) {unknown} — template conditions on: {sorted(known)}",
+        )
 
 
 @router.get("")
@@ -162,8 +197,12 @@ async def create_template(request: TemplateCreate, db: AsyncSession = Depends(ge
     bad_grounds = [g for g in request.grounds if g not in ("white", "black")]
     if bad_grounds:
         raise HTTPException(status_code=422, detail=f"Invalid grounds: {bad_grounds}")
+    _validate_controls(request.html, request.hidden_elements, request.media_position)
 
-    issues = await _validate_render(db, request.html, request.family, request.grounds)
+    issues = await _validate_render(
+        db, request.html, request.family, request.grounds,
+        media_position=request.media_position, hidden=request.hidden_elements,
+    )
     if issues:
         raise HTTPException(status_code=422, detail="Template overflows: " + "; ".join(issues))
 
@@ -181,6 +220,8 @@ async def create_template(request: TemplateCreate, db: AsyncSession = Depends(ge
         "html": request.html,
         "image_slots": image_slots,
         "has_logo_slot": has_logo,
+        "hidden_elements": request.hidden_elements,
+        "media_position": request.media_position,
         "source": "manual",
         "is_active": True,
     })
@@ -211,9 +252,16 @@ async def update_template(
     html = data.get("html", row.html)
     family = data.get("family", row.family)
     grounds = data.get("grounds", row.grounds)
+    media_position = data.get("media_position", row.media_position or "auto")
+    hidden = data.get("hidden_elements", row.hidden_elements or [])
+
+    if any(k in data for k in ("html", "hidden_elements", "media_position")):
+        _validate_controls(html, hidden, media_position)
 
     if "html" in data or "family" in data or "grounds" in data:
-        issues = await _validate_render(db, html, family, grounds)
+        issues = await _validate_render(
+            db, html, family, grounds, media_position=media_position, hidden=hidden
+        )
         if issues:
             raise HTTPException(status_code=422, detail="Template overflows: " + "; ".join(issues))
         image_slots, has_logo = scan_template_features(html)
@@ -238,13 +286,20 @@ async def validate_template(template_id: str, db: AsyncSession = Depends(get_db)
     row = await repo.get_by_id(template_id)
     if not row:
         raise NotFoundError(f"Template {template_id!r} not found")
-    issues = await _validate_render(db, row.html, row.family, row.grounds)
+    issues = await _validate_render(
+        db, row.html, row.family, row.grounds,
+        media_position=row.media_position or "auto", hidden=row.hidden_elements or [],
+    )
     return {"id": template_id, "ok": not issues, "issues": issues}
 
 
 @router.post("/{template_id}/preview")
 async def preview_template(template_id: str, db: AsyncSession = Depends(get_db)):
-    """Render the template with sample copy + real tokens/fonts → {html}."""
+    """Render the template with sample copy + real tokens/fonts → {html}.
+
+    Applies the template's own element defaults (hidden_elements /
+    media_position) so the gallery card matches real output.
+    """
     repo = TemplateRepository(db)
     row = await repo.get_by_id(template_id)
     if not row:
@@ -252,6 +307,8 @@ async def preview_template(template_id: str, db: AsyncSession = Depends(get_db))
     html = await _render_preview_html(
         db, row.html, row.family, row.design_system_id,
         row.grounds[0] if row.grounds else "white",
+        media_position=row.media_position or "auto",
+        hidden=row.hidden_elements or [],
     )
     return {"id": template_id, "html": html}
 
@@ -261,6 +318,8 @@ class DraftPreviewRequest(BaseModel):
     family: str = Field(default="square", pattern="^(square|portrait|story|landscape)$")
     design_system_id: str = Field(default=DEFAULT_ID, max_length=64)
     ground: str = Field(default="", max_length=16)
+    media_position: str = Field(default="auto", max_length=16)
+    hidden: list[str] = Field(default_factory=list)
 
 
 @router.post("/preview-draft")
@@ -268,11 +327,16 @@ async def preview_draft(request: DraftPreviewRequest, db: AsyncSession = Depends
     """Render arbitrary (draft) template HTML with sample copy → {html}.
 
     Used by the template editor's live preview pane so edits are visible
-    without saving.
+    without saving. ``hidden`` / ``media_position`` reflect the Elements panel
+    and Media position controls.
     """
     ground = request.ground if request.ground in ("white", "black") else "white"
+    media_position = (
+        request.media_position if request.media_position in VALID_MEDIA_POSITIONS else "auto"
+    )
     html = await _render_preview_html(
-        db, request.html, request.family, request.design_system_id, ground
+        db, request.html, request.family, request.design_system_id, ground,
+        media_position=media_position, hidden=request.hidden,
     )
     return {"html": html}
 
@@ -283,11 +347,14 @@ async def _render_preview_html(
     family: str,
     design_system_id: str,
     ground: str,
+    media_position: str = "auto",
+    hidden: list[str] | None = None,
 ) -> str:
     """Render a template string with sample copy + tokens/fonts/logo."""
     from app.services.design_instruction import (
         build_google_fonts_link,
         inject_fonts_into_html,
+        photo_grayscale,
         substitute_image_keys,
         substitute_logo,
     )
@@ -312,6 +379,7 @@ async def _render_preview_html(
     context = build_template_context(
         dict(SAMPLE_COPY), "WRITING", ground, footer, width, height,
         bool(image_slots), seed="preview", family=family, logo=logo,
+        media_position=media_position, hidden=hidden,
     )
     try:
         rendered = render_template_html(html, context)
@@ -321,9 +389,11 @@ async def _render_preview_html(
     rendered = inject_tokens_into_html(rendered, tokens)
     rendered = inject_fonts_into_html(rendered, build_google_fonts_link(tokens, di))
     rendered = substitute_logo(rendered, logo)
-    if image_slots:
+    if image_slots and "has_image" not in (hidden or []):
         placeholders = [{"data": _PLACEHOLDER_B64, "mime": "image/svg+xml", "alt": "placeholder"}]
-        rendered = substitute_image_keys(rendered, placeholders)
+        rendered = substitute_image_keys(
+            rendered, placeholders, grayscale=photo_grayscale(di)
+        )
     return rendered
 
 

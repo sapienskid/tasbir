@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useMemo, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import {
   AlertDialog,
@@ -36,6 +36,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Dropzone } from "@/components/tasks/dropzone"
 import { FAMILY_DIMS, FitScaledFrame, ZoomableFrame } from "@/components/tasks/preview-frame"
+import { detectTemplateElements } from "@/lib/template-elements"
 import {
   createTemplate,
   createTemplateBuild,
@@ -472,10 +473,16 @@ function EditTemplateDialog({
   const [hintTags, setHintTags] = useState<string[]>(template.hint_tags)
   const [weight, setWeight] = useState(template.weight)
   const [isActive, setIsActive] = useState(template.is_active)
+  const [hidden, setHidden] = useState<string[]>(template.hidden_elements ?? [])
+  const [mediaPosition, setMediaPosition] = useState(template.media_position ?? "auto")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [previewHtml, setPreviewHtml] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
+
+  // Auto-derive the togglable elements from the template's Jinja conditionals.
+  const elements = useMemo(() => detectTemplateElements(html), [html])
+  const hasMediaSlot = (template.image_slots?.length ?? 0) > 0
 
   // The list payload has no HTML body — fetch the full template on open.
   useEffect(() => {
@@ -492,6 +499,8 @@ function EditTemplateDialog({
         setHintTags(full.hint_tags ?? template.hint_tags)
         setWeight(full.weight ?? template.weight)
         setIsActive(full.is_active ?? template.is_active)
+        setHidden(full.hidden_elements ?? [])
+        setMediaPosition(full.media_position ?? "auto")
         setLoading(false)
       })
       .catch((e) => {
@@ -516,6 +525,8 @@ function EditTemplateDialog({
         family: template.family,
         design_system_id: template.design_system_id,
         ground: grounds[0] ?? "white",
+        media_position: mediaPosition,
+        hidden,
       })
         .then((r) => {
           if (alive) setPreviewHtml(r.html)
@@ -528,7 +539,7 @@ function EditTemplateDialog({
       alive = false
       clearTimeout(t)
     }
-  }, [html, grounds, loading, template.family, template.design_system_id])
+  }, [html, grounds, hidden, mediaPosition, loading, template.family, template.design_system_id])
 
   async function save() {
     setSaving(true)
@@ -542,6 +553,8 @@ function EditTemplateDialog({
         hint_tags: hintTags,
         weight,
         is_active: isActive,
+        hidden_elements: hidden,
+        media_position: mediaPosition,
       })
       toast.success("Template saved")
       onSaved()
@@ -660,6 +673,74 @@ function EditTemplateDialog({
             ))}
             <span className="ml-auto text-xs text-muted-foreground">Live preview</span>
           </div>
+
+          <details className="rounded-md border p-3" open>
+            <summary className="cursor-pointer select-none text-sm font-medium">
+              Elements & media
+              <ChevronDown aria-hidden="true" className="ml-1 inline size-4 align-text-bottom transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="mt-3 grid gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground">
+                  Show / hide elements (auto-detected from the template)
+                </Label>
+                {elements.length === 0 ? (
+                  <p className="pt-1 text-xs text-muted-foreground">
+                    No optional elements detected — this template renders everything it receives.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 pt-1">
+                    {elements.map((el) => {
+                      const checked = !hidden.includes(el.name)
+                      return (
+                        <label key={el.name} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) =>
+                              setHidden((prev) =>
+                                e.target.checked
+                                  ? prev.filter((n) => n !== el.name)
+                                  : [...prev, el.name]
+                              )
+                            }
+                          />
+                          {el.label}
+                          <span className="text-[10px] text-muted-foreground">{el.name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+                {hidden.includes("body") ? (
+                  <p className="mt-1 text-xs text-amber-600">
+                    Body is hidden — verbatim carousels could render empty frames.
+                  </p>
+                ) : null}
+              </div>
+              {hasMediaSlot ? (
+                <div className="grid gap-1.5">
+                  <Label className="text-xs text-muted-foreground">Media position</Label>
+                  <Select value={mediaPosition} onValueChange={setMediaPosition}>
+                    <SelectTrigger className="w-56">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">Auto</SelectItem>
+                      <SelectItem value="left">Left</SelectItem>
+                      <SelectItem value="right">Right</SelectItem>
+                      <SelectItem value="top">Top</SelectItem>
+                      <SelectItem value="bottom">Bottom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    For split-media templates — which side the image sits on.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          </details>
+
           <div className="grid min-h-0 flex-1 grid-cols-2 gap-4">
             <div className="h-full min-h-0 overflow-hidden rounded-md border">
               {loading ? (

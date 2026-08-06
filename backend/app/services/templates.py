@@ -115,6 +115,10 @@ def template_to_dict(row) -> dict:
         "html": row.html,
         "image_slots": row.image_slots or [],
         "has_logo_slot": bool(row.has_logo_slot),
+        "hidden_elements": row.hidden_elements or [],
+        "media_position": (row.media_position or "auto")
+        if (row.media_position or "auto") in VALID_MEDIA_POSITIONS
+        else "auto",
         "design_system_id": row.design_system_id,
         "source": row.source,
         "is_active": bool(row.is_active),
@@ -271,6 +275,8 @@ def build_template_context(
     illustration: str | None = None,
     slide_index: int = 0,
     slide_total: int = 0,
+    media_position: str = "auto",
+    hidden: list[str] | None = None,
 ) -> dict:
     """Build the Jinja2 render context from typed copy + design decisions."""
     # Index numeral (editorial device): the SLIDE NUMBER on carousel slides
@@ -310,7 +316,7 @@ def build_template_context(
         ill_seed = f"{seed.split('|')[0]}|illustration" if seed else "illustration"
         illustration = generate_illustration_svg(ill_seed, ground)
 
-    return {
+    context = {
         "kicker": category,
         "headline": copy.get("headline", ""),
         "subhead": copy.get("subhead", ""),
@@ -334,7 +340,67 @@ def build_template_context(
         "slide_index": slide_index,
         "slide_total": slide_total,
         "tscale": tscale,
+        "media_position": media_position if media_position in VALID_MEDIA_POSITIONS else "auto",
     }
+    return apply_hidden(context, hidden)
+
+
+# ---------------------------------------------------------------------------
+# Element toggles + media placement (Studio editor controls)
+# ---------------------------------------------------------------------------
+
+VALID_MEDIA_POSITIONS = {"auto", "left", "right", "top", "bottom"}
+
+# Skips conditions that compare/negate or are structural (ground/variant/loop).
+_IF_SKIP = re.compile(r"==|!=|<=|>=|\bnot\b|\bin\b|\bfor\b|\(|%")
+_STRUCT_VARS = {"ground", "variant", "loop", "loop_index", "slide_index", "slide_total", "range"}
+_BOOL_WORDS = {"or", "and", "not", "in", "is", "true", "false"}
+# Elements that are mandatory and must never be hideable. The verifier hard-fails
+# a design missing the footer handle, so `footer_right` is not a toggle.
+_MANDATORY = {"footer_right"}
+
+
+def detect_elements(html: str) -> list[str]:
+    """Bare identifiers used as Jinja `{% if %}` conditions → togglable elements.
+
+    This is the auto-derivation source for the editor's Elements panel: every
+    content var a template conditions on becomes a toggle. Conditions that
+    compare or negate (``ground == "black"``, ``not body``), loops, boolean
+    connectors, and structural vars are skipped. Mandatory elements (the footer
+    handle) are never offered as toggles.
+    """
+    found: list[str] = []
+    for m in re.finditer(r"\{%-?\s*(?:if|elif)\s+(.+?)\s*-?%\}", html or ""):
+        cond = m.group(1)
+        if _IF_SKIP.search(cond):
+            continue
+        for tok in re.findall(r"[A-Za-z_][A-Za-z0-9_.]*", cond):
+            if tok in _STRUCT_VARS or tok in _BOOL_WORDS or tok in _MANDATORY:
+                continue
+            if tok not in found:
+                found.append(tok)
+    return found
+
+
+def apply_hidden(context: dict, hidden: list[str] | None) -> dict:
+    """Null the context values for hidden elements so they render empty.
+
+    A hidden element maps to its context key: string vars → "", boolean
+    media/log flags → False, and ``extra.<field>`` → removed from ``extra``.
+    Unknown names are ignored so stale metadata never crashes a render.
+    """
+    for name in hidden or []:
+        if name in ("has_image", "has_logo", "has_media", "has_photo", "has_illustration"):
+            context[name] = False
+        elif name.startswith("extra."):
+            extras = context.get("extra")
+            if isinstance(extras, dict):
+                extras.pop(name.split(".", 1)[1], None)
+        elif name in context and isinstance(context[name], str):
+            context[name] = ""
+        elif name == "badge":
+            context[name] = None
+    return context
 
 
 # ---------------------------------------------------------------------------
@@ -497,15 +563,6 @@ def slotize_html(html: str) -> str:
     return joined
 
 
-def save_template(rel_file: str, html: str) -> Path:
-    """Write a template file into the library directory (legacy path)."""
-    path = templates_dir() / rel_file
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(html, encoding="utf-8")
-    log.info("[templates] Saved template file %s", path)
-    return path
-
-
 def scan_template_features(html: str) -> tuple[list[dict], bool]:
     """Derive image_slots + has_logo_slot from a template's markers."""
     keys = set(re.findall(r'data-image-key=["\'](\d+)["\']', html))
@@ -573,7 +630,6 @@ __all__ = [
     "push_recent_template_id",
     "render_template_file",
     "render_template_html",
-    "save_template",
     "scan_template_features",
     "select_template",
     "slotize_html",

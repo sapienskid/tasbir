@@ -7,7 +7,6 @@ relying on the declared content type. Returns base64 data for embedding.
 from __future__ import annotations
 
 import base64
-import binascii
 import logging
 
 from app.config import get_settings
@@ -47,11 +46,3 @@ def validate_upload(raw: bytes) -> tuple[str, str]:
     if mime is None:
         raise ValueError("Unsupported file type — use PNG, JPEG, WebP, or GIF")
     return mime, base64.b64encode(raw).decode("ascii")
-
-
-def encode_bytes(raw: bytes, mime: str = "image/png") -> str:
-    """Base64-encode raw bytes (already validated elsewhere)."""
-    try:
-        return base64.b64encode(raw).decode("ascii")
-    except binascii.Error as e:
-        raise ValueError("Invalid image data") from e

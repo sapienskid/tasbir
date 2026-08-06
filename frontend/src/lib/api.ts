@@ -310,6 +310,8 @@ export interface Template {
   description: string
   image_slots: Array<{ key: string; role: string; hint: string }>
   has_logo_slot: boolean
+  hidden_elements?: string[]
+  media_position?: string
   supports_text?: boolean
   has_illustration_slot?: boolean
   source: string
@@ -736,6 +738,8 @@ export function previewDraft(body: {
   family: Template["family"]
   design_system_id: string
   ground?: string
+  media_position?: string
+  hidden?: string[]
 }): Promise<{ html: string }> {
   return apiRequest("/templates/preview-draft", {
     method: "POST",

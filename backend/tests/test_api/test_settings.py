@@ -7,7 +7,7 @@ async def test_settings_seeded_with_defaults(authed_client):
     r = await authed_client.get("/api/settings", headers=H)
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["values"]["verifier.max_retries"] == 2
+    assert data["values"]["verifier.max_retries"] == 3
     assert data["values"]["copywriter.concurrency"] == 2
     assert data["values"]["vision.min_interval_seconds"] == 5.0
     assert data["values"]["chat.html_cap_chars"] == 80000
@@ -32,7 +32,7 @@ async def test_settings_update_and_reset(authed_client):
 
     r = await authed_client.post("/api/settings/reset", headers=H)
     assert r.status_code == 200, r.text
-    assert r.json()["values"]["verifier.max_retries"] == 2
+    assert r.json()["values"]["verifier.max_retries"] == 3
 
 
 async def test_settings_ignores_unknown_keys(authed_client):

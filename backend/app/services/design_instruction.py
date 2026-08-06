@@ -417,7 +417,16 @@ def format_layout_archetype_block(key: str, description: str) -> str:
     )
 
 
-def substitute_image_keys(html: str, images: list[dict]) -> str:
+def photo_grayscale(di: dict | None) -> bool:
+    """Design language photo treatment: True = grayscale (Swiss/monochrome).
+
+    Reads ``di.photo.grayscale`` (seeded for every language); the strict
+    monochrome default is grayscale.
+    """
+    return bool(((di or {}).get("photo") or {}).get("grayscale", True))
+
+
+def substitute_image_keys(html: str, images: list[dict], grayscale: bool = True) -> str:
     """Replace data-image-key markers with base64-embedded <img> tags.
 
     The designer places <img data-image-key="0"> or any element with
@@ -426,9 +435,13 @@ def substitute_image_keys(html: str, images: list[dict]) -> str:
       - If it's any other element: replaces the entire element with
         <img src="data:..." data-image-key="N" alt="...">
 
+    ``grayscale`` applies the design language's photo treatment (a CSS
+    grayscale filter) to every embedded photo — the Swiss/monochrome default.
+
     Args:
         html: The HTML document with data-image-key markers.
         images: List of dicts with 'data', 'alt', 'mime' keys.
+        grayscale: Whether photos render grayscale (design-language policy).
 
     Returns:
         HTML with image src attributes populated.
@@ -450,6 +463,8 @@ def substitute_image_keys(html: str, images: list[dict]) -> str:
     if not keyed:
         return html
 
+    gray_style = "filter:grayscale(1);" if grayscale else ""
+
     def _replace_img(match):
         full_match = match.group(0)
         key = _extract_image_key(full_match)
@@ -466,9 +481,17 @@ def substitute_image_keys(html: str, images: list[dict]) -> str:
                 count=1,
             )
             full_match = full_match.replace("<img", f'<img src="{info["src"]}"', 1)
+            if gray_style and "filter:grayscale" not in full_match:
+                if re.search(r"\sstyle=", full_match):
+                    full_match = re.sub(
+                        r'(\sstyle="[^"]*)"', rf'\1;{gray_style.rstrip(";")}"', full_match, count=1
+                    )
+                else:
+                    full_match = full_match.replace(">", f' style="{gray_style}">', 1)
             return full_match
         alt = info["alt"]
-        return f'<img src="{info["src"]}" data-image-key="{key}" alt="{alt}" style="width:100%;height:auto;object-fit:cover"/>'
+        style = "width:100%;height:auto;object-fit:cover" + (f";{gray_style.rstrip(';')}" if gray_style else "")
+        return f'<img src="{info["src"]}" data-image-key="{key}" alt="{alt}" style="{style}"/>'
 
     # Pass 1: full elements with closing tags (span, div, etc.)
     html = re.sub(

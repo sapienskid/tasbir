@@ -285,21 +285,6 @@ def load_platforms(path: str | Path) -> dict[str, tuple[int, int]]:
     return {}
 
 
-def load_campaign(name: str, campaigns_path: str | Path) -> dict:
-    """Load a single campaign preset by key name."""
-    path = Path(campaigns_path)
-    if not path.exists():
-        return {}
-    try:
-        with open(path) as f:
-            raw = yaml.safe_load(f)
-        if isinstance(raw, dict):
-            return raw.get(name, raw.get("default", {}))
-    except Exception as e:
-        log.warning("[tokens] Failed to load campaign '%s': %s", name, e)
-    return {}
-
-
 # CSS variable injection helper
 
 def _quote_font_value(value: str) -> str:
@@ -391,31 +376,4 @@ def inject_katex_into_html(html: str) -> str:
         return html.replace("</head>", f"{head_tag}\n</head>", 1)
     if "<head>" in html:
         return html.replace("<head>", f"<head>\n{head_tag}", 1)
-    return html
-
-
-def inject_images_into_html(html: str, images: list[dict]) -> str:
-    """Inject base64-embedded images into HTML body as preloaded resources."""
-    if not images:
-        return html
-
-    img_tags = []
-    for img in images:
-        b64 = img.get("data")
-        alt = img.get("alt", "")
-        placement = img.get("placement", "auto")
-        style = 'style="display:none"' if placement == "background" else ""
-        if b64:
-            img_tags.append(f'<img src="data:image/png;base64,{b64}" '
-                           f'alt="{alt}" {style}/>')
-
-    if not img_tags:
-        return html
-
-    injected = "\n".join(img_tags)
-    if "<body" in html:
-        idx = html.index("<body") + 6
-        end = html.index(">", idx) + 1
-        return html[:end] + "\n" + injected + html[end:]
-
     return html

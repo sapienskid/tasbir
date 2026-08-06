@@ -66,6 +66,29 @@ async def test_update_agent_empty_prompt_422(authed_client):
     assert r.status_code == 422
 
 
+async def test_update_agent_bad_model_422(authed_client):
+    r = await authed_client.put(
+        "/api/agents/strategist",
+        headers={"x-api-key": "test-key"},
+        json={"model": "gemini 3.5 flash"},
+    )
+    assert r.status_code == 422
+
+    r2 = await authed_client.put(
+        "/api/agents/strategist",
+        headers={"x-api-key": "test-key"},
+        json={"fallback_models": ["openai/gpt-4o", "bad model!"]},
+    )
+    assert r2.status_code == 422
+
+    r3 = await authed_client.put(
+        "/api/agents/strategist",
+        headers={"x-api-key": "test-key"},
+        json={"model": "gemini-3.5-flash-lite"},
+    )
+    assert r3.status_code == 200
+
+
 async def test_reset_agent_restores_seed(authed_client):
     await authed_client.put(
         "/api/agents/strategist",

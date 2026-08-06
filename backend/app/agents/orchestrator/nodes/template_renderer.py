@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import logging
 
-from app.agents.orchestrator.state import GenerationState
+from app.agents.orchestrator.state import GenerationState, platform_cfg
 from app.services.formats import get_format_info, parse_carousel_slide
 from app.services.templates import (
     build_template_context,
@@ -267,7 +267,7 @@ async def template_node_single(state: GenerationState) -> dict:
     if not templates:
         return {}
 
-    user_template_id = (state.get("template_id") or "").strip()
+    user_template_id = platform_cfg(state, fmt_id, "template_id").strip()
 
     # Verbatim mode carries long-form text in {{ body }} — only templates that
     # actually render a body slot can host it, or the content would be dropped.
@@ -420,6 +420,8 @@ async def template_node_single(state: GenerationState) -> dict:
             illustration=illustration,
             slide_index=slide_index,
             slide_total=slide_total,
+            media_position=entry.get("media_position") or "auto",
+            hidden=entry.get("hidden_elements") or [],
         )
         rendered = render_template_html(html, context)
         if auto_photo:

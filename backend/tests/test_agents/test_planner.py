@@ -1,4 +1,4 @@
-"""Planner node tests — hybrid gating, deterministic synth, ratio mapping."""
+"""Planner node tests — hybrid gating, deterministic synth, platform authority."""
 
 from unittest.mock import patch
 
@@ -62,7 +62,8 @@ async def test_deterministic_carousel_skips_llm():
     assert out["platforms"] == ["instagram-carousel"]
 
 
-async def test_portrait_ratio_swaps_base():
+async def test_ratio_does_not_swap_chosen_platform():
+    """The chosen carousel platform id is authoritative — ratio never overrides it."""
     async def fake_call_llm(**kw):
         raise AssertionError("LLM must not be called")
 
@@ -71,6 +72,20 @@ async def test_portrait_ratio_swaps_base():
         out = await planner_node(state)
 
     assert out["post_plan"]["ratio"] == "portrait"
+    # Square platform stays square even though a portrait ratio was passed.
+    assert out["platforms"] == ["instagram-carousel"]
+
+
+async def test_chosen_portrait_platform_is_kept():
+    """A user-picked portrait carousel platform stays portrait (ratio square default)."""
+    async def fake_call_llm(**kw):
+        raise AssertionError("LLM must not be called")
+
+    with patch("app.agents.orchestrator.nodes.planner.call_llm", fake_call_llm):
+        state = _state(platforms=["instagram-carousel-portrait"], slides=4, ratio="square")
+        out = await planner_node(state)
+
+    assert out["post_plan"]["ratio"] == "square"
     assert out["platforms"] == ["instagram-carousel-portrait"]
 
 
@@ -106,8 +121,9 @@ async def test_auto_resolves_platforms_via_llm():
     assert plan["ratio"] == "portrait"
     assert plan["slides"] == 5
     assert len(plan["slides_outline"]) == 1
-    # Portrait ratio → the resolved carousel base is the portrait one.
-    assert out["platforms"] == ["instagram-carousel-portrait"]
+    # The planner respects the LLM's explicit platform choice — ratio alone no
+    # longer swaps the carousel base.
+    assert out["platforms"] == ["instagram-carousel"]
     assert out["slides"] == 5
 
 

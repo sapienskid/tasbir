@@ -20,7 +20,7 @@ _cache_ts = 0.0
 # key → {"value": default, "description": human hint}
 DEFAULT_APP_SETTINGS: dict[str, dict] = {
     "verifier.max_retries": {
-        "value": 2,
+        "value": 3,
         "description": "Max verifier retry loops per format before failing",
     },
     "copywriter.concurrency": {

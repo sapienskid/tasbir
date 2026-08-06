@@ -30,6 +30,12 @@ class Template(Base):
     # image_slots: [{key, role, hint}] from data-image-key markers
     image_slots: Mapped[list] = mapped_column(JSON, default=list)
     has_logo_slot: Mapped[bool] = mapped_column(Boolean, default=False)
+    # hidden_elements: content vars the template always renders empty (e.g.
+    # ["body", "footer_right"]) — set in the Studio editor's Elements panel.
+    hidden_elements: Mapped[list] = mapped_column(JSON, default=list)
+    # media_position: "auto" | "left" | "right" | "top" | "bottom" — how the
+    # media slot is placed in placement-parametric templates.
+    media_position: Mapped[str] = mapped_column(String(16), default="auto")
 
     source: Mapped[str] = mapped_column(String(16), default="manual")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

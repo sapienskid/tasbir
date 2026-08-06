@@ -16,8 +16,7 @@ body {
 }
 body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
 
-/* Placement-parametric split: right/left = side-by-side, top/bottom = stacked.
-   The media comes after the text in the DOM; flex-direction flips its side. */
+/* Placement-parametric landscape split. Default right = text left / image right. */
 .card {
   height: 100%;
   display: flex;
@@ -29,57 +28,56 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  padding: {{ (height * 0.06) | round | int }}px {{ (width * 0.05) | round | int }}px;
+  padding: {{ (height * 0.1) | round | int }}px {{ (width * 0.05) | round | int }}px;
   display: flex;
   flex-direction: column;
 }
 .kicker {
   font-family: var(--font-sans);
-  font-size: {{ (width * 0.020) | round | int }}px;
+  font-size: {{ (width * 0.016) | round | int }}px;
   font-weight: 500;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
 .headline {
-  margin-top: {{ (width * 0.03) | round | int }}px;
+  margin-top: {{ (height * 0.03) | round | int }}px;
   font-family: var(--font-display);
-  font-size: {{ (width * 0.072) | round | int }}px;
+  font-size: {{ (width * 0.052) | round | int }}px;
   font-weight: 700;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
   line-height: 0.98;
   max-width: 92%;
 }
 .subhead {
-  margin-top: {{ (width * 0.03) | round | int }}px;
+  margin-top: {{ (height * 0.025) | round | int }}px;
   font-family: var(--font-serif);
-  font-size: {{ (width * 0.033) | round | int }}px;
-  line-height: 1.35;
+  font-size: {{ (width * 0.022) | round | int }}px;
+  line-height: 1.4;
   color: var(--color-text);
   max-width: 86%;
 }
 .body {
-  margin-top: {{ (width * 0.025) | round | int }}px;
+  margin-top: {{ (height * 0.02) | round | int }}px;
   font-family: var(--font-serif);
-  font-size: {{ (width * 0.027) | round | int }}px;
+  font-size: {{ (width * 0.020) | round | int }}px;
   line-height: 1.5;
   color: var(--color-text-secondary);
   max-width: 84%;
 }
 .footer {
   margin-top: auto;
-  padding-top: {{ (width * 0.024) | round | int }}px;
+  padding-top: {{ (height * 0.03) | round | int }}px;
 }
 .handle {
   font-family: var(--font-sans);
-  font-size: {{ (width * 0.020) | round | int }}px;
+  font-size: {{ (width * 0.014) | round | int }}px;
   font-weight: 500;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
 
-/* media zone — the hairline rule follows the media to its edge */
 .media {
   flex: 0 0 42%;
   min-width: 0;

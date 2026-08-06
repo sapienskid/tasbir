@@ -171,7 +171,7 @@ async def process_all_formats_node(state: GenerationState) -> dict:
     import asyncio
     import json
 
-    from app.services.formats import carousel_slide_id, is_carousel
+    from app.services.formats import carousel_slide_id, is_carousel, parse_carousel_slide
 
     platforms = state.get("platforms", [])
     format_tasks = dict(state.get("format_tasks", {}))
@@ -205,16 +205,21 @@ async def process_all_formats_node(state: GenerationState) -> dict:
     log.info("[graph] Processing %d format(s)/slide(s) in parallel", len(runnable))
 
     # Auto-distribute user images across carousel slides (image i → slide i,
-    # wrapping). Single formats keep the full image list.
+    # wrapping). Single formats keep the full image list. A platform's own
+    # `platform_images` entry overrides the post-wide fallback for that platform.
     all_images = list(state.get("images") or [])
+    per_platform_images = state.get("platform_images") or {}
     slide_images: dict[str, list[dict]] = {}
     for i, sid in enumerate(runnable):
+        base = parse_carousel_slide(sid)[0] if is_carousel(sid) else sid
+        source = per_platform_images.get(base) or all_images
         if is_carousel(sid):
-            if all_images:
-                slide_images[sid] = [all_images[i % len(all_images)]]
+            if source:
+                idx = (slide_context[sid]["index"] - 1) if sid in slide_context else i
+                slide_images[sid] = [source[idx % len(source)]]
         else:
-            if all_images:
-                slide_images[sid] = all_images
+            if source:
+                slide_images[sid] = source
 
     base_state = dict(state)
     base_state["format_tasks"] = format_tasks

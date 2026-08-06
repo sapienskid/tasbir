@@ -83,6 +83,99 @@ async def test_from_image_dispatches_job(authed_client):
         delay.assert_called_once()
 
 
+def _conditional_html() -> str:
+    return (
+        "<!DOCTYPE html><html><head><style>"
+        "body{width:1080px;height:1080px;overflow:hidden;margin:0;"
+        "background:var(--color-bg);color:var(--color-text);font-family:var(--font-sans)}"
+        "body[data-ground=\"black\"]{background:var(--color-bg-inverted);color:var(--color-text-inverted)}"
+        ".headline{font-family:var(--font-display);font-size:70px}"
+        "</style></head>"
+        "<body {% if ground == \"black\" %}data-ground=\"black\"{% endif %}>"
+        "{% if subhead %}<div class=\"subhead\" data-slot=\"subhead\">{{ subhead }}</div>{% endif %}"
+        "{% if body %}<div class=\"body\" data-slot=\"body\">{{ body }}</div>{% endif %}"
+        "<h1 class=\"headline\" data-slot=\"headline\">{{ headline }}</h1>"
+        "{% if footer_right %}<span class=\"handle\" data-slot=\"footer_right\">{{ footer_right }}</span>{% endif %}"
+        "</body></html>"
+    )
+
+
+async def test_create_and_update_controls(authed_client):
+    body = {
+        "id": "square-controls",
+        "name": "Controls",
+        "design_system_id": "default",
+        "family": "square",
+        "grounds": ["white", "black"],
+        "html": _conditional_html(),
+        "hidden_elements": ["subhead"],
+        "media_position": "left",
+    }
+    r = await authed_client.post("/api/templates", headers=H, json=body)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["hidden_elements"] == ["subhead"]
+    assert data["media_position"] == "left"
+
+    r2 = await authed_client.put(
+        "/api/templates/square-controls",
+        headers=H,
+        json={"hidden_elements": ["body"], "media_position": "bottom"},
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["hidden_elements"] == ["body"]
+    assert r2.json()["media_position"] == "bottom"
+
+    await authed_client.delete("/api/templates/square-controls", headers=H)
+
+
+async def test_create_rejects_unknown_hidden_element(authed_client):
+    body = {
+        "id": "square-bad-hidden",
+        "name": "Bad",
+        "design_system_id": "default",
+        "family": "square",
+        "grounds": ["white"],
+        "html": _conditional_html(),
+        "hidden_elements": ["not_a_real_element"],
+    }
+    r = await authed_client.post("/api/templates", headers=H, json=body)
+    assert r.status_code == 422
+    assert "Unknown hidden element" in r.json()["detail"]
+
+
+async def test_create_rejects_invalid_media_position(authed_client):
+    body = {
+        "id": "square-bad-pos",
+        "name": "Bad",
+        "design_system_id": "default",
+        "family": "square",
+        "grounds": ["white"],
+        "html": _conditional_html(),
+        "media_position": "diagonal",
+    }
+    r = await authed_client.post("/api/templates", headers=H, json=body)
+    assert r.status_code == 422
+
+
+async def test_preview_draft_reflects_hidden(authed_client):
+    r = await authed_client.post(
+        "/api/templates/preview-draft",
+        headers=H,
+        json={
+            "html": _conditional_html(),
+            "family": "square",
+            "design_system_id": "default",
+            "hidden": ["subhead"],
+            "media_position": "right",
+        },
+    )
+    assert r.status_code == 200, r.text
+    out = r.json()["html"]
+    assert "White space is the rhythm" not in out  # subhead sample hidden
+    assert 'data-slot="footer_right"' in out  # footer still present
+
+
 async def test_from_image_rejects_bad_ds(authed_client):
     with patch("app.tasks.agent_jobs.run_template_from_image.delay") as delay:
         png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64

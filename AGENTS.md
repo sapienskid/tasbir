@@ -80,7 +80,7 @@ renders to PNG for visual verification.
 - **Template Author agent**: mockup image → validated Jinja2 template
 - YAML design system (`data/design_system/*.yaml`) — seeds the `default`
   system on first boot; templates' YAML catalog only used for that seed
-- LLM client (Gemini 3.5 Flash Lite via OpenRouter fallback)
+- LLM client (Gemini Flash Lite / Gemma 4 via OpenRouter, free tier)
 - KaTeX automatic injection for math rendering
 - Image embedding (SSRF-guarded download, base64 encode, inject into HTML)
 - Campaign presets (tone, ground, language) + category taxonomy
@@ -94,7 +94,7 @@ renders to PNG for visual verification.
 - **Visual editing** in the Studio: locked-down GrapesJS canvas (exact format dims,
   no manual blocks — elements come from the agent), apply → re-render
 - Bulk download of all artifacts as a ZIP (`GET /tasks/{id}/files/archive`)
-- **Template library**: human-authored Jinja2 post compositions (12), template-first
+- **Template library**: human-authored Jinja2 post compositions (16), template-first
   pipeline with LLM fallback, category-mapped selection + strategist `template_hint`,
   anti-repeat via Redis, and a promote-edited-post learning loop
 - **Tasbir Studio**: React + Vite + shadcn/ui SPA served by FastAPI (Monaco + GrapesJS editors,
@@ -107,7 +107,7 @@ renders to PNG for visual verification.
 | API | FastAPI (Python) |
 | Task Queue | Celery + Redis (worker + beat) |
 | Pipeline | LangGraph (3 nodes + per-format chain) |
-| LLM | Gemini 3.5 Flash Lite (free tier) |
+| LLM | Gemini Flash Lite / Gemma 4 via OpenRouter (free tier) |
 | Rendering | Playwright (headless Chromium, slim image, internal network) |
 | Database | SQLite (aiosqlite, create_all on boot) |
 | Frontend | React 19 + Vite + shadcn/ui + SWR + Monaco (Tasbir Studio) |
@@ -116,7 +116,7 @@ renders to PNG for visual verification.
 ### Cost Target
 
 Zero API costs:
-- Gemini 3.5 Flash Lite free tier
+- Free-tier models (Gemini Flash Lite / Gemma 4 via OpenRouter)
 - CSS backgrounds (no Unsplash unless free tier works)
 - No SaaS dependencies
 
@@ -470,7 +470,9 @@ tasbir/
 │   │       ├── planner.yaml             ← Aria Sol prompt
 │   │       ├── copywriter.yaml          ← Julian Sterling prompt
 │   │       ├── designer.yaml            ← Marcus Chen prompt
-│   │       └── verifier.yaml            ← Victoria Thorne prompt
+│   │       ├── verifier.yaml            ← Victoria Thorne prompt
+│   │       └── (brand_vision, brand_tokens, brand_campaigns,
+│   │           template_vision, template_author, editor_chat) — aux agents
 │   │
 │   ├── data/
 │   │   ├── design_system/
@@ -772,6 +774,18 @@ Studio flow (edit / save-as-template / from-image agent). Programmatically:
 5. Existing `data/design_system/templates/*.html` + `catalog.yaml` only seed the
    `default` system on first boot
 
+Every template row also carries two Studio-editable defaults:
+- `hidden_elements: [element…]` — content vars the template always renders
+  empty (e.g. `["body", "footer_right"]`). The editor's **Elements panel**
+  auto-derives toggles from the template's `{% if <name> %}` conditions
+  (`detect_elements` in `services/templates.py`), and `apply_hidden` nulls the
+  matching context values in both previews and the pipeline.
+- `media_position: auto|left|right|top|bottom` — how the media slot is placed
+  in placement-parametric templates (the split-media family + `portrait-index`).
+  The template branches on `{{ media_position }}` (flex-direction + the hairline
+  rule's edge). `auto` = the template's natural layout (right for square/
+  landscape splits, top for the portrait split).
+
 ### Creating a template from an image (agent)
 1. `POST /templates/from-image` (multipart `file` + `design_system_id`) → `{job_id}`
 2. Poll `GET /agent-jobs/{id}` until `completed`; the result has `template_id`
@@ -834,6 +848,10 @@ docker compose up -d            # pulls GHCR images + redis, starts the stack
   "ratio": "square",
   "sequence_audit": false,
   "post_type": "product",
+  "platforms_config": {
+    "instagram-square": { "post_type": "quote", "template_id": "square-quote" },
+    "linkedin-post": { "post_type": "tutorial" }
+  },
   "illustration_style": "procedural",
   "images": [
     {
@@ -866,22 +884,32 @@ Other optional fields:
   the design system.
 - `post_type` — `default` | `quote` | `promo` | `event` | `product` |
   `comparison` | `tutorial`. Steers copy + which optional `extra` fields
-  (price/date/location/stat/cta/source) the copywriter fills; templates render
-  them via `{{ extra.* }}` (`ad-card`: price+cta; `landscape-pull`:
-  date+location).
+  (price/date/location/stat/cta/source) the copywriter fills into `copy.extra`.
+  No seed template renders `{{ extra.* }}` yet (templates to be added).
+- `platforms_config` — per-platform overrides: `{platform_id: {post_type?,
+  template_id?}}`. A platform's entry wins over the global `post_type` /
+  `template_id`; unlisted platforms inherit the global values. Keys must be
+  concrete platforms already in `platforms` (not `"auto"`). Both the global
+  `template_id` and per-platform `template_id`s are validated against the
+  design system's template library (422 on unknown id); a template whose
+  family doesn't match the platform falls back to auto-selection.
+- `ratio` — **legacy**. The carousel platform id is the single source of truth
+  for aspect (`instagram-carousel` = square 1:1, `instagram-carousel-portrait`
+  = portrait 4:5); `ratio` only matters when `platforms` contains `"auto"` and
+  the planner picks the concrete id. It never overrides a chosen platform.
 
 **Planner & carousels**: `platforms: ["auto"]` lets the planner choose the
-platform set and structure. For carousels, `slides` (2-10) and `ratio`
-(`square` | `portrait` | `auto`) set the frame count/aspect; `ratio: "auto"`
-or an unpinned `slides` delegates to the planner. `sequence_audit: true`
-runs an opt-in vision audit of the whole slide set (one call).
+platform set and structure. For carousels, `slides` (2-10) set the frame
+count; the aspect comes from the chosen carousel platform id. An unpinned
+`slides` (or `platforms:["auto"]`) delegates to the planner. `sequence_audit:
+true` runs an opt-in vision audit of the whole slide set (one call).
 
 **Media**: the media-plan director decides per-slide media. For conceptual/
 abstract subjects it skips photo search and uses an abstract illustration;
 `kind: "chart"` renders a deterministic token-only bar chart for stat-led posts
-(comparison/tutorial). Illustrations and charts render in templates with a slot
-(`slide`, `ad-card`). If a planned photo can't materialize, the slot fills with
-a procedural figure instead of shipping empty.
+(comparison/tutorial). Illustrations render in the `square-slide` illustration
+slot. If a planned photo can't materialize, the slot fills with a procedural
+figure instead of shipping empty.
 
 ### Design systems API
 - `GET /design-systems` · `POST /design-systems` · `GET/PUT/DELETE /design-systems/{id}`
@@ -890,9 +918,10 @@ a procedural figure instead of shipping empty.
 - `POST /design-systems/from-input` (multipart form + optional reference/logo images) → `{job_id}`
 - `GET /design-systems/styles` → the design languages (built-ins + customs) with
   palette/accent tokens, emoji/grayscale flags (the Studio picker source)
-- `POST /design-systems/{id}/style` → `{style_language}` applies a language to the
-  system: replaces the core color tokens with the language's palette, adds accent
-  tokens, seeds starter templates, and backfills identity if missing
+- `POST /design-systems/{id}/style` → applies a language to the system (returns
+  the full design system + `seeded_templates`): replaces the core color tokens
+  with the language's palette, adds accent tokens, seeds starter templates, and
+  backfills identity if missing
 
 ### Design languages API
 - `GET /design-languages` · `POST /design-languages` (custom language `{name,
@@ -1006,7 +1035,7 @@ replaces the source template the post came from; `mode=new` creates one. Validat
 (render + overflow) before saving. Response: `{"template_id", "mode", "file"}`.
 
 ### GET /health
-Response: `{"status": "ok"}`
+Response: `{"status": "ok", "version": "…", "service": "tasbir", "llm_configured": true}`
 
 ## Environment Variables
 

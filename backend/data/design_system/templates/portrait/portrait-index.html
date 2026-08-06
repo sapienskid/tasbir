@@ -17,105 +17,134 @@ body {
 body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--color-text-inverted); }
 
 .sheet {
+  position: relative;
   height: 100%;
   padding: {{ (height * 0.05) | round | int }}px;
   display: flex;
   flex-direction: column;
-  position: relative;
 }
 
-.index {
-  position: absolute;
-  top: {{ (height * 0.04) | round | int }}px;
-  right: {{ (width * 0.05) | round | int }}px;
-  font-family: var(--font-display);
-  font-size: {{ (173 * tscale) | round | int }}px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 0.8;
-  color: var(--color-text-tertiary);
-  font-variant-numeric: tabular-nums;
+/* header row: kicker left, index numeral right — separate rows, no collision. */
+.toprow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: {{ (width * 0.03) | round | int }}px;
 }
-body[data-ground="black"] .index { color: var(--color-text-secondary); }
-
 .kicker {
   font-family: var(--font-sans);
-  font-size: {{ (22 * tscale) | round | int }}px;
+  font-size: {{ (width * 0.020) | round | int }}px;
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
-
-.headline {
-  margin-top: {{ (height * 0.028) | round | int }}px;
+.index {
   font-family: var(--font-display);
-  font-size: {{ (89 * tscale) | round | int }}px;
+  font-size: {{ (width * 0.12) | round | int }}px;
+  font-weight: 500;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
+  color: var(--color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+body[data-ground="black"] .index { color: var(--color-text-secondary); }
+
+/* content flow: text block + optional image block. media_position flips the
+   image to top/bottom (stacked) or left/right (side-by-side). */
+.flow {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: {% if media_position == "bottom" %}column{% elif media_position == "top" %}column-reverse{% elif media_position == "left" %}row-reverse{% else %}row{% endif %};
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.headline {
+  margin-top: {{ (height * 0.02) | round | int }}px;
+  font-family: var(--font-display);
+  font-size: {{ (width * 0.078) | round | int }}px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   line-height: 1.0;
   max-width: {{ (width * 0.84) | round | int }}px;
 }
-
-.body {
-  margin-top: {{ (height * 0.03) | round | int }}px;
-  font-size: {{ (30 * tscale) | round | int }}px;
-  line-height: 1.5;
-  color: var(--color-text-secondary);
-  max-width: {{ (width * 0.66) | round | int }}px;
-}
 .subhead {
-  margin-top: {{ (height * 0.03) | round | int }}px;
-  font-size: {{ (39 * tscale) | round | int }}px;
+  margin-top: {{ (width * 0.03) | round | int }}px;
+  font-size: {{ (width * 0.034) | round | int }}px;
   line-height: 1.4;
-  max-width: {{ (width * 0.66) | round | int }}px;
+  color: var(--color-text);
+  max-width: {{ (width * 0.68) | round | int }}px;
+}
+.body {
+  margin-top: {{ (width * 0.03) | round | int }}px;
+  font-size: {{ (width * 0.028) | round | int }}px;
+  line-height: 1.55;
+  color: var(--color-text-secondary);
+  max-width: {{ (width * 0.7) | round | int }}px;
 }
 
-.rule { margin-top: auto; }
-
+/* framed photo block — a tall side column in row layouts, a horizontal block
+   in column layouts, with the rule on the edge it sits against */
 .image {
-  width: {{ (width * 0.5) | round | int }}px;
-  height: {{ (height * 0.2) | round | int }}px;
+  {% if media_position in ("left", "right") %}flex: 0 0 40%; width: auto; height: 100%; margin-top: 0;
+  {% elif media_position == "top" %}flex: 0 0 18%; width: {{ (width * 0.5) | round | int }}px; margin-top: 0;
+  {% else %}flex: 0 0 18%; width: {{ (width * 0.5) | round | int }}px; margin-top: {{ (width * 0.03) | round | int }}px;
+  {% endif %}
   overflow: hidden;
-  border: 1px solid var(--color-border);
-  margin-top: {{ (height * 0.03) | round | int }}px;
-  margin-left: auto;
-  background: var(--color-text-tertiary);
+  {% if media_position == "left" %}border: 1px solid var(--color-border); border-right-width: 0;
+  {% elif media_position == "right" %}border: 1px solid var(--color-border); border-left-width: 0;
+  {% else %}border: 1px solid var(--color-border);{% endif %}
 }
 body[data-ground="black"] .image { border-color: var(--color-border-inverted); }
-.image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.image img, .image svg { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .meta-line {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  padding-top: {{ (width * 0.022) | round | int }}px;
+  margin-top: {{ (width * 0.02) | round | int }}px;
+  padding-top: {{ (width * 0.02) | round | int }}px;
   font-family: var(--font-sans);
-  font-size: {{ (21 * tscale) | round | int }}px;
+  font-size: {{ (width * 0.018) | round | int }}px;
   font-weight: 500;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
-
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
   <div class="sheet">
-    <div class="index">{{ loop_index }}</div>
-    <div class="kicker" data-slot="kicker">{{ kicker }}</div>
-    <h1 class="headline" data-slot="headline">{{ headline }}</h1>
-    {% if subhead %}
-    <div class="subhead" data-slot="subhead">{{ subhead }}</div>
-    {% endif %}
-    {% if body %}
-    <div class="body" data-slot="body">{{ body }}</div>
-    {% endif %}
-    {% if has_image %}
-    <figure class="image"><img data-image-key="0" alt=""/></figure>
-    {% endif %}
-    {% if footer_right %}
+    <div class="toprow">
+      <span class="kicker" data-slot="kicker">{{ kicker }}</span>
+      <span class="index">{{ loop_index }}</span>
+    </div>
+    <div class="flow">
+      <div class="text">
+        <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+        {% if subhead %}
+        <div class="subhead" data-slot="subhead">{{ subhead }}</div>
+        {% endif %}
+        {% if body %}
+        <div class="body" data-slot="body">{{ body }}</div>
+        {% endif %}
+      </div>
+      {% if has_image %}
+      <div class="image"><img data-image-key="0" alt=""/></div>
+      {% endif %}
+    </div>
+    {% if meta or footer_right %}
     <div class="meta-line">
+      <span data-slot="meta">{{ meta }}</span>
       <span data-slot="footer_right">{{ footer_right }}</span>
     </div>
     {% endif %}

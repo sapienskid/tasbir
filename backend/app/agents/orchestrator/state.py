@@ -21,6 +21,26 @@ def _keep_first_dict(a: dict, b: dict) -> dict:
     return a if a else b
 
 
+def platform_cfg(state: "GenerationState", fmt_id: str, key: str, default: str = "") -> str:
+    """Resolve a per-platform config value, falling back to the global field.
+
+    ``fmt_id`` may be a carousel slide id (instagram-carousel-N) — those resolve
+    up to their base platform (instagram-carousel) before checking the map.
+    Returns ``default`` when neither the platform config nor the global value
+    carries a value.
+    """
+    cfg = (state.get("platforms_config") or {}).get(fmt_id) or {}
+    if cfg.get(key):
+        return str(cfg[key])
+    if fmt_id.startswith("instagram-carousel-"):
+        base = fmt_id.rsplit("-", 1)[0]
+        cfg = (state.get("platforms_config") or {}).get(base) or {}
+        if cfg.get(key):
+            return str(cfg[key])
+    global_val = str(state.get(key) or "")
+    return global_val or default
+
+
 def _merge_dicts(a: dict, b: dict) -> dict:
     merged = dict(a)
     for k, v in b.items():
@@ -124,6 +144,9 @@ class GenerationState(TypedDict):
     campaign_name: Annotated[str, _keep_first]
     overrides: Annotated[dict[str, str], _keep_first_dict]
     images: Annotated[list[dict[str, Any]], _keep_first_list]
+    # Per-platform images {platform_id: [image dict]} — overrides the post-wide
+    # list for that platform (graph distribution).
+    platform_images: Annotated[dict[str, list[dict[str, Any]]], _keep_first_dict]
     footer: Annotated[dict[str, Any], _keep_first_dict]
     categories: Annotated[list[dict[str, Any]], _keep_first_list]
     category: Annotated[str, _keep_first]
@@ -132,9 +155,12 @@ class GenerationState(TypedDict):
     logo: Annotated[str, _keep_first]
     # User-selected template override (auto-fallback for other families)
     template_id: Annotated[str, _keep_first]
+    # Per-platform overrides {platform_id: {"post_type"?, "template_id"?}} —
+    # a platform's entry wins over the global post_type/template_id.
+    platforms_config: Annotated[dict[str, dict[str, Any]], _keep_first_dict]
     # How the per-format chain produces HTML: auto | template | designer
     template_mode: Annotated[str, _keep_first]
-    # Illustration style override: "compose" | "procedural" | DiceBear id | "".
+    # Illustration style override: "procedural" | DiceBear id | "".
     # Empty → the media plan (or DS default) decides.
     illustration_style: Annotated[str, _keep_first]
     # The design system's templates, loaded once before the graph runs
@@ -196,6 +222,7 @@ def initial_state(
     design_instruction: dict[str, Any] | None = None,
     logo: str = "",
     template_id: str = "",
+    platforms_config: dict[str, dict[str, Any]] | None = None,
     ds_templates: list[dict[str, Any]] | None = None,
     **kwargs,
 ) -> GenerationState:
@@ -233,6 +260,7 @@ def initial_state(
         "campaign_name": campaign_name or kwargs.get("campaign", ""),
         "overrides": overrides or {},
         "images": images or kwargs.get("images", []),
+        "platform_images": kwargs.get("platform_images") or {},
         "footer": footer or {},
         "categories": categories or [],
         "category": category or kwargs.get("category", ""),
@@ -240,6 +268,7 @@ def initial_state(
         "design_instruction": design_instruction or {},
         "logo": logo,
         "template_id": template_id,
+        "platforms_config": platforms_config or {},
         "template_mode": str(kwargs.get("template_mode") or "auto"),
         "illustration_style": str(kwargs.get("illustration_style") or ""),
         "ds_templates": ds_templates or [],
