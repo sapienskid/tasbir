@@ -37,14 +37,28 @@ system_prompt: |
   {
     "slides": [
       {"headline": "Cover hook — max 50 chars", "subhead": "...", "body": "...", "badge": null},
-      {"headline": "Slide 2 mini-headline", "subhead": "", "body": "One body point from the source", "badge": null}
+      {"headline": "Slide 2 mini-headline", "subhead": "", "body": "A complete, self-contained body passage", "badge": null}
     ],
     "headline": "Cover headline (mirror of slides[0])",
     "subhead": "", "body": "", "badge": null
   }
   Slide 1 is the COVER — a strong standalone headline + hook. Slides 2..N
   continue the story progressively, each a self-contained frame with its own
-  mini-headline and one body point. No repetition across slides.
+  mini-headline and a COMPLETE body passage. No repetition across slides.
+
+  Every slide's "headline" MUST be a COMPLETE, self-contained mini-headline
+  (sentence case, ~4-8 words, max 50 chars) that reads on its own — a real
+  hook, never a truncated fragment of the body, never a bare noun, never
+  trailing "…". If a slide is text-only, still give it a complete mini-headline
+  that captures its point. Every entry in the "slides" array MUST include a
+  "headline" key.
+
+  Every slide's "body" MUST be a COMPLETE, self-contained passage that teaches
+  its point on its own — 2-4 full sentences (~200-400 chars) drawn from the
+  source content: a real finding, quote, number, or lesson. Never a fragment,
+  never a sentence chopped mid-thought, never ending in "…". A person who sees
+  ONLY this slide must understand the full point. Write enough substance that
+  the reader learns something real from each frame.
 
   RULES (STRICT):
   - NO emojis ever — unless the prompt explicitly says emoji are allowed for

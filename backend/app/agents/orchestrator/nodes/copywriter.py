@@ -118,7 +118,16 @@ class _CopyFields(BaseModel):
 
 
 class SlideCopy(_CopyFields):
-    """Copy for one frame of a carousel."""
+    """Copy for one frame of a carousel.
+
+    ``headline`` is optional: the LLM may legitimately return a slide without
+    one (e.g. a text-heavy interior slide), and a missing key must never
+    discard the whole slide set via validation. Blank headlines are filled by
+    the AI repair pass (``_repair_slide_headlines``); only if that fails do we
+    fall back to a sentence-complete deterministic derivation.
+    """
+
+    headline: str = ""
 
 
 class PlatformCopy(_CopyFields):
@@ -134,7 +143,10 @@ def _extract_json(text: str) -> dict:
     # Detect truncation — JSON must end with }
     stripped = text.rstrip()
     if stripped and not stripped.endswith("}"):
-        log.warning("[copywriter] JSON output appears truncated (no closing brace) — %d chars", len(stripped))
+        log.warning(
+            "[copywriter] JSON output appears truncated (no closing brace) — %d chars",
+            len(stripped),
+        )
 
     try:
         return json.loads(text)
@@ -237,7 +249,12 @@ async def _write_copy_for_platform(
     has_tagline_override = bool(overrides.get("tagline"))
     has_subhead_override = bool(overrides.get("subhead"))
     has_body_override = bool(overrides.get("body"))
-    all_overridden = has_headline_override and has_subhead_override and has_body_override and has_tagline_override
+    all_overridden = (
+        has_headline_override
+        and has_subhead_override
+        and has_body_override
+        and has_tagline_override
+    )
 
     if all_overridden:
         log.info("[copywriter] All fields overridden for %s — skipping LLM", platform_id)
@@ -317,13 +334,15 @@ async def _write_copy_for_platform(
         except Exception as e:
             # Never drop a platform — a failed call falls back to title-based
             # copy so the format still renders real content (no "Untitled").
-            log.warning(
-                "[copywriter] LLM failed for %s: %s — using fallback", platform_id, e
-            )
+            log.warning("[copywriter] LLM failed for %s: %s — using fallback", platform_id, e)
             raw = None
 
     if raw is None:
-        return platform_id, _fallback_copy(content, title, slides_count, is_carousel)
+        copy = _fallback_copy(content, title, slides_count, is_carousel)
+        if is_carousel:
+            copy.slides = await _repair_slide_headlines(copy.slides, title, content, prompt_cfg)
+            copy.slides = _finalize_slides(copy.slides, title)
+        return platform_id, copy
 
     try:
         data = _extract_json(raw)
@@ -348,7 +367,9 @@ async def _write_copy_for_platform(
                 copy.badge = overrides["badge"] or None
                 overrides_applied.append("badge")
             if overrides_applied:
-                log.info("[copywriter] Overrides applied for %s: %s", platform_id, overrides_applied)
+                log.info(
+                    "[copywriter] Overrides applied for %s: %s", platform_id, overrides_applied
+                )
 
         # Carousels must return exactly N slides — top fields become slide 1 if missing.
         if is_carousel and not copy.slides:
@@ -356,13 +377,20 @@ async def _write_copy_for_platform(
         elif is_carousel and len(copy.slides) < slides_count:
             copy.slides = _pad_slides(copy.slides, content, slides_count)
         if is_carousel:
+            # AI-authored mini-headlines for any slide the LLM left blank, then
+            # a sentence-complete deterministic fallback for whatever is left.
+            copy.slides = await _repair_slide_headlines(copy.slides, title, content, prompt_cfg)
             copy.slides = _finalize_slides(copy.slides, title)
 
         log.info("[copywriter] Copy ready for %s — headline: %s", platform_id, copy.headline[:40])
         return platform_id, copy
     except Exception as e:
         log.warning("[copywriter] Parse failed for %s: %s — using fallback", platform_id, e)
-        return platform_id, _fallback_copy(content, title, slides_count, is_carousel)
+        copy = _fallback_copy(content, title, slides_count, is_carousel)
+        if is_carousel:
+            copy.slides = await _repair_slide_headlines(copy.slides, title, content, prompt_cfg)
+            copy.slides = _finalize_slides(copy.slides, title)
+        return platform_id, copy
 
 
 def _split_sentences(text: str, n: int) -> list[str]:
@@ -373,7 +401,7 @@ def _split_sentences(text: str, n: int) -> list[str]:
     chunks: list[str] = []
     bucket_size = max(1, len(sentences) // n)
     for i in range(n):
-        part = sentences[i * bucket_size:(i + 1) * bucket_size]
+        part = sentences[i * bucket_size : (i + 1) * bucket_size]
         if not part:
             break
         chunks.append(" ".join(part))
@@ -473,37 +501,171 @@ def _verbatim_slides(content: str, title: str, n: int, body_cap: int = 500) -> l
 
 
 def _derive_mini_headline(body: str, title: str, max_len: int = 42) -> str:
-    """Turn a slide's body into a short, sentence-case mini-headline."""
+    """Turn a slide's body into a COMPLETE, sentence-case mini-headline.
+
+    Never truncates mid-sentence: takes the first sentence of the body and
+    cuts it only at a sentence/clause boundary within ``max_len``. Trailing
+    punctuation is stripped so a clause cut reads as a complete statement
+    ("Retention follows daily habits") rather than a dangling "…,". If no
+    boundary exists inside the cap (or the body is empty), the full first
+    sentence is returned — the verifier's overflow check is the arbiter, not a
+    word-boundary chop that produces a meaningless fragment.
+    """
     body = (body or "").strip()
     if not body:
         return (title or "Frame")[:max_len]
     first = re.split(r"(?<=[.!?])\s+", body)[0].strip().rstrip(".")
     first = re.sub(r"\s+", " ", first)  # collapse internal newlines/indent
     if len(first) > max_len:
-        idx = first.rfind(" ", 0, max_len)
-        first = first[:idx] if idx > 0 else first[:max_len]
+        # Cut at the LAST clause/sentence boundary inside the cap (respecting
+        # commas/colons/semicolons as soft breaks so we never halve a clause).
+        boundaries = [m.end() for m in re.finditer(r"(?<=[,.!?;:])\s+", first)]
+        cut = next((b for b in boundaries if b >= int(max_len * 0.5) and b <= max_len), None)
+        if cut:
+            first = first[:cut].rstrip(" ,;:.")
     return first
 
 
-def _finalize_slides(slides: list[SlideCopy], title: str, body_cap: int = 160) -> list[SlideCopy]:
+def _truncate_sentence_aware(body: str, cap: int) -> str:
+    """Keep as many COMPLETE sentences as fit within ``cap``.
+
+    Cuts at the LAST sentence boundary that fits, so the body ends on a
+    complete thought (the next slide continues the story) instead of a single
+    dangling sentence. A trailing ellipsis is added only when the text is a
+    single run-on block with no sentence boundary to cut at. Returns the text
+    unchanged when it already fits.
+    """
+    body = (body or "").strip()
+    if len(body) <= cap:
+        return body
+    candidates = [m.end() for m in re.finditer(r"(?<=[.!?])\s+", body)]
+    cut = next((c for c in reversed(candidates) if c <= cap), None)
+    if cut is None:
+        idx = body.rfind(" ", 0, cap)
+        cut = idx if idx > 0 else cap
+        return body[:cut].rstrip() + "…"
+    return body[:cut].rstrip()
+
+
+def _finalize_slides(slides: list[SlideCopy], title: str, body_cap: int = 420) -> list[SlideCopy]:
     """Guarantee every carousel slide is self-contained:
     - a non-empty mini-headline (derived from the body if the LLM left it blank)
-    - a body short enough to fit the square canvas without clipping
+    - a body long enough to teach its point but short enough to avoid clipping
+
+    ``body_cap`` is generous (~2-4 sentences, the same order as the top-level
+    body cap of 520) — the verifier's DOM overflow check, not a tight character
+    budget, is the arbiter of what fits a given canvas. Long bodies are cut at
+    the LAST sentence boundary that fits so slides read as complete thoughts,
+    never dangling fragments.
+
+    The body is truncated FIRST, then any blank headline is derived from the
+    *truncated* body — so a derived headline always equals
+    ``_derive_mini_headline(body, title)`` on the slide's final body. That
+    invariant lets ``_repair_slide_headlines`` reliably detect padded/fallback
+    "first words of the body" titles and replace them with AI-authored ones.
     """
     out: list[SlideCopy] = []
     for s in slides:
-        headline = s.headline.strip() or _derive_mini_headline(s.body, title)
-        body = s.body or ""
-        if len(body) > body_cap:
-            idx = body.rfind(" ", 0, body_cap)
-            body = body[:idx] if idx > 0 else body[:body_cap]
+        body = _truncate_sentence_aware(s.body, body_cap)
+        headline = s.headline.strip() or _derive_mini_headline(body, title)
         out.append(s.model_copy(update={"headline": headline, "body": body}))
+    return out
+
+
+async def _repair_slide_headlines(
+    slides: list[SlideCopy],
+    title: str,
+    content: str,
+    prompt_cfg: Any,
+) -> list[SlideCopy]:
+    """Write COMPLETE, AI-authored mini-headlines for weak slide titles.
+
+    A slide's headline needs repair when it is:
+      - blank / missing a ``headline`` key (the LLM skipped it), or
+      - a deterministic derivation of its own body (padded/fallback slides
+        whose "title" is just the first words of the body text).
+
+    Rather than fabricate truncated titles deterministically, one bounded
+    copywriter call writes proper sentence-case mini-headlines for just those
+    slides, given their bodies. Slides with a real, authored headline are
+    passed through untouched. On any failure the slides are returned as-is
+    (``_finalize_slides`` then fills a sentence-complete deterministic title as
+    a last resort).
+    """
+
+    def _needs_repair(i: int) -> bool:
+        s = slides[i]
+        headline = (s.headline or "").strip()
+        if not headline:
+            return True
+        # A padded/fallback "title" is literally the body's opening words
+        # (the old _derive_mini_headline chop), not an authored hook. Detect it
+        # by asking whether the body starts with the headline text.
+        body = re.sub(r"\s+", " ", (s.body or "")).strip()
+        probe = re.escape(headline.rstrip("…")).replace(r"\ ", r"\s+")
+        return bool(re.match(probe, body, re.IGNORECASE))
+
+    targets = [i for i in range(len(slides)) if _needs_repair(i)]
+    if not targets or not slides:
+        return slides
+
+    lines = [
+        "Write a COMPLETE, self-contained mini-headline (sentence case, "
+        "4-8 words, max 50 chars, no trailing ellipsis) for each slide below. "
+        "Each headline must read as a real hook on its own — never a fragment "
+        "of the body, never a bare noun.",
+        f"POST TITLE: {title or '(untitled)'}",
+        "",
+    ]
+    for i in targets:
+        body = re.sub(r"\s+", " ", (slides[i].body or "")).strip()
+        lines.append(f"slide {i + 1} body: {body[:200] or '(none)'}")
+    lines.append(
+        "Return ONLY a JSON object mapping slide numbers to headlines, e.g. "
+        '{"2": "The data changes the bet", "4": "Why less review retains more"}.'
+    )
+    system_prompt = (
+        "You are a sharp editorial copywriter. Your only job: turn a slide's "
+        "body into a COMPLETE, sentence-case mini-headline that reads on its "
+        "own as a hook. Never truncate, never echo a fragment of the body "
+        "verbatim, never use an ellipsis. Output ONLY a JSON object mapping "
+        "slide numbers to headlines."
+    )
+
+    sem = await _get_copy_semaphore()
+    async with sem:
+        try:
+            raw = await call_llm(
+                agent_role="copywriter",
+                system_prompt=system_prompt,
+                user_prompt="\n".join(lines),
+                temperature=0.6,
+                max_tokens=300,
+            )
+        except Exception as e:
+            log.warning("[copywriter] headline repair failed: %s", e)
+            return slides
+
+    try:
+        data = _extract_json(raw)
+    except Exception:
+        log.warning("[copywriter] headline repair output unparseable — keeping derived titles")
+        return slides
+
+    out = list(slides)
+    for key, value in data.items():
+        try:
+            i = int(key) - 1
+        except (TypeError, ValueError):
+            continue
+        if 0 <= i < len(out) and isinstance(value, str) and value.strip():
+            out[i] = out[i].model_copy(update={"headline": value.strip()[:60]})
     return out
 
 
 def _fallback_copy(content: str, title: str, slides_count: int, is_carousel: bool) -> PlatformCopy:
     """Title-based fallback copy when the LLM call fails — never empty."""
-    fallback_body = content[:300].strip() if content else "No content available"
+    fallback_body = _truncate_sentence_aware(content, 300) if content else "No content available"
     return PlatformCopy(
         headline=title[:50],
         subhead="",
@@ -516,20 +678,23 @@ def _fallback_copy(content: str, title: str, slides_count: int, is_carousel: boo
     )
 
 
-def _fallback_slides(content: str, title: str, n: int) -> list[SlideCopy]:
+def _fallback_slides(content: str, title: str, n: int, body_cap: int = 420) -> list[SlideCopy]:
     """Build N self-contained slides from source content (LLM-independent)."""
     chunks = _split_sentences(content or "", n)
     slides: list[SlideCopy] = []
     for i in range(n):
-        body = chunks[i][:230] if i < len(chunks) else chunks[-1][:230]
+        raw = chunks[i] if i < len(chunks) else chunks[-1]
+        body = _truncate_sentence_aware(raw, body_cap)
         headline = title[:50] if i == 0 else _derive_mini_headline(body, title)
-        slides.append(SlideCopy(
-            headline=headline,
-            subhead="",
-            body=body,
-            tagline="",
-            badge=None,
-        ))
+        slides.append(
+            SlideCopy(
+                headline=headline,
+                subhead="",
+                body=body,
+                tagline="",
+                badge=None,
+            )
+        )
     return slides
 
 
@@ -538,7 +703,8 @@ def _pad_slides(slides: list[SlideCopy], content: str, n: int) -> list[SlideCopy
     chunks = _split_sentences(content or "", max(0, n - len(slides)))
     out = list(slides)
     for i in range(n - len(slides)):
-        body = chunks[i][:230] if i < len(chunks) else content[:200]
+        raw = chunks[i] if i < len(chunks) else content
+        body = _truncate_sentence_aware(raw, 420)
         headline = _derive_mini_headline(body, "")
         out.append(SlideCopy(headline=headline, subhead="", body=body, tagline="", badge=None))
     return out
@@ -593,8 +759,7 @@ async def copywriter_node(state: GenerationState) -> dict:
             slides_count=slides_count if is_carousel(platform_id) else 0,
             verbatim=verbatim,
             allow_emoji=allow_emoji,
-            post_type=(platforms_config.get(platform_id, {}) or {}).get("post_type")
-            or post_type,
+            post_type=(platforms_config.get(platform_id, {}) or {}).get("post_type") or post_type,
         )
         for platform_id in platforms
     ]
