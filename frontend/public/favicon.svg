@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Tasbir monogram — Swiss monochrome, sharp geometry, no hue. -->
+  <rect width="64" height="64" fill="#ffffff"/>
+  <!-- Horizontal bar of the T -->
+  <rect x="8" y="10" width="48" height="12" fill="#000000"/>
+  <!-- Vertical stem of the T, optically centered (slightly right for optical balance) -->
+  <rect x="26" y="22" width="12" height="32" fill="#000000"/>
+</svg>
