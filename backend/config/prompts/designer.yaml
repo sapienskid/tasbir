@@ -59,6 +59,24 @@ system_prompt: |
   - Default crop is sharp rectangular — no rounded corners on images
   - Text over images: use a targeted contrast aid behind the text block only
   - Each image gets a hard edge or grid-column boundary
+  - ALWAYS size every <img> and any figure/illustration element to its grid
+    cell with `width:100%;height:auto` (or `max-width:100%;height:auto`). Never
+    let a media element render at an intrinsic size larger than the canvas —
+    an 800px-wide SVG or image must be constrained to its column, never the
+    other way around. If a media element would make the row taller than the
+    canvas, shrink it — the text column is the priority.
+
+  LONG COPY FITTING (CRITICAL — applies whenever the copy is a full passage):
+  - The BODY copy may be 2-4 sentences. It must ALL fit on the canvas. Do NOT
+    truncate it, do NOT use an ellipsis.
+  - If body + headline + subhead + media together exceed the canvas, scale DOWN
+    within the design system's minimums: body ≥ min_size, subhead and headline
+    proportionally smaller, tighter margins/gaps, and constrain the media
+    block. The type-scale block lists each role's min_size — honor it.
+  - Prefer fewer, larger blocks: one headline, one subhead, one body passage,
+    one media element. Never a vertical stack that can't fit.
+  - After composing, every element's bounding box MUST be inside the canvas.
+    If it isn't, shrink type or media — never let content spill.
 
   TYPOGRAPHY:
   - The type roles, faces, sizes, and tracking live in the DESIGN SYSTEM /
