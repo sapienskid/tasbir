@@ -120,7 +120,9 @@ def _orientation_for(fmt) -> str:
     return "square"
 
 
-async def _get_post_photo(state: GenerationState, orientation: str, required: bool = False) -> dict | None:
+async def _get_post_photo(
+    state: GenerationState, orientation: str, required: bool = False
+) -> dict | None:
     """Return the slide's auto-photo per the media plan: {image, credit, candidate}.
 
     The media plan decides which slides get a photo (and the query). This
@@ -276,12 +278,15 @@ async def template_node_single(state: GenerationState) -> dict:
         if body_templates:
             templates = body_templates
 
-    # Carousel slide layout direction: cover prefers a media template; interior
-    # slides alternate text ↔ media so the sequence breathes.
+    # Carousel slide layout direction: the COVER prefers the dedicated
+    # slide/text template (square-slide) — it flex-fits a full body passage
+    # and illustration without overflow, which background-cover and split-media
+    # templates don't guarantee. Interior slides alternate text ↔ media so the
+    # sequence breathes.
     layout_pref: str | None = None
     parsed = parse_carousel_slide(fmt_id)
     if parsed and not state.get("verbatim"):
-        layout_pref = "media" if parsed[1] % 2 == 1 else "text"
+        layout_pref = "text" if parsed[1] == 1 else ("media" if parsed[1] % 2 == 0 else "text")
 
     # When the media plan chose an illustration for this slide, prefer a
     # template that actually renders an {{ illustration }} slot, so the
@@ -324,9 +329,7 @@ async def template_node_single(state: GenerationState) -> dict:
     selected: tuple[str, dict] | None = None
     exclude: set[str] = set()
     if user_template_id:
-        entry = next(
-            (t for t in templates if t.get("id") == user_template_id), None
-        )
+        entry = next((t for t in templates if t.get("id") == user_template_id), None)
         if (
             entry
             and entry.get("family") == family
@@ -349,7 +352,13 @@ async def template_node_single(state: GenerationState) -> dict:
                 templates = [slide_tpl]
         exclude = await get_recent_template_ids()
         selected = select_template(
-            family, ground, category, hint, seed, templates, exclude,
+            family,
+            ground,
+            category,
+            hint,
+            seed,
+            templates,
+            exclude,
             prefer=("background" if prefer_background else layout_pref),
             prefer_slot=prefer_slot,
             style_language=style_language or None,
@@ -380,13 +389,22 @@ async def template_node_single(state: GenerationState) -> dict:
         if auto_photo is None and is_media:
             log.info("[template] media template %s has no photo — falling back to text", tid)
             text_tpls = [
-                t for t in templates
-                if t.get("family") == family and "media" not in _hint_tags(t)
+                t for t in templates if t.get("family") == family and "media" not in _hint_tags(t)
             ]
             reselected = (
-                select_template(family, ground, category, hint, seed, text_tpls, exclude,
-                                prefer="text", style_language=style_language or None)
-                if text_tpls else None
+                select_template(
+                    family,
+                    ground,
+                    category,
+                    hint,
+                    seed,
+                    text_tpls,
+                    exclude,
+                    prefer="text",
+                    style_language=style_language or None,
+                )
+                if text_tpls
+                else None
             )
             if reselected:
                 tid, entry = reselected
@@ -457,12 +475,14 @@ async def template_node_single(state: GenerationState) -> dict:
         update[_PHOTO_CACHE_KEY] = auto_photo
         credits = list(state.get(_MEDIA_CREDITS_KEY) or [])
         cand = auto_photo.get("candidate") or {}
-        credits.append({
-            "kind": "photo",
-            "provider": cand.get("provider"),
-            "photographer": cand.get("photographer"),
-            "license": cand.get("license"),
-            "credit": auto_photo.get("credit", ""),
-        })
+        credits.append(
+            {
+                "kind": "photo",
+                "provider": cand.get("provider"),
+                "photographer": cand.get("photographer"),
+                "license": cand.get("license"),
+                "credit": auto_photo.get("credit", ""),
+            }
+        )
         update[_MEDIA_CREDITS_KEY] = credits
     return update
