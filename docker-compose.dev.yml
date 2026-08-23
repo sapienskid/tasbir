@@ -14,6 +14,8 @@ volumes:
 x-shared-env: &shared-env
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+  PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
   DATABASE_URL: sqlite+aiosqlite:///data/tasbir.db
   REDIS_URL: redis://redis:6379/0
   LOG_LEVEL: ${LOG_LEVEL:-debug}
@@ -35,6 +37,11 @@ services:
     restart: unless-stopped
     networks:
       - tasbir-dev
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     mem_limit: 128m
     ports:
@@ -70,7 +77,7 @@ services:
       - tasbir-dev
     depends_on:
       redis:
-        condition: service_started
+        condition: service_healthy
       playwright:
         condition: service_healthy
     environment:
@@ -96,7 +103,7 @@ services:
       - tasbir-dev
     depends_on:
       redis:
-        condition: service_started
+        condition: service_healthy
       playwright:
         condition: service_healthy
     environment:
@@ -116,7 +123,7 @@ services:
       - tasbir-dev
     depends_on:
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
       <<: *shared-env
       SERVICE: beat

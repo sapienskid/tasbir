@@ -15,6 +15,8 @@ volumes:
 x-shared: &shared-env
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+  PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
   DATABASE_URL: sqlite+aiosqlite:///data/tasbir.db
   REDIS_URL: redis://redis:6379/0
   LOG_LEVEL: ${LOG_LEVEL:-info}
