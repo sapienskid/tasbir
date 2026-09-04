@@ -4,9 +4,23 @@ All notable changes to Tasbir are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.1] — 2026-09-04
 
-### Added
+### Fixed
+- **Markdown sanitization in copywriter** — `_clean_markdown()` strips raw markdown syntax (`**`, `*`, `##`, `-`, `` ` ``, `---`, `![[...]]`, `![...]`) across all copywriter paths (LLM output, fallbacks, verbatim, and repairs) into clean editorial text.
+- **Carousel slide retry & validation** — `validate_platforms()` now parses and accepts individual carousel slide IDs (e.g. `instagram-carousel-portrait-5`); `build_retry_state()` populates `slide_context` and cleans stored copy.
+- **Copywriter token scaling** — Raised default `max_tokens` from 2,000 to 4,000 and dynamically scale for multi-slide carousels (`slides * 450 + 1000`).
+- **Markdown web image auto-discovery** — `![alt](https://...)` URLs in source content are automatically extracted and passed to the media pipeline.
+
+### Changed
+- **Memory & Resource Optimization (< 1 GB RAM)** — Capped total compose memory footprint across all 5 containers to 944 MB:
+  - `playwright`: 384 MB limit with low-memory Chromium launch flags (`--disable-gpu`, `--disable-software-rasterizer`, `--renderer-process-limit=1`, `--disable-extensions`, `--disable-background-networking`, `--mute-audio`).
+  - `api`: 192 MB limit (`uvicorn --workers 1`).
+  - `worker`: 256 MB limit (`celery --concurrency=1`).
+  - `redis`: 48 MB limit (`--maxmemory 32mb`).
+  - `beat`: 64 MB limit.
+
+## [1.0.0] — 2026-08-03
 - **Per-slide media plan** — one LLM planning session per post decides each
   slide's media (photo / illustration / none) via a structured plan
   (`app/services/media_plan.py`), executed in parallel per slide. Slides

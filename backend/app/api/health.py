@@ -69,7 +69,7 @@ async def health():
     settings = get_settings()
     return {
         "status": "ok",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "service": "tasbir",
         "llm_configured": bool(settings.gemini_api_key),
     }
