@@ -25,8 +25,8 @@ class FormatInfo:
 
 def is_carousel(format_id: str) -> bool:
     """True for any carousel base or its slides (square + portrait)."""
-    return format_id in CAROUSEL_BASES or format_id.startswith(
-        f"{CAROUSEL_FORMAT}-"
+    return format_id in CAROUSEL_BASES or any(
+        format_id.startswith(f"{base}-") for base in CAROUSEL_BASES
     )
 
 
@@ -41,11 +41,11 @@ def carousel_slide_id(format_id: str, index: int) -> str:
 
 
 def parse_carousel_slide(format_id: str) -> tuple[str, int] | None:
-    """If format_id is a carousel slide (instagram-carousel-N), return (base, N)."""
-    if not format_id.startswith(f"{CAROUSEL_FORMAT}-"):
+    """If format_id is a carousel slide (instagram-carousel-N / instagram-carousel-portrait-N), return (base, N)."""
+    if not any(format_id.startswith(f"{base}-") for base in CAROUSEL_BASES):
         return None
     m = _SLIDE_RE.match(format_id)
-    if m and m.group(2).isdigit():
+    if m and m.group(2).isdigit() and m.group(1) in CAROUSEL_BASES:
         return m.group(1), int(m.group(2))
     return None
 
@@ -73,7 +73,8 @@ def validate_platforms(platforms: list[str]) -> list[str]:
     """Validate platform ids against the DB platforms table; reject unknown/unsafe ids.
 
     Unknown or path-traversal format ids would otherwise end up in output file
-    names (e.g. `data/output/{task_id}/{fmt_id}.html`).
+    names (e.g. `data/output/{task_id}/{fmt_id}.html`). Also accepts valid
+    carousel slide ids (e.g. `instagram-carousel-portrait-5`).
     """
     from app.services.platforms import list_platforms
 
@@ -82,7 +83,13 @@ def validate_platforms(platforms: list[str]) -> list[str]:
     for p in platforms:
         if not p or p != p.strip() or ".." in p or "/" in p or "\\" in p:
             raise HTTPException(status_code=422, detail=f"Unsafe format id: {p!r}")
-        if p not in known:
-            raise HTTPException(status_code=422, detail=f"Unknown format: {p!r}")
-        cleaned.append(p)
+        if p in known:
+            cleaned.append(p)
+            continue
+        parsed = parse_carousel_slide(p)
+        if parsed and (parsed[0] in known or parsed[0] in CAROUSEL_BASES) and parsed[1] > 0:
+            cleaned.append(p)
+            continue
+        raise HTTPException(status_code=422, detail=f"Unknown format: {p!r}")
     return cleaned
+

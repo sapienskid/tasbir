@@ -18,6 +18,18 @@ class TestValidatePlatforms:
     def test_known_platform_passes(self):
         assert validate_platforms(["instagram-square"]) == ["instagram-square"]
 
+    def test_carousel_slide_passes(self):
+        assert validate_platforms(["instagram-carousel-1", "instagram-carousel-portrait-5"]) == [
+            "instagram-carousel-1",
+            "instagram-carousel-portrait-5",
+        ]
+
+    def test_invalid_carousel_slide_rejected(self):
+        with pytest.raises(Exception):
+            validate_platforms(["instagram-carousel-portrait-0"])
+        with pytest.raises(Exception):
+            validate_platforms(["not-carousel-1"])
+
     def test_unknown_platform_rejected(self):
         with pytest.raises(Exception):
             validate_platforms(["not-a-platform"])

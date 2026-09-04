@@ -312,10 +312,24 @@ export default function NewTaskPage() {
     }))
   }
 
-  // Media step surfaces every selected platform's effective template slots.
+  // Detect local obsidian attachments or markdown image references
+  const detectedImages = useMemo(() => {
+    const matches: string[] = []
+    const wikiRe = /!\[\[(.*?)\]\]/g
+    let m
+    while ((m = wikiRe.exec(content)) !== null) {
+      const filename = m[1].split("/").pop() ?? m[1]
+      matches.push(filename)
+    }
+    return matches
+  }, [content])
+
+  // Media step surfaces every selected platform's template slots.
+  // When template is "auto", allow media upload for all platforms (carousels get per-slide slots).
   const mediaPlatforms = concretePlatforms.filter((pid) => {
     const t = effectiveTemplate(pid)
-    return Boolean(t && (t.image_slots?.length ?? 0) > 0)
+    if (!t) return true
+    return (t.image_slots?.length ?? 0) > 0
   })
   const hasMediaStep = mediaPlatforms.length > 0
 
@@ -451,6 +465,12 @@ export default function NewTaskPage() {
             <div className="grid gap-2">
               <Label htmlFor="nt-content">Content</Label>
               <Textarea id="nt-content" className="min-h-40" value={content} onChange={(e) => setContent(e.target.value)} placeholder="Paste the full article / blog post…" />
+              {detectedImages.length > 0 ? (
+                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
+                  <span className="font-semibold">Image references detected:</span> {detectedImages.length} image attachment(s) found in markdown ({detectedImages.slice(0, 3).join(", ")}{detectedImages.length > 3 ? "…" : ""}).
+                  Local Obsidian files cannot be read from disk automatically. Markdown tags are automatically cleaned from copy; upload your screenshots in the <strong>Media</strong> step to render them on your slides.
+                </div>
+              ) : null}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
@@ -850,7 +870,14 @@ export default function NewTaskPage() {
             </p>
             {mediaPlatforms.map((pid) => {
               const t = effectiveTemplate(pid)
-              const slots = t?.image_slots ?? []
+              const defaultSlots = isCarouselPlatform(pid)
+                ? Array.from({ length: slides }).map((_, i) => ({
+                    key: String(i),
+                    label: `Slide ${i + 1}`,
+                    description: `Image for slide ${i + 1}`,
+                  }))
+                : [{ key: "0", label: "Media", description: "Hero / background media" }]
+              const slots = t?.image_slots && t.image_slots.length > 0 ? t.image_slots : defaultSlots
               return (
                 <div key={pid} className="grid gap-3 rounded-md border p-4">
                   <Label className="text-xs uppercase tracking-wide text-muted-foreground">

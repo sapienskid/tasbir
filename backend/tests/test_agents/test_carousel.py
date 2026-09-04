@@ -548,3 +548,52 @@ async def test_copywriter_keeps_platform_when_llm_fails():
         copy = json.loads(task["copy"])
         assert copy["headline"] == "The Measure"
         assert copy["body"]
+
+
+def test_clean_markdown():
+    from app.agents.orchestrator.nodes.copywriter import _clean_markdown
+
+    raw = (
+        "# Main Heading\n\n"
+        "![[../Attachments/screenshot.png]]\n"
+        "![Diagram](https://example.com/d.png)\n"
+        "Here is [[Internal Note|an article]] on **Tauri 2** and *Rust*.\n"
+        "---\n"
+        "## Subheading: Performance\n"
+        "- **Item 1**: uses `fflate` for speed.\n"
+        "- Item 2: zero cloud lock-in."
+    )
+    cleaned = _clean_markdown(raw)
+    assert "![" not in cleaned
+    assert "![[" not in cleaned
+    assert "#" not in cleaned
+    assert "**" not in cleaned
+    assert "---" not in cleaned
+    assert "`" not in cleaned
+    assert "Main Heading" in cleaned
+    assert "an article" in cleaned
+    assert "Tauri 2 and Rust" in cleaned
+    assert "Item 1: uses fflate for speed" in cleaned
+
+
+def test_fallback_slides_strips_markdown():
+    from app.agents.orchestrator.nodes.copywriter import _fallback_slides
+
+    content = (
+        "# How I Built a Local-First App\n\n"
+        "![[../Attachments/library.png]]\n"
+        "I love reading books. Own those books digitally. No cloud lock-in. ---\n\n"
+        "## Architecture: Tauri 2 + Rust\n"
+        "Theorem is built on **Tauri 2** with a Rust core."
+    )
+    slides = _fallback_slides(content, "Building Theorem", 3)
+    assert len(slides) == 3
+    for s in slides:
+        assert "#" not in s.headline
+        assert "**" not in s.headline
+        assert "![" not in s.headline
+        assert "#" not in s.body
+        assert "**" not in s.body
+        assert "![" not in s.body
+        assert "---" not in s.body
+

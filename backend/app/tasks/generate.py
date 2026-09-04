@@ -139,6 +139,19 @@ def generate_task(self, task_id: str, source_data: dict):
 
             # Download URL images / pass through uploaded base64 media.
             raw_images = source_data.get("images", [])
+            if not raw_images:
+                # Auto-discover web images from markdown content: ![alt](https://...)
+                import re
+                discovered = []
+                content_text = source_data.get("content", "") or ""
+                for match in re.finditer(r"!\[(.*?)\]\((https?://[^\s)]+)\)", content_text):
+                    alt = match.group(1).strip()
+                    url = match.group(2).strip()
+                    discovered.append({"url": url, "alt": alt, "placement": "auto"})
+                if discovered:
+                    raw_images = discovered[:8]
+                    log.info("[generate_task] Auto-discovered %d markdown image(s) from content", len(raw_images))
+
             pipeline_input["images"] = await prepare_images(raw_images) if raw_images else []
             raw_platform_images = source_data.get("platform_images", {}) or {}
             pipeline_input["platform_images"] = {

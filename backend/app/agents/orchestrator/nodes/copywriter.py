@@ -311,7 +311,7 @@ async def _write_copy_for_platform(
         f"TONE: {brief.get('tone', 'professional')}\n"
         f"PLATFORM NOTE: {platform_note}\n\n"
         f"SOURCE TITLE: {title}\n"
-        f"SOURCE CONTENT (excerpt):\n{content[:2000]}"
+        f"SOURCE CONTENT (excerpt):\n{_clean_markdown(content)[:2000]}"
     )
     if allow_emoji:
         user_prompt += (
@@ -324,12 +324,15 @@ async def _write_copy_for_platform(
     async with sem:
         log.info("[copywriter] Writing copy for %s", platform_id)
         try:
+            tokens = prompt_cfg.max_tokens or 2000
+            if is_carousel and slides_count > 0:
+                tokens = max(tokens, slides_count * 450 + 1000)
             raw = await call_llm(
                 agent_role="copywriter",
                 system_prompt=prompt_cfg.system_prompt,
                 user_prompt=user_prompt,
                 temperature=prompt_cfg.temperature,
-                max_tokens=prompt_cfg.max_tokens,
+                max_tokens=tokens,
             )
         except Exception as e:
             # Never drop a platform — a failed call falls back to title-based
@@ -347,6 +350,9 @@ async def _write_copy_for_platform(
     try:
         data = _extract_json(raw)
         copy = PlatformCopy(**data)
+        copy.headline = _clean_markdown(copy.headline)
+        copy.subhead = _clean_markdown(copy.subhead)
+        copy.body = _clean_markdown(copy.body)
 
         # Apply partial overrides on top of LLM output
         if overrides:
@@ -391,6 +397,56 @@ async def _write_copy_for_platform(
             copy.slides = await _repair_slide_headlines(copy.slides, title, content, prompt_cfg)
             copy.slides = _finalize_slides(copy.slides, title)
         return platform_id, copy
+
+
+def _clean_markdown(text: str) -> str:
+    """Strip raw markdown formatting artifacts from text so copy reads as clean prose.
+
+    Handles:
+    - Obsidian image/file embeds: ![[...]]
+    - Markdown images: ![alt](...)
+    - Obsidian wikilinks: [[link|label]] -> label, [[link]] -> link
+    - Markdown links: [label](url) -> label
+    - Code blocks & inline code: ```code``` -> code, `code` -> code
+    - Horizontal rules: ---, *** -> stripped
+    - Markdown headers: # Title -> Title
+    - Blockquotes: > quote -> quote
+    - List bullets: - item -> item, * item -> item, 1. item -> item
+    - Bold/italic markers: **bold** -> bold, *italic* -> italic
+    - Multiple blank lines collapsed
+    """
+    if not text:
+        return ""
+    # Strip Obsidian image/attachment embeds: ![[../Attachments/foo.png]] or ![[foo.png]]
+    text = re.sub(r"!\[\[.*?\]\]", "", text)
+    # Strip markdown images: ![alt](path_or_url)
+    text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
+    # Unwrap Obsidian wikilinks: [[target|alias]] -> alias, [[target]] -> target
+    text = re.sub(r"\[\[(?:[^|\]]*\|)?([^\]]+)\]\]", r"\1", text)
+    # Unwrap markdown links: [text](url) -> text
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    # Remove code fences
+    text = re.sub(r"```[\w]*\n?([\s\S]*?)```", r"\1", text)
+    # Remove inline code backticks: `code` -> code
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    # Remove horizontal rules (standalone or inline divider)
+    text = re.sub(r"\s*[-*_]{3,}\s*", "\n\n", text)
+    # Remove headers: #, ##, ### at start of line
+    text = re.sub(r"^\s*#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Remove blockquote markers: >
+    text = re.sub(r"^\s*>\s*", "", text, flags=re.MULTILINE)
+    # Remove bullet/list markers: - item, * item, + item, 1. item
+    text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
+    # Strip bold/italic: **bold** or __bold__
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"__([^_]+)__", r"\1", text)
+    # Strip remaining single * or _ if wrapping words
+    text = re.sub(r"(?<!\w)\*([^*]+)\*(?!\w)", r"\1", text)
+    text = re.sub(r"(?<!\w)_([^_]+)_(?!\w)", r"\1", text)
+    # Collapse multiple newlines/spaces
+    text = re.sub(r"\n\s*\n\s*\n+", "\n\n", text)
+    return text.strip()
 
 
 def _split_sentences(text: str, n: int) -> list[str]:
@@ -472,7 +528,7 @@ def _verbatim_slides(content: str, title: str, n: int, body_cap: int = 500) -> l
     the whole text is kept whenever the canvas allows. Slide 1 uses the title
     as its headline.
     """
-    text = (content or "").strip()
+    text = _clean_markdown(content or "")
     if not text or n < 1:
         return []
     blocks = [b.strip() for b in re.split(r"\n\s*\n+", text) if b.strip()]
@@ -488,6 +544,7 @@ def _verbatim_slides(content: str, title: str, n: int, body_cap: int = 500) -> l
     buckets = _fill_empty_buckets(buckets)
 
     slides: list[SlideCopy] = []
+    clean_title = _clean_markdown(title)
     for i, bucket in enumerate(buckets):
         body = "\n\n".join(bucket).strip()
         if len(body) > body_cap:
@@ -495,7 +552,7 @@ def _verbatim_slides(content: str, title: str, n: int, body_cap: int = 500) -> l
             body = (body[:cut] + "…") if cut > 0 else body[:body_cap]
         # Cover slide carries the complete title; later slides show only the
         # text (no truncated per-slide headlines).
-        headline = title[:60] if i == 0 else ""
+        headline = clean_title[:60] if i == 0 else ""
         slides.append(SlideCopy(headline=headline, subhead="", body=body, tagline="", badge=None))
     return slides
 
@@ -511,9 +568,9 @@ def _derive_mini_headline(body: str, title: str, max_len: int = 42) -> str:
     sentence is returned — the verifier's overflow check is the arbiter, not a
     word-boundary chop that produces a meaningless fragment.
     """
-    body = (body or "").strip()
+    body = _clean_markdown(body or "").strip()
     if not body:
-        return (title or "Frame")[:max_len]
+        return _clean_markdown(title or "Frame")[:max_len]
     first = re.split(r"(?<=[.!?])\s+", body)[0].strip().rstrip(".")
     first = re.sub(r"\s+", " ", first)  # collapse internal newlines/indent
     if len(first) > max_len:
@@ -565,9 +622,12 @@ def _finalize_slides(slides: list[SlideCopy], title: str, body_cap: int = 420) -
     "first words of the body" titles and replace them with AI-authored ones.
     """
     out: list[SlideCopy] = []
+    clean_title = _clean_markdown(title)
     for s in slides:
-        body = _truncate_sentence_aware(s.body, body_cap)
-        headline = s.headline.strip() or _derive_mini_headline(body, title)
+        clean_b = _clean_markdown(s.body)
+        body = _truncate_sentence_aware(clean_b, body_cap)
+        clean_h = _clean_markdown(s.headline).strip()
+        headline = clean_h or _derive_mini_headline(body, clean_title)
         out.append(s.model_copy(update={"headline": headline, "body": body}))
     return out
 
@@ -614,7 +674,7 @@ async def _repair_slide_headlines(
         "4-8 words, max 50 chars, no trailing ellipsis) for each slide below. "
         "Each headline must read as a real hook on its own — never a fragment "
         "of the body, never a bare noun.",
-        f"POST TITLE: {title or '(untitled)'}",
+        f"POST TITLE: {_clean_markdown(title) or '(untitled)'}",
         "",
     ]
     for i in targets:
@@ -659,20 +719,22 @@ async def _repair_slide_headlines(
         except (TypeError, ValueError):
             continue
         if 0 <= i < len(out) and isinstance(value, str) and value.strip():
-            out[i] = out[i].model_copy(update={"headline": value.strip()[:60]})
+            out[i] = out[i].model_copy(update={"headline": _clean_markdown(value.strip())[:60]})
     return out
 
 
 def _fallback_copy(content: str, title: str, slides_count: int, is_carousel: bool) -> PlatformCopy:
     """Title-based fallback copy when the LLM call fails — never empty."""
-    fallback_body = _truncate_sentence_aware(content, 300) if content else "No content available"
+    clean_content = _clean_markdown(content or "")
+    fallback_body = _truncate_sentence_aware(clean_content, 300) if clean_content else "No content available"
+    clean_title = _clean_markdown(title)
     return PlatformCopy(
-        headline=title[:50],
+        headline=clean_title[:50],
         subhead="",
         body=fallback_body,
         tagline="",
         badge=None,
-        slides=_finalize_slides(_fallback_slides(content, title, slides_count), title)
+        slides=_finalize_slides(_fallback_slides(content, clean_title, slides_count), clean_title)
         if is_carousel
         else [],
     )
@@ -680,12 +742,14 @@ def _fallback_copy(content: str, title: str, slides_count: int, is_carousel: boo
 
 def _fallback_slides(content: str, title: str, n: int, body_cap: int = 420) -> list[SlideCopy]:
     """Build N self-contained slides from source content (LLM-independent)."""
-    chunks = _split_sentences(content or "", n)
+    clean_content = _clean_markdown(content or "")
+    chunks = _split_sentences(clean_content, n)
     slides: list[SlideCopy] = []
+    clean_title = _clean_markdown(title)
     for i in range(n):
         raw = chunks[i] if i < len(chunks) else chunks[-1]
         body = _truncate_sentence_aware(raw, body_cap)
-        headline = title[:50] if i == 0 else _derive_mini_headline(body, title)
+        headline = clean_title[:50] if i == 0 else _derive_mini_headline(body, clean_title)
         slides.append(
             SlideCopy(
                 headline=headline,
@@ -700,10 +764,11 @@ def _fallback_slides(content: str, title: str, n: int, body_cap: int = 420) -> l
 
 def _pad_slides(slides: list[SlideCopy], content: str, n: int) -> list[SlideCopy]:
     """Pad an LLM slide list up to N with content-derived slides."""
-    chunks = _split_sentences(content or "", max(0, n - len(slides)))
+    clean_content = _clean_markdown(content or "")
+    chunks = _split_sentences(clean_content, max(0, n - len(slides)))
     out = list(slides)
     for i in range(n - len(slides)):
-        raw = chunks[i] if i < len(chunks) else content
+        raw = chunks[i] if i < len(chunks) else clean_content
         body = _truncate_sentence_aware(raw, 420)
         headline = _derive_mini_headline(body, "")
         out.append(SlideCopy(headline=headline, subhead="", body=body, tagline="", badge=None))

@@ -98,6 +98,17 @@ async def build_retry_state(db, task, fmt_id: str) -> dict | None:
     if not copy_json:
         return None
 
+    try:
+        from app.agents.orchestrator.nodes.copywriter import _clean_markdown
+
+        c = json.loads(copy_json)
+        c["headline"] = _clean_markdown(c.get("headline", ""))
+        c["subhead"] = _clean_markdown(c.get("subhead", ""))
+        c["body"] = _clean_markdown(c.get("body", ""))
+        copy_json = json.dumps(c)
+    except Exception:
+        pass
+
     campaign_name = source.get("campaign", "default")
     campaigns = payload.get("campaigns") or {}
     campaign = campaigns.get(campaign_name, campaigns.get("default", {}))
@@ -147,6 +158,33 @@ async def build_retry_state(db, task, fmt_id: str) -> dict | None:
         ),
         verbatim=bool(source.get("verbatim")),
     )
+
+    from app.services.formats import parse_carousel_slide
+
+    parsed_slide = parse_carousel_slide(fmt_id)
+    if parsed_slide:
+        base, idx = parsed_slide
+        total = int(source.get("slides") or 0)
+        if total <= 0:
+            total = (
+                len([p for p in (result.get("platforms") or {}) if p.startswith(f"{base}-")])
+                or 1
+            )
+        state["slide_context"] = {
+            fmt_id: {
+                "index": idx,
+                "total": total,
+                "platform": base,
+            }
+        }
+        slide_img_map = (source.get("platform_images") or {}).get(base, {})
+        if slide_img_map:
+            slot_img = slide_img_map.get(str(idx - 1)) or slide_img_map.get(str(idx))
+            if slot_img:
+                prep = await prepare_images([slot_img])
+                if prep:
+                    state["_slide_images"] = {fmt_id: prep}
+
     state["format_tasks"] = {
         fmt_id: {
             "status": "copy_ready",
@@ -173,6 +211,7 @@ async def build_retry_state(db, task, fmt_id: str) -> dict | None:
     }
     state["retry_count"] = {fmt_id: 1}
     return state
+
 
 
 async def run_retry(db, task, fmt_id: str, settings) -> dict:

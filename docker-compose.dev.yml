@@ -42,8 +42,8 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
-    mem_limit: 128m
+    command: redis-server --maxmemory 32mb --maxmemory-policy allkeys-lru
+    mem_limit: 48m
     ports:
       - "6379:6379"
 
@@ -64,7 +64,7 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
-    mem_limit: 1.5g
+    mem_limit: 384m
 
   api:
     build:
@@ -92,7 +92,7 @@ services:
       timeout: 8s
       retries: 15
       start_period: 15s
-    mem_limit: 512m
+    mem_limit: 256m
 
   worker:
     build:
@@ -111,8 +111,8 @@ services:
       SERVICE: worker
     volumes:
       - ./backend:/app
-    command: sh -c "cd /app && python -m watchfiles 'celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2' app/"
-    mem_limit: 512m
+    command: sh -c "cd /app && python -m watchfiles 'celery -A app.tasks.celery_app worker --loglevel=info --concurrency=1' app/"
+    mem_limit: 256m
 
   beat:
     build:
@@ -132,7 +132,7 @@ services:
     volumes:
       - ./backend:/app
     command: celery -A app.tasks.celery_app beat --loglevel=info
-    mem_limit: 128m
+    mem_limit: 64m
 
   frontend:
     image: node:22-alpine

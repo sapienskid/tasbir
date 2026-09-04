@@ -47,7 +47,13 @@ async def get_browser():
                 args=[
                     "--no-sandbox",
                     "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--renderer-process-limit=1",
                     "--font-render-hinting=none",
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--mute-audio",
                 ],
             )
     return _browser
