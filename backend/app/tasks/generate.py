@@ -150,7 +150,10 @@ def generate_task(self, task_id: str, source_data: dict):
                     discovered.append({"url": url, "alt": alt, "placement": "auto"})
                 if discovered:
                     raw_images = discovered[:8]
-                    log.info("[generate_task] Auto-discovered %d markdown image(s) from content", len(raw_images))
+                    log.info(
+                        "[generate_task] Auto-discovered %d markdown image(s) from content",
+                        len(raw_images),
+                    )
 
             pipeline_input["images"] = await prepare_images(raw_images) if raw_images else []
             raw_platform_images = source_data.get("platform_images", {}) or {}

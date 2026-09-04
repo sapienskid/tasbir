@@ -41,7 +41,7 @@ def carousel_slide_id(format_id: str, index: int) -> str:
 
 
 def parse_carousel_slide(format_id: str) -> tuple[str, int] | None:
-    """If format_id is a carousel slide (instagram-carousel-N / instagram-carousel-portrait-N), return (base, N)."""
+    """If format_id is a carousel slide (e.g. instagram-carousel-2), return (base, N)."""
     if not any(format_id.startswith(f"{base}-") for base in CAROUSEL_BASES):
         return None
     m = _SLIDE_RE.match(format_id)
