@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 - **Manual Compose (zero AI)** — `/api/compose` builds posts from an operator-chosen template, copy, and media (upload / stock photo / procedural or DiceBear illustration); a batch of up to 20 posts (carousels 2–10 slides) becomes one task per post, rendered by the no-LLM `compose_task`, re-openable via `PUT /api/tasks/{id}/composition`. Shared `ds_context.resolve_ds_context` + `composer.finalize_html` replace the duplicated design-language and token/font/KaTeX/image/logo injection code (see ADR-0021).
+- **Agent structured editing** — `POST /api/tasks/{id}/formats/{fmt}/refill` applies slot text, element toggles, media position, media (upload / stock photo / illustration), or a template switch to template-built posts (slot replacement via BeautifulSoup, full template re-fill preserving or replacing media) and re-renders through the deterministic hard gate. The Studio editor is compose-style: Content panel (Template/Text/Media tabs reusing the composer fields, caps, and media picker) with debounced auto-save of touched fields only (converges with inline edits instead of clobbering them), always-live click-to-edit WYSIWYG preview, agent chat open by default.
+
+### Removed
+- **GrapesJS visual editor** — the parallel canvas was never WYSIWYG (own wrapper divs, re-parsed CSS, divergent font/token resolution); direct slot editing in the real preview document replaces it, and the `grapesjs` dependency is dropped.
 
 ## [1.0.1] — 2026-09-04
 

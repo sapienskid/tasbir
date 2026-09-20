@@ -53,7 +53,7 @@ function illustrationDoc(svg: string, ground: ComposeGround): string {
 function IllustrationThumb({ style, seed, ground }: { style: string; seed: string; ground: ComposeGround }) {
   const { data, error, isLoading } = useIllustration(style, seed, ground)
   return (
-    <div className="flex size-40 items-center justify-center overflow-hidden rounded-md border bg-muted/20">
+    <div className="flex size-40 max-w-full items-center justify-center overflow-hidden rounded-md border bg-muted/20">
       {data ? (
         <iframe
           title={`${style} illustration preview`}
@@ -84,6 +84,7 @@ export function MediaPicker({
   multiSlide,
   onChange,
   onApplyAll,
+  hideApply = false,
 }: {
   media: ComposeMedia
   mediaKinds: Array<"image" | "illustration">
@@ -92,6 +93,8 @@ export function MediaPicker({
   multiSlide: boolean
   onChange: (m: ComposeMedia) => void
   onApplyAll: (scope: "post" | "all") => void
+  /** Hide the bulk-apply buttons (single-format editors apply directly). */
+  hideApply?: boolean
 }) {
   const [uploading, setUploading] = useState(false)
   const [query, setQuery] = useState("")
@@ -144,7 +147,7 @@ export function MediaPicker({
   return (
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div role="radiogroup" aria-label="Media type" className="flex overflow-hidden rounded-md border">
+        <div role="radiogroup" aria-label="Media type" className="flex min-w-0 flex-wrap overflow-hidden rounded-md border">
           {KINDS.filter((k) => kindAllowed(k.id, mediaKinds)).map((k) => (
             <button
               key={k.id}
@@ -168,9 +171,11 @@ export function MediaPicker({
               Apply to all slides
             </Button>
           ) : null}
-          <Button size="xs" variant="outline" onClick={() => onApplyAll("all")}>
-            Apply to all posts
-          </Button>
+          {!hideApply ? (
+            <Button size="xs" variant="outline" onClick={() => onApplyAll("all")}>
+              Apply to all posts
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -181,7 +186,7 @@ export function MediaPicker({
               <img
                 src={`data:${media.mime};base64,${media.data}`}
                 alt={media.alt || "Uploaded image"}
-                className="max-h-48 rounded-md border object-contain"
+                className="max-h-48 max-w-full rounded-md border object-contain"
               />
               <Button
                 size="icon-xs"
@@ -216,7 +221,7 @@ export function MediaPicker({
       {media.kind === "photo" ? (
         <div className="grid gap-3">
           <form
-            className="flex gap-2"
+            className="flex min-w-0 gap-2"
             onSubmit={(e) => {
               e.preventDefault()
               void search()
@@ -227,8 +232,9 @@ export function MediaPicker({
               placeholder="Search stock photos…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              className="min-w-0 flex-1"
             />
-            <Button type="submit" variant="outline" disabled={searching || !query.trim()}>
+            <Button type="submit" variant="outline" disabled={searching || !query.trim()} className="shrink-0">
               {searching ? (
                 <Loader2 aria-hidden="true" className="size-4 animate-spin" />
               ) : (
@@ -248,7 +254,7 @@ export function MediaPicker({
             </p>
           ) : null}
           {results && results.length > 0 ? (
-            <div role="radiogroup" aria-label="Photo results" className="grid max-h-80 grid-cols-3 gap-1.5 overflow-y-auto">
+            <div role="radiogroup" aria-label="Photo results" className="grid max-h-80 min-w-0 grid-cols-3 gap-1.5 overflow-y-auto">
               {results.map((p) => {
                 const selected = media.url === p.url
                 return (
