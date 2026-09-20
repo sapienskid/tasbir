@@ -17,6 +17,9 @@ class GenerationTask(Base):
     source_data: Mapped[dict] = mapped_column(JSON, default=dict)
     result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     edited_html: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Manual Compose (ADR-0021): the post's full composition (design system,
+    # language, ground, slides) so it can be re-opened and re-rendered.
+    composition: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     progress: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

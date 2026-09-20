@@ -18,7 +18,7 @@ import { SaveTemplateDialog } from "@/components/tasks/save-template-dialog"
 import { GalleryView } from "@/components/tasks/artifact-gallery"
 import { FormatEditor } from "@/components/tasks/format-editor"
 import { formatDims } from "@/lib/platforms"
-import { ArrowLeft, RotateCcw, Trash2 } from "lucide-react"
+import { ArrowLeft, PenLine, RotateCcw, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useTask, useTaskProgress } from "@/hooks/use-task"
 import { apiRequest, ApiError, fetchBlob, fetchText, downloadBlob } from "@/lib/api"
@@ -198,6 +198,17 @@ export default function TaskDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <StatusBadge status={task.status} />
+          {(task.source_data as { mode?: string })?.mode === "manual" &&
+          (task.source_data as { batch_id?: string })?.batch_id ? (
+            <Button asChild variant="outline" size="sm">
+              <Link
+                to={`/compose/${(task.source_data as { batch_id: string }).batch_id}?task=${task.id}`}
+              >
+                <PenLine aria-hidden="true" className="size-4" />
+                Edit composition
+              </Link>
+            </Button>
+          ) : null}
           <Button variant="ghost" size="icon" aria-label="Delete task" onClick={() => setDeleteOpen(true)}>
             <Trash2 aria-hidden="true" className="size-4" />
           </Button>

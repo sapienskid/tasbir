@@ -117,16 +117,11 @@ async def apply_design_system_style(
     Applies the language's rules to the design_instruction (preserving the
     user's type scale/spacing/footer), replaces the core color tokens with the
     language's palette, provisions accent tokens, and seeds starter templates
-    for families the system lacks.
+    for families the system lacks. See ``apply_language_to_system``.
     """
-    from app.services.design_languages import apply_language, get_language
-    from app.services.style_templates import (
-        remove_other_style_templates,
-        seed_style_templates,
-    )
+    from app.services.design_languages import apply_language_to_system, get_language
 
-    lang = await get_language(db, request.style_language)
-    if lang is None:
+    if await get_language(db, request.style_language) is None:
         raise HTTPException(
             status_code=422,
             detail=f"Unknown design language {request.style_language!r}",
@@ -137,52 +132,7 @@ async def apply_design_system_style(
     if not ds:
         raise NotFoundError(f"Design system {ds_id!r} not found")
 
-    new_di = await apply_language(db, request.style_language, ds.design_instruction or {})
-    tokens = dict(ds.tokens or {})
-    # The language's core palette (bg/text/border/radius/shadow) replaces the
-    # design system's color tokens — switching styles visibly changes the
-    # palette. Fonts are preserved (user-owned).
-    palette = lang.palette_tokens or {}
-    if palette:
-        for var, value in palette.items():
-            tokens[var] = value
-    new_accent = lang.accent_tokens or {}
-    if new_accent:
-        for var, value in new_accent.items():
-            tokens[var] = value
-    else:
-        # Monochrome style — strip accent tokens left by a previous colorful style.
-        tokens.pop("--color-accent", None)
-        tokens.pop("--color-accent-secondary", None)
-
-    # A pre-existing bare system (created before create seeded a baseline) gets
-    # its missing identity fields backfilled so it is never incomplete.
-    baseline = ds_service.new_design_system_defaults(ds.name or ds.id)
-    updates: dict = {"design_instruction": new_di, "tokens": tokens}
-    if not ds.categories:
-        updates["categories"] = baseline["categories"]
-    if not ds.campaigns:
-        updates["campaigns"] = baseline["campaigns"]
-    if not (ds.brand or {}).get("name"):
-        updates["brand"] = baseline["brand"]
-
-    # The style's preferred ground (dark-luxury → black, others → white) should
-    # drive the default campaign, or posts resolve to white via the seed's
-    # "default" campaign and the language's identity is lost.
-    campaigns = dict(ds.campaigns or baseline["campaigns"])
-    default_campaign = campaigns.get("default")
-    if isinstance(default_campaign, dict):
-        default_campaign = dict(default_campaign)
-        default_campaign["ground"] = new_di.get("default_ground") or "white"
-        campaigns["default"] = default_campaign
-        updates["campaigns"] = campaigns
-
-    await remove_other_style_templates(db, ds_id, request.style_language)
-    seeded = await seed_style_templates(db, ds_id, request.style_language)
-    # Restyling the default system takes it out of seed control.
-    if ds_id == ds_service.DEFAULT_ID and ds.source == "seed":
-        updates["source"] = "manual"
-    updated = await repo.update(ds_id, updates)
+    updated, seeded = await apply_language_to_system(db, ds, request.style_language)
     return {
         **ds_service.ds_to_dict(updated, template_count=await _count_templates(db, ds_id)),
         "seeded_templates": seeded,
@@ -208,6 +158,15 @@ async def update_design_system(
         raise NotFoundError(f"Design system {ds_id!r} not found")
 
     data = request.model_dump(exclude_unset=True)
+    # A blank token value means "unset" (the Studio token editor sends the
+    # whole map) — drop it rather than persisting an invalid ``--x: ;``.
+    # Every other malformed/unsafe value is rejected with 422 below.
+    if isinstance(data.get("tokens"), dict):
+        data["tokens"] = {
+            k: v
+            for k, v in data["tokens"].items()
+            if not (isinstance(v, str) and not v.strip())
+        }
     # Only allow patching the fields supplied; keep the rest.
     issues = ds_service.validate_design_system(data)
     if issues:

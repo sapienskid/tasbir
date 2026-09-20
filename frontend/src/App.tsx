@@ -14,6 +14,7 @@ const TaskListPage = lazy(() =>
 const TaskDetailPage = lazy(() => import("@/pages/task-detail"))
 const JobDetailPage = lazy(() => import("@/pages/job-detail"))
 const NewTaskPage = lazy(() => import("@/pages/new-task"))
+const ComposePage = lazy(() => import("@/pages/compose"))
 const TemplatesPage = lazy(() => import("@/pages/templates"))
 const DesignSystemsPage = lazy(() => import("@/pages/design-systems"))
 const AgentsPage = lazy(() =>
@@ -70,6 +71,22 @@ export default function App() {
               element={
                 <Suspense fallback={<FullPageSkeleton />}>
                   <NewTaskPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="compose"
+              element={
+                <Suspense fallback={<FullPageSkeleton />}>
+                  <ComposePage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="compose/:batchId"
+              element={
+                <Suspense fallback={<FullPageSkeleton />}>
+                  <ComposePage />
                 </Suspense>
               }
             />

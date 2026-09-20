@@ -4,6 +4,11 @@ All notable changes to Tasbir are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Manual Compose (zero AI)** — `/api/compose` builds posts from an operator-chosen template, copy, and media (upload / stock photo / procedural or DiceBear illustration); a batch of up to 20 posts (carousels 2–10 slides) becomes one task per post, rendered by the no-LLM `compose_task`, re-openable via `PUT /api/tasks/{id}/composition`. Shared `ds_context.resolve_ds_context` + `composer.finalize_html` replace the duplicated design-language and token/font/KaTeX/image/logo injection code (see ADR-0021).
+
 ## [1.0.1] — 2026-09-04
 
 ### Fixed

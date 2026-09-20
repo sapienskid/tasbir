@@ -19,6 +19,9 @@ from app.services.templates import (
     VALID_MEDIA_POSITIONS,
     build_template_context,
     detect_elements,
+    detect_fields,
+    has_media,
+    media_kinds,
     render_template_html,
     scan_template_features,
 )
@@ -71,6 +74,9 @@ def _entry(row) -> dict:
         else "auto",
         "supports_text": "{{ body" in (row.html or ""),
         "has_illustration_slot": "{{ illustration" in (row.html or ""),
+        "fields": detect_fields(row.html or ""),
+        "media_kinds": media_kinds(row.html or ""),
+        "has_media": has_media(row.html or ""),
         "source": row.source,
         "is_active": bool(row.is_active),
         "created_at": iso_utc(row.created_at),
@@ -120,12 +126,9 @@ async def _validate_render(
     Renders with the template's effective media placement so a chosen position
     that overflows is caught on save.
     """
-    from app.services.design_instruction import (
-        build_google_fonts_link,
-        inject_fonts_into_html,
-    )
+    from app.services.composer import finalize_html
     from app.services.dom_extractor import detect_overflow
-    from app.services.tokens import inject_tokens_into_html
+    from app.services.ds_context import DSContext
 
     width, height = DIMS.get(family, DIMS["square"])
     tokens = dict(DEFAULT_TOKEN_VALUES)
@@ -141,8 +144,7 @@ async def _validate_render(
         rendered = render_template_html(html, context)
     except Exception as e:
         return [f"Jinja2 render failed: {e}"]
-    rendered = inject_tokens_into_html(rendered, tokens)
-    rendered = inject_fonts_into_html(rendered, build_google_fonts_link(tokens, {}))
+    rendered = finalize_html(rendered, DSContext(ds_id="", tokens=tokens), katex=False)
     try:
         overflow = await detect_overflow(rendered, width, height)
     except Exception as e:
@@ -351,14 +353,8 @@ async def _render_preview_html(
     hidden: list[str] | None = None,
 ) -> str:
     """Render a template string with sample copy + tokens/fonts/logo."""
-    from app.services.design_instruction import (
-        build_google_fonts_link,
-        inject_fonts_into_html,
-        photo_grayscale,
-        substitute_image_keys,
-        substitute_logo,
-    )
-    from app.services.tokens import inject_tokens_into_html
+    from app.services.composer import finalize_html
+    from app.services.ds_context import DSContext
 
     ds_repo = DesignSystemRepository(db)
     ds = await ds_repo.get_by_id(design_system_id)
@@ -386,15 +382,11 @@ async def _render_preview_html(
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Template render failed: {e}")
 
-    rendered = inject_tokens_into_html(rendered, tokens)
-    rendered = inject_fonts_into_html(rendered, build_google_fonts_link(tokens, di))
-    rendered = substitute_logo(rendered, logo)
+    placeholders = None
     if image_slots and "has_image" not in (hidden or []):
         placeholders = [{"data": _PLACEHOLDER_B64, "mime": "image/svg+xml", "alt": "placeholder"}]
-        rendered = substitute_image_keys(
-            rendered, placeholders, grayscale=photo_grayscale(di)
-        )
-    return rendered
+    ctx = DSContext(ds_id=design_system_id, tokens=tokens, design_instruction=di, logo=logo)
+    return finalize_html(rendered, ctx, placeholders, katex=False)
 
 
 @router.post("/from-image")

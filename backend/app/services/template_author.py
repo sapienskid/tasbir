@@ -196,12 +196,9 @@ async def validate_template_html(
     soft warning (the gallery re-validates on use) — only hard violations fail.
     """
     from app.agents.orchestrator.nodes.quality_check import _run_deterministic_checks
-    from app.services.design_instruction import (
-        build_google_fonts_link,
-        inject_fonts_into_html,
-        substitute_logo,
-    )
+    from app.services.composer import finalize_html
     from app.services.dom_extractor import detect_overflow
+    from app.services.ds_context import DSContext
     from app.services.templates import build_template_context, render_template_html
 
     width, height = FAMILY_DIMS.get(family, (1080, 1080))
@@ -233,16 +230,10 @@ async def validate_template_html(
             "rendered_html": "",
         }
 
-    rendered = inject_fonts_into_html(
-        rendered, build_google_fonts_link(tokens, ds.design_instruction or {})
+    ctx = DSContext(
+        ds_id=ds.id, tokens=tokens, design_instruction=ds.design_instruction or {}, logo=logo
     )
-    rendered = substitute_logo(rendered, logo)
-    try:
-        from app.services.tokens import inject_tokens_into_html
-
-        rendered = inject_tokens_into_html(rendered, tokens)
-    except Exception:
-        pass
+    rendered = finalize_html(rendered, ctx, katex=False)
 
     display_family = (
         tokens.get("--font-display") or DEFAULT_TOKEN_VALUES["--font-display"]

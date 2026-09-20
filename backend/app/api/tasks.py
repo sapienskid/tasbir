@@ -27,6 +27,11 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def is_manual_task(task) -> bool:
+    """True for tasks created by Manual Compose (ADR-0021)."""
+    return (task.source_data or {}).get("mode") == "manual"
+
+
 @router.get("")
 async def list_tasks(
     limit: int = 50,
@@ -59,6 +64,7 @@ async def get_task(task_id: str, db: AsyncSession = Depends(get_db)):
         "source_data": task.source_data,
         "result": task.result,
         "edited_html": task.edited_html,
+        "composition": task.composition,
         "progress": task.progress,
         "error": task.error,
         "created_at": iso_utc(task.created_at),
@@ -259,19 +265,10 @@ async def rerender_format(
     """
     from app.config import get_settings
     from app.services.agents import get_agent_config
-    from app.services.design_instruction import (
-        build_google_fonts_link,
-        inject_fonts_into_html,
-        photo_grayscale,
-        substitute_image_keys,
-    )
-    from app.services.dom_extractor import detect_overflow, render_to_png
+    from app.services.composer import finalize_html, katex_missing, run_hard_checks
+    from app.services.dom_extractor import render_to_png
+    from app.services.ds_context import resolve_ds_context
     from app.services.sanitizer import sanitize_html
-    from app.services.tokens import (
-        DEFAULT_TOKEN_VALUES,
-        inject_katex_into_html,
-        inject_tokens_into_html,
-    )
 
     repo = TaskRepository(db)
     task = await repo.get_by_id(task_id)
@@ -285,60 +282,33 @@ async def rerender_format(
     fmt = get_format_info(fmt_id)
 
     settings = get_settings()
-    # Resolve the design system the task was built with (DB first, YAML
-    # fallback for legacy rows) so re-render + QC use the right tokens/brand.
-    ds_id = (task.source_data or {}).get("design_system_id") or "default"
-    payload: dict = {}
-    try:
-        from app.db.repositories.design_systems import DesignSystemRepository
-        from app.services.design_systems import build_pipeline_payload
-
-        ds = await DesignSystemRepository(db).get_by_id(ds_id)
-        if ds is not None:
-            payload = build_pipeline_payload(ds)
-    except Exception as e:
-        log.warning("[rerender] Design-system payload failed (%s) — default DS", e)
-    if not payload:
-        from app.services.design_systems import default_design_system_payload
-
-        payload = await default_design_system_payload()
-    tokens = payload.get("design_tokens") or dict(DEFAULT_TOKEN_VALUES)
-    design_instruction = payload.get("design_instruction") or {}
-    footer = payload.get("footer") or {"left": "", "right": ""}
+    # Resolve the design system the task was built with (DB first, default
+    # fallback) + its per-post language override, so re-render + QC use the
+    # right tokens/brand.
+    source = task.source_data or {}
+    ctx = await resolve_ds_context(
+        db, source.get("design_system_id") or "default", source.get("style_language") or ""
+    )
+    tokens = ctx.tokens
+    design_instruction = ctx.design_instruction
+    footer = ctx.footer
     brief = ((task.result or {}).get("strategic_brief") or {})
-    category = (task.source_data or {}).get("category") or brief.get("category") or ""
+    category = source.get("category") or brief.get("category") or ""
     ground = brief.get("ground", "white")
 
     html = sanitize_html(request.html, mode="preserve_system")
-    if "cdn.jsdelivr.net/npm/katex" not in html:
-        html = inject_katex_into_html(html)
-    html = inject_tokens_into_html(html, tokens)
-    html = inject_fonts_into_html(html, build_google_fonts_link(tokens, design_instruction))
-    html = substitute_image_keys(
-        html, (task.source_data or {}).get("images") or [],
-        grayscale=photo_grayscale(design_instruction),
+    html = finalize_html(
+        html, ctx, source.get("images") or [], katex=katex_missing(html), logo=False
     )
 
-    # Deterministic checks (no LLM cost)
-    display_value = tokens.get("--font-display", "Space Grotesk, Inter, sans-serif")
-    display_family = display_value.split(",")[0].strip()
+    # Deterministic checks + overflow + low-contrast (no LLM cost)
     from app.agents.orchestrator.nodes.quality_check import (
         _build_design_system_context,
         _call_vision_llm,
         _extract_json,
-        _run_deterministic_checks,
     )
 
-    issues = _run_deterministic_checks(
-        html, footer, category, fmt.width, fmt.height, display_family,
-        allow_emoji=bool((design_instruction.get("style") or {}).get("emoji")),
-    )
-    from app.services.dom_extractor import detect_low_contrast
-
-    overflow = await detect_overflow(html, fmt.width, fmt.height)
-    issues.extend(overflow)
-    contrast = await detect_low_contrast(html, fmt.width, fmt.height)
-    issues.extend(contrast)
+    issues = await run_hard_checks(html, ctx, fmt.width, fmt.height, category)
 
     passed = not issues
     score = 100 if passed else 20
@@ -472,7 +442,8 @@ async def retry_task(task_id: str, db: AsyncSession = Depends(get_db)):
     Pre-seeds the pipeline with the stored strategic brief, post plan, and
     per-format copy, so the strategist/planner/copywriter LLM steps are skipped.
     Formats that already verified keep their artifacts; only unverified formats
-    are re-designed and re-checked.
+    are re-designed and re-checked. Manual (composed) tasks simply re-run the
+    deterministic compose job — no AI step is ever involved.
     """
     from app.tasks.generate import generate_task
 
@@ -482,6 +453,13 @@ async def retry_task(task_id: str, db: AsyncSession = Depends(get_db)):
         raise NotFoundError(f"Task {task_id} not found")
     if task.status in ("pending", "running"):
         raise HTTPException(status_code=409, detail="Task is still processing")
+
+    if is_manual_task(task):
+        from app.tasks.compose import compose_task
+
+        await repo.update_status(task_id=task_id, status="pending")
+        compose_task.delay(task_id)
+        return {"task_id": task_id, "status": "pending"}
 
     resume = _build_resume_state(task)
     source = dict(task.source_data or {})
@@ -512,6 +490,12 @@ async def retry_format(
         raise NotFoundError(f"Task {task_id} not found")
     if task.status in ("pending", "running"):
         raise HTTPException(status_code=409, detail="Task is still processing")
+    if is_manual_task(task):
+        raise HTTPException(
+            status_code=422,
+            detail="Manually composed posts have no AI designer — edit the composition "
+            "or the HTML instead",
+        )
 
     validated = validate_platforms([fmt_id])
     fmt_id = validated[0]

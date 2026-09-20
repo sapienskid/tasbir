@@ -30,6 +30,7 @@ import { useDesignSystems, useTemplates, useTemplatePreview } from "@/hooks/use-
 import { usePlatforms } from "@/hooks/use-platforms"
 import { familyOfPlatform } from "@/lib/platforms"
 import { PreviewFrame, FAMILY_DIMS } from "@/components/tasks/preview-frame"
+import { ModeSwitch } from "@/components/compose/mode-switch"
 
 function isCarouselPlatform(p: string): boolean {
   return p === "instagram-carousel" || p === "instagram-carousel-portrait"
@@ -356,6 +357,7 @@ export default function NewTaskPage() {
 
   return (
     <div className="mx-auto grid max-w-3xl gap-6">
+      <ModeSwitch active="ai" />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">New Task</h1>

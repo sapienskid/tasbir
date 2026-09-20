@@ -314,6 +314,12 @@ export interface Template {
   media_position?: string
   supports_text?: boolean
   has_illustration_slot?: boolean
+  /** Content vars the template renders (kicker/headline/…/extra.cta). */
+  fields?: string[]
+  /** True when the template has an image slot or an illustration. */
+  has_media?: boolean
+  /** Media the template can host: "image" (upload/photo), "illustration". */
+  media_kinds?: Array<"image" | "illustration">
   source: string
   is_active: boolean
   html?: string
@@ -795,6 +801,156 @@ export async function uploadMedia(file: File): Promise<{ data: string; mime: str
   const form = new FormData()
   form.append("file", file)
   return apiForm("/uploads", form)
+}
+
+// ─── Manual compose (no AI) ────────────────────────────────────────────────
+
+export type ComposeGround = "white" | "black"
+export type ComposeMediaPosition = "auto" | "left" | "right" | "top" | "bottom"
+export type ComposeExtraKey = "price" | "cta" | "date" | "location" | "stat" | "source"
+
+export interface ComposeCopy {
+  kicker: string
+  headline: string
+  subhead: string
+  body: string
+  tagline: string
+  extra: Record<ComposeExtraKey, string>
+}
+
+export type ComposeMedia =
+  | { kind: "none" }
+  | { kind: "upload"; data: string; mime: string; alt: string }
+  | {
+      kind: "photo"
+      url: string
+      credit: string
+      provider: string
+      photographer: string
+      license: string
+    }
+  | { kind: "illustration"; style: string; seed: string }
+
+export interface ComposeSlideSpec {
+  template_id: string
+  copy: ComposeCopy
+  /** Element toggles; null = the template's default hidden elements. */
+  hidden: string[] | null
+  media_position: ComposeMediaPosition
+  media: ComposeMedia
+}
+
+export interface ComposePostSpec {
+  platform: string
+  slides: ComposeSlideSpec[]
+}
+
+export interface ComposeBatchRequest {
+  design_system_id: string
+  style_language: string
+  ground: ComposeGround
+  title?: string
+  posts: ComposePostSpec[]
+}
+
+/** Per-task stored composition (also the PUT /tasks/{id}/composition body). */
+export interface ComposeComposition {
+  design_system_id: string
+  style_language: string
+  ground: ComposeGround
+  post: ComposePostSpec
+}
+
+export interface ComposePreviewRequest {
+  design_system_id: string
+  style_language: string
+  ground: ComposeGround
+  platform: string
+  slide_index: number
+  slide_total: number
+  slide: ComposeSlideSpec
+}
+
+export interface ComposePreviewResponse {
+  html: string
+  width: number
+  height: number
+}
+
+export interface ComposeCreateResponse {
+  batch_id: string
+  task_ids: string[]
+}
+
+export interface ComposeBatchTask {
+  task_id: string
+  status: string
+  platform: string
+  composition: ComposeComposition | null
+}
+
+export interface ComposeBatch {
+  batch_id: string
+  tasks: ComposeBatchTask[]
+}
+
+export interface ComposePhoto {
+  url: string
+  thumb: string
+  width: number
+  height: number
+  provider: string
+  photographer: string
+  credit: string
+  license: string
+}
+
+export function composePreview(
+  body: ComposePreviewRequest,
+  signal?: AbortSignal
+): Promise<ComposePreviewResponse> {
+  return apiRequest("/compose/preview", { method: "POST", body: JSON.stringify(body), signal })
+}
+
+export function createComposeBatch(body: ComposeBatchRequest): Promise<ComposeCreateResponse> {
+  return apiRequest("/compose", { method: "POST", body: JSON.stringify(body) })
+}
+
+export function getComposeBatch(batchId: string): Promise<ComposeBatch> {
+  return apiRequest(`/compose/batches/${encodeURIComponent(batchId)}`)
+}
+
+export function updateTaskComposition(
+  taskId: string,
+  body: ComposeComposition
+): Promise<{ task_id: string; status: string }> {
+  return apiRequest(`/tasks/${taskId}/composition`, { method: "PUT", body: JSON.stringify(body) })
+}
+
+export function getComposeIllustration(
+  style: string,
+  seed: string,
+  ground: ComposeGround = "white"
+): Promise<{ svg: string }> {
+  const params = new URLSearchParams({ style, seed, ground })
+  return apiRequest(`/compose/illustration?${params.toString()}`)
+}
+
+export function searchComposePhotos(
+  q: string,
+  orientation: "square" | "portrait" | "landscape" = "square"
+): Promise<{ results: ComposePhoto[] }> {
+  const params = new URLSearchParams({ q, orientation })
+  return apiRequest(`/compose/photos?${params.toString()}`)
+}
+
+export function mapComposeTemplates(body: {
+  from_design_system_id: string
+  to_design_system_id: string
+  template_ids: string[]
+  platform: string
+}): Promise<{ mapping: Record<string, string> }> {
+  return apiRequest("/compose/templates/map", { method: "POST", body: JSON.stringify(body) })
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

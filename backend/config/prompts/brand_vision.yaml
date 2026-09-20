@@ -42,7 +42,10 @@ system_prompt: |
   - Always keep a bg + bg_inverted pair and a text + text_inverted pair.
   - Use exact 6-digit hex values.
   - Prefer 1 strong accent color max; keep the rest neutral.
-  - The accent may be omitted (empty string) if the brand is strictly monochrome.
+  - Omit the accent entry entirely if the brand is strictly monochrome (never
+    output an empty hex).
+  - Text must stay readable: text on bg and text_inverted on bg_inverted need
+    at least 4.5:1 contrast; secondary on bg at least 3:1.
   - Do NOT invent colors that contradict an uploaded image — extract them.
   - ground: black only for dramatic/bold brands or dark reference images, else white.
 temperature: 0.4

@@ -21,19 +21,11 @@ from app.agents.orchestrator.nodes.quality_check import (
 )
 from app.db.repositories.chat import ChatRepository
 from app.services.agents import get_agent_config
-from app.services.design_instruction import (
-    build_google_fonts_link,
-    inject_fonts_into_html,
-)
 from app.services.dom_extractor import detect_overflow, render_to_png
 from app.services.formats import get_format_info, validate_platforms
 from app.services.llm import call_llm
 from app.services.sanitizer import sanitize_html
-from app.services.tokens import (
-    DEFAULT_TOKEN_VALUES,
-    inject_katex_into_html,
-    inject_tokens_into_html,
-)
+from app.services.tokens import DEFAULT_TOKEN_VALUES
 
 log = logging.getLogger(__name__)
 
@@ -82,11 +74,16 @@ async def _precheck_html(
     tokens = payload.get("design_tokens") or dict(DEFAULT_TOKEN_VALUES)
     di = payload.get("design_instruction") or {}
 
+    from app.services.composer import finalize_html, katex_missing
+    from app.services.ds_context import DSContext
+
     clean = sanitize_html(html, mode="preserve_system")
-    if "cdn.jsdelivr.net/npm/katex" not in clean:
-        clean = inject_katex_into_html(clean)
-    clean = inject_tokens_into_html(clean, tokens)
-    clean = inject_fonts_into_html(clean, build_google_fonts_link(tokens, di))
+    clean = finalize_html(
+        clean,
+        DSContext(ds_id="", tokens=tokens, design_instruction=di),
+        katex=katex_missing(clean),
+        logo=False,
+    )
 
     display_value = tokens.get("--font-display") or DEFAULT_TOKEN_VALUES["--font-display"]
     display_family = display_value.split(",")[0].strip()

@@ -10,6 +10,7 @@ from app.api import (
     agent_jobs,
     agents,
     chat,
+    compose,
     design_languages,
     design_systems,
     font_pool,
@@ -67,6 +68,7 @@ async def lifespan(app: FastAPI):
         # idempotent column migrations here.
         await conn.run_sync(_ensure_column, "generation_tasks", "edited_html", "JSON")
         await conn.run_sync(_ensure_column, "generation_tasks", "progress", "JSON")
+        await conn.run_sync(_ensure_column, "generation_tasks", "composition", "JSON")
         await conn.run_sync(_ensure_column, "agents", "fallback_models", "JSON")
         await conn.run_sync(_ensure_column, "templates", "hidden_elements", "JSON")
         await conn.run_sync(_ensure_column, "templates", "media_position", "VARCHAR(16)")
@@ -179,6 +181,14 @@ app.include_router(
 )
 app.include_router(
     tasks.router, prefix="/api/tasks", tags=["tasks"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    compose.router, prefix="/api/compose", tags=["compose"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    compose.tasks_router, prefix="/api/tasks", tags=["compose"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 app.include_router(

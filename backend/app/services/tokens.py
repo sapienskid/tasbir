@@ -6,6 +6,7 @@ Tokens define brand colors, fonts, and spacing for the design system.
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import yaml
@@ -285,6 +286,192 @@ def load_platforms(path: str | Path) -> dict[str, tuple[int, int]]:
     return {}
 
 
+# Token value sanitizing
+#
+# Token values are injected verbatim into a <style> block, so a value like
+# ``red}</style><script>`` (or an empty LLM value producing ``--x: ;``) must
+# never reach the page. Each family of variables gets a conservative grammar;
+# unknown variables fall back to a deny-list of CSS/HTML breakout sequences.
+
+_NUM = r"-?(?:\d+\.?\d*|\.\d+)"
+_LENGTH_RE = re.compile(
+    rf"^(?:0|{_NUM}(?:px|rem|em|%|vw|vh|vmin|vmax|pt|ch|ex)?)$", re.IGNORECASE
+)
+_HEX_RE = re.compile(r"^#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+_COLOR_FN_RE = re.compile(
+    rf"^(?:rgba?|hsla?)\(\s*{_NUM}(?:%|deg)?"
+    rf"(?:\s*[,/]?\s*{_NUM}(?:%|deg)?){{2,3}}\s*\)$",
+    re.IGNORECASE,
+)
+_NAMED_COLOR_RE = re.compile(r"^[A-Za-z]{3,30}$")
+_VAR_REF_RE = re.compile(r"^var\(--[A-Za-z0-9-]+\)$")
+_FONT_FAMILY_RE = re.compile(r"^[A-Za-z0-9 '\"-]+$")
+_SHADOW_ITEM_RE = re.compile(r"(?:rgba?|hsla?)\([^()]*\)|[^\s,()]+", re.IGNORECASE)
+_UNSAFE_SUBSTRINGS = (";", "{", "}", "<", ">", "\\", "/*", "url(", "expression")
+_SIZE_PREFIXES = (
+    "--radius", "--space", "--spacing", "--size", "--gap", "--margin",
+    "--padding", "--width", "--height", "--font-size", "--font-weight",
+    "--line-height", "--leading", "--tracking", "--letter-spacing",
+)
+
+
+def _is_color(value: str) -> bool:
+    return bool(
+        _HEX_RE.match(value)
+        or _COLOR_FN_RE.match(value)
+        or _NAMED_COLOR_RE.match(value)
+        or _VAR_REF_RE.match(value)
+    )
+
+
+def _is_font_stack(value: str) -> bool:
+    families = [f.strip() for f in value.split(",")]
+    return all(f and _FONT_FAMILY_RE.match(f) for f in families)
+
+
+def _is_size(value: str) -> bool:
+    parts = value.split()
+    return 1 <= len(parts) <= 4 and all(
+        _LENGTH_RE.match(p) or _VAR_REF_RE.match(p) for p in parts
+    )
+
+
+def _is_shadow(value: str) -> bool:
+    if value.lower() == "none":
+        return True
+    items = _SHADOW_ITEM_RE.findall(value)
+    if not items or _SHADOW_ITEM_RE.sub("", value).strip(" \t,"):
+        return False
+    return all(
+        i.lower() == "inset" or _LENGTH_RE.match(i) or _is_color(i) for i in items
+    )
+
+
+def sanitize_token_value(var: str, value) -> str | None:
+    """Return a safe, trimmed token value — or None when it must be dropped.
+
+    ``--color-*`` accepts hex / rgb[a]() / hsl[a]() / a named color word /
+    ``var(--x)``; ``--font-*`` a comma-separated family stack; sizes
+    (``--radius-*``, ``--space-*``, ``--font-size-*``, ...) one to four CSS
+    lengths/numbers; ``--shadow-*`` ``none`` or a conservative box-shadow.
+    Any other variable is accepted unless it carries a CSS/HTML breakout
+    sequence. Empty values are dropped (they would emit ``--x: ;``).
+    """
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    if not value or any(s in value.lower() for s in _UNSAFE_SUBSTRINGS):
+        return None
+    var = (var or "").lower()
+    if var.startswith("--color"):
+        ok = _is_color(value)
+    elif var.startswith(_SIZE_PREFIXES):
+        ok = _is_size(value)
+    elif var.startswith("--font"):
+        ok = _is_font_stack(value)
+    elif var.startswith("--shadow"):
+        ok = _is_shadow(value)
+    else:
+        ok = "\n" not in value and "\r" not in value
+    return value if ok else None
+
+
+def invalid_token_issues(tokens: dict) -> list[str]:
+    """Human-readable problems for token values that fail sanitizing."""
+    issues: list[str] = []
+    for var, value in (tokens or {}).items():
+        if not isinstance(var, str) or not isinstance(value, str):
+            continue
+        if sanitize_token_value(var, value) is None:
+            shown = value if len(value) <= 60 else value[:57] + "..."
+            issues.append(f"token {var} has an invalid value {shown!r}")
+    return issues
+
+
+# WCAG contrast helpers (hex colors only — other formats are left untouched).
+
+def _hex_to_rgb(value: str) -> tuple[int, int, int] | None:
+    if not isinstance(value, str) or not _HEX_RE.match(value.strip()):
+        return None
+    h = value.strip().lstrip("#")
+    if len(h) in (3, 4):
+        h = "".join(c * 2 for c in h[:3])
+    h = h[:6]
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _relative_luminance(rgb: tuple[int, int, int]) -> float:
+    def channel(c: int) -> float:
+        s = c / 255.0
+        return s / 12.92 if s <= 0.03928 else ((s + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (channel(c) for c in rgb)
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast_ratio(fg: str, bg: str) -> float | None:
+    """WCAG 2.x contrast ratio of two hex colors (None if either isn't hex)."""
+    a, b = _hex_to_rgb(fg), _hex_to_rgb(bg)
+    if a is None or b is None:
+        return None
+    la, lb = _relative_luminance(a), _relative_luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _mix_hex(a: str, b: str, t: float) -> str:
+    ra, rb = _hex_to_rgb(a), _hex_to_rgb(b)
+    assert ra is not None and rb is not None
+    return "#" + "".join(
+        f"{round(x + (y - x) * t):02X}" for x, y in zip(ra, rb, strict=True)
+    )
+
+
+def enforce_text_contrast(tokens: dict[str, str]) -> dict[str, str]:
+    """Return tokens with unreadable text colors replaced (hex values only).
+
+    ``--color-text`` on ``--color-bg`` and ``--color-text-inverted`` on
+    ``--color-bg-inverted`` must reach 4.5:1, else they fall back to black or
+    white (whichever reads on that ground). ``--color-text-secondary`` must
+    reach 3:1 on ``--color-bg``, else it is mixed toward ``--color-text``.
+    """
+    out = dict(tokens)
+    for text_var, bg_var in (
+        ("--color-text", "--color-bg"),
+        ("--color-text-inverted", "--color-bg-inverted"),
+    ):
+        bg = out.get(bg_var, DEFAULT_TOKEN_VALUES[bg_var])
+        ratio = contrast_ratio(out.get(text_var, ""), bg)
+        if ratio is None or ratio >= 4.5:
+            continue
+        on_black = contrast_ratio("#000000", bg) or 0.0
+        on_white = contrast_ratio("#FFFFFF", bg) or 0.0
+        fallback = "#000000" if on_black >= on_white else "#FFFFFF"
+        log.info(
+            "[tokens] %s contrast %.2f on %s < 4.5 — using %s",
+            text_var, ratio, bg_var, fallback,
+        )
+        out[text_var] = fallback
+
+    secondary = out.get("--color-text-secondary", "")
+    bg = out.get("--color-bg", DEFAULT_TOKEN_VALUES["--color-bg"])
+    text = out.get("--color-text", DEFAULT_TOKEN_VALUES["--color-text"])
+    ratio = contrast_ratio(secondary, bg)
+    if ratio is not None and ratio < 3.0 and _hex_to_rgb(text) is not None:
+        fixed = text
+        for step in range(1, 11):
+            candidate = _mix_hex(secondary, text, step / 10)
+            if (contrast_ratio(candidate, bg) or 0.0) >= 3.0:
+                fixed = candidate
+                break
+        log.info(
+            "[tokens] --color-text-secondary contrast %.2f < 3.0 — using %s",
+            ratio, fixed,
+        )
+        out["--color-text-secondary"] = fixed
+    return out
+
+
 # CSS variable injection helper
 
 def _quote_font_value(value: str) -> str:
@@ -306,10 +493,22 @@ def _quote_font_value(value: str) -> str:
 
 
 def build_css_variable_block(tokens: dict[str, str]) -> str:
-    """Build a CSS :root block with all token values for injection into HTML."""
+    """Build a CSS :root block with all token values for injection into HTML.
+
+    Defense in depth: tokens whose name or value fails sanitizing are dropped
+    (never emitted raw into the ``<style>`` block).
+    """
     lines = [":root {"]
-    for var, value in tokens.items():
-        if var.startswith("--font") and value:
+    for var, raw in tokens.items():
+        value = sanitize_token_value(var, raw)
+        if (
+            value is None
+            or not isinstance(var, str)
+            or not re.fullmatch(r"--[A-Za-z0-9_-]+", var)
+        ):
+            log.debug("[tokens] dropping invalid token %r: %r", var, raw)
+            continue
+        if var.startswith("--font") and not var.startswith(_SIZE_PREFIXES):
             value = _quote_font_value(value)
         lines.append(f"  {var}: {value};")
     lines.append("}")

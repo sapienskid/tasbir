@@ -89,6 +89,9 @@ renders to PNG for visual verification.
 - Security hardening: fail-closed API keys, per-key Redis rate limit, SSRF guard, HTML sanitizer, input caps
 - Ephemeral artifact delivery (persist-until-TTL + `?consume=true` opt-in delete)
 - Manual edit → re-render endpoint (`POST /tasks/{id}/formats/{fmt}/rerender`)
+- **Manual Compose** (`/compose`, ADR-0021): operator picks template + copy + media per post,
+  zero LLM calls; batch → one task per post (`source_data.mode="manual"`), `compose_task`
+  renders with the same finalize/QC path as rerender; composition stored per task for re-edit
 - **Agent chat** (`GET/POST /tasks/{id}/chat`): DB-backed thread per (task, format);
   vision-capable design assistant proposes replacement HTML, applied review-then-render
 - **Visual editing** in the Studio: locked-down GrapesJS canvas (exact format dims,

@@ -20,7 +20,7 @@ from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.templates import TemplateRepository
 from app.models.design_system import DesignSystem
 from app.services.templates import template_to_dict
-from app.services.tokens import DEFAULT_TOKEN_VALUES
+from app.services.tokens import DEFAULT_TOKEN_VALUES, invalid_token_issues
 
 log = logging.getLogger(__name__)
 
@@ -50,6 +50,9 @@ def validate_design_system(data: dict) -> list[str]:
                 issues.append(f"token key {key!r} must start with '--'")
             if not isinstance(value, str):
                 issues.append(f"token {key} value must be a string")
+        # Values are injected verbatim into <style> — reject empty / unsafe /
+        # malformed values (e.g. ``--color-accent: ""`` or ``red}</style>``).
+        issues.extend(invalid_token_issues(tokens))
 
     campaigns = data.get("campaigns") or {}
     if not isinstance(campaigns, dict):
@@ -344,22 +347,18 @@ async def render_ds_preview(
     the design system's look — tokens, fonts, logo, footer — without any
     template-specific devices (rules, motifs) confusing the preview.
     """
-    from app.services.design_instruction import (
-        build_google_fonts_link,
-        inject_fonts_into_html,
-        substitute_logo,
-    )
-    from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html
+    from app.services.composer import finalize_html
+    from app.services.ds_context import DSContext
 
     tokens = dict(DEFAULT_TOKEN_VALUES)
     tokens.update(ds.tokens or {})
     footer = ds.footer or {"left": "", "right": ""}
-    logo = logo_data_uri(ds)
 
     html = _generic_preview_html(1080, 1080, footer)
-
-    html = inject_tokens_into_html(html, tokens)
-    di = ds.design_instruction or {}
-    html = inject_fonts_into_html(html, build_google_fonts_link(tokens, di))
-    html = substitute_logo(html, logo)
-    return html
+    ctx = DSContext(
+        ds_id=ds.id,
+        tokens=tokens,
+        design_instruction=ds.design_instruction or {},
+        logo=logo_data_uri(ds),
+    )
+    return finalize_html(html, ctx, katex=False)

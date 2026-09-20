@@ -122,6 +122,9 @@ def template_to_dict(row) -> dict:
         "design_system_id": row.design_system_id,
         "source": row.source,
         "is_active": bool(row.is_active),
+        "fields": detect_fields(row.html or ""),
+        "media_kinds": media_kinds(row.html or ""),
+        "has_media": has_media(row.html or ""),
     }
 
 
@@ -404,6 +407,66 @@ def apply_hidden(context: dict, hidden: list[str] | None) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Content fields + media (Manual Compose form derivation)
+# ---------------------------------------------------------------------------
+
+# Canonical content vars a composer form can fill, in display order.
+CONTENT_FIELDS = (
+    "kicker",
+    "headline",
+    "subhead",
+    "body",
+    "tagline",
+    "extra.price",
+    "extra.cta",
+    "extra.date",
+    "extra.location",
+    "extra.stat",
+    "extra.source",
+)
+_JINJA_BLOCK_RE = re.compile(r"\{\{(.*?)\}\}|\{%(.*?)%\}", re.DOTALL)
+_EXTRA_REF_RE = re.compile(
+    r"""extra\s*(?:\.get\(\s*['"](\w+)['"]|\[\s*['"](\w+)['"]\s*\]|\.\s*(\w+))"""
+)
+_ILLUSTRATION_RE = re.compile(r"\{\{-?\s*illustration\b")
+
+
+def detect_fields(html: str) -> list[str]:
+    """Content vars a template renders, among :data:`CONTENT_FIELDS`.
+
+    Scans only Jinja expressions/statements (``{{ … }}`` / ``{% … %}``) so CSS
+    or markup that merely contains the word "body" never counts. ``extra``
+    fields are recognized as ``extra.x``, ``extra['x']`` or ``extra.get('x')``.
+    """
+    found: set[str] = set()
+    for m in _JINJA_BLOCK_RE.finditer(html or ""):
+        expr = m.group(1) if m.group(1) is not None else m.group(2)
+        for ident in re.findall(r"(?<![\w.])([A-Za-z_]\w*)", expr):
+            if ident in CONTENT_FIELDS:
+                found.add(ident)
+        for em in _EXTRA_REF_RE.finditer(expr):
+            key = em.group(1) or em.group(2) or em.group(3)
+            if f"extra.{key}" in CONTENT_FIELDS:
+                found.add(f"extra.{key}")
+    return [f for f in CONTENT_FIELDS if f in found]
+
+
+def media_kinds(html: str) -> list[str]:
+    """Media a template can host: ``image`` (a ``data-image-key`` slot, for
+    uploads/photos) and/or ``illustration`` (it renders ``{{ illustration }}``)."""
+    image_slots, _ = scan_template_features(html or "")
+    kinds = ["image"] if image_slots else []
+    if _ILLUSTRATION_RE.search(html or ""):
+        kinds.append("illustration")
+    return kinds
+
+
+def has_media(html: str) -> bool:
+    """True when a template can host any media (see :func:`media_kinds`)."""
+    return bool(media_kinds(html))
+
+
+# ---------------------------------------------------------------------------
 # Promotion (edited HTML → template)
 # ---------------------------------------------------------------------------
 
@@ -620,13 +683,17 @@ async def push_recent_template_id(template_id: str) -> None:
 
 
 __all__ = [
+    "CONTENT_FIELDS",
     "build_template_context",
     "catalog_path",
+    "detect_fields",
     "extract_slots",
     "format_family",
     "get_environment",
     "get_recent_template_ids",
+    "has_media",
     "load_template_catalog",
+    "media_kinds",
     "push_recent_template_id",
     "render_template_file",
     "render_template_html",
