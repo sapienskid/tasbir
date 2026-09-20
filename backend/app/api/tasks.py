@@ -649,3 +649,340 @@ async def save_as_template(
         await tpl_repo.create({**data, "id": template_id})
 
     return {"template_id": template_id, "mode": request.mode, "file": f"db://{template_id}"}
+
+
+class RefillRequest(BaseModel):
+    """Structured content edit for a template-built format (no raw HTML).
+
+    ``slots`` maps data-slot names (headline, subhead, body, …) to new text.
+    ``hidden`` / ``media_position`` / ``template_id`` trigger a full template
+    re-fill; otherwise only the slot texts are swapped in place (media,
+    illustration, and counters are preserved exactly).
+    """
+
+    slots: dict[str, str] = Field(default_factory=dict)
+    hidden: list[str] | None = None
+    media_position: str = Field(default="auto", max_length=16)
+    template_id: str = Field(default="", max_length=64)
+    # Media change (same shape as Manual Compose media): upload / photo /
+    # illustration. Omitted = keep the post's baked media untouched.
+    media: dict | None = None
+
+
+@router.post("/{task_id}/formats/{fmt_id}/refill")
+async def refill_format(
+    task_id: str,
+    fmt_id: str,
+    request: RefillRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply a structured slot edit to a template-built format and re-render.
+
+    Text-only edits swap ``[data-slot]`` content in the current HTML (zero
+    LLM, media preserved). Element toggles, media position, or a template
+    switch re-fill the template deterministically, preserving baked images.
+    Runs the deterministic hard gate (no vision audit) and persists like a
+    rerender. 422 for posts not built from a template (designer-LLM output
+    and manual compositions use the HTML / composition paths instead).
+    """
+    import json
+
+    from app.config import get_settings
+    from app.services.composer import (
+        fill_template,
+        finalize_html,
+        katex_missing,
+        run_hard_checks,
+    )
+    from app.services.dom_extractor import render_to_png
+    from app.services.ds_context import resolve_ds_context
+    from app.services.sanitizer import sanitize_html
+    from app.services.templates import (
+        VALID_MEDIA_POSITIONS,
+        detect_elements,
+        extract_baked_images,
+        extract_slots,
+        format_family,
+        media_kinds,
+        replace_slots,
+    )
+
+    repo = TaskRepository(db)
+    task = await repo.get_by_id(task_id)
+    if not task:
+        raise NotFoundError(f"Task {task_id} not found")
+    if task.status in ("pending", "running"):
+        raise HTTPException(status_code=409, detail="Task is still processing")
+    if is_manual_task(task):
+        raise HTTPException(
+            status_code=422,
+            detail="Manually composed posts edit via PUT /tasks/{task_id}/composition instead",
+        )
+
+    validated = validate_platforms([fmt_id])
+    fmt_id = validated[0]
+    fmt = get_format_info(fmt_id)
+
+    if len(request.slots) > 32:
+        raise HTTPException(status_code=422, detail="At most 32 slots per refill")
+    for name, value in request.slots.items():
+        if len(name) > 64 or len(value) > 5000:
+            raise HTTPException(status_code=422, detail=f"Slot {name!r} exceeds size limits")
+
+    from app.db.repositories.templates import TemplateRepository
+
+    tpl_repo = TemplateRepository(db)
+    platform = ((task.result or {}).get("platforms") or {}).get(fmt_id, {})
+    current_template = platform.get("template_id") or ""
+    target_template = request.template_id.strip() or current_template
+    if not target_template:
+        raise HTTPException(
+            status_code=422,
+            detail="This post was not built from a template — edit the HTML instead",
+        )
+    row = await tpl_repo.get_by_id(target_template)
+    if not row:
+        raise HTTPException(status_code=422, detail=f"Template {target_template!r} not found")
+    if row.family != format_family(fmt_id):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Template {target_template!r} is {row.family}, not {format_family(fmt_id)}",
+        )
+
+    if request.media_position not in VALID_MEDIA_POSITIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"media_position must be one of {sorted(VALID_MEDIA_POSITIONS)}",
+        )
+    if request.hidden is not None:
+        known = set(detect_elements(row.html or ""))
+        unknown = [h for h in request.hidden if h not in known]
+        if unknown:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown hidden element(s) {unknown} — valid: {sorted(known)}",
+            )
+
+    if request.media is not None:
+        if not isinstance(request.media, dict):
+            raise HTTPException(status_code=422, detail="media must be an object")
+        kind = str(request.media.get("kind") or "")
+        if kind not in ("upload", "photo", "illustration"):
+            raise HTTPException(
+                status_code=422,
+                detail="media.kind must be upload, photo, or illustration",
+            )
+        kinds = media_kinds(row.html or "")
+        if kind in ("upload", "photo") and "image" not in kinds:
+            raise HTTPException(
+                status_code=422, detail="This template has no image slot",
+            )
+        if kind == "illustration" and "illustration" not in kinds:
+            raise HTTPException(
+                status_code=422, detail="This template has no illustration slot",
+            )
+        if kind == "upload":
+            data = str(request.media.get("data") or "")
+            if not data:
+                raise HTTPException(status_code=422, detail="Upload is empty")
+            if len(data) > 15_000_000:
+                raise HTTPException(status_code=422, detail="Upload too large")
+        if kind == "photo" and not str(request.media.get("url") or "").startswith("https://"):
+            raise HTTPException(status_code=422, detail="Photo needs an https url")
+
+    html = ((task.edited_html or {}).get(fmt_id)) or None
+    if html is None:
+        try:
+            html_path = resolve_output_file(task_id, f"{fmt_id}.html")
+        except FileNotFoundError:
+            raise NotFoundError(f"No HTML for {fmt_id} — render it first")
+        with open(html_path, encoding="utf-8") as f:
+            html = f.read()
+
+    source = task.source_data or {}
+    settings = get_settings()
+    ctx = await resolve_ds_context(
+        db, source.get("design_system_id") or "default", source.get("style_language") or ""
+    )
+    brief = ((task.result or {}).get("strategic_brief") or {})
+    category = source.get("category") or brief.get("category") or ""
+    ground = brief.get("ground", "white")
+    if ground not in ("white", "black"):
+        ground = "white"
+
+    merged = extract_slots(html)
+    merged.update(request.slots)
+
+    full_refill = (
+        bool(request.template_id.strip() and request.template_id.strip() != current_template)
+        or request.hidden is not None
+        or request.media_position != "auto"
+        or request.media is not None
+    )
+    if full_refill:
+        from app.services.composer import fetch_photo, render_illustration
+        from app.services.formats import parse_carousel_slide
+
+        seed = f"{source.get('title', '')}|{fmt_id}"
+        # Media: an explicit change wins; otherwise the post's baked images
+        # carry over so a text/toggle/template edit never drops the art.
+        images: list[dict] = []
+        photo: dict | None = None
+        illustration: str | None = None
+        has_image = False
+        req_media = request.media or {}
+        req_kind = str(req_media.get("kind") or "")
+        if req_kind == "upload":
+            images = [
+                {
+                    "data": str(req_media.get("data") or ""),
+                    "mime": str(req_media.get("mime") or "image/png"),
+                    "alt": str(req_media.get("alt") or ""),
+                }
+            ]
+            has_image = True
+            illustration = ""  # never a procedural figure on top of a real image
+        elif req_kind == "photo":
+            image = await fetch_photo(req_media)
+            if image is None:
+                raise HTTPException(
+                    status_code=422, detail="Stock photo could not be downloaded"
+                )
+            photo = {"image": image, "credit": str(req_media.get("credit") or "")}
+            has_image = True
+            illustration = ""
+        elif req_kind == "illustration":
+            illustration = render_illustration(
+                str(req_media.get("style") or "procedural"),
+                str(req_media.get("seed") or f"{seed}|media"),
+                ground,
+            )
+        else:
+            baked = extract_baked_images(html)
+            images = baked
+            has_image = bool(baked)
+        copy = {
+            "headline": merged.get("headline", ""),
+            "subhead": merged.get("subhead", ""),
+            "body": merged.get("body", ""),
+            "tagline": merged.get("tagline", ""),
+            "extra": {
+                k[6:]: v for k, v in merged.items() if k.startswith("extra.") and v
+            },
+            "badge": None,
+        }
+        hidden = request.hidden if request.hidden is not None else (row.hidden_elements or [])
+        media_position = (
+            request.media_position
+            if request.media_position != "auto"
+            else (row.media_position or "auto")
+        )
+        parsed = parse_carousel_slide(fmt_id)
+        slide_index, slide_total = (parsed[1], 0) if parsed else (0, 0)
+        if parsed:
+            base = parsed[0]
+            keys = (task.result or {}).get("platforms") or {}
+            slide_total = len([p for p in keys if p.startswith(f"{base}-")])
+            slide_total = slide_total or int(source.get("slides") or 0)
+        seed = f"{source.get('title', '')}|{fmt_id}"
+        filled = fill_template(
+            row.html or "",
+            copy=copy,
+            kicker=merged.get("kicker", "") or category,
+            ground=ground,
+            footer=ctx.footer,
+            width=fmt.width,
+            height=fmt.height,
+            has_image=has_image,
+            seed=seed,
+            family=format_family(fmt_id),
+            logo=ctx.logo,
+            di_config=ctx.design_instruction,
+            illustration=illustration,
+            slide_index=slide_index,
+            slide_total=slide_total,
+            media_position=media_position,
+            hidden=hidden,
+            photo=photo,
+            grayscale=None if photo is None else True,
+        )
+        filled = sanitize_html(filled, mode="strict")
+        filled = finalize_html(filled, ctx, images or None, grayscale=None)
+        if parsed and slide_total > 0:
+            from app.agents.orchestrator.nodes.renderer import inject_slide_counter
+
+            filled = inject_slide_counter(filled, slide_index, slide_total)
+        html = filled
+    else:
+        if not request.slots:
+            raise HTTPException(status_code=422, detail="Provide at least one slot")
+        html, replaced = replace_slots(html, request.slots)
+        if not replaced:
+            raise HTTPException(
+                status_code=422,
+                detail=f"No matching data-slot found — available: {sorted(extract_slots(html))}",
+            )
+        html = sanitize_html(html, mode="preserve_system")
+        html = finalize_html(
+            html, ctx, source.get("images") or [], katex=katex_missing(html), logo=False
+        )
+
+    issues = await run_hard_checks(html, ctx, fmt.width, fmt.height, category)
+    passed = not issues
+    score = 100 if passed else 20
+    critique = "No issues." if passed else "Fix: " + "; ".join(issues)
+
+    png_bytes = await render_to_png(html, fmt.width, fmt.height)
+    if not png_bytes:
+        issues.append(
+            "PNG render unavailable — the HTML was saved; re-render to regenerate the image"
+        )
+        passed = False
+        score = min(score, 40)
+
+    out_dir = os.path.join(settings.output_dir, task_id)
+    os.makedirs(out_dir, exist_ok=True)
+    png_path = os.path.join(out_dir, f"{fmt_id}.png")
+    html_path = os.path.join(out_dir, f"{fmt_id}.html")
+    with open(html_path, "w", encoding="utf-8") as fh:
+        fh.write(html)
+    if png_bytes:
+        with open(png_path, "wb") as fh:
+            fh.write(png_bytes)
+
+    from datetime import datetime, timezone
+
+    result = dict(task.result or {})
+    platforms = dict(result.get("platforms") or {})
+    platforms[fmt_id] = {
+        **(platforms.get(fmt_id) or {}),
+        "status": "verified" if passed else "needs_review",
+        "quality_score": score,
+        "quality_issues": issues,
+        "html_path": html_path,
+        "template_id": target_template,
+        "copy": json.dumps(
+            {
+                "headline": merged.get("headline", ""),
+                "subhead": merged.get("subhead", ""),
+                "body": merged.get("body", ""),
+                "tagline": merged.get("tagline", ""),
+                "badge": None,
+            }
+        ),
+        "refilled_at": datetime.now(timezone.utc).isoformat(),
+    }
+    result["platforms"] = platforms
+    await repo.update_status(task_id=task_id, status=task.status, result=result)
+
+    edited = dict(task.edited_html or {})
+    edited[fmt_id] = html
+    await repo.save_edited_html(task_id=task_id, edited_html=edited)
+
+    return {
+        "format": fmt_id,
+        "pass": passed,
+        "quality": {"score": score, "issues": issues, "critique": critique},
+        "png_b64": base64.b64encode(png_bytes).decode("ascii") if png_bytes else "",
+        "template_id": target_template,
+    }

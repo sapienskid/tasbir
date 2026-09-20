@@ -626,6 +626,54 @@ def slotize_html(html: str) -> str:
     return joined
 
 
+def replace_slots(html: str, slots: dict[str, str]) -> tuple[str, list[str]]:
+    """Swap [data-slot] texts in rendered HTML. Returns (html, replaced_names).
+
+    Built on BeautifulSoup (html.parser tree): each matching element's
+    children are replaced with the new text (auto-escaped, never parsed as
+    markup). Unknown slot names (no matching element) are ignored.
+    """
+    if not slots:
+        return html, []
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    replaced: list[str] = []
+    for el in soup.find_all(attrs={"data-slot": True}):
+        name = el.get("data-slot")
+        if isinstance(name, list):
+            name = name[0] if name else ""
+        if not name or name not in slots:
+            continue
+        el.string = slots[name]
+        replaced.append(str(name))
+    return str(soup), sorted(set(replaced))
+
+
+def extract_baked_images(html: str) -> list[dict]:
+    """Pull baked base64 images out of rendered HTML for re-embedding.
+
+    Returns ``[{data, mime, alt}]`` ordered by data-image-key so a template
+    re-fill can preserve the post's media via ``substitute_image_keys``.
+    Non-data-URI sources (unrendered markers) are skipped.
+    """
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html or "", "html.parser")
+    found: dict[int, dict] = {}
+    for img in soup.find_all("img", attrs={"data-image-key": True}):
+        src = str(img.get("src") or "")
+        if not src.startswith("data:") or ";base64," not in src:
+            continue
+        try:
+            key = int(str(img.get("data-image-key")))
+        except (TypeError, ValueError):
+            continue
+        mime, _, data = src[5:].partition(";base64,")
+        found[key] = {"data": data, "mime": mime or "image/png", "alt": str(img.get("alt") or "")}
+    return [found[k] for k in sorted(found)]
+
+
 def scan_template_features(html: str) -> tuple[list[dict], bool]:
     """Derive image_slots + has_logo_slot from a template's markers."""
     keys = set(re.findall(r'data-image-key=["\'](\d+)["\']', html))
@@ -687,6 +735,7 @@ __all__ = [
     "build_template_context",
     "catalog_path",
     "detect_fields",
+    "extract_baked_images",
     "extract_slots",
     "format_family",
     "get_environment",
@@ -697,6 +746,7 @@ __all__ = [
     "push_recent_template_id",
     "render_template_file",
     "render_template_html",
+    "replace_slots",
     "scan_template_features",
     "select_template",
     "slotize_html",
