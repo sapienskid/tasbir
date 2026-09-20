@@ -129,6 +129,8 @@ export interface PlatformResult {
   quality_issues: string[]
   html_path?: string
   template_id?: string | null
+  /** Stored copy JSON (headline/subhead/body/…) for template-built formats. */
+  copy?: string
   error?: string | null
   rerendered_at?: string | null
 }
@@ -179,6 +181,38 @@ export interface RetryResponse {
   html_path: string
   png_path: string | null
   template_id: string | null
+}
+
+export interface RefillRequest {
+  slots?: Record<string, string>
+  hidden?: string[] | null
+  media_position?: string
+  template_id?: string
+  media?: Record<string, string>
+}
+
+export interface RefillResponse {
+  format: string
+  pass: boolean
+  quality: {
+    score: number
+    issues: string[]
+    critique: string
+  }
+  png_b64: string
+  template_id: string
+}
+
+/** Structured slot edit (template-built formats) — no raw HTML involved. */
+export function refillFormat(
+  taskId: string,
+  format: string,
+  body: RefillRequest
+): Promise<RefillResponse> {
+  return apiRequest(`/tasks/${taskId}/formats/${format}/refill`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
 }
 
 export interface GenerateResponse {
