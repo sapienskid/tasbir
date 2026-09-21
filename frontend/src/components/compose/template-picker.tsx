@@ -112,6 +112,7 @@ export function TemplatePicker({
   onHidden,
   onMediaPosition,
   onApplyAll,
+  showApplyAll = true,
 }: {
   family: string
   templates: Template[]
@@ -125,6 +126,8 @@ export function TemplatePicker({
   onHidden: (hidden: string[] | null) => void
   onMediaPosition: (p: ComposeMediaPosition) => void
   onApplyAll: (scope: "post" | "all") => void
+  /** Hide the bulk-apply buttons (single-post editors apply directly). */
+  showApplyAll?: boolean
 }) {
   // The list payload has no HTML — fetch the selected template for toggles.
   const { data: full } = useSWR(
@@ -142,7 +145,7 @@ export function TemplatePicker({
           <span id="tpl-gallery-label" className="text-xs text-muted-foreground">
             {family} templates · {templates.length}
           </span>
-          {selected ? (
+          {selected && showApplyAll ? (
             <div className="flex gap-1">
               {multiSlide ? (
                 <Button size="xs" variant="outline" onClick={() => onApplyAll("post")}>

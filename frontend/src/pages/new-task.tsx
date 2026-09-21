@@ -421,8 +421,8 @@ export default function NewTaskPage() {
                   <p className="font-medium">{s.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {s.description || s.id} · {s.template_count ?? "?"} templates ·{" "}
-                    {(s.design_instruction as { style_language?: string } | undefined)?.style_language ??
-                      "swiss-editorial"}
+                    {(s.design_instruction as { style_language?: string } | undefined)?.style_language ||
+                      "no language"}
                   </p>
                 </div>
                 {dsId === s.id ? <Check aria-hidden="true" className="size-4 text-primary" /> : null}

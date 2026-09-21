@@ -45,3 +45,28 @@ export function detectOverflow(doc: Document, width: number, height: number): st
   }
   return [...hits]
 }
+
+/**
+ * Patch slot texts straight into a live document — the instant path for
+ * typing. Only touches elements whose text actually differs, so an element
+ * being edited inline (`skip`) or already up to date never gets rewritten
+ * (which would reset the caret). Returns how many elements changed.
+ */
+export function applySlotsToDocument(
+  doc: Document,
+  slots: Readonly<Record<string, string>>,
+  only?: readonly string[],
+  skip?: Element | null
+): number {
+  let changed = 0
+  doc.querySelectorAll<HTMLElement>("[data-slot]").forEach((el) => {
+    const name = el.getAttribute("data-slot")
+    if (!name || (only && !only.includes(name)) || !(name in slots)) return
+    if (skip && el === skip) return
+    const text = slots[name]
+    if (el.textContent === text) return
+    el.textContent = text
+    changed++
+  })
+  return changed
+}

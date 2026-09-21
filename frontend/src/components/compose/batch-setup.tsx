@@ -47,8 +47,8 @@ export function BatchSetup({
 }) {
   const ds = systems.find((s) => s.id === designSystemId)
   const ownLanguage =
-    (ds?.design_instruction as { style_language?: string } | undefined)?.style_language ??
-    "swiss-editorial"
+    (ds?.design_instruction as { style_language?: string } | undefined)?.style_language ||
+    "none"
   return (
     <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_minmax(0,1fr)] xl:items-end">
       <div className="grid gap-1.5">

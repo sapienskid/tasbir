@@ -39,11 +39,21 @@ export function clearApiKey(): void {
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  /** Server-suggested wait (from a `Retry-After` header), in milliseconds. */
+  retryAfterMs?: number
+  constructor(status: number, message: string, retryAfterMs?: number) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.retryAfterMs = retryAfterMs
   }
+}
+
+function retryAfterOf(res: Response): number | undefined {
+  const raw = res.headers.get("retry-after")
+  if (!raw) return undefined
+  const secs = Number(raw)
+  return Number.isFinite(secs) && secs >= 0 ? Math.min(secs, 120) * 1000 : undefined
 }
 
 async function authHeaders(init: RequestInit): Promise<Headers> {
@@ -69,7 +79,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, detail)
+    throw new ApiError(res.status, detail, retryAfterOf(res))
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -189,6 +199,16 @@ export interface RefillRequest {
   media_position?: string
   template_id?: string
   media?: Record<string, string>
+  /** Re-fill under another design system (template is remapped server-side). */
+  design_system_id?: string
+}
+
+/** Persisted editor metadata the server keeps per (task, format). */
+export interface EditorMeta {
+  hidden?: string[] | null
+  media_position?: string
+  media_kind?: string
+  revision?: number
 }
 
 export interface RefillResponse {
@@ -201,18 +221,97 @@ export interface RefillResponse {
   }
   png_b64: string
   template_id: string
+  /** Finalized document as persisted — the client never has to refetch it. */
+  html?: string
+  /** +1 per successful persist per (task, format). */
+  revision?: number
+  saved_at?: string
+  editor?: EditorMeta
+  /** True when a designer-LLM post was converted to a template post. */
+  converted?: boolean
+  /** Effective design system after the refill (override or task default). */
+  design_system_id?: string
+  /** Template remap applied by a design-system switch, if any. */
+  remapped?: { from: string; to: string } | null
+}
+
+export interface RefillPreviewResponse {
+  html: string
+  width: number
+  height: number
+  template_id: string
+  slots: Record<string, string>
+  converted: boolean
+  design_system_id?: string
+  remapped?: { from: string; to: string } | null
+}
+
+export interface RequestOpts {
+  signal?: AbortSignal
+  /** Let the request outlive the page (route change / unload flush). */
+  keepalive?: boolean
 }
 
 /** Structured slot edit (template-built formats) — no raw HTML involved. */
 export function refillFormat(
   taskId: string,
   format: string,
-  body: RefillRequest
+  body: RefillRequest,
+  opts: RequestOpts = {}
 ): Promise<RefillResponse> {
   return apiRequest(`/tasks/${taskId}/formats/${format}/refill`, {
     method: "POST",
     body: JSON.stringify(body),
+    signal: opts.signal,
+    keepalive: opts.keepalive,
   })
+}
+
+/** Fast preview of a refill — no PNG, no hard checks, no writes. */
+export function refillPreview(
+  taskId: string,
+  format: string,
+  body: RefillRequest,
+  opts: RequestOpts = {}
+): Promise<RefillPreviewResponse> {
+  return apiRequest(`/tasks/${taskId}/formats/${format}/refill/preview`, {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal: opts.signal,
+  })
+}
+
+/** Media as reported by the editor-state endpoint (never carries base64). */
+export interface EditorMedia {
+  kind: "none" | "upload" | "photo" | "illustration"
+  [key: string]: unknown
+}
+
+export interface EditorState {
+  editable: boolean
+  convertible: boolean
+  reason: string | null
+  template_id: string
+  family: string
+  ground: "white" | "black"
+  width: number
+  height: number
+  slots: Record<string, string>
+  hidden: string[] | null
+  media_position: string
+  media: EditorMedia
+  media_kinds: Array<"image" | "illustration">
+  revision: number
+  design_system_id: string
+  style_language: string
+}
+
+export function getEditorState(
+  taskId: string,
+  format: string,
+  opts: RequestOpts = {}
+): Promise<EditorState> {
+  return apiRequest(`/tasks/${taskId}/formats/${format}/editor`, { signal: opts.signal })
 }
 
 export interface GenerateResponse {

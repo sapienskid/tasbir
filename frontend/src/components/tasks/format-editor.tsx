@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { HtmlEditor } from "@/components/editor/html-editor"
 import { useDebouncedValue } from "@/components/editor/use-debounce"
-import { SlotPreview, type SlotPreviewHandle } from "@/components/tasks/slot-preview"
+import { SlotPreview, type FrameKey, type SlotPreviewHandle } from "@/components/tasks/slot-preview"
+import { SavePill } from "@/components/tasks/save-pill"
+import { useEditorSession } from "@/hooks/use-editor-session"
 import { StructuredEditor } from "@/components/tasks/structured-editor"
-import { parseSlots } from "@/components/tasks/slot-utils"
 import { InspectorRail, type QcState } from "@/components/tasks/inspector-rail"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,8 +20,10 @@ import {
   FileCode2,
   FileImage,
   MoreVertical,
+  Redo2,
   RefreshCw,
   Save,
+  Undo2,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -28,15 +31,27 @@ import {
   downloadBlob,
   fetchBlob,
   fetchText,
+  mapComposeTemplates,
   refillFormat,
-  type RefillRequest,
   type RerenderResponse,
   type RetryResponse,
   type TaskDetail,
 } from "@/lib/api"
-import { usePlatforms } from "@/hooks/use-platforms"
-import { platformFamily } from "@/components/compose/model"
+import { useDesignSystems } from "@/hooks/use-library"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { formatLabel } from "@/components/tasks/format-utils"
+
+/** Carousel slide ids (instagram-carousel-2) → their base platform for mapping. */
+function carouselBase(fmt: string): string {
+  const m = /^(instagram-carousel(?:-portrait)?)-\d+$/.exec(fmt)
+  return m ? m[1] : fmt
+}
 
 /**
  * Agent-post editor, compose-style: structured Content panel on the left,
@@ -77,19 +92,86 @@ export function FormatEditor({
   const [templateId, setTemplateId] = useState<string | null>(null)
 
   const previewRef = useRef<SlotPreviewHandle>(null)
-  const { platforms } = usePlatforms()
 
-  const livePreviewHtml = useDebouncedValue(draft, 300)
-  const slots = useMemo(() => parseSlots(draft), [draft])
+  // Structured editing session: one shared store (form + inline), latest-wins
+  // server previews and a coalesced background save. Survives navigation.
+  const { session, snap } = useEditorSession(taskId, format, () => prefetchFormat(format), {
+    onPersisted: ({ html, pngB64 }) => {
+      if (pngB64) cachePng(format, `data:image/png;base64,${pngB64}`)
+      if (html) cacheHtml(format, html)
+      onMutate()
+    },
+    onNotify: ({ level, message }) => (level === "error" ? toast.error(message) : toast(message)),
+  })
+  const structured = snap.phase === "ready" && snap.info !== null
 
-  const designSystemId =
+  const { data: systems } = useDesignSystems()
+  const activeSystems = (systems ?? []).filter((s) => s.is_active !== false)
+  const taskDs =
     (task?.source_data as { design_system_id?: string } | undefined)?.design_system_id ??
     "default"
-  const ground =
-    ((task?.result?.strategic_brief as { ground?: string } | undefined)?.ground === "black"
-      ? "black"
-      : "white") as "white" | "black"
-  const family = platformFamily(format, platforms)
+  const curDs = snap.info?.design_system_id ?? taskDs
+  const [remapping, setRemapping] = useState(false)
+
+  // Design-system switch, manual-compose style: remap the current template
+  // onto the new system, then re-fill under it in one store commit (one undo
+  // step). Designer posts convert via a direct refill that auto-picks.
+  const switchDesignSystem = useCallback(
+    async (newId: string) => {
+      if (!newId || newId === curDs || remapping) return
+      const name = activeSystems.find((d) => d.id === newId)?.name ?? newId
+      if (!structured) {
+        setRemapping(true)
+        try {
+          await refillFormat(taskId, format, { design_system_id: newId })
+          toast.success(`Switched to ${name} — re-rendered under the new system`)
+          onMutate()
+          await session.load(() => prefetchFormat(format))
+        } catch (err) {
+          toast.error(
+            `Couldn't switch design system — ${err instanceof Error ? err.message : "unknown error"}`
+          )
+        } finally {
+          setRemapping(false)
+        }
+        return
+      }
+      const curTpl = session.store.doc.templateId
+      setRemapping(true)
+      try {
+        let mapped = ""
+        if (curTpl) {
+          const res = await mapComposeTemplates({
+            from_design_system_id: curDs,
+            to_design_system_id: newId,
+            template_ids: [curTpl],
+            platform: carouselBase(format),
+          })
+          mapped = res.mapping?.[curTpl] ?? ""
+        }
+        session.store.setDesignSystem(newId, mapped)
+        if (mapped && mapped !== curTpl) {
+          toast.success(`Switched to ${name} — remapped ${curTpl} → ${mapped}`)
+        } else if (mapped) {
+          toast.success(`Switched to ${name} — template kept`)
+        } else {
+          toast.success(`Switched to ${name} — picking a matching template`)
+        }
+        await session.flush()
+        await session.load(() => prefetchFormat(format))
+        onMutate()
+      } catch (err) {
+        toast.error(
+          `Couldn't switch design system — ${err instanceof Error ? err.message : "unknown error"}`
+        )
+      } finally {
+        setRemapping(false)
+      }
+    },
+    [curDs, remapping, structured, session, taskId, format, activeSystems, prefetchFormat, onMutate]
+  )
+
+  const livePreviewHtml = useDebouncedValue(draft, 300)
 
   // Ctrl/Cmd ± / 0 and Ctrl+wheel zoom the preview, never the browser page.
   useEffect(() => {
@@ -177,36 +259,6 @@ export function FormatEditor({
     [format, taskId, cachePng, cacheHtml, onMutate]
   )
 
-  /** Structured edit (form or inline slot): refill → fresh HTML + QC. Throws. */
-  const doRefill = useCallback(
-    async (body: RefillRequest) => {
-      setBusy(true)
-      try {
-        const res = await refillFormat(taskId, format, body)
-        if (res.template_id) setTemplateId(res.template_id)
-        setQc({
-          score: res.quality.score,
-          issues: res.quality.issues,
-          critique: res.quality.critique,
-          status: res.pass ? "verified" : "needs_review",
-        })
-        await applyServerHtml(res.png_b64)
-      } finally {
-        setBusy(false)
-      }
-    },
-    [taskId, format, applyServerHtml]
-  )
-
-  const handleSlotCommit = useCallback(
-    (slot: string, text: string) => {
-      void doRefill({ slots: { [slot]: text } }).catch((err) => {
-        toast.error(err instanceof Error ? err.message : "Inline edit failed")
-      })
-    },
-    [doRefill]
-  )
-
   const handleRerender = useCallback(
     async (audit: boolean) => {
       setBusy(true)
@@ -223,13 +275,14 @@ export function FormatEditor({
           status: res.pass ? "verified" : "needs_review",
         })
         toast.success(res.pass ? "Saved & rendered" : "Saved — review the issues")
+        void session.load(() => prefetchFormat(format))
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Re-render failed")
       } finally {
         setBusy(false)
       }
     },
-    [format, taskId, draft, applyServerHtml]
+    [format, taskId, draft, applyServerHtml, session, prefetchFormat]
   )
 
   const handleRetry = useCallback(async () => {
@@ -254,13 +307,14 @@ export function FormatEditor({
         status: res.pass ? "verified" : "needs_review",
       })
       toast.success(res.pass ? "Retry passed verification" : "Retry done — still has issues")
+      void session.load(() => prefetchFormat(format))
       onMutate()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Retry failed")
     } finally {
       setBusy(false)
     }
-  }, [taskId, format, prefetchFormat, cachePng, onMutate])
+  }, [taskId, format, prefetchFormat, cachePng, onMutate, session])
 
   const applyHtml = useCallback(
     (html: string) => {
@@ -300,6 +354,60 @@ export function FormatEditor({
     toast.error("No HTML available")
   }, [draft, format])
 
+  const flushNow = useCallback(
+    async (announce: boolean) => {
+      const ok = await session.flush()
+      if (announce) {
+        if (ok) toast.success("Saved")
+        else toast.error("Couldn't save — see the status pill")
+      }
+    },
+    [session]
+  )
+
+  // Undo / redo / save shortcuts (also forwarded from inside the preview frame).
+  const handleKey = useCallback(
+    (e: { key: string; ctrl: boolean; shift: boolean; preventDefault: () => void }) => {
+      if (mode !== "content" || !structured) return false
+      const k = e.key.toLowerCase()
+      if (e.ctrl && k === "z") {
+        e.preventDefault()
+        if (e.shift) session.redo()
+        else session.undo()
+        return true
+      }
+      if (e.ctrl && k === "y") {
+        e.preventDefault()
+        session.redo()
+        return true
+      }
+      if (e.ctrl && k === "s") {
+        e.preventDefault()
+        void flushNow(true)
+        return true
+      }
+      return false
+    },
+    [mode, structured, session, flushNow]
+  )
+  const onFrameKey = useCallback((e: FrameKey) => void handleKey(e), [handleKey])
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (!(ev.ctrlKey || ev.metaKey)) return
+      const t = ev.target as HTMLElement | null
+      // Leave the agent chat / code editor's own undo alone.
+      if (t?.closest("aside, .monaco-editor")) return
+      handleKey({
+        key: ev.key,
+        ctrl: true,
+        shift: ev.shiftKey,
+        preventDefault: () => ev.preventDefault(),
+      })
+    }
+    window.addEventListener("keydown", onKey, true)
+    return () => window.removeEventListener("keydown", onKey, true)
+  }, [handleKey])
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -312,13 +420,72 @@ export function FormatEditor({
           <span className="text-xs text-muted-foreground">
             {dims.width}×{dims.height}
           </span>
-          {templateId ? (
+          {snap.info?.template_id || templateId ? (
             <span className="hidden rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground xl:inline">
-              {templateId}
+              {snap.info?.template_id || templateId}
             </span>
+          ) : null}
+          {activeSystems.length > 1 ? (
+            <Select
+              value={activeSystems.some((s) => s.id === curDs) ? curDs : undefined}
+              onValueChange={(id) => void switchDesignSystem(id)}
+              disabled={
+                remapping ||
+                snap.phase === "loading" ||
+                (snap.info !== null && !snap.info.editable && snap.info.reason !== "designer")
+              }
+            >
+              <SelectTrigger
+                className="h-7 w-40 text-xs"
+                aria-label="Design system"
+                title={
+                  snap.info !== null && !snap.info.editable && snap.info.reason !== "designer"
+                    ? "Design system switching needs a convertible post"
+                    : undefined
+                }
+              >
+                <SelectValue placeholder="Design system" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeSystems.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name || s.id}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : null}
         </div>
         <div className="flex items-center gap-2">
+          {structured && mode === "content" ? (
+            <>
+              <SavePill save={snap.save} onRetry={() => void session.retrySave()} />
+              <div className="flex items-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label="Undo"
+                  title="Undo (Ctrl/Cmd+Z)"
+                  disabled={!snap.canUndo}
+                  onClick={() => session.undo()}
+                >
+                  <Undo2 aria-hidden="true" className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  aria-label="Redo"
+                  title="Redo (Shift+Ctrl/Cmd+Z)"
+                  disabled={!snap.canRedo}
+                  onClick={() => session.redo()}
+                >
+                  <Redo2 aria-hidden="true" className="size-4" />
+                </Button>
+              </div>
+            </>
+          ) : null}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" aria-label="More options">
@@ -357,16 +524,37 @@ export function FormatEditor({
               Retry designer
             </Button>
           ) : null}
-          <Button size="sm" onClick={() => void handleRerender(false)} disabled={busy}>
-            <Save aria-hidden="true" className="size-4" />
-            {busy ? "Saving…" : "Save & Render"}
-          </Button>
+          {structured && mode === "content" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void flushNow(true)}
+              disabled={snap.save.phase === "saved"}
+              title="Save now (Ctrl/Cmd+S)"
+            >
+              <Save aria-hidden="true" className="size-4" />
+              Save
+            </Button>
+          ) : (
+            <Button size="sm" onClick={() => void handleRerender(false)} disabled={busy}>
+              <Save aria-hidden="true" className="size-4" />
+              {busy ? "Saving…" : "Save & Render"}
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="grid items-start gap-4 xl:grid-cols-[340px_minmax(0,1fr)_360px]">
         <div className="grid min-w-0 content-start gap-2">
-          <Tabs value={mode} onValueChange={(v) => setMode(v as "content" | "code")}>
+          <Tabs
+            value={mode}
+            onValueChange={(v) => {
+              if (v === "code" && structured) {
+                void session.flush().then(() => setDraft(snap.html))
+              }
+              setMode(v as "content" | "code")
+            }}
+          >
             <TabsList className="h-8 w-full">
               <TabsTrigger value="content" className="flex-1 px-3 text-xs">
                 Content
@@ -378,23 +566,21 @@ export function FormatEditor({
             </TabsList>
           </Tabs>
           <div className="min-h-[40vh] overflow-y-auto rounded-md border p-3 xl:h-[65vh]">
-            {mode === "content" && templateId ? (
-              <StructuredEditor
-                format={format}
-                slots={slots}
-                templateId={templateId}
-                designSystemId={designSystemId}
-                ground={ground}
-                family={family}
-                refilling={busy}
-                onRefill={doRefill}
-              />
+            {mode === "content" && structured && snap.info ? (
+              <StructuredEditor session={session} info={snap.info} />
+            ) : mode === "content" && snap.phase === "loading" ? (
+              <p className="text-xs text-muted-foreground">Loading editor…</p>
+            ) : mode === "content" && snap.phase === "error" ? (
+              <p className="rounded-md border border-destructive/50 p-3 text-xs text-destructive">
+                {snap.error ?? "Couldn't load the editor."}
+              </p>
             ) : mode === "content" ? (
               <div className="grid gap-2 text-sm">
                 <p className="font-medium">Freeform AI design</p>
                 <p className="text-xs text-muted-foreground">
-                  This post wasn't built from a template, so there are no structured
-                  fields. Edit the HTML directly, or ask the agent chat to change it.
+                  {snap.info?.reason === "manual"
+                    ? "Manually composed posts are edited from their composition."
+                    : "This post wasn't built from a template, so there are no structured fields. Edit the HTML directly, or ask the agent chat to change it."}
                 </p>
                 <Button size="sm" variant="outline" onClick={() => setMode("code")}>
                   Open Code
@@ -411,20 +597,32 @@ export function FormatEditor({
         <div className="h-[60vh] min-w-0 overflow-hidden rounded-md border xl:h-[calc(65vh+44px)]">
           <SlotPreview
             ref={previewRef}
-            html={livePreviewHtml}
+            html={mode === "content" && structured ? snap.html : livePreviewHtml}
+            htmlVersion={mode === "content" && structured ? snap.htmlVersion : 0}
             width={dims.width}
             height={dims.height}
-            editable={Boolean(templateId) && !busy}
-            onSlotCommit={handleSlotCommit}
+            store={mode === "content" && structured ? session.store : null}
+            editable={mode === "content" && structured}
+            updating={snap.updating}
+            onHotkey={onFrameKey}
           />
         </div>
 
         <aside className="h-[60vh] min-w-0 xl:h-[calc(65vh+44px)]">
           <InspectorRail
-            qc={qc}
+            qc={
+              snap.qc
+                ? {
+                    score: snap.qc.score,
+                    issues: snap.qc.issues,
+                    critique: snap.qc.critique,
+                    status: snap.qc.pass ? "verified" : "needs_review",
+                  }
+                : qc
+            }
             taskId={taskId}
             format={format}
-            currentHtml={draft}
+            currentHtml={mode === "content" && structured ? snap.html : draft}
             defaultTab="agent"
             onApplyHtml={applyHtml}
             onApplyAndRender={(html) => void applyAndRender(html)}
