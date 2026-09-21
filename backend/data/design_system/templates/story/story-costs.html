@@ -39,8 +39,9 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-sm, 0px);
   font-family: var(--font-display);
-  font-weight: 500;
+  font-weight: clamp(300, calc(var(--font-weight-display, 700) - 200), 900);
   font-size: {{ (22 * tscale) | round | int }}px;
 }
 body[data-ground="black"] .mark { background: var(--color-text-inverted); color: var(--color-bg-inverted); }
@@ -80,13 +81,15 @@ body[data-ground="black"] .grid { color: var(--color-text-secondary); }
 .headline {
   font-family: var(--font-display);
   font-size: {{ (48 * tscale) | round | int }}px;
-  font-weight: 500;
+  font-weight: clamp(300, calc(var(--font-weight-display, 700) - 200), 900);
   line-height: 1.25;
   letter-spacing: -0.015em;
   max-width: {{ (width * 0.86) | round | int }}px;
   background: var(--color-text);
   color: var(--color-bg);
   padding: {{ (width * 0.03) | round | int }}px {{ (width * 0.035) | round | int }}px;
+  border-radius: var(--radius-md, 0px);
+  box-shadow: var(--shadow-md, none);
 }
 body[data-ground="black"] .headline {
   background: var(--color-text-inverted);
@@ -106,6 +109,29 @@ body[data-ground="black"] .headline {
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
+.subhead {
+  margin-top: {{ (height * 0.02) | round | int }}px;
+  font-family: var(--font-serif);
+  font-size: {{ (34 * tscale) | round | int }}px;
+  line-height: 1.4;
+  color: var(--color-text);
+  max-width: {{ (width * 0.86) | round | int }}px;
+}
+body[data-ground="black"] .subhead { color: var(--color-text-inverted); }
+{% if logo %}
+{% set lh = [ (width * 0.03) | round | int, 24 ] | max %}
+/* brand logo — on solid ground only, clear space >= 1x its own height, never rotated/recoloured */
+body { position: relative; }
+.brand-logo { position: absolute; top: {{ (height * 0.09) | round | int }}px; right: {{ (width * 0.07) | round | int }}px; height: {{ lh }}px; width: auto; max-width: {{ (width * 0.22) | round | int }}px; object-fit: contain; display: block; }
+{% endif %}
+{% if has_accent %}
+/* accent · the index mark and the headline badge sit on accent fills (ink text) — the accent is never a text colour */
+.mark:not(:empty), body[data-ground="black"] .mark:not(:empty),
+.headline:not(:empty), body[data-ground="black"] .headline:not(:empty) {
+  background: var(--color-accent, var(--color-text-inverted));
+  color: var(--color-text);
+}
+{% endif %}
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -120,6 +146,9 @@ body[data-ground="black"] .headline {
 
     <div class="kicker" data-slot="kicker">{{ kicker }}</div>
     <h1 class="headline" data-slot="headline">{{ headline }}</h1>
+    {% if subhead %}
+    <div class="subhead" data-slot="subhead">{{ subhead }}</div>
+    {% endif %}
 
     {% if meta or footer_right %}
     <div class="footerrow">
@@ -128,5 +157,6 @@ body[data-ground="black"] .headline {
     </div>
     {% endif %}
   </div>
+{% if logo %}<img class="brand-logo" data-logo src="{{ logo }}" alt="">{% endif %}
 </body>
 </html>

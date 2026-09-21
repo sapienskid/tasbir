@@ -29,12 +29,34 @@ DEFAULT_ID = "default"
 _VALID_GROUNDS = {"white", "black"}
 
 
-def logo_data_uri(ds: DesignSystem) -> str:
-    """Return the design system's logo as a data URI ('' when none)."""
-    logo = ds.logo or {}
-    data = logo.get("data") or ""
-    mime = logo.get("mime") or "image/png"
+def _logo_uri(entry: dict | None) -> str:
+    entry = entry or {}
+    data = entry.get("data") or ""
+    mime = entry.get("mime") or "image/png"
     return f"data:{mime};base64,{data}" if data else ""
+
+
+def logo_data_uri(ds: DesignSystem, ground: str | None = None) -> str:
+    """Return the design system's logo as a data URI ('' when none).
+
+    A logo may carry per-ground variants under ``logo["grounds"]`` (keys
+    ``white`` / ``black``) — e.g. a lime mark for a dark ground and a carbon
+    mark for a light one. With ``ground`` given, that variant wins; otherwise
+    (or when the ground has no variant) the primary logo is used.
+    """
+    logo = ds.logo or {}
+    if ground:
+        variant = _logo_uri((logo.get("grounds") or {}).get(ground))
+        if variant:
+            return variant
+    return _logo_uri(logo)
+
+
+def logo_variant_uris(ds: DesignSystem) -> dict[str, str]:
+    """{ground: data URI} for every ground that has its own logo variant."""
+    variants = (ds.logo or {}).get("grounds") or {}
+    out = {g: _logo_uri(variants.get(g)) for g in ("white", "black")}
+    return {g: uri for g, uri in out.items() if uri}
 
 
 def validate_design_system(data: dict) -> list[str]:
@@ -82,20 +104,52 @@ def validate_design_system(data: dict) -> list[str]:
     return issues
 
 
+def neutral_design_instruction(di: dict | None = None) -> dict:
+    """A design instruction with the structure but no design language.
+
+    Keeps the structural fields (type scale, spacing, formats, footer) and
+    blanks everything a language owns, so a new design system starts empty:
+    ``style_language`` is ``""`` (the picker shows "Select a design language"),
+    no accent, no decoration, generic voice, no layout archetypes.
+    """
+    import copy
+
+    out = copy.deepcopy(di) if isinstance(di, dict) else {}
+    out["style_language"] = ""
+    out["default_ground"] = "white"
+    out["style"] = {
+        "name": "",
+        "palette": "custom",
+        "accent": "none",
+        "shadows": False,
+        "gradients": False,
+        "emoji": False,
+        "border_radius": "0px",
+        "illustrations": True,
+    }
+    out["photo"] = {"grayscale": False, "media_policy": "photo-forward"}
+    out["type_voice"] = {
+        "display": "The display voice (var(--font-display)) — the headline only.",
+        "serif": "The text voice (var(--font-serif)) — subhead and body copy.",
+        "body": "The interface voice (var(--font-sans)) — category, metadata, handle.",
+    }
+    out["do_dont"] = {"do": [], "dont": []}
+    out["layout_archetypes"] = {}
+    return out
+
+
 def new_design_system_defaults(name: str) -> dict:
     """A complete, immediately-usable baseline for a newly created design system.
 
     A bare create (name only) is NOT usable: no brand identity, no categories,
-    no campaigns, no design instruction. This seeds the Swiss editorial
-    baseline + starter taxonomy so a fresh system renders real posts. The user
-    can switch the style language (Design language picker) and edit identity
-    later.
+    no campaigns, no design instruction. This seeds the structural baseline
+    (type scale, spacing, formats) + starter taxonomy, but NO design language:
+    the user picks one (or builds their own) in the Design language picker.
     """
     import yaml
 
     from app.config import get_settings
     from app.services.design_instruction import load_design_instruction
-    from app.services.styles import apply_style_preset
     from app.services.tokens import (
         DEFAULT_CATEGORIES,
         DEFAULT_TOKEN_VALUES,
@@ -108,7 +162,7 @@ def new_design_system_defaults(name: str) -> dict:
     di = load_design_instruction(
         Path(settings.design_system_dir) / "design-instruction.yaml"
     )
-    di = apply_style_preset("swiss-editorial", di)
+    di = neutral_design_instruction(di)
 
     campaigns: dict = {}
     try:
@@ -149,6 +203,7 @@ def build_pipeline_payload(ds: DesignSystem) -> dict:
         "campaigns": ds.campaigns or {},
         "design_instruction": normalize_design_instruction(ds.design_instruction),
         "logo": logo_data_uri(ds),
+        "logo_variants": logo_variant_uris(ds),
     }
 
 

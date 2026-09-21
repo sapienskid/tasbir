@@ -25,6 +25,7 @@ DEFAULT_TOKEN_VALUES: dict[str, str] = {
     "--font-sans": "Inter, 'Helvetica Neue', Arial, sans-serif",
     "--font-display": "Space Grotesk, Inter, sans-serif",
     "--font-serif": "Source Serif 4, Georgia, serif",
+    "--font-weight-display": "700",
     "--radius-sm": "0px",
     "--radius-md": "0px",
     "--shadow-md": "none",
@@ -48,6 +49,7 @@ SEMANTIC_VAR_ROLES: dict[str, str] = {
     "--font-sans": "interface sans — Inter (category, metadata, handle only)",
     "--font-display": "signature display typeface — for the headline ONLY",
     "--font-serif": "editorial serif text face — for the subhead and body copy ONLY",
+    "--font-weight-display": "headline weight for the display face — templates read it; light brands set 300",
 }
 
 DEFAULT_CATEGORIES: list[dict] = [

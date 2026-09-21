@@ -143,6 +143,19 @@ async def lifespan(app: FastAPI):
         await migrate_stored_design_instructions(pool)
     except Exception as e:
         log.error("[startup] Design-instruction migration FAILED: %s", e, exc_info=True)
+    # Bundled brand design systems (Fundaments.work, Theorem): created on first
+    # boot, refreshed while untouched, never resurrected once deleted.
+    try:
+        from app.services.seeding import sync_bundled_design_systems
+
+        bundled = await sync_bundled_design_systems(pool)
+        if bundled.get("created") or bundled.get("updated"):
+            log.info(
+                "[startup] Bundled design systems: created=%s updated=%s",
+                bundled.get("created"), bundled.get("updated"),
+            )
+    except Exception as e:
+        log.error("[startup] Bundled design-system sync FAILED: %s", e, exc_info=True)
     try:
         from app.services.settings import seed_app_settings
         await seed_app_settings(pool)

@@ -21,6 +21,11 @@ log = logging.getLogger(__name__)
 ACCENT_TOKEN_VARS = ("--color-accent", "--color-accent-secondary")
 
 
+def pick_logo(logo: str, variants: dict | None, ground: str) -> str:
+    """The logo data URI for a ground: its variant when the DS defines one."""
+    return (variants or {}).get(ground) or logo or ""
+
+
 @dataclass
 class DSContext:
     """Pipeline-ready view of a design system (optionally restyled)."""
@@ -31,12 +36,18 @@ class DSContext:
     design_instruction: dict = field(default_factory=dict)
     footer: dict = field(default_factory=lambda: {"left": "", "right": ""})
     logo: str = ""
+    # {ground: data URI} — per-ground logo variants (light vs dark ground).
+    logo_variants: dict = field(default_factory=dict)
     categories: list = field(default_factory=list)
     campaigns: dict = field(default_factory=dict)
     brand: dict = field(default_factory=dict)
     overrides: dict = field(default_factory=dict)
     # The language override actually applied ("" = the DS's own language).
     style_language: str = ""
+
+    def logo_for(self, ground: str) -> str:
+        """The logo to render on ``ground`` (variant when defined, else primary)."""
+        return pick_logo(self.logo, self.logo_variants, ground)
 
     @classmethod
     def from_payload(cls, payload: dict) -> DSContext:
@@ -50,6 +61,7 @@ class DSContext:
             design_instruction=dict(payload.get("design_instruction") or {}),
             footer=dict(payload.get("footer") or {"left": "", "right": ""}),
             logo=payload.get("logo") or "",
+            logo_variants=dict(payload.get("logo_variants") or {}),
             categories=list(payload.get("categories") or []),
             campaigns=dict(payload.get("campaigns") or {}),
             brand=dict(payload.get("brand_info") or {}),
@@ -115,6 +127,18 @@ async def _apply_override(session: AsyncSession, ctx: DSContext, language_id: st
     ctx.design_instruction = di
     ctx.tokens = apply_language_tokens(ctx.tokens, lang)
     ctx.style_language = lang.id
+
+
+def effective_design_system_id(task, fmt_id: str) -> str:
+    """The design system a format renders under: its per-format editor
+    override (set by a design-system switch in the structured editor), else
+    the task's, else ``"default"``."""
+    source = getattr(task, "source_data", None) or {}
+    result = getattr(task, "result", None) or {}
+    entry = (result.get("platforms") or {}).get(fmt_id) or {}
+    editor = entry.get("editor") or {}
+    override = editor.get("design_system_id") if isinstance(editor, dict) else None
+    return str(override or source.get("design_system_id") or "default")
 
 
 async def resolve_ds_context(

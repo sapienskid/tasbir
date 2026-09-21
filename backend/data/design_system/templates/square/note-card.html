@@ -21,6 +21,8 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   position: absolute;
   inset: {{ (height * 0.045) | round | int }}px {{ (width * 0.045) | round | int }}px;
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 0px);
+  box-shadow: var(--shadow-md, none);
 }
 body[data-ground="black"] .frame { border-color: var(--color-border-inverted); }
 
@@ -48,7 +50,7 @@ body[data-ground="black"] .frame { border-color: var(--color-border-inverted); }
 .headline {
   font-family: var(--font-display);
   font-size: {{ (width * 0.068) | round | int }}px;
-  font-weight: 700;
+  font-weight: var(--font-weight-display, 700);
   letter-spacing: -0.015em;
   line-height: 1.02;
   max-width: {{ (width * 0.8) | round | int }}px;
@@ -77,6 +79,40 @@ body[data-ground="black"] .frame { border-color: var(--color-border-inverted); }
 }
 .handle { color: var(--color-text-secondary); }
 
+.subhead { color: var(--color-text); }
+body[data-ground="black"] .subhead { color: var(--color-text-inverted); }
+{% if logo %}
+{% set lh = [ (width * 0.03) | round | int, 24 ] | max %}
+/* brand logo — on solid ground only, clear space >= 1x its own height, never rotated/recoloured */
+body { position: relative; }
+.brand-logo { position: absolute; right: {{ (width * 0.09) | round | int }}px; bottom: {{ (height * 0.09) | round | int }}px; height: {{ lh }}px; width: auto; max-width: {{ (width * 0.22) | round | int }}px; object-fit: contain; display: block; }
+{% endif %}
+{% if has_accent %}
+/* accent · kicker highlight chip — ink text on the accent fill (the accent is never a text colour);
+   the padding is cancelled by an equal negative margin so nothing reflows; an empty kicker gets no chip */
+.topline [data-slot="kicker"]:not(:empty), body[data-ground="black"] .topline [data-slot="kicker"]:not(:empty) {
+  background: var(--color-accent, var(--color-text-inverted));
+  color: var(--color-text);
+  border-radius: var(--radius-sm, 0px);
+  width: fit-content;
+  padding: .34em .66em .34em .8em;
+  margin-left: -.8em;
+  margin-right: -.66em;
+  margin-top: -.34em;
+  margin-bottom: -.34em;
+}
+/* accent · a tab straddling the frame's top edge, aligned with the text margin */
+.frame::before {
+  content: "";
+  position: absolute;
+  left: {{ (width * 0.045) | round | int }}px;
+  top: -{{ (width * 0.004) | round | int + 1 }}px;
+  width: {{ (width * 0.16) | round | int }}px;
+  height: {{ (width * 0.007) | round | int }}px;
+  background: var(--color-accent, transparent);
+  border-radius: var(--radius-sm, 0px);
+}
+{% endif %}
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -88,7 +124,7 @@ body[data-ground="black"] .frame { border-color: var(--color-border-inverted); }
     <div class="spacer"></div>
     <h1 class="headline" data-slot="headline">{{ headline }}</h1>
     {% if subhead %}
-    <div class="body" data-slot="subhead" style="color:var(--color-text);font-size:{{ (width * 0.033) | round | int }}px;line-height:1.35;">{{ subhead }}</div>
+    <div class="body subhead" data-slot="subhead" style="font-size:{{ (width * 0.033) | round | int }}px;line-height:1.35;">{{ subhead }}</div>
     {% endif %}
     {% if body %}
     <div class="body" data-slot="body">{{ body }}</div>
@@ -99,5 +135,6 @@ body[data-ground="black"] .frame { border-color: var(--color-border-inverted); }
     </div>
     {% endif %}
   </div>
+{% if logo %}<img class="brand-logo" data-logo src="{{ logo }}" alt="">{% endif %}
 </body>
 </html>

@@ -32,6 +32,7 @@ def finalize_html(
     katex: bool = True,
     grayscale: bool | None = None,
     logo: bool = True,
+    ground: str | None = None,
 ) -> str:
     """Inject tokens, fonts, KaTeX, keyed images, and the logo into ``html``.
 
@@ -43,6 +44,7 @@ def finalize_html(
             HTML pass ``katex_missing(html)`` so it is never duplicated).
         grayscale: Photo treatment; None follows the design language.
         logo: Substitute ``data-logo`` markers (off for already-baked HTML).
+        ground: Post ground — picks the DS's per-ground logo variant.
     """
     from app.services.design_instruction import (
         build_google_fonts_link,
@@ -63,7 +65,7 @@ def finalize_html(
             html, images, grayscale=photo_grayscale(di) if grayscale is None else grayscale
         )
     if logo:
-        html = substitute_logo(html, ctx.logo)
+        html = substitute_logo(html, ctx.logo_for(ground) if ground else ctx.logo)
     return html
 
 
@@ -299,7 +301,7 @@ async def compose_slide(
         has_image=has_image,
         seed=seed,
         family=family,
-        logo=ctx.logo,
+        logo=ctx.logo_for(ground),
         di_config=ctx.design_instruction,
         illustration=illustration,
         slide_index=index,
@@ -311,7 +313,7 @@ async def compose_slide(
     )
     # Same defense-in-depth + injection order as the AI renderer node.
     rendered = sanitize_html(rendered, mode="strict")
-    rendered = finalize_html(rendered, ctx, images, grayscale=grayscale)
+    rendered = finalize_html(rendered, ctx, images, grayscale=grayscale, ground=ground)
     if carousel and total > 0:
         rendered = inject_slide_counter(rendered, index, total)
     return rendered

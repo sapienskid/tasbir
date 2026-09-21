@@ -71,7 +71,9 @@ async def build_retry_state(db, task, fmt_id: str) -> dict | None:
     )
 
     source = task.source_data or {}
-    ds_id = source.get("design_system_id") or "default"
+    from app.services.ds_context import effective_design_system_id
+
+    ds_id = effective_design_system_id(task, fmt_id)
     ds = await DesignSystemRepository(db).get_by_id(ds_id)
     if ds is None:
         from app.db.session import get_shared_session_factory

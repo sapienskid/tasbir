@@ -1,0 +1,177 @@
+# Bundled brand design system — Theorem
+# Source: https://theorem.fundaments.work/brand/  (ink/paper, the six-colour
+# semantic taxonomy, weight-300 wordmark and rules as published there).
+# Seeded once on first boot by app.services.seeding.sync_bundled_design_systems;
+# after that the Studio owns the row (edits are never overwritten; deleting it
+# is respected).
+
+id: theorem
+name: "Theorem"
+description: >
+  Local-first reader brand: ink on paper, a light-weight display face, and six
+  semantic highlighter colours. Sharp corners only.
+style_language: theorem
+logo:
+  file: logo.svg
+  grounds:
+    white: logo.svg
+    black: logo-paper.svg
+
+# The brand's own design language (a custom row in design_languages, seeded
+# with this system). Colours + rules travel with it; fonts stay on the system.
+language:
+  id: theorem
+  name: "Theorem"
+  description: >
+    Ink on paper, Inter Light headlines, six semantic highlighter colours —
+    one meaning each. Sharp corners. From theorem.fundaments.work/brand.
+  base: swiss-editorial
+  emoji: false
+  grayscale: true
+  accent: true
+  media_policy: typographic
+  palette_tokens:
+    "--color-bg": "#FAFAFA"
+    "--color-bg-inverted": "#1A1A1A"
+    "--color-text": "#1A1A1A"
+    "--color-text-inverted": "#FAFAFA"
+    "--color-text-secondary": "#767676"
+    "--color-text-tertiary": "#999999"
+    "--color-border": "#E5E5E5"
+    "--color-border-inverted": "#333333"
+    "--radius-sm": "0px"
+    "--radius-md": "0px"
+    "--shadow-md": "none"
+  accent_tokens:
+    "--color-accent": "#FEF08A"
+    "--color-accent-secondary": "#BAE6FD"
+  di:
+    default_ground: "white"
+    style:
+      name: "Theorem — ink, paper, highlighter"
+      palette: "ink on paper; six semantic highlighter colours, one meaning each"
+      accent: "accent"
+      shadows: false
+      gradients: false
+      emoji: false
+      border_radius: "0px"
+      illustrations: true
+    type_voice:
+      display: "Inter (var(--font-display)) at weight 300 — the headline ONLY, never bold."
+      serif: "Inter (var(--font-serif)) regular — subhead and body copy."
+      body: "JetBrains Mono (var(--font-sans)) — category, metadata and the fundaments.work credit, uppercase."
+    do_dont:
+      do:
+        - "Render the wordmark and headlines at weight 300, always"
+        - "Mark meaning with the six highlighter colours (var(--color-mark-*)) as fills behind ink text — one meaning per colour"
+        - "Credit fundaments.work in mono, uppercase"
+        - "Ink on paper, generous whitespace, left-aligned"
+      dont:
+        - "Never round corners — radius 0 on chrome, controls and bars"
+        - "Never bold the wordmark for emphasis"
+        - "Never use a highlighter colour as text colour"
+        - "No gradients, shadows or emoji"
+    layout_archetypes:
+      marked-claim:
+        description: "One claim in light Inter with a highlighter mark behind the key words; the credit in mono below."
+      quiet-ledger:
+        description: "Category in mono, a light headline, a short body — ink on paper with generous whitespace."
+      index-note:
+        description: "A small mono index beside a single thought; one highlighter colour carries the meaning."
+
+brand:
+  name: "Theorem"
+  tagline: "Local-first reader — PDF, EPUB, RSS with Markdown export"
+  mission: "A product for reading and exporting content with Markdown capabilities."
+  story: >
+    Theorem is a local-first reader for PDF, EPUB and RSS with Markdown export,
+    from fundaments.work.
+  url: "https://theorem.fundaments.work"
+  social: {}
+
+# Credit is fundaments.work in mono uppercase (the interface voice).
+footer:
+  left: ""
+  right: "fundaments.work"
+
+# The six-colour semantic taxonomy doubles as the post taxonomy.
+categories:
+  - name: "THESIS"
+    description: "Core thesis — the claim a post argues for (yellow)"
+  - name: "METHOD"
+    description: "Empirical method — how something was tested or measured (blue)"
+  - name: "FACT"
+    description: "Agreement / fact — established ground (green)"
+  - name: "QUOTE"
+    description: "Aphorism / quote (orange)"
+  - name: "EPISTEMOLOGY"
+    description: "How we know what we know (purple)"
+  - name: "CONTRADICTION"
+    description: "A contradiction or counter-claim (red)"
+
+campaigns:
+  default:
+    label: "Default"
+    tone: "precise, scholarly, calm"
+    ground: "white"
+    language: "ink on paper, light-weight display type, highlighter marks carry meaning"
+  highlights:
+    label: "Highlights"
+    tone: "concise"
+    ground: "white"
+    language: "one claim per post, marked with its semantic colour"
+  night:
+    label: "Night"
+    tone: "focused"
+    ground: "black"
+    language: "ink ground, paper text, the same restraint"
+
+# Ink #1A1A1A on paper #FAFAFA. Highlighter colours (semantic taxonomy):
+# Yellow #FEF08A core thesis · Blue #BAE6FD empirical method · Green #BBF7D0
+# agreement/fact · Orange #FED7AA aphorism/quote · Purple #E9D5FF
+# epistemology · Red #FECDD3 contradiction.
+# --color-text-secondary is a mid-tone that clears 3:1 on BOTH grounds (the
+# brand's #666666 is only 3.03:1 on ink).
+tokens:
+  "--color-bg": "#FAFAFA"
+  "--color-bg-inverted": "#1A1A1A"
+  "--color-text": "#1A1A1A"
+  "--color-text-inverted": "#FAFAFA"
+  "--color-text-secondary": "#767676"
+  "--color-text-tertiary": "#999999"
+  "--color-border": "#E5E5E5"
+  "--color-border-inverted": "#333333"
+  "--color-accent": "#FEF08A"
+  "--color-accent-secondary": "#BAE6FD"
+  "--color-mark-thesis": "#FEF08A"
+  "--color-mark-method": "#BAE6FD"
+  "--color-mark-fact": "#BBF7D0"
+  "--color-mark-quote": "#FED7AA"
+  "--color-mark-epistemology": "#E9D5FF"
+  "--color-mark-contradiction": "#FECDD3"
+  "--font-display": "Inter, 'Helvetica Neue', Arial, sans-serif"
+  "--font-serif": "Inter, 'Helvetica Neue', Arial, sans-serif"
+  "--font-sans": "JetBrains Mono, 'IBM Plex Mono', ui-monospace, monospace"
+  "--font-weight-display": "300"
+  "--radius-sm": "0px"
+  "--radius-md": "0px"
+  "--shadow-md": "none"
+
+token_roles:
+  "--color-accent": "Yellow highlighter — core thesis, the default accent. A marker fill behind ink text; never a text color"
+  "--color-accent-secondary": "Blue highlighter — empirical method"
+  "--color-mark-thesis": "Yellow highlighter — core thesis"
+  "--color-mark-method": "Blue highlighter — empirical method"
+  "--color-mark-fact": "Green highlighter — agreement / fact"
+  "--color-mark-quote": "Orange highlighter — aphorism / quote"
+  "--color-mark-epistemology": "Purple highlighter — epistemology"
+  "--color-mark-contradiction": "Red highlighter — contradiction"
+  "--font-sans": "JetBrains Mono — the credit line and metadata, uppercase"
+  "--font-weight-display": "display weight — always 300 (light) for Theorem"
+
+# Structural overlay only — the language-owned rules live in `language.di`.
+design_instruction:
+  type_scale:
+    roles:
+      headline:
+        weight: 300

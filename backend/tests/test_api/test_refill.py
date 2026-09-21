@@ -1,4 +1,5 @@
 """Refill endpoint tests — structured slot edits on template-built formats."""
+# ruff: noqa: E501
 
 import base64
 import json
@@ -298,3 +299,163 @@ class TestRefillMedia:
             json={"media": {"kind": "illustration", "style": "procedural", "seed": "x"}},
         )
         assert r.status_code == 422
+
+
+_NEWDS_TPL_HTML = (
+    "<!DOCTYPE html><html><head><style>"
+    "body{width:1080px;height:1080px;overflow:hidden;margin:0}"
+    "</style></head><body>"
+    "<div>NEWDS-MARKER</div>"
+    '<h1 data-slot="headline">{{ headline }}</h1>'
+    "</body></html>"
+)
+
+
+async def _make_ds_with_template(authed_client: AsyncClient, name: str = "Switch Test"):
+    r = await authed_client.post("/api/design-systems", headers=H, json={"name": name})
+    assert r.status_code == 200, r.text
+    ds_id = r.json()["id"]
+    r = await authed_client.post(
+        "/api/templates",
+        headers=H,
+        json={
+            "id": f"square-switch-{uuid.uuid4().hex[:8]}",
+            "name": "Switch Template",
+            "design_system_id": ds_id,
+            "family": "square",
+            "grounds": ["white"],
+            "html": _NEWDS_TPL_HTML,
+        },
+    )
+    assert r.status_code == 200, r.text
+    return ds_id, r.json()["id"]
+
+
+class TestRefillDesignSystem:
+    async def test_switch_remaps_template(
+        self, authed_client: AsyncClient, tmp_path, _mock_services
+    ):
+        task_id, old_tid = await _seed_template_task(authed_client, tmp_path)
+        ds_id, new_tid = await _make_ds_with_template(authed_client)
+        r = await authed_client.post(
+            f"/api/tasks/{task_id}/formats/instagram-square/refill",
+            headers=H,
+            json={"design_system_id": ds_id},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["template_id"] != old_tid
+        assert data["remapped"] == {"from": old_tid, "to": data["template_id"]}
+        assert data["design_system_id"] == ds_id
+        t = await authed_client.get(f"/api/templates/{data['template_id']}", headers=H)
+        assert t.status_code == 200, t.text
+        assert t.json()["design_system_id"] == ds_id
+        saved = (tmp_path / task_id / "instagram-square.html").read_text()
+        assert "Old headline" in saved  # copy carried over
+        # Persisted per-format override surfaces on the editor document.
+        g = await authed_client.get(
+            f"/api/tasks/{task_id}/formats/instagram-square/editor", headers=H
+        )
+        assert g.status_code == 200, g.text
+        assert g.json()["design_system_id"] == ds_id
+        assert g.json()["template_id"] == data["template_id"]
+
+    async def test_switch_with_explicit_template(
+        self, authed_client: AsyncClient, tmp_path, _mock_services
+    ):
+        task_id, _ = await _seed_template_task(authed_client, tmp_path)
+        ds_id, new_tid = await _make_ds_with_template(authed_client)
+        r = await authed_client.post(
+            f"/api/tasks/{task_id}/formats/instagram-square/refill",
+            headers=H,
+            json={"design_system_id": ds_id, "template_id": new_tid},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["template_id"] == new_tid
+        assert r.json()["remapped"] is None
+
+    async def test_unknown_design_system_rejected(
+        self, authed_client: AsyncClient, tmp_path, _mock_services
+    ):
+        task_id, _ = await _seed_template_task(authed_client, tmp_path)
+        r = await authed_client.post(
+            f"/api/tasks/{task_id}/formats/instagram-square/refill",
+            headers=H,
+            json={"design_system_id": "no-such-ds"},
+        )
+        assert r.status_code == 422
+
+    async def test_foreign_template_rejected(
+        self, authed_client: AsyncClient, tmp_path, _mock_services
+    ):
+        task_id, old_tid = await _seed_template_task(authed_client, tmp_path)
+        ds_id, _ = await _make_ds_with_template(authed_client)
+        # old_tid belongs to "default", not the new system.
+        r = await authed_client.post(
+            f"/api/tasks/{task_id}/formats/instagram-square/refill",
+            headers=H,
+            json={"design_system_id": ds_id, "template_id": old_tid},
+        )
+        assert r.status_code == 422
+
+    async def test_switch_without_family_template_rejected(
+        self, authed_client: AsyncClient, tmp_path, _mock_services
+    ):
+        task_id, _ = await _seed_template_task(authed_client, tmp_path)
+        r = await authed_client.post("/api/design-systems", headers=H, json={"name": "Empty"})
+        assert r.status_code == 200, r.text
+        empty_ds = r.json()["id"]
+        existing = await authed_client.get(
+            f"/api/templates?design_system_id={empty_ds}&family=square", headers=H
+        )
+        for row in existing.json():
+            d = await authed_client.delete(f"/api/templates/{row['id']}", headers=H)
+            assert d.status_code == 204, d.text
+        r = await authed_client.post(
+            f"/api/tasks/{task_id}/formats/instagram-square/refill",
+            headers=H,
+            json={"design_system_id": empty_ds},
+        )
+        assert r.status_code == 422
+
+    async def test_designer_post_converts_on_switch(
+        self, authed_client: AsyncClient, tmp_path, _mock_services
+    ):
+        ds_id, new_tid = await _make_ds_with_template(authed_client)
+        task_id = str(uuid.uuid4())
+        copy = json.dumps({"headline": "Designer headline", "subhead": "", "body": ""})
+        await seed_task(
+            task_id,
+            result={
+                "strategic_brief": {"category": "WRITING", "ground": "white"},
+                "platforms": {
+                    "instagram-square": {
+                        "status": "needs_review",
+                        "quality_score": 40,
+                        "quality_issues": [],
+                        "html_path": "",
+                        "copy": copy,
+                    }
+                },
+            },
+        )
+        out_dir = tmp_path / task_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "instagram-square.html").write_text(
+            _RENDERED_HTML.replace("Old headline", "Designer headline").replace(
+                "<p data-slot=\"subhead\">Old subhead</p>", ""
+            )
+        )
+        r = await authed_client.post(
+            f"/api/tasks/{task_id}/formats/instagram-square/refill",
+            headers=H,
+            json={"design_system_id": ds_id},
+        )
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["converted"] is True
+        t = await authed_client.get(f"/api/templates/{data['template_id']}", headers=H)
+        assert t.status_code == 200, t.text
+        assert t.json()["design_system_id"] == ds_id
+        saved = (tmp_path / task_id / "instagram-square.html").read_text()
+        assert "Designer headline" in saved

@@ -65,6 +65,7 @@ def generate_task(self, task_id: str, source_data: dict):
                     "categories": ctx.categories,
                     "design_instruction": ctx.design_instruction,
                     "logo": ctx.logo,
+                    "logo_variants": ctx.logo_variants,
                 }
             )
 

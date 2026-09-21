@@ -153,6 +153,8 @@ class GenerationState(TypedDict):
     ground: Annotated[str, _keep_first]
     design_instruction: Annotated[dict[str, Any], _keep_first_dict]
     logo: Annotated[str, _keep_first]
+    # {ground: data URI} per-ground logo variants (light vs dark ground)
+    logo_variants: Annotated[dict[str, Any], _keep_first_dict]
     # User-selected template override (auto-fallback for other families)
     template_id: Annotated[str, _keep_first]
     # Per-platform overrides {platform_id: {"post_type"?, "template_id"?}} —
@@ -224,6 +226,7 @@ def initial_state(
     token_roles: dict[str, Any] | None = None,
     design_instruction: dict[str, Any] | None = None,
     logo: str = "",
+    logo_variants: dict[str, Any] | None = None,
     template_id: str = "",
     platforms_config: dict[str, dict[str, Any]] | None = None,
     ds_templates: list[dict[str, Any]] | None = None,
@@ -270,6 +273,7 @@ def initial_state(
         "ground": ground or kwargs.get("ground", ""),
         "design_instruction": design_instruction or {},
         "logo": logo,
+        "logo_variants": logo_variants or {},
         "template_id": template_id,
         "platforms_config": platforms_config or {},
         "template_mode": str(kwargs.get("template_mode") or "auto"),

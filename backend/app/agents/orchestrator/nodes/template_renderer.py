@@ -17,6 +17,7 @@ import logging
 
 from app.agents.orchestrator.state import GenerationState, platform_cfg
 from app.services.composer import fill_template
+from app.services.ds_context import pick_logo
 from app.services.formats import get_format_info, parse_carousel_slide
 from app.services.templates import (
     format_family,
@@ -436,7 +437,7 @@ async def template_node_single(state: GenerationState) -> dict:
             has_image=has_user_images or bool(auto_photo),
             seed=seed,
             family=family,
-            logo=state.get("logo", ""),
+            logo=pick_logo(state.get("logo", ""), state.get("logo_variants"), ground),
             di_config=state.get("design_instruction") or {},
             illustration=illustration,
             slide_index=slide_index,

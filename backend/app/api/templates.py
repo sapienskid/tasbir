@@ -369,13 +369,13 @@ async def _render_preview_html(
         tokens.update(ds.tokens or {})
         di = ds.design_instruction or {}
         footer = ds.footer or {}
-        logo = logo_data_uri(ds)
+        logo = logo_data_uri(ds, ground)
         image_slots, _ = scan_template_features(html)
 
     context = build_template_context(
         dict(SAMPLE_COPY), "WRITING", ground, footer, width, height,
         bool(image_slots), seed="preview", family=family, logo=logo,
-        media_position=media_position, hidden=hidden,
+        di_config=di, media_position=media_position, hidden=hidden,
     )
     try:
         rendered = render_template_html(html, context)

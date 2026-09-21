@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
+from app.core.ratelimit import interactive
 from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.tasks import TaskRepository
 from app.db.repositories.templates import TemplateRepository
@@ -284,6 +285,7 @@ def _post_title(title: str, post: PostSpec) -> str:
 
 
 @router.post("/preview")
+@interactive
 async def preview_slide(request: ComposePreviewRequest, db: AsyncSession = Depends(get_db)):
     """Fully finalized HTML for one slide (tokens/fonts/logo/media) — no PNG, no LLM."""
     from app.services.composer import compose_slide
@@ -370,6 +372,7 @@ async def get_batch(batch_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/illustration")
+@interactive
 async def illustration(style: str = "procedural", seed: str = "", ground: str = "white"):
     """An offline illustration (procedural / DiceBear) for picker thumbnails."""
     from app.services.composer import render_illustration
@@ -391,6 +394,7 @@ def _thumb_url(c: dict) -> str:
 
 
 @router.get("/photos")
+@interactive
 async def search_photos(q: str, orientation: str = "square"):
     """Stock photo search (Pexels → Pixabay → Wikimedia). No LLM pick."""
     from app.services.tools.photo import _attribution, search_photo_candidates
@@ -427,13 +431,14 @@ async def map_templates(request: TemplateMapRequest, db: AsyncSession = Depends(
     shared content fields, and weight. Ids with no same-family candidate in
     the target system are omitted from the mapping.
     """
-    from app.services.templates import detect_fields, format_family, has_media
+    from app.services.templates import format_family, match_template, template_to_dict
 
     platform = _validate_platform(request.platform)
     family = format_family(platform)
     repo = TemplateRepository(db)
     targets = [r for r in await repo.list(request.to_design_system_id) if r.family == family]
     by_id = {r.id: r for r in targets}
+    target_dicts = [template_to_dict(r) for r in targets]
 
     mapping: dict[str, str] = {}
     for tid in request.template_ids:
@@ -443,23 +448,12 @@ async def map_templates(request: TemplateMapRequest, db: AsyncSession = Depends(
         if not targets:
             continue
         src = await repo.get_by_id(tid)
-        src_tags = {str(t).lower() for t in ((src.hint_tags if src else None) or [])}
-        src_html = (src.html if src else "") or ""
-        src_media = has_media(src_html)
-        src_fields = set(detect_fields(src_html))
-
-        def score(r, src_tags=src_tags, src_media=src_media, src_fields=src_fields):
-            tags = {str(t).lower() for t in (r.hint_tags or [])}
-            html = r.html or ""
-            return (
-                len(src_tags & tags) * 3.0
-                + (2.0 if has_media(html) == src_media else 0.0)
-                + len(src_fields & set(detect_fields(html))) * 0.5
-                + float(r.weight or 1.0) * 0.1
-            )
-
-        best = max(sorted(targets, key=lambda r: r.id), key=score)
-        mapping[tid] = best.id
+        best = match_template(
+            template_to_dict(src) if src is not None else {"id": tid},
+            target_dicts,
+        )
+        if best is not None:
+            mapping[tid] = str(best["id"])
     return {"mapping": mapping}
 
 

@@ -528,6 +528,10 @@ def substitute_logo(html: str, logo_data_uri: str) -> str:
     def _replace(match):
         tag = match.group(0)
         if tag.lstrip().startswith("<img"):
+            # Already carries a baked logo (e.g. a template that picked the
+            # ground-specific variant) — never overwrite it with the primary.
+            if re.search(r'\ssrc\s*=\s*["\']data:', tag):
+                return tag
             tag = re.sub(
                 r'\s+src\s*=\s*("[^"]*"|\'[^\']*\'|[^\s>]+)', "", tag, count=1
             )

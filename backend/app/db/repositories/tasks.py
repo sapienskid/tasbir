@@ -30,6 +30,29 @@ class TaskRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_fresh(self, task_id: str) -> GenerationTask | None:
+        """Like :meth:`get_by_id` but always re-reads the row (bypasses the
+        session identity map) — for read-modify-write of the JSON columns."""
+        result = await self.session.execute(
+            select(GenerationTask)
+            .where(GenerationTask.id == task_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def save_format_state(
+        self, task_id: str, result: dict, edited_html: dict
+    ) -> None:
+        """Replace ``result`` + ``edited_html`` in ONE statement (the editor's
+        atomic per-format persist; the task's status is left untouched)."""
+        stmt = (
+            update(GenerationTask)
+            .where(GenerationTask.id == task_id)
+            .values(result=result, edited_html=edited_html)
+        )
+        await self.session.execute(stmt)
+        await self.session.commit()
+
     async def create(
         self, source_data: dict, composition: dict | None = None
     ) -> GenerationTask:

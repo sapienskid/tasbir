@@ -15,6 +15,7 @@ from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
 from app.services.design_instruction import photo_grayscale
+from app.services.ds_context import pick_logo
 from app.services.sanitizer import sanitize_html
 from app.services.tokens import DEFAULT_TOKEN_VALUES
 
@@ -81,7 +82,7 @@ async def renderer_node_single(state: GenerationState) -> dict:
     # post-wide list for single formats.
     slide_images = (state.get("_slide_images") or {}).get(fmt_id)
     images = slide_images if slide_images is not None else state.get("images", [])
-    logo = state.get("logo", "")
+    logo = pick_logo(state.get("logo", ""), state.get("logo_variants"), state.get("ground", "white"))
 
     if not html:
         log.warning("[renderer] No HTML for %s, skipping", fmt_id)

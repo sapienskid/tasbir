@@ -32,10 +32,14 @@ log = logging.getLogger(__name__)
 _HTML_CAP = 80_000  # chars of current HTML shown to the model
 
 
-async def _resolve_payload(db: AsyncSession, task: object) -> dict:
-    """Design-system payload for the task — DB first, default-DS fallback."""
+async def _resolve_payload(db: AsyncSession, task: object, fmt_id: str = "") -> dict:
+    """Design-system payload for a format — per-format override, else the task's."""
+    from app.services.ds_context import effective_design_system_id
+
     source_data = task.source_data or {}
-    ds_id = source_data.get("design_system_id") or "default"
+    ds_id = effective_design_system_id(task, fmt_id) if fmt_id else (
+        source_data.get("design_system_id") or "default"
+    )
 
     try:
         from app.db.repositories.design_systems import DesignSystemRepository
@@ -122,7 +126,7 @@ async def run_chat_turn(
     fmt_id = validated[0]
     fmt = get_format_info(fmt_id)
 
-    payload = await _resolve_payload(db, task)
+    payload = await _resolve_payload(db, task, fmt_id)
     tokens = payload.get("design_tokens") or dict(DEFAULT_TOKEN_VALUES)
     footer = payload.get("footer") or {"left": "", "right": ""}
     design_instruction = payload.get("design_instruction") or {}

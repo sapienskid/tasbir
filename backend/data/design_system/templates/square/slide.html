@@ -74,7 +74,7 @@ body[data-ground="black"] .counter { color: var(--color-text-secondary); }
 .headline {
   font-family: var(--font-display);
   font-size: {{ (width * 0.070) | round | int }}px;
-  font-weight: 700;
+  font-weight: var(--font-weight-display, 700);
   letter-spacing: -0.02em;
   line-height: 1.02;
   margin-bottom: {{ (width * 0.06) | round | int }}px;
@@ -105,6 +105,49 @@ body[data-ground="black"] .body { color: var(--color-text-inverted); }
   color: var(--color-text-secondary);
 }
 body[data-ground="black"] .handle { color: var(--color-text-secondary); }
+.subhead {
+  font-family: var(--font-serif);
+  font-size: {{ (width * 0.034) | round | int }}px;
+  line-height: 1.35;
+  margin-bottom: {{ (width * 0.03) | round | int }}px;
+  color: var(--color-text);
+  max-width: {{ (width * 0.72) | round | int }}px;
+}
+.headline + .subhead { margin-top: -{{ (width * 0.03) | round | int }}px; }
+body[data-ground="black"] .subhead { color: var(--color-text-inverted); }
+{% if logo %}
+{% set lh = [ (width * 0.03) | round | int, 24 ] | max %}
+/* brand logo — on solid ground only, clear space >= 1x its own height, never rotated/recoloured */
+body { position: relative; }
+.brand-logo { position: absolute; right: {{ (width * 0.08) | round | int }}px; bottom: {{ (height * 0.07) | round | int }}px; height: {{ lh }}px; width: auto; max-width: {{ (width * 0.22) | round | int }}px; object-fit: contain; display: block; }
+.art { margin-bottom: {{ lh }}px; }
+{% endif %}
+{% if has_accent %}
+/* accent · kicker highlight chip — ink text on the accent fill (the accent is never a text colour);
+   the padding is cancelled by an equal negative margin so nothing reflows; an empty kicker gets no chip */
+.kicker:not(:empty), body[data-ground="black"] .kicker:not(:empty) {
+  background: var(--color-accent, var(--color-text-inverted));
+  color: var(--color-text);
+  border-radius: var(--radius-sm, 0px);
+  width: fit-content;
+  padding: .34em .66em .34em .8em;
+  margin-left: -.8em;
+  margin-right: -.66em;
+  margin-top: -.34em;
+  margin-bottom: -.34em;
+}
+/* accent · carousel progress bar along the top edge — the filled length is slide i of N */
+.slide::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: {% if slide_total %}{{ (100 * slide_index / slide_total) | round(1) }}%{% else %}12%{% endif %};
+  height: {{ (width * 0.008) | round | int }}px;
+  background: var(--color-accent, transparent);
+  border-radius: 0 var(--radius-sm, 0px) var(--radius-sm, 0px) 0;
+}
+{% endif %}
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -119,6 +162,9 @@ body[data-ground="black"] .handle { color: var(--color-text-secondary); }
       {% if headline %}
       <h1 class="headline" data-slot="headline">{{ headline }}</h1>
       {% endif %}
+      {% if subhead %}
+      <div class="subhead" data-slot="subhead">{{ subhead }}</div>
+      {% endif %}
       {% if body %}
       <div class="body" data-slot="body">{{ body }}</div>
       {% endif %}
@@ -132,5 +178,6 @@ body[data-ground="black"] .handle { color: var(--color-text-secondary); }
     </div>
     {% endif %}
   </div>
+{% if logo %}<img class="brand-logo" data-logo src="{{ logo }}" alt="">{% endif %}
 </body>
 </html>

@@ -83,7 +83,12 @@ async def create_design_system(
             **ds_service.new_design_system_defaults(request.name),
         },
     )
-    return ds_service.ds_to_dict(ds, template_count=0)
+    from app.services.seeding import seed_starter_templates
+
+    count = await seed_starter_templates(
+        db, ds_id, {str(c.get("name")) for c in (ds.categories or []) if c.get("name")}
+    )
+    return ds_service.ds_to_dict(ds, template_count=count)
 
 
 @router.get("/styles")

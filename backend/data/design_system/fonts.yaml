@@ -62,7 +62,7 @@ fonts:
   # ── Sans / interface ───────────────────────────────────────────────────
   - family: "Inter"
     role: sans
-    weights: [400, 500, 600]
+    weights: [300, 400, 500, 600, 700]
     style: neutral UI workhorse
   - family: "Work Sans"
     role: sans
@@ -92,3 +92,7 @@ fonts:
     role: mono
     weights: [400, 500]
     style: blueprint mono
+  - family: "JetBrains Mono"
+    role: mono
+    weights: [400, 500, 600]
+    style: technical telemetry mono

@@ -45,6 +45,9 @@ body[data-ground="black"] .media {
   {% else %}border-bottom-color: var(--color-border-inverted);{% endif %}
 }
 .media img, .media svg { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* the picture floats inside its column as a rounded card when the system has a radius (0 = flush, unchanged) */
+.media { padding: calc(var(--radius-md, 0px) * .75); }
+.media img, .media svg { border-radius: var(--radius-md, 0px); box-shadow: var(--shadow-md, none); }
 
 .text {
   flex: 1 1 auto;
@@ -67,7 +70,7 @@ body[data-ground="black"] .media {
   margin-top: {{ (width * 0.03) | round | int }}px;
   font-family: var(--font-display);
   font-size: {{ (width * 0.074) | round | int }}px;
-  font-weight: 700;
+  font-weight: var(--font-weight-display, 700);
   letter-spacing: -0.015em;
   line-height: 1.0;
   max-width: 92%;
@@ -100,6 +103,40 @@ body[data-ground="black"] .media {
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
+body[data-ground="black"] .subhead { color: var(--color-text-inverted); }
+{% if logo %}
+{% set lh = [ (width * 0.03) | round | int, 24 ] | max %}
+/* brand logo — on solid ground only, clear space >= 1x its own height, never rotated/recoloured */
+.text { position: relative; }
+.brand-logo { position: absolute; right: {{ (width * 0.07) | round | int }}px; bottom: {{ (width * 0.06) | round | int }}px; height: {{ lh }}px; width: auto; max-width: {{ (width * 0.22) | round | int }}px; object-fit: contain; display: block; }
+{% endif %}
+{% if has_accent %}
+/* accent · kicker highlight chip — ink text on the accent fill (the accent is never a text colour);
+   the padding is cancelled by an equal negative margin so nothing reflows; an empty kicker gets no chip */
+.kicker:not(:empty), body[data-ground="black"] .kicker:not(:empty) {
+  background: var(--color-accent, var(--color-text-inverted));
+  color: var(--color-text);
+  border-radius: var(--radius-sm, 0px);
+  width: fit-content;
+  padding: .34em .66em .34em .8em;
+  margin-left: -.8em;
+  margin-right: -.66em;
+  margin-top: -.34em;
+  margin-bottom: -.34em;
+}
+/* accent · edge marker — a bar flush with the canvas edge, the height of the headline */
+.headline { position: relative; }
+.headline:not(:empty)::before {
+  content: "";
+  position: absolute;
+  left: -{{ (width * 0.07) | round | int }}px;
+  top: .1em;
+  bottom: .1em;
+  width: {{ (width * 0.009) | round | int }}px;
+  background: var(--color-accent, transparent);
+  border-radius: 0 var(--radius-sm, 0px) var(--radius-sm, 0px) 0;
+}
+{% endif %}
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -121,6 +158,7 @@ body[data-ground="black"] .media {
         <span class="handle" data-slot="footer_right">{{ footer_right }}</span>
       </div>
       {% endif %}
+      {% if logo %}<img class="brand-logo" data-logo src="{{ logo }}" alt="">{% endif %}
     </div>
   </div>
 </body>
