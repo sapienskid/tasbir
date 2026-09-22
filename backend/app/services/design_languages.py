@@ -269,8 +269,11 @@ async def apply_language_to_system(db: AsyncSession, ds, language_id: str) -> tu
         campaigns["default"] = default_campaign
         updates["campaigns"] = campaigns
 
-    await remove_other_style_templates(db, ds.id, language_id)
+    # Seed the new style's starters BEFORE pruning the old style's pack:
+    # a seed failure then leaves the old library intact instead of deleting
+    # it first and failing second (which stranded the DS with fewer templates).
     seeded = await seed_style_templates(db, ds.id, language_id)
+    await remove_other_style_templates(db, ds.id, language_id)
     # Restyling the default system takes it out of seed control.
     if ds.id == ds_service.DEFAULT_ID and ds.source == "seed":
         updates["source"] = "manual"

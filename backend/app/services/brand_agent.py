@@ -41,6 +41,7 @@ from app.services.template_author import (
     validate_template_html,
 )
 from app.services.tokens import (
+    DEFAULT_CATEGORIES,
     DEFAULT_TOKEN_VALUES,
     SEMANTIC_VAR_ROLES,
     enforce_text_contrast,
@@ -50,12 +51,9 @@ from app.services.vision import call_vision_llm
 
 log = logging.getLogger(__name__)
 
-DEFAULT_CATEGORIES = [
-    {"name": "PORTFOLIO", "description": "Project posts"},
-    {"name": "PROJECT", "description": "Individual build/ship updates"},
-    {"name": "WRITING", "description": "Blog posts"},
-    {"name": "NOTE", "description": "Short-form/thought posts", "ground": "black"},
-]
+# Single taxonomy for every creation path (see tokens.DEFAULT_CATEGORIES) —
+# previously the brand builder carried its own 4-entry copy missing
+# "THE LIMITS No.{issue}", so AI-built systems diverged from manual ones.
 
 # Monochrome fallback and the closest colorful preset when the agent's
 # language choice is missing/unknown or contradicts the brand's accent token.

@@ -84,8 +84,13 @@ def apply_language_tokens(tokens: dict, lang) -> dict:
     The language's core palette (bg/text/border/radius/shadow) replaces the
     color tokens; fonts are user-owned and preserved. A colorful language
     provisions its accent tokens; a monochrome one (no accent tokens) strips
-    any accent left behind by a previous colorful style. Returns a new dict.
+    any accent left behind by a previous colorful style — including custom
+    ``--color-*`` tokens outside the language palette + core set, so a
+    switched-to-monochrome system can't leak a stale hue into ``:root``.
+    Returns a new dict.
     """
+    from app.services.tokens import DEFAULT_TOKEN_VALUES
+
     out = dict(tokens or {})
     for var, value in (lang.palette_tokens or {}).items():
         out[var] = value
@@ -94,6 +99,12 @@ def apply_language_tokens(tokens: dict, lang) -> dict:
         for var, value in accent.items():
             out[var] = value
     else:
+        core_colors = {k for k in DEFAULT_TOKEN_VALUES if k.startswith("--color")}
+        keep = set(lang.palette_tokens or {}) | core_colors
+        for var in list(out):
+            if var.startswith("--color") and var not in keep:
+                log.info("[ds_context] dropping custom color token %s on monochrome switch", var)
+                del out[var]
         for var in ACCENT_TOKEN_VARS:
             out.pop(var, None)
     return out

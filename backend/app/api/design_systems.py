@@ -320,8 +320,8 @@ async def preview_design_system(ds_id: str, db: AsyncSession = Depends(get_db)):
         raise NotFoundError(f"Design system {ds_id!r} not found")
 
     pool = await get_shared_session_factory()
-    html = await ds_service.render_ds_preview(ds, pool)
-    return {"id": ds_id, "html": html}
+    preview = await ds_service.render_ds_preview(ds, pool)
+    return {"id": ds_id, **preview}
 
 
 @router.post("/from-input")
@@ -339,7 +339,7 @@ async def create_from_input(
 ):
     """Start the brand-builder job from a form (+ optional reference/logo images)."""
     from app.db.repositories.agent_jobs import AgentJobRepository
-    from app.services.uploads import validate_upload
+    from app.services.uploads import validate_logo_upload, validate_upload
     from app.tasks.agent_jobs import run_design_system_from_input
 
     payload: dict = {
@@ -362,7 +362,7 @@ async def create_from_input(
     if logo_image is not None:
         raw = await logo_image.read()
         try:
-            mime, b64 = validate_upload(raw)
+            mime, b64 = validate_logo_upload(raw)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=f"logo_image: {e}")
         payload["logo_image"] = b64

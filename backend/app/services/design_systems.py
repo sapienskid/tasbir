@@ -431,7 +431,7 @@ _SAMPLE_COPY = {
 }
 
 
-def _generic_preview_html(width: int, height: int, footer: dict) -> str:
+def _generic_preview_html(width: int, height: int, footer: dict, ground: str = "white") -> str:
     """A minimal sample layout using only var(--color-*) / var(--font-*)."""
     right = (footer or {}).get("right", "")
     footer_block = (
@@ -497,18 +497,21 @@ def _generic_preview_html(width: int, height: int, footer: dict) -> str:
     ])
     return (
         "<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"UTF-8\">"
-        f"<style>\n{css}\n</style></head>\n<body>\n{body}\n</body></html>"
+        f"<style>\n{css}\n</style></head>\n<body"
+        f"{' data-ground=\"black\"' if ground == 'black' else ''}>\n{body}\n</body></html>"
     )
 
 
 async def render_ds_preview(
     ds: DesignSystem, pool: async_sessionmaker[AsyncSession]
-) -> str:
-    """Render a neutral sample layout with the design system's tokens.
+) -> dict[str, str]:
+    """Render neutral sample layouts with the design system's tokens.
 
     Uses the generic preview (not a specific template) so the result isolates
     the design system's look — tokens, fonts, logo, footer — without any
     template-specific devices (rules, motifs) confusing the preview.
+    Returns both grounds (``html`` white + ``html_black``) so a broken dark
+    ground is visible in the Studio, each with its per-ground logo variant.
     """
     from app.services.composer import finalize_html
     from app.services.ds_context import DSContext
@@ -517,11 +520,15 @@ async def render_ds_preview(
     tokens.update(ds.tokens or {})
     footer = ds.footer or {"left": "", "right": ""}
 
-    html = _generic_preview_html(1080, 1080, footer)
     ctx = DSContext(
         ds_id=ds.id,
         tokens=tokens,
         design_instruction=ds.design_instruction or {},
         logo=logo_data_uri(ds),
+        logo_variants=logo_variant_uris(ds),
     )
-    return finalize_html(html, ctx, katex=False)
+    out = {}
+    for ground in ("white", "black"):
+        html = _generic_preview_html(1080, 1080, footer, ground)
+        out[ground] = finalize_html(html, ctx, katex=False, ground=ground)
+    return {"html": out["white"], "html_black": out["black"]}
