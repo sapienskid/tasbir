@@ -177,6 +177,20 @@ async def update_design_system(
     if issues:
         raise HTTPException(status_code=422, detail="; ".join(issues))
 
+    # A style_language that names no known language would silently render
+    # with the base instruction — reject it here (needs the DB).
+    di = data.get("design_instruction")
+    if isinstance(di, dict):
+        language = di.get("style_language") or ""
+        if language:
+            from app.services.design_languages import get_language
+
+            if await get_language(db, language) is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown design language {language!r}",
+                )
+
     # Editing the default system hands ownership from the seed to the Studio —
     # the startup seed-sync must not revert the change on the next restart.
     if ds.id == ds_service.DEFAULT_ID and ds.source == "seed":

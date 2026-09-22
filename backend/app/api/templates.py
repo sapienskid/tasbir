@@ -404,8 +404,11 @@ async def create_template_from_image(
     from app.tasks.agent_jobs import run_template_from_image
 
     ds_repo = DesignSystemRepository(db)
-    if not await ds_repo.get_by_id(design_system_id):
+    ds_row = await ds_repo.get_by_id(design_system_id)
+    if ds_row is None:
         raise HTTPException(status_code=422, detail="Design system not found")
+    if not ds_row.is_active:
+        raise HTTPException(status_code=422, detail="Design system is inactive")
 
     raw = await file.read()
     try:
@@ -439,8 +442,11 @@ async def create_template_from_input(
     from app.tasks.agent_jobs import run_template_build_task
 
     ds_repo = DesignSystemRepository(db)
-    if not await ds_repo.get_by_id(design_system_id):
+    ds_row = await ds_repo.get_by_id(design_system_id)
+    if ds_row is None:
         raise HTTPException(status_code=422, detail="Design system not found")
+    if not ds_row.is_active:
+        raise HTTPException(status_code=422, detail="Design system is inactive")
     family = family if family in ("square", "portrait", "story", "landscape") else "square"
     ground = ground if ground in ("white", "black") else "white"
     if not message and not html and not file:

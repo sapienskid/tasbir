@@ -59,47 +59,144 @@ def logo_variant_uris(ds: DesignSystem) -> dict[str, str]:
     return {g: uri for g, uri in out.items() if uri}
 
 
+def _is_nonempty_str(v) -> bool:
+    return isinstance(v, str) and bool(v.strip())
+
+
 def validate_design_system(data: dict) -> list[str]:
-    """Return a list of validation problems (empty = valid)."""
+    """Return a list of validation problems (empty = valid).
+
+    Validates every field the Studio can PATCH (partial dicts are fine —
+    only keys present in ``data`` are checked): tokens, token_roles, brand,
+    footer, categories, overrides, campaigns, and design_instruction.
+    """
     issues: list[str] = []
 
-    tokens = data.get("tokens") or {}
-    if not isinstance(tokens, dict):
-        issues.append("tokens must be an object")
-    else:
-        for key, value in tokens.items():
-            if not isinstance(key, str) or not key.startswith("--"):
-                issues.append(f"token key {key!r} must start with '--'")
-            if not isinstance(value, str):
-                issues.append(f"token {key} value must be a string")
-        # Values are injected verbatim into <style> — reject empty / unsafe /
-        # malformed values (e.g. ``--color-accent: ""`` or ``red}</style>``).
-        issues.extend(invalid_token_issues(tokens))
+    if "tokens" in data:
+        tokens = data.get("tokens")
+        if not isinstance(tokens, dict):
+            issues.append("tokens must be an object")
+        else:
+            for key, value in tokens.items():
+                if not isinstance(key, str) or not key.startswith("--"):
+                    issues.append(f"token key {key!r} must start with '--'")
+                if not isinstance(value, str):
+                    issues.append(f"token {key} value must be a string")
+            # Values are injected verbatim into <style> — reject empty / unsafe /
+            # malformed values (e.g. ``--color-accent: ""`` or ``red}</style>``).
+            issues.extend(invalid_token_issues(tokens))
 
-    campaigns = data.get("campaigns") or {}
-    if not isinstance(campaigns, dict):
-        issues.append("campaigns must be an object")
-    else:
-        for name, c in campaigns.items():
-            if not isinstance(c, dict):
-                issues.append(f"campaign {name!r} must be an object")
-                continue
-            ground = c.get("ground", "")
-            if ground and ground not in _VALID_GROUNDS:
-                issues.append(
-                    f"campaign {name!r} ground must be 'white' or 'black' (got {ground!r})"
-                )
+    if "token_roles" in data:
+        roles = data.get("token_roles")
+        if not isinstance(roles, dict):
+            issues.append("token_roles must be an object")
+        else:
+            for key, value in roles.items():
+                if not isinstance(key, str) or not key.startswith("--"):
+                    issues.append(f"token_roles key {key!r} must start with '--'")
+                elif not isinstance(value, str) or not value.strip():
+                    issues.append(f"token_roles {key} description must be a non-empty string")
 
-    di = data.get("design_instruction") or {}
-    allowed = di.get("style", {}).get("allowed_grounds")
-    if isinstance(allowed, list):
-        bad = [g for g in allowed if g not in _VALID_GROUNDS]
-        if bad:
-            issues.append(f"design_instruction allowed_grounds {bad} invalid")
+    if "brand" in data:
+        brand = data.get("brand")
+        if not isinstance(brand, dict):
+            issues.append("brand must be an object")
+        else:
+            for field in ("name", "tagline", "mission", "story", "url"):
+                if field in brand and not isinstance(brand[field], str):
+                    issues.append(f"brand.{field} must be a string")
+            if "social" in brand and not isinstance(brand["social"], dict):
+                issues.append("brand.social must be an object")
 
-    language = di.get("style_language") or ""
-    if language and not isinstance(language, str):
-        issues.append("design_instruction style_language must be a string")
+    if "footer" in data:
+        footer = data.get("footer")
+        if not isinstance(footer, dict):
+            issues.append("footer must be an object")
+        else:
+            for field in ("left", "right"):
+                if field in footer and not isinstance(footer[field], str):
+                    issues.append(f"footer.{field} must be a string")
+
+    if "categories" in data:
+        categories = data.get("categories")
+        if not isinstance(categories, list):
+            issues.append("categories must be a list")
+        else:
+            seen: set[str] = set()
+            for i, c in enumerate(categories):
+                where = f"categories[{i}]"
+                if not isinstance(c, dict):
+                    issues.append(f"{where} must be an object")
+                    continue
+                name = c.get("name")
+                if not _is_nonempty_str(name):
+                    issues.append(f"{where}.name must be a non-empty string")
+                else:
+                    lowered = str(name).strip().lower()
+                    if lowered in seen:
+                        issues.append(f"{where}.name {name!r} is duplicated")
+                    seen.add(lowered)
+                if "description" in c and not isinstance(c["description"], str):
+                    issues.append(f"{where}.description must be a string")
+                ground = c.get("ground", "")
+                if ground not in ("", "white", "black"):
+                    issues.append(
+                        f"{where}.ground must be 'white' or 'black' (got {ground!r})"
+                    )
+
+    if "overrides" in data:
+        overrides = data.get("overrides")
+        if not isinstance(overrides, dict):
+            issues.append("overrides must be an object")
+        else:
+            for key, value in overrides.items():
+                if not isinstance(key, str) or not key.strip():
+                    issues.append(f"overrides key {key!r} must be a non-empty string")
+                elif not isinstance(value, str):
+                    issues.append(f"overrides.{key} must be a string")
+
+    if "campaigns" in data:
+        campaigns = data.get("campaigns")
+        if not isinstance(campaigns, dict):
+            issues.append("campaigns must be an object")
+        else:
+            for name, c in campaigns.items():
+                if not _is_nonempty_str(name):
+                    issues.append(f"campaign key {name!r} must be a non-empty string")
+                if not isinstance(c, dict):
+                    issues.append(f"campaign {name!r} must be an object")
+                    continue
+                for field in ("label", "tone", "language"):
+                    if field in c and not isinstance(c[field], str):
+                        issues.append(f"campaign {name!r}.{field} must be a string")
+                ground = c.get("ground", "")
+                if ground not in ("", "white", "black"):
+                    issues.append(
+                        f"campaign {name!r} ground must be 'white' or 'black' (got {ground!r})"
+                    )
+
+    if "design_instruction" in data:
+        di = data.get("design_instruction")
+        if not isinstance(di, dict):
+            issues.append("design_instruction must be an object")
+        else:
+            style = di.get("style", {})
+            if "style" in di and not isinstance(style, dict):
+                issues.append("design_instruction.style must be an object")
+            allowed = (style or {}).get("allowed_grounds") if isinstance(style, dict) else None
+            if isinstance(allowed, list):
+                bad = [g for g in allowed if g not in _VALID_GROUNDS]
+                if bad:
+                    issues.append(f"design_instruction allowed_grounds {bad} invalid")
+            if "default_ground" in di:
+                dg = di.get("default_ground")
+                if dg not in ("", "white", "black"):
+                    issues.append(
+                        f"design_instruction default_ground must be 'white' or 'black' (got {dg!r})"
+                    )
+            language = di.get("style_language") or ""
+            if language and not isinstance(language, str):
+                issues.append("design_instruction style_language must be a string")
 
     return issues
 

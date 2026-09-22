@@ -117,12 +117,17 @@ def validate_payload(payload: Any) -> list[str]:
         issues.append(f"unknown top-level keys: {', '.join(map(repr, unknown))}")
     # Token values are injected raw into <style> — reject unsafe ones up front
     # (same rule as the Studio design-system editor).
+    from app.services.design_systems import validate_design_system
     from app.services.tokens import invalid_token_issues
 
     for row in payload.get("design_systems") or []:
-        if isinstance(row, dict) and isinstance(row.get("tokens"), dict):
+        if not isinstance(row, dict):
+            continue
+        if isinstance(row.get("tokens"), dict):
             for issue in invalid_token_issues(row["tokens"]):
                 issues.append(f"design system {row.get('id')!r}: {issue}")
+        for issue in validate_design_system(row):
+            issues.append(f"design system {row.get('id')!r}: {issue}")
     return issues
 
 
