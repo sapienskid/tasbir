@@ -88,7 +88,16 @@ async def create_design_system(
     count = await seed_starter_templates(
         db, ds_id, {str(c.get("name")) for c in (ds.categories or []) if c.get("name")}
     )
-    return ds_service.ds_to_dict(ds, template_count=count)
+    item = ds_service.ds_to_dict(ds, template_count=count)
+    # A fresh system has no design language yet (neutral instruction, no
+    # archetypes) — say so up front instead of letting the first post
+    # silently render generic output. Additive key; existing clients ignore it.
+    if not (ds.design_instruction or {}).get("style_language"):
+        item["warnings"] = [
+            "No design language selected — pick one via POST /design-systems/{id}/style "
+            "before generating posts."
+        ]
+    return item
 
 
 @router.get("/styles")
