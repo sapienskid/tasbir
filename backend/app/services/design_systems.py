@@ -29,6 +29,17 @@ DEFAULT_ID = "default"
 _VALID_GROUNDS = {"white", "black"}
 
 
+def _has_logo(logo: dict | None) -> bool:
+    if not isinstance(logo, dict):
+        return False
+    if logo.get("data"):
+        return True
+    grounds = logo.get("grounds") or {}
+    return bool(isinstance(grounds, dict) and any(
+        isinstance(v, dict) and v.get("data") for v in grounds.values()
+    ))
+
+
 def _logo_uri(entry: dict | None) -> str:
     entry = entry or {}
     data = entry.get("data") or ""
@@ -338,7 +349,7 @@ def ds_to_dict(ds: DesignSystem, template_count: int | None = None) -> dict:
         "campaigns": ds.campaigns,
         "design_instruction": ds.design_instruction,
         "logo": ds.logo,
-        "has_logo": bool(ds.logo and ds.logo.get("data")),
+        "has_logo": _has_logo(ds.logo),
         "source": ds.source,
         "is_active": bool(ds.is_active),
         "template_count": template_count,

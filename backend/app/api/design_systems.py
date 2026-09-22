@@ -217,13 +217,15 @@ async def delete_design_system(ds_id: str, db: AsyncSession = Depends(get_db)):
 async def upload_logo(
     ds_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)
 ):
+    from app.services.uploads import validate_logo_upload
+
     repo = DesignSystemRepository(db)
     ds = await repo.get_by_id(ds_id)
     if not ds:
         raise NotFoundError(f"Design system {ds_id!r} not found")
     raw = await file.read()
     try:
-        mime, b64 = validate_upload(raw)
+        mime, b64 = validate_logo_upload(raw)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     logo = {
@@ -231,8 +233,71 @@ async def upload_logo(
         "data": b64,
         "filename": file.filename or "logo",
     }
+    # A primary re-upload must not destroy per-ground variants.
+    grounds = (ds.logo or {}).get("grounds")
+    if isinstance(grounds, dict) and grounds:
+        logo["grounds"] = grounds
     await repo.update(ds_id, {"logo": logo})
     return {"id": ds_id, "has_logo": True, "mime": mime, "size": len(raw)}
+
+
+async def _logo_grounds_variant(
+    ds_id: str, ground: str, file: UploadFile, db: AsyncSession,
+):
+    """Store a per-ground logo variant (``white`` | ``black``)."""
+    from app.services.uploads import validate_logo_upload
+
+    if ground not in ("white", "black"):
+        raise HTTPException(status_code=422, detail="ground must be 'white' or 'black'")
+    repo = DesignSystemRepository(db)
+    ds = await repo.get_by_id(ds_id)
+    if not ds:
+        raise NotFoundError(f"Design system {ds_id!r} not found")
+    raw = await file.read()
+    try:
+        mime, b64 = validate_logo_upload(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    logo = dict(ds.logo or {})
+    grounds = dict(logo.get("grounds") or {})
+    grounds[ground] = {
+        "mime": mime,
+        "data": b64,
+        "filename": file.filename or f"logo-{ground}",
+    }
+    logo["grounds"] = grounds
+    await repo.update(ds_id, {"logo": logo})
+    return {"id": ds_id, "ground": ground, "mime": mime, "size": len(raw)}
+
+
+@router.post("/{ds_id}/logo/grounds/{ground}")
+async def upload_logo_variant(
+    ds_id: str, ground: str, file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a per-ground logo variant (e.g. a light mark for dark grounds)."""
+    return await _logo_grounds_variant(ds_id, ground, file, db)
+
+
+@router.delete("/{ds_id}/logo/grounds/{ground}", status_code=204)
+async def remove_logo_variant(
+    ds_id: str, ground: str, db: AsyncSession = Depends(get_db)
+):
+    """Remove a per-ground logo variant (falls back to the primary logo)."""
+    if ground not in ("white", "black"):
+        raise HTTPException(status_code=422, detail="ground must be 'white' or 'black'")
+    repo = DesignSystemRepository(db)
+    ds = await repo.get_by_id(ds_id)
+    if not ds:
+        raise NotFoundError(f"Design system {ds_id!r} not found")
+    logo = dict(ds.logo or {})
+    grounds = dict(logo.get("grounds") or {})
+    grounds.pop(ground, None)
+    if grounds:
+        logo["grounds"] = grounds
+    else:
+        logo.pop("grounds", None)
+    await repo.update(ds_id, {"logo": logo})
 
 
 @router.delete("/{ds_id}/logo", status_code=204)
