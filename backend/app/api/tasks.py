@@ -283,7 +283,11 @@ async def _rerender_impl(
     from app.services.agents import get_agent_config
     from app.services.composer import finalize_html, katex_missing, run_hard_checks
     from app.services.dom_extractor import render_to_png
-    from app.services.ds_context import effective_design_system_id, resolve_ds_context
+    from app.services.ds_context import (
+        DSResolutionError,
+        effective_design_system_id,
+        resolve_ds_context_strict,
+    )
     from app.services.sanitizer import sanitize_html
 
     repo = TaskRepository(db)
@@ -299,11 +303,15 @@ async def _rerender_impl(
 
     # Resolve the design system the format renders under (per-format editor
     # override, else the task's) + its per-post language override, so
-    # re-render + QC use the right tokens/brand.
+    # re-render + QC use the right tokens/brand. Strict: unknown/inactive
+    # systems or languages are a 422, never a silent default render.
     source = task.source_data or {}
-    ctx = await resolve_ds_context(
-        db, effective_design_system_id(task, fmt_id), source.get("style_language") or ""
-    )
+    try:
+        ctx = await resolve_ds_context_strict(
+            db, effective_design_system_id(task, fmt_id), source.get("style_language") or ""
+        )
+    except DSResolutionError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     tokens = ctx.tokens
     design_instruction = ctx.design_instruction
     footer = ctx.footer
@@ -507,7 +515,12 @@ async def retry_format(
     try:
         result = await run_retry(db, task, fmt_id, get_settings())
     except RuntimeError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        msg = str(e)
+        # Bad references (deleted/deactivated system, language, campaign) are
+        # client errors; missing copy / busy state stays 409.
+        if "unknown design system" in msg or "is inactive" in msg or "unknown campaign" in msg or "Unknown design language" in msg:
+            raise HTTPException(status_code=422, detail=msg)
+        raise HTTPException(status_code=409, detail=msg)
     return result
 
 
@@ -837,7 +850,7 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
         render_illustration,
     )
     from app.services.design_instruction import photo_grayscale
-    from app.services.ds_context import resolve_ds_context
+    from app.services.ds_context import DSResolutionError, resolve_ds_context_strict
     from app.services.formats import parse_carousel_slide
     from app.services.html_payloads import hoist_data_uris, restore_data_uris
     from app.services.sanitizer import sanitize_html
@@ -892,9 +905,14 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
     if requested_ds:
         from app.db.repositories.design_systems import DesignSystemRepository
 
-        if await DesignSystemRepository(db).get_by_id(requested_ds) is None:
+        row = await DesignSystemRepository(db).get_by_id(requested_ds)
+        if row is None:
             raise HTTPException(
                 status_code=422, detail=f"Unknown design system {requested_ds!r}"
+            )
+        if not row.is_active:
+            raise HTTPException(
+                status_code=422, detail=f"Design system {requested_ds!r} is inactive"
             )
     current_template = str(entry.get("template_id") or "")
     requested_template = request.template_id.strip()
@@ -988,9 +1006,12 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
     # multi-MB) base64 image payloads swapped for tokens — see html_payloads.
     light, payloads = hoist_data_uris(prior_html)
 
-    ctx = await resolve_ds_context(
-        db, target_ds, source.get("style_language") or ""
-    )
+    try:
+        ctx = await resolve_ds_context_strict(
+            db, target_ds, source.get("style_language") or ""
+        )
+    except DSResolutionError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     brief = _as_dict(_as_dict(task.result).get("strategic_brief"))
     category = source.get("category") or brief.get("category") or ""
     ground = brief.get("ground", "white")

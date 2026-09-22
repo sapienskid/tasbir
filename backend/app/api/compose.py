@@ -165,8 +165,11 @@ def _unprocessable(detail: str) -> HTTPException:
 async def _validate_system(db: AsyncSession, ds_id: str, style_language: str) -> None:
     from app.services.design_languages import get_language
 
-    if await DesignSystemRepository(db).get_by_id(ds_id) is None:
+    row = await DesignSystemRepository(db).get_by_id(ds_id)
+    if row is None:
         raise _unprocessable(f"Unknown design system {ds_id!r}")
+    if not row.is_active:
+        raise _unprocessable(f"Design system {ds_id!r} is inactive")
     if style_language and await get_language(db, style_language) is None:
         raise _unprocessable(f"Unknown design language {style_language!r}")
 

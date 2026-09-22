@@ -35,7 +35,10 @@ def generate_task(self, task_id: str, source_data: dict):
 
             from app.config import get_settings
             from app.services.design_systems import load_ds_templates
-            from app.services.ds_context import resolve_ds_context
+            from app.services.ds_context import (
+                DSResolutionError,
+                resolve_ds_context_strict,
+            )
             from app.services.image_loader import prepare_images
             from app.services.tokens import DEFAULT_TOKEN_VALUES
 
@@ -45,10 +48,22 @@ def generate_task(self, task_id: str, source_data: dict):
             # design-instruction, and the logo. Defaults to the seeded system.
             # A per-post design-language override applies the language's rules
             # + palette to THIS post only (in-memory), without changing the DS.
+            # Strict: unknown/inactive systems, languages, or campaigns fail
+            # the task loudly instead of silently rendering the wrong brand.
             override = str(source_data.get("style_language") or "")
-            ctx = await resolve_ds_context(
-                pool, source_data.get("design_system_id") or "default", override
-            )
+            try:
+                ctx = await resolve_ds_context_strict(
+                    pool, source_data.get("design_system_id") or "default", override
+                )
+            except DSResolutionError as e:
+                async with pool() as session:
+                    await TaskRepository(session).update_status(
+                        task_id=task_id, status="failed", error=str(e),
+                    )
+                from app.agents.orchestrator.post_cache import post_cache_clear as _pcc
+
+                _pcc(task_id)
+                return
             if ctx.style_language:
                 log.info("[generate] %s uses per-post language override %r", task_id, override)
 
@@ -77,8 +92,20 @@ def generate_task(self, task_id: str, source_data: dict):
             }
 
             # Campaign preset from this design system's campaigns map.
+            # Strict: an unknown campaign fails loudly (no silent default).
             campaign_name = source_data.get("campaign", "default")
             campaigns = ctx.campaigns or {}
+            if campaign_name not in campaigns:
+                async with pool() as session:
+                    await TaskRepository(session).update_status(
+                        task_id=task_id,
+                        status="failed",
+                        error=f"Unknown campaign {campaign_name!r} for design system {ctx.ds_id!r}",
+                    )
+                from app.agents.orchestrator.post_cache import post_cache_clear as _pcc2
+
+                _pcc2(task_id)
+                return
             pipeline_input["campaign"] = campaigns.get(
                 campaign_name, campaigns.get("default", {})
             )

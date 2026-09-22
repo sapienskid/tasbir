@@ -81,7 +81,7 @@ async def _execute(pool, task_id: str, composition: dict) -> None:
     from app.services import dom_extractor
     from app.services.artifacts import delete_task_output
     from app.services.composer import compose_slide, run_hard_checks
-    from app.services.ds_context import resolve_ds_context
+    from app.services.ds_context import DSResolutionError, resolve_ds_context_strict
     from app.services.formats import carousel_slide_id, get_format_info, is_carousel_base
     from app.services.templates import template_to_dict
 
@@ -94,11 +94,15 @@ async def _execute(pool, task_id: str, composition: dict) -> None:
     carousel = is_carousel_base(platform)
     total = len(slides)
 
-    ctx = await resolve_ds_context(
-        pool,
-        composition.get("design_system_id") or "default",
-        composition.get("style_language") or "",
-    )
+    try:
+        ctx = await resolve_ds_context_strict(
+            pool,
+            composition.get("design_system_id") or "default",
+            composition.get("style_language") or "",
+        )
+    except DSResolutionError as e:
+        await _fail(pool, task_id, str(e))
+        return
 
     templates: dict[str, dict] = {}
     async with pool() as session:

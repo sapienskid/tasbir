@@ -33,28 +33,27 @@ _HTML_CAP = 80_000  # chars of current HTML shown to the model
 
 
 async def _resolve_payload(db: AsyncSession, task: object, fmt_id: str = "") -> dict:
-    """Design-system payload for a format — per-format override, else the task's."""
-    from app.services.ds_context import effective_design_system_id
+    """Design-system payload for a format — per-format override, else the task's.
+
+    Strict: unknown/inactive systems raise :class:`DSResolutionError` (mapped
+    to 422 by the endpoint) instead of silently chatting against ``default``.
+    """
+    from app.services.ds_context import DSResolutionError, effective_design_system_id
 
     source_data = task.source_data or {}
     ds_id = effective_design_system_id(task, fmt_id) if fmt_id else (
         source_data.get("design_system_id") or "default"
     )
 
-    try:
-        from app.db.repositories.design_systems import DesignSystemRepository
-        from app.services.design_systems import build_pipeline_payload
+    from app.db.repositories.design_systems import DesignSystemRepository
+    from app.services.design_systems import build_pipeline_payload
 
-        if ds_id:
-            ds = await DesignSystemRepository(db).get_by_id(ds_id)
-            if ds is not None:
-                return build_pipeline_payload(ds)
-    except Exception as e:
-        log.warning("[chat] Design-system load failed, using default: %s", e)
-
-    from app.services.design_systems import default_design_system_payload
-
-    return await default_design_system_payload()
+    ds = await DesignSystemRepository(db).get_by_id(ds_id)
+    if ds is None:
+        raise DSResolutionError(f"Unknown design system {ds_id!r}")
+    if not ds.is_active:
+        raise DSResolutionError(f"Design system {ds_id!r} is inactive")
+    return build_pipeline_payload(ds)
 
 
 async def _current_html(task: object, fmt_id: str) -> str | None:

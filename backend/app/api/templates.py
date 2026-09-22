@@ -185,8 +185,11 @@ async def list_templates(
 async def create_template(request: TemplateCreate, db: AsyncSession = Depends(get_db)):
     repo = TemplateRepository(db)
     ds_repo = DesignSystemRepository(db)
-    if not await ds_repo.get_by_id(request.design_system_id):
+    ds_row = await ds_repo.get_by_id(request.design_system_id)
+    if ds_row is None:
         raise HTTPException(status_code=422, detail="Design system not found")
+    if not ds_row.is_active:
+        raise HTTPException(status_code=422, detail="Design system is inactive")
 
     tid = request.id or request.name
     slug = "".join(c for c in tid.lower() if c.isalnum() or c in "-_").strip("-")

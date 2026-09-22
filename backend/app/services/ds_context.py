@@ -17,6 +17,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 log = logging.getLogger(__name__)
 
+
+class DSResolutionError(ValueError):
+    """Raised when a requested design system / language cannot be resolved.
+
+    Unlike :func:`resolve_ds_context` (legacy lenient fallback to ``default``),
+    strict resolution fails loudly so callers can return 422 / fail the task
+    instead of silently rendering with the wrong brand.
+    """
+
 # Accent tokens a colorful language provisions; a monochrome language strips them.
 ACCENT_TOKEN_VARS = ("--color-accent", "--color-accent-secondary")
 
@@ -108,13 +117,17 @@ async def _load(session: AsyncSession, ds_id: str, style_language: str) -> DSCon
     return ctx
 
 
-async def _apply_override(session: AsyncSession, ctx: DSContext, language_id: str) -> None:
+async def _apply_override(
+    session: AsyncSession, ctx: DSContext, language_id: str, strict: bool = False
+) -> None:
     """Restyle ``ctx`` in-memory with a design language (the DS row is untouched)."""
     from app.services.design_languages import apply_language, get_language
     from app.services.styles import normalize_design_instruction
 
     lang = await get_language(session, language_id)
     if lang is None:
+        if strict:
+            raise DSResolutionError(f"Unknown design language {language_id!r}")
         log.warning("[ds_context] unknown style_language override %r ignored", language_id)
         return
     base_style = (ctx.design_instruction or {}).get("style") or {}
@@ -139,6 +152,50 @@ def effective_design_system_id(task, fmt_id: str) -> str:
     editor = entry.get("editor") or {}
     override = editor.get("design_system_id") if isinstance(editor, dict) else None
     return str(override or source.get("design_system_id") or "default")
+
+
+async def _load_strict(session: AsyncSession, ds_id: str, style_language: str) -> DSContext:
+    """Load a design system or raise :class:`DSResolutionError`.
+
+    Requires the row to exist and be active; unknown/inactive ids and unknown
+    language overrides raise instead of falling back to ``default``.
+    """
+    from app.db.repositories.design_systems import DesignSystemRepository
+    from app.services.design_systems import DEFAULT_ID, build_pipeline_payload
+
+    requested = (ds_id or DEFAULT_ID).strip() or DEFAULT_ID
+    repo = DesignSystemRepository(session)
+    ds = await repo.get_by_id(requested)
+    if ds is None:
+        raise DSResolutionError(f"Unknown design system {requested!r}")
+    if not ds.is_active:
+        raise DSResolutionError(f"Design system {requested!r} is inactive")
+    ctx = DSContext.from_payload(build_pipeline_payload(ds))
+    if style_language:
+        await _apply_override(session, ctx, style_language, strict=True)
+    return ctx
+
+
+async def resolve_ds_context_strict(
+    db_or_pool: AsyncSession | async_sessionmaker[AsyncSession] | None,
+    ds_id: str,
+    style_language_override: str = "",
+) -> DSContext:
+    """Strict variant of :func:`resolve_ds_context` — no silent fallback.
+
+    Raises :class:`DSResolutionError` for unknown/inactive design systems and
+    unknown language overrides. Pre-seed (no default row at all) still raises
+    — callers decide whether that is a 422 or a failed task.
+    """
+    override = str(style_language_override or "")
+    if isinstance(db_or_pool, AsyncSession):
+        return await _load_strict(db_or_pool, ds_id, override)
+    if db_or_pool is None:
+        from app.db.session import get_shared_session_factory
+
+        db_or_pool = await get_shared_session_factory()
+    async with db_or_pool() as session:
+        return await _load_strict(session, ds_id, override)
 
 
 async def resolve_ds_context(
@@ -177,6 +234,8 @@ async def resolve_ds_context(
 __all__ = [
     "ACCENT_TOKEN_VARS",
     "DSContext",
+    "DSResolutionError",
     "apply_language_tokens",
     "resolve_ds_context",
+    "resolve_ds_context_strict",
 ]
