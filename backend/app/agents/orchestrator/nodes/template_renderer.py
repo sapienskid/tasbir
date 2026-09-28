@@ -16,13 +16,13 @@ import json
 import logging
 
 from app.agents.orchestrator.state import GenerationState, platform_cfg
+from app.services.composer import fill_template
+from app.services.ds_context import pick_logo
 from app.services.formats import get_format_info, parse_carousel_slide
 from app.services.templates import (
-    build_template_context,
     format_family,
     get_recent_template_ids,
     push_recent_template_id,
-    render_template_html,
     select_template,
 )
 
@@ -424,35 +424,29 @@ async def template_node_single(state: GenerationState) -> dict:
             slide_index = parsed[1]
             slide_total = int((state.get("slide_context") or {}).get(fmt_id, {}).get("total", 0))
 
-        context = build_template_context(
-            copy,
-            category,
-            ground,
-            state.get("footer", {}),
-            fmt.width,
-            fmt.height,
-            has_user_images or bool(auto_photo),
+        from app.services.media_plan import _photo_grayscale
+
+        rendered = fill_template(
+            html,
+            copy=copy,
+            kicker=category,
+            ground=ground,
+            footer=state.get("footer", {}),
+            width=fmt.width,
+            height=fmt.height,
+            has_image=has_user_images or bool(auto_photo),
             seed=seed,
             family=family,
-            logo=state.get("logo", ""),
+            logo=pick_logo(state.get("logo", ""), state.get("logo_variants"), ground),
             di_config=state.get("design_instruction") or {},
             illustration=illustration,
             slide_index=slide_index,
             slide_total=slide_total,
             media_position=entry.get("media_position") or "auto",
             hidden=entry.get("hidden_elements") or [],
+            photo=auto_photo,
+            grayscale=_photo_grayscale(state),
         )
-        rendered = render_template_html(html, context)
-        if auto_photo:
-            from app.services.media_plan import _photo_grayscale
-            from app.services.tools.photo import embed_photo_into_html
-
-            rendered = embed_photo_into_html(
-                rendered,
-                auto_photo["image"],
-                auto_photo.get("credit", ""),
-                grayscale=_photo_grayscale(state),
-            )
     except Exception as e:
         log.warning("[template] Render failed for %s (%s): %s", fmt_id, tid, e)
         return {}

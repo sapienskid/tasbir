@@ -89,6 +89,9 @@ renders to PNG for visual verification.
 - Security hardening: fail-closed API keys, per-key Redis rate limit, SSRF guard, HTML sanitizer, input caps
 - Ephemeral artifact delivery (persist-until-TTL + `?consume=true` opt-in delete)
 - Manual edit → re-render endpoint (`POST /tasks/{id}/formats/{fmt}/rerender`)
+- **Manual Compose** (`/compose`, ADR-0021): operator picks template + copy + media per post,
+  zero LLM calls; batch → one task per post (`source_data.mode="manual"`), `compose_task`
+  renders with the same finalize/QC path as rerender; composition stored per task for re-edit
 - **Agent chat** (`GET/POST /tasks/{id}/chat`): DB-backed thread per (task, format);
   vision-capable design assistant proposes replacement HTML, applied review-then-render
 - **Visual editing** in the Studio: locked-down GrapesJS canvas (exact format dims,
@@ -1021,6 +1024,33 @@ Re-injects tokens/fonts/KaTeX/images, renders PNG, runs deterministic + overflow
 checks. `?audit=true` also runs the vision audit (opt-in to save quota). Skips
 the designer LLM. Response: `{"format", "pass", "quality": {"score", "issues", "critique"}, "png_b64"}`.
 
+### Structured editor (template posts) — refill, preview, editor state
+All three are interactive-tier endpoints (own rate bucket, see
+`RATE_LIMIT_INTERACTIVE_PER_MIN`).
+
+- `GET /tasks/{id}/formats/{fmt}/editor` → `{editable, convertible, reason,
+  template_id, family, ground, width, height, slots, hidden|null,
+  media_position, media{kind,…no base64}, media_kinds, revision,
+  design_system_id, style_language, fields, elements}`. `reason` is
+  `designer` (convertible), `manual`, `running`, `template_missing`, or
+  `expired`. Toggles / media position / media kind survive a reload (persisted
+  in `result.platforms[fmt].editor` on every refill).
+- `POST /tasks/{id}/formats/{fmt}/refill/preview` — body = the refill body;
+  returns `{html, width, height, template_id, slots, converted, editor}`.
+  Same validation and 404/409/422 as refill but **no PNG, no hard checks, no
+  writes, no render-service call** (p50 ≈ 10–20 ms; ≈ 50–90 ms on a post with a
+  2 MB uploaded image). Shares `_build_refill` with refill, so it is exactly
+  what a save would persist.
+- `POST /tasks/{id}/formats/{fmt}/refill` — body `{slots, hidden, media_position,
+  template_id, media}`. Serialized per (task, format); re-reads the latest HTML
+  under the lock so concurrent edits merge. Files are written atomically (temp +
+  `os.replace`), then the task row is updated (per-task read-modify-write).
+  Response adds `html`, `revision` (+1 per persist), `saved_at`, `editor`,
+  `converted`, `slots` to `{format, pass, quality, png_b64, template_id}`. A PNG
+  service failure still saves the HTML and reports the issue. A `template_id` on
+  a designer-LLM post converts it (copy from the stored copy JSON; the original
+  is kept as `{fmt}.designer.html`, hidden from the files list).
+
 ### POST /tasks/{id}/formats/{fmt}/retry
 Re-runs the **designer LLM** for one format (with the previous verifier critique),
 then re-renders and re-audits — the manual retry for formats left in
@@ -1049,6 +1079,7 @@ Response: `{"status": "ok", "version": "…", "service": "tasbir", "llm_configur
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///data/tasbir.db` | SQLite for task tracking |
 | `API_KEYS` | Yes* | — | Comma-separated API keys (auth fails closed if empty) |
 | `RATE_LIMIT_PER_MIN` | No | `30` | Per-key requests/minute |
+| `RATE_LIMIT_INTERACTIVE_PER_MIN` | No | `600` | Separate per-key bucket for interactive editor traffic (compose preview/illustration/photos, refill preview, refill, editor state) |
 | `RENDER_SERVICE_KEY` | No* | — | Shared secret with the internal Playwright service (Docker) |
 | `IMAGE_ALLOW_HOSTS` | No | — | Extra trusted hosts for image fetch (SSRF opt-in) |
 | `IMAGE_MAX_BYTES` | No | `10485760` | Max bytes per downloaded image |

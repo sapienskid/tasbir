@@ -13,7 +13,6 @@ from app.core.errors import NotFoundError
 from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.templates import TemplateRepository
 from app.services import design_systems as ds_service
-from app.services.uploads import validate_upload
 
 log = logging.getLogger(__name__)
 
@@ -83,7 +82,21 @@ async def create_design_system(
             **ds_service.new_design_system_defaults(request.name),
         },
     )
-    return ds_service.ds_to_dict(ds, template_count=0)
+    from app.services.seeding import seed_starter_templates
+
+    count = await seed_starter_templates(
+        db, ds_id, {str(c.get("name")) for c in (ds.categories or []) if c.get("name")}
+    )
+    item = ds_service.ds_to_dict(ds, template_count=count)
+    # A fresh system has no design language yet (neutral instruction, no
+    # archetypes) — say so up front instead of letting the first post
+    # silently render generic output. Additive key; existing clients ignore it.
+    if not (ds.design_instruction or {}).get("style_language"):
+        item["warnings"] = [
+            "No design language selected — pick one via POST /design-systems/{id}/style "
+            "before generating posts."
+        ]
+    return item
 
 
 @router.get("/styles")
@@ -117,16 +130,11 @@ async def apply_design_system_style(
     Applies the language's rules to the design_instruction (preserving the
     user's type scale/spacing/footer), replaces the core color tokens with the
     language's palette, provisions accent tokens, and seeds starter templates
-    for families the system lacks.
+    for families the system lacks. See ``apply_language_to_system``.
     """
-    from app.services.design_languages import apply_language, get_language
-    from app.services.style_templates import (
-        remove_other_style_templates,
-        seed_style_templates,
-    )
+    from app.services.design_languages import apply_language_to_system, get_language
 
-    lang = await get_language(db, request.style_language)
-    if lang is None:
+    if await get_language(db, request.style_language) is None:
         raise HTTPException(
             status_code=422,
             detail=f"Unknown design language {request.style_language!r}",
@@ -137,52 +145,7 @@ async def apply_design_system_style(
     if not ds:
         raise NotFoundError(f"Design system {ds_id!r} not found")
 
-    new_di = await apply_language(db, request.style_language, ds.design_instruction or {})
-    tokens = dict(ds.tokens or {})
-    # The language's core palette (bg/text/border/radius/shadow) replaces the
-    # design system's color tokens — switching styles visibly changes the
-    # palette. Fonts are preserved (user-owned).
-    palette = lang.palette_tokens or {}
-    if palette:
-        for var, value in palette.items():
-            tokens[var] = value
-    new_accent = lang.accent_tokens or {}
-    if new_accent:
-        for var, value in new_accent.items():
-            tokens[var] = value
-    else:
-        # Monochrome style — strip accent tokens left by a previous colorful style.
-        tokens.pop("--color-accent", None)
-        tokens.pop("--color-accent-secondary", None)
-
-    # A pre-existing bare system (created before create seeded a baseline) gets
-    # its missing identity fields backfilled so it is never incomplete.
-    baseline = ds_service.new_design_system_defaults(ds.name or ds.id)
-    updates: dict = {"design_instruction": new_di, "tokens": tokens}
-    if not ds.categories:
-        updates["categories"] = baseline["categories"]
-    if not ds.campaigns:
-        updates["campaigns"] = baseline["campaigns"]
-    if not (ds.brand or {}).get("name"):
-        updates["brand"] = baseline["brand"]
-
-    # The style's preferred ground (dark-luxury → black, others → white) should
-    # drive the default campaign, or posts resolve to white via the seed's
-    # "default" campaign and the language's identity is lost.
-    campaigns = dict(ds.campaigns or baseline["campaigns"])
-    default_campaign = campaigns.get("default")
-    if isinstance(default_campaign, dict):
-        default_campaign = dict(default_campaign)
-        default_campaign["ground"] = new_di.get("default_ground") or "white"
-        campaigns["default"] = default_campaign
-        updates["campaigns"] = campaigns
-
-    await remove_other_style_templates(db, ds_id, request.style_language)
-    seeded = await seed_style_templates(db, ds_id, request.style_language)
-    # Restyling the default system takes it out of seed control.
-    if ds_id == ds_service.DEFAULT_ID and ds.source == "seed":
-        updates["source"] = "manual"
-    updated = await repo.update(ds_id, updates)
+    updated, seeded = await apply_language_to_system(db, ds, request.style_language)
     return {
         **ds_service.ds_to_dict(updated, template_count=await _count_templates(db, ds_id)),
         "seeded_templates": seeded,
@@ -208,10 +171,33 @@ async def update_design_system(
         raise NotFoundError(f"Design system {ds_id!r} not found")
 
     data = request.model_dump(exclude_unset=True)
+    # A blank token value means "unset" (the Studio token editor sends the
+    # whole map) — drop it rather than persisting an invalid ``--x: ;``.
+    # Every other malformed/unsafe value is rejected with 422 below.
+    if isinstance(data.get("tokens"), dict):
+        data["tokens"] = {
+            k: v
+            for k, v in data["tokens"].items()
+            if not (isinstance(v, str) and not v.strip())
+        }
     # Only allow patching the fields supplied; keep the rest.
     issues = ds_service.validate_design_system(data)
     if issues:
         raise HTTPException(status_code=422, detail="; ".join(issues))
+
+    # A style_language that names no known language would silently render
+    # with the base instruction — reject it here (needs the DB).
+    di = data.get("design_instruction")
+    if isinstance(di, dict):
+        language = di.get("style_language") or ""
+        if language:
+            from app.services.design_languages import get_language
+
+            if await get_language(db, language) is None:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Unknown design language {language!r}",
+                )
 
     # Editing the default system hands ownership from the seed to the Studio —
     # the startup seed-sync must not revert the change on the next restart.
@@ -239,13 +225,15 @@ async def delete_design_system(ds_id: str, db: AsyncSession = Depends(get_db)):
 async def upload_logo(
     ds_id: str, file: UploadFile = File(...), db: AsyncSession = Depends(get_db)
 ):
+    from app.services.uploads import validate_logo_upload
+
     repo = DesignSystemRepository(db)
     ds = await repo.get_by_id(ds_id)
     if not ds:
         raise NotFoundError(f"Design system {ds_id!r} not found")
     raw = await file.read()
     try:
-        mime, b64 = validate_upload(raw)
+        mime, b64 = validate_logo_upload(raw)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     logo = {
@@ -253,8 +241,71 @@ async def upload_logo(
         "data": b64,
         "filename": file.filename or "logo",
     }
+    # A primary re-upload must not destroy per-ground variants.
+    grounds = (ds.logo or {}).get("grounds")
+    if isinstance(grounds, dict) and grounds:
+        logo["grounds"] = grounds
     await repo.update(ds_id, {"logo": logo})
     return {"id": ds_id, "has_logo": True, "mime": mime, "size": len(raw)}
+
+
+async def _logo_grounds_variant(
+    ds_id: str, ground: str, file: UploadFile, db: AsyncSession,
+):
+    """Store a per-ground logo variant (``white`` | ``black``)."""
+    from app.services.uploads import validate_logo_upload
+
+    if ground not in ("white", "black"):
+        raise HTTPException(status_code=422, detail="ground must be 'white' or 'black'")
+    repo = DesignSystemRepository(db)
+    ds = await repo.get_by_id(ds_id)
+    if not ds:
+        raise NotFoundError(f"Design system {ds_id!r} not found")
+    raw = await file.read()
+    try:
+        mime, b64 = validate_logo_upload(raw)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    logo = dict(ds.logo or {})
+    grounds = dict(logo.get("grounds") or {})
+    grounds[ground] = {
+        "mime": mime,
+        "data": b64,
+        "filename": file.filename or f"logo-{ground}",
+    }
+    logo["grounds"] = grounds
+    await repo.update(ds_id, {"logo": logo})
+    return {"id": ds_id, "ground": ground, "mime": mime, "size": len(raw)}
+
+
+@router.post("/{ds_id}/logo/grounds/{ground}")
+async def upload_logo_variant(
+    ds_id: str, ground: str, file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+):
+    """Upload a per-ground logo variant (e.g. a light mark for dark grounds)."""
+    return await _logo_grounds_variant(ds_id, ground, file, db)
+
+
+@router.delete("/{ds_id}/logo/grounds/{ground}", status_code=204)
+async def remove_logo_variant(
+    ds_id: str, ground: str, db: AsyncSession = Depends(get_db)
+):
+    """Remove a per-ground logo variant (falls back to the primary logo)."""
+    if ground not in ("white", "black"):
+        raise HTTPException(status_code=422, detail="ground must be 'white' or 'black'")
+    repo = DesignSystemRepository(db)
+    ds = await repo.get_by_id(ds_id)
+    if not ds:
+        raise NotFoundError(f"Design system {ds_id!r} not found")
+    logo = dict(ds.logo or {})
+    grounds = dict(logo.get("grounds") or {})
+    grounds.pop(ground, None)
+    if grounds:
+        logo["grounds"] = grounds
+    else:
+        logo.pop("grounds", None)
+    await repo.update(ds_id, {"logo": logo})
 
 
 @router.delete("/{ds_id}/logo", status_code=204)
@@ -277,8 +328,8 @@ async def preview_design_system(ds_id: str, db: AsyncSession = Depends(get_db)):
         raise NotFoundError(f"Design system {ds_id!r} not found")
 
     pool = await get_shared_session_factory()
-    html = await ds_service.render_ds_preview(ds, pool)
-    return {"id": ds_id, "html": html}
+    preview = await ds_service.render_ds_preview(ds, pool)
+    return {"id": ds_id, **preview}
 
 
 @router.post("/from-input")
@@ -296,7 +347,7 @@ async def create_from_input(
 ):
     """Start the brand-builder job from a form (+ optional reference/logo images)."""
     from app.db.repositories.agent_jobs import AgentJobRepository
-    from app.services.uploads import validate_upload
+    from app.services.uploads import validate_logo_upload, validate_upload
     from app.tasks.agent_jobs import run_design_system_from_input
 
     payload: dict = {
@@ -319,7 +370,7 @@ async def create_from_input(
     if logo_image is not None:
         raw = await logo_image.read()
         try:
-            mime, b64 = validate_upload(raw)
+            mime, b64 = validate_logo_upload(raw)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=f"logo_image: {e}")
         payload["logo_image"] = b64

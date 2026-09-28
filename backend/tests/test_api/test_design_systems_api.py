@@ -95,3 +95,23 @@ async def test_agent_job_lookup(authed_client):
     r = await authed_client.get(f"/api/agent-jobs/{job.id}", headers=H)
     assert r.status_code == 200
     assert r.json()["status"] == "pending"
+
+
+async def test_new_design_system_starts_without_a_language(authed_client):
+    r = await authed_client.post("/api/design-systems", headers=H, json={"name": "Blank Brand"})
+    assert r.status_code == 200, r.text
+    ds = r.json()
+    di = ds["design_instruction"]
+    # No language pre-selected: the picker shows its placeholder.
+    assert di["style_language"] == ""
+    assert di["style"]["accent"] == "none" and not di["layout_archetypes"]
+    # …but it is usable: its own user-owned copy of the standard layouts.
+    assert ds["template_count"] >= 16
+    listing = await authed_client.get(
+        f"/api/templates?design_system_id={ds['id']}", headers=H
+    )
+    rows = listing.json()
+    rows = rows.get("templates", rows) if isinstance(rows, dict) else rows
+    assert len(rows) == ds["template_count"]
+    assert all(t["id"].startswith(f"{ds['id']}-") and t["source"] == "manual" for t in rows)
+    await authed_client.delete(f"/api/design-systems/{ds['id']}", headers=H)

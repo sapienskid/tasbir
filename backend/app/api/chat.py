@@ -69,7 +69,10 @@ async def send_chat_message(
         raise HTTPException(status_code=409, detail="Task is still processing")
 
     fmt = validate_platforms([request.format])[0]
-    result = await run_chat_turn(
-        db, task, fmt, request.message, html=request.html
-    )
+    try:
+        result = await run_chat_turn(
+            db, task, fmt, request.message, html=request.html
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return result

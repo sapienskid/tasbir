@@ -30,6 +30,7 @@ import { useDesignSystems, useTemplates, useTemplatePreview } from "@/hooks/use-
 import { usePlatforms } from "@/hooks/use-platforms"
 import { familyOfPlatform } from "@/lib/platforms"
 import { PreviewFrame, FAMILY_DIMS } from "@/components/tasks/preview-frame"
+import { ModeSwitch } from "@/components/compose/mode-switch"
 
 function isCarouselPlatform(p: string): boolean {
   return p === "instagram-carousel" || p === "instagram-carousel-portrait"
@@ -356,6 +357,7 @@ export default function NewTaskPage() {
 
   return (
     <div className="mx-auto grid max-w-3xl gap-6">
+      <ModeSwitch active="ai" />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">New Task</h1>
@@ -419,8 +421,8 @@ export default function NewTaskPage() {
                   <p className="font-medium">{s.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {s.description || s.id} · {s.template_count ?? "?"} templates ·{" "}
-                    {(s.design_instruction as { style_language?: string } | undefined)?.style_language ??
-                      "swiss-editorial"}
+                    {(s.design_instruction as { style_language?: string } | undefined)?.style_language ||
+                      "no language"}
                   </p>
                 </div>
                 {dsId === s.id ? <Check aria-hidden="true" className="size-4 text-primary" /> : null}

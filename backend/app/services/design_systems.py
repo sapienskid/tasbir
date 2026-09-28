@@ -20,7 +20,7 @@ from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.templates import TemplateRepository
 from app.models.design_system import DesignSystem
 from app.services.templates import template_to_dict
-from app.services.tokens import DEFAULT_TOKEN_VALUES
+from app.services.tokens import DEFAULT_TOKEN_VALUES, invalid_token_issues
 
 log = logging.getLogger(__name__)
 
@@ -29,70 +29,235 @@ DEFAULT_ID = "default"
 _VALID_GROUNDS = {"white", "black"}
 
 
-def logo_data_uri(ds: DesignSystem) -> str:
-    """Return the design system's logo as a data URI ('' when none)."""
-    logo = ds.logo or {}
-    data = logo.get("data") or ""
-    mime = logo.get("mime") or "image/png"
+def _has_logo(logo: dict | None) -> bool:
+    if not isinstance(logo, dict):
+        return False
+    if logo.get("data"):
+        return True
+    grounds = logo.get("grounds") or {}
+    return bool(isinstance(grounds, dict) and any(
+        isinstance(v, dict) and v.get("data") for v in grounds.values()
+    ))
+
+
+def _logo_uri(entry: dict | None) -> str:
+    entry = entry or {}
+    data = entry.get("data") or ""
+    mime = entry.get("mime") or "image/png"
     return f"data:{mime};base64,{data}" if data else ""
 
 
+def logo_data_uri(ds: DesignSystem, ground: str | None = None) -> str:
+    """Return the design system's logo as a data URI ('' when none).
+
+    A logo may carry per-ground variants under ``logo["grounds"]`` (keys
+    ``white`` / ``black``) — e.g. a lime mark for a dark ground and a carbon
+    mark for a light one. With ``ground`` given, that variant wins; otherwise
+    (or when the ground has no variant) the primary logo is used.
+    """
+    logo = ds.logo or {}
+    if ground:
+        variant = _logo_uri((logo.get("grounds") or {}).get(ground))
+        if variant:
+            return variant
+    return _logo_uri(logo)
+
+
+def logo_variant_uris(ds: DesignSystem) -> dict[str, str]:
+    """{ground: data URI} for every ground that has its own logo variant."""
+    variants = (ds.logo or {}).get("grounds") or {}
+    out = {g: _logo_uri(variants.get(g)) for g in ("white", "black")}
+    return {g: uri for g, uri in out.items() if uri}
+
+
+def _is_nonempty_str(v) -> bool:
+    return isinstance(v, str) and bool(v.strip())
+
+
 def validate_design_system(data: dict) -> list[str]:
-    """Return a list of validation problems (empty = valid)."""
+    """Return a list of validation problems (empty = valid).
+
+    Validates every field the Studio can PATCH (partial dicts are fine —
+    only keys present in ``data`` are checked): tokens, token_roles, brand,
+    footer, categories, overrides, campaigns, and design_instruction.
+    """
     issues: list[str] = []
 
-    tokens = data.get("tokens") or {}
-    if not isinstance(tokens, dict):
-        issues.append("tokens must be an object")
-    else:
-        for key, value in tokens.items():
-            if not isinstance(key, str) or not key.startswith("--"):
-                issues.append(f"token key {key!r} must start with '--'")
-            if not isinstance(value, str):
-                issues.append(f"token {key} value must be a string")
+    if "tokens" in data:
+        tokens = data.get("tokens")
+        if not isinstance(tokens, dict):
+            issues.append("tokens must be an object")
+        else:
+            for key, value in tokens.items():
+                if not isinstance(key, str) or not key.startswith("--"):
+                    issues.append(f"token key {key!r} must start with '--'")
+                if not isinstance(value, str):
+                    issues.append(f"token {key} value must be a string")
+            # Values are injected verbatim into <style> — reject empty / unsafe /
+            # malformed values (e.g. ``--color-accent: ""`` or ``red}</style>``).
+            issues.extend(invalid_token_issues(tokens))
 
-    campaigns = data.get("campaigns") or {}
-    if not isinstance(campaigns, dict):
-        issues.append("campaigns must be an object")
-    else:
-        for name, c in campaigns.items():
-            if not isinstance(c, dict):
-                issues.append(f"campaign {name!r} must be an object")
-                continue
-            ground = c.get("ground", "")
-            if ground and ground not in _VALID_GROUNDS:
-                issues.append(
-                    f"campaign {name!r} ground must be 'white' or 'black' (got {ground!r})"
-                )
+    if "token_roles" in data:
+        roles = data.get("token_roles")
+        if not isinstance(roles, dict):
+            issues.append("token_roles must be an object")
+        else:
+            for key, value in roles.items():
+                if not isinstance(key, str) or not key.startswith("--"):
+                    issues.append(f"token_roles key {key!r} must start with '--'")
+                elif not isinstance(value, str) or not value.strip():
+                    issues.append(f"token_roles {key} description must be a non-empty string")
 
-    di = data.get("design_instruction") or {}
-    allowed = di.get("style", {}).get("allowed_grounds")
-    if isinstance(allowed, list):
-        bad = [g for g in allowed if g not in _VALID_GROUNDS]
-        if bad:
-            issues.append(f"design_instruction allowed_grounds {bad} invalid")
+    if "brand" in data:
+        brand = data.get("brand")
+        if not isinstance(brand, dict):
+            issues.append("brand must be an object")
+        else:
+            for field in ("name", "tagline", "mission", "story", "url"):
+                if field in brand and not isinstance(brand[field], str):
+                    issues.append(f"brand.{field} must be a string")
+            if "social" in brand and not isinstance(brand["social"], dict):
+                issues.append("brand.social must be an object")
 
-    language = di.get("style_language") or ""
-    if language and not isinstance(language, str):
-        issues.append("design_instruction style_language must be a string")
+    if "footer" in data:
+        footer = data.get("footer")
+        if not isinstance(footer, dict):
+            issues.append("footer must be an object")
+        else:
+            for field in ("left", "right"):
+                if field in footer and not isinstance(footer[field], str):
+                    issues.append(f"footer.{field} must be a string")
+
+    if "categories" in data:
+        categories = data.get("categories")
+        if not isinstance(categories, list):
+            issues.append("categories must be a list")
+        else:
+            seen: set[str] = set()
+            for i, c in enumerate(categories):
+                where = f"categories[{i}]"
+                if not isinstance(c, dict):
+                    issues.append(f"{where} must be an object")
+                    continue
+                name = c.get("name")
+                if not _is_nonempty_str(name):
+                    issues.append(f"{where}.name must be a non-empty string")
+                else:
+                    lowered = str(name).strip().lower()
+                    if lowered in seen:
+                        issues.append(f"{where}.name {name!r} is duplicated")
+                    seen.add(lowered)
+                if "description" in c and not isinstance(c["description"], str):
+                    issues.append(f"{where}.description must be a string")
+                ground = c.get("ground", "")
+                if ground not in ("", "white", "black"):
+                    issues.append(
+                        f"{where}.ground must be 'white' or 'black' (got {ground!r})"
+                    )
+
+    if "overrides" in data:
+        overrides = data.get("overrides")
+        if not isinstance(overrides, dict):
+            issues.append("overrides must be an object")
+        else:
+            for key, value in overrides.items():
+                if not isinstance(key, str) or not key.strip():
+                    issues.append(f"overrides key {key!r} must be a non-empty string")
+                elif not isinstance(value, str):
+                    issues.append(f"overrides.{key} must be a string")
+
+    if "campaigns" in data:
+        campaigns = data.get("campaigns")
+        if not isinstance(campaigns, dict):
+            issues.append("campaigns must be an object")
+        else:
+            for name, c in campaigns.items():
+                if not _is_nonempty_str(name):
+                    issues.append(f"campaign key {name!r} must be a non-empty string")
+                if not isinstance(c, dict):
+                    issues.append(f"campaign {name!r} must be an object")
+                    continue
+                for field in ("label", "tone", "language"):
+                    if field in c and not isinstance(c[field], str):
+                        issues.append(f"campaign {name!r}.{field} must be a string")
+                ground = c.get("ground", "")
+                if ground not in ("", "white", "black"):
+                    issues.append(
+                        f"campaign {name!r} ground must be 'white' or 'black' (got {ground!r})"
+                    )
+
+    if "design_instruction" in data:
+        di = data.get("design_instruction")
+        if not isinstance(di, dict):
+            issues.append("design_instruction must be an object")
+        else:
+            style = di.get("style", {})
+            if "style" in di and not isinstance(style, dict):
+                issues.append("design_instruction.style must be an object")
+            allowed = (style or {}).get("allowed_grounds") if isinstance(style, dict) else None
+            if isinstance(allowed, list):
+                bad = [g for g in allowed if g not in _VALID_GROUNDS]
+                if bad:
+                    issues.append(f"design_instruction allowed_grounds {bad} invalid")
+            if "default_ground" in di:
+                dg = di.get("default_ground")
+                if dg not in ("", "white", "black"):
+                    issues.append(
+                        f"design_instruction default_ground must be 'white' or 'black' (got {dg!r})"
+                    )
+            language = di.get("style_language") or ""
+            if language and not isinstance(language, str):
+                issues.append("design_instruction style_language must be a string")
 
     return issues
+
+
+def neutral_design_instruction(di: dict | None = None) -> dict:
+    """A design instruction with the structure but no design language.
+
+    Keeps the structural fields (type scale, spacing, formats, footer) and
+    blanks everything a language owns, so a new design system starts empty:
+    ``style_language`` is ``""`` (the picker shows "Select a design language"),
+    no accent, no decoration, generic voice, no layout archetypes.
+    """
+    import copy
+
+    out = copy.deepcopy(di) if isinstance(di, dict) else {}
+    out["style_language"] = ""
+    out["default_ground"] = "white"
+    out["style"] = {
+        "name": "",
+        "palette": "custom",
+        "accent": "none",
+        "shadows": False,
+        "gradients": False,
+        "emoji": False,
+        "border_radius": "0px",
+        "illustrations": True,
+    }
+    out["photo"] = {"grayscale": False, "media_policy": "photo-forward"}
+    out["type_voice"] = {
+        "display": "The display voice (var(--font-display)) — the headline only.",
+        "serif": "The text voice (var(--font-serif)) — subhead and body copy.",
+        "body": "The interface voice (var(--font-sans)) — category, metadata, handle.",
+    }
+    out["do_dont"] = {"do": [], "dont": []}
+    out["layout_archetypes"] = {}
+    return out
 
 
 def new_design_system_defaults(name: str) -> dict:
     """A complete, immediately-usable baseline for a newly created design system.
 
     A bare create (name only) is NOT usable: no brand identity, no categories,
-    no campaigns, no design instruction. This seeds the Swiss editorial
-    baseline + starter taxonomy so a fresh system renders real posts. The user
-    can switch the style language (Design language picker) and edit identity
-    later.
+    no campaigns, no design instruction. This seeds the structural baseline
+    (type scale, spacing, formats) + starter taxonomy, but NO design language:
+    the user picks one (or builds their own) in the Design language picker.
     """
     import yaml
 
     from app.config import get_settings
     from app.services.design_instruction import load_design_instruction
-    from app.services.styles import apply_style_preset
     from app.services.tokens import (
         DEFAULT_CATEGORIES,
         DEFAULT_TOKEN_VALUES,
@@ -105,7 +270,7 @@ def new_design_system_defaults(name: str) -> dict:
     di = load_design_instruction(
         Path(settings.design_system_dir) / "design-instruction.yaml"
     )
-    di = apply_style_preset("swiss-editorial", di)
+    di = neutral_design_instruction(di)
 
     campaigns: dict = {}
     try:
@@ -146,6 +311,7 @@ def build_pipeline_payload(ds: DesignSystem) -> dict:
         "campaigns": ds.campaigns or {},
         "design_instruction": normalize_design_instruction(ds.design_instruction),
         "logo": logo_data_uri(ds),
+        "logo_variants": logo_variant_uris(ds),
     }
 
 
@@ -183,7 +349,7 @@ def ds_to_dict(ds: DesignSystem, template_count: int | None = None) -> dict:
         "campaigns": ds.campaigns,
         "design_instruction": ds.design_instruction,
         "logo": ds.logo,
-        "has_logo": bool(ds.logo and ds.logo.get("data")),
+        "has_logo": _has_logo(ds.logo),
         "source": ds.source,
         "is_active": bool(ds.is_active),
         "template_count": template_count,
@@ -265,7 +431,7 @@ _SAMPLE_COPY = {
 }
 
 
-def _generic_preview_html(width: int, height: int, footer: dict) -> str:
+def _generic_preview_html(width: int, height: int, footer: dict, ground: str = "white") -> str:
     """A minimal sample layout using only var(--color-*) / var(--font-*)."""
     right = (footer or {}).get("right", "")
     footer_block = (
@@ -331,35 +497,38 @@ def _generic_preview_html(width: int, height: int, footer: dict) -> str:
     ])
     return (
         "<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"UTF-8\">"
-        f"<style>\n{css}\n</style></head>\n<body>\n{body}\n</body></html>"
+        f"<style>\n{css}\n</style></head>\n<body"
+        f"{' data-ground=\"black\"' if ground == 'black' else ''}>\n{body}\n</body></html>"
     )
 
 
 async def render_ds_preview(
     ds: DesignSystem, pool: async_sessionmaker[AsyncSession]
-) -> str:
-    """Render a neutral sample layout with the design system's tokens.
+) -> dict[str, str]:
+    """Render neutral sample layouts with the design system's tokens.
 
     Uses the generic preview (not a specific template) so the result isolates
     the design system's look — tokens, fonts, logo, footer — without any
     template-specific devices (rules, motifs) confusing the preview.
+    Returns both grounds (``html`` white + ``html_black``) so a broken dark
+    ground is visible in the Studio, each with its per-ground logo variant.
     """
-    from app.services.design_instruction import (
-        build_google_fonts_link,
-        inject_fonts_into_html,
-        substitute_logo,
-    )
-    from app.services.tokens import DEFAULT_TOKEN_VALUES, inject_tokens_into_html
+    from app.services.composer import finalize_html
+    from app.services.ds_context import DSContext
 
     tokens = dict(DEFAULT_TOKEN_VALUES)
     tokens.update(ds.tokens or {})
     footer = ds.footer or {"left": "", "right": ""}
-    logo = logo_data_uri(ds)
 
-    html = _generic_preview_html(1080, 1080, footer)
-
-    html = inject_tokens_into_html(html, tokens)
-    di = ds.design_instruction or {}
-    html = inject_fonts_into_html(html, build_google_fonts_link(tokens, di))
-    html = substitute_logo(html, logo)
-    return html
+    ctx = DSContext(
+        ds_id=ds.id,
+        tokens=tokens,
+        design_instruction=ds.design_instruction or {},
+        logo=logo_data_uri(ds),
+        logo_variants=logo_variant_uris(ds),
+    )
+    out = {}
+    for ground in ("white", "black"):
+        html = _generic_preview_html(1080, 1080, footer, ground)
+        out[ground] = finalize_html(html, ctx, katex=False, ground=ground)
+    return {"html": out["white"], "html_black": out["black"]}

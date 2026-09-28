@@ -26,6 +26,10 @@ class Settings(BaseSettings):
         "http://localhost:5173", "http://localhost:3000"
     ]
     rate_limit_per_min: int = 30
+    # Separate bucket for interactive editor traffic (previews, refill,
+    # editor state, compose previews/thumbnails) so editing never starves
+    # or gets starved by generation calls. <= 0 disables the tier.
+    rate_limit_interactive_per_min: int = 600
 
     # Playwright render service
     render_service_key: str = ""

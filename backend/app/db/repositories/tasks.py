@@ -1,6 +1,6 @@
 from typing import Sequence
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.task import GenerationTask
@@ -30,8 +30,33 @@ class TaskRepository:
         )
         return result.scalar_one_or_none()
 
-    async def create(self, source_data: dict) -> GenerationTask:
-        task = GenerationTask(source_data=source_data)
+    async def get_fresh(self, task_id: str) -> GenerationTask | None:
+        """Like :meth:`get_by_id` but always re-reads the row (bypasses the
+        session identity map) — for read-modify-write of the JSON columns."""
+        result = await self.session.execute(
+            select(GenerationTask)
+            .where(GenerationTask.id == task_id)
+            .execution_options(populate_existing=True)
+        )
+        return result.scalar_one_or_none()
+
+    async def save_format_state(
+        self, task_id: str, result: dict, edited_html: dict
+    ) -> None:
+        """Replace ``result`` + ``edited_html`` in ONE statement (the editor's
+        atomic per-format persist; the task's status is left untouched)."""
+        stmt = (
+            update(GenerationTask)
+            .where(GenerationTask.id == task_id)
+            .values(result=result, edited_html=edited_html)
+        )
+        await self.session.execute(stmt)
+        await self.session.commit()
+
+    async def create(
+        self, source_data: dict, composition: dict | None = None
+    ) -> GenerationTask:
+        task = GenerationTask(source_data=source_data, composition=composition)
         self.session.add(task)
         await self.session.commit()
         await self.session.refresh(task)
@@ -91,6 +116,42 @@ class TaskRepository:
             update(GenerationTask)
             .where(GenerationTask.id == task_id)
             .values(progress=progress)
+            .returning(GenerationTask)
+        )
+        res = await self.session.execute(stmt)
+        await self.session.commit()
+        return res.scalar_one_or_none()
+
+    async def list_by_batch(self, batch_id: str) -> Sequence[GenerationTask]:
+        """Tasks of one Manual Compose batch (``source_data.batch_id``), oldest first."""
+        stmt = (
+            select(GenerationTask)
+            .where(func.json_extract(GenerationTask.source_data, "$.batch_id") == batch_id)
+            .order_by(GenerationTask.created_at.asc())
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
+    async def save_composition(
+        self, task_id: str, composition: dict, source_data: dict | None = None
+    ) -> GenerationTask | None:
+        """Store a manual task's composition and re-arm it for a fresh compose.
+
+        Resets status to ``pending`` and clears any operator-edited HTML (the
+        new composition supersedes it). ``source_data`` is replaced when given.
+        """
+        values: dict = {
+            "composition": composition,
+            "status": "pending",
+            "edited_html": None,
+            "error": None,
+        }
+        if source_data is not None:
+            values["source_data"] = source_data
+        stmt = (
+            update(GenerationTask)
+            .where(GenerationTask.id == task_id)
+            .values(**values)
             .returning(GenerationTask)
         )
         res = await self.session.execute(stmt)

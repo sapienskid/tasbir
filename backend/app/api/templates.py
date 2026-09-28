@@ -19,6 +19,9 @@ from app.services.templates import (
     VALID_MEDIA_POSITIONS,
     build_template_context,
     detect_elements,
+    detect_fields,
+    has_media,
+    media_kinds,
     render_template_html,
     scan_template_features,
 )
@@ -71,6 +74,9 @@ def _entry(row) -> dict:
         else "auto",
         "supports_text": "{{ body" in (row.html or ""),
         "has_illustration_slot": "{{ illustration" in (row.html or ""),
+        "fields": detect_fields(row.html or ""),
+        "media_kinds": media_kinds(row.html or ""),
+        "has_media": has_media(row.html or ""),
         "source": row.source,
         "is_active": bool(row.is_active),
         "created_at": iso_utc(row.created_at),
@@ -120,12 +126,9 @@ async def _validate_render(
     Renders with the template's effective media placement so a chosen position
     that overflows is caught on save.
     """
-    from app.services.design_instruction import (
-        build_google_fonts_link,
-        inject_fonts_into_html,
-    )
+    from app.services.composer import finalize_html
     from app.services.dom_extractor import detect_overflow
-    from app.services.tokens import inject_tokens_into_html
+    from app.services.ds_context import DSContext
 
     width, height = DIMS.get(family, DIMS["square"])
     tokens = dict(DEFAULT_TOKEN_VALUES)
@@ -141,8 +144,7 @@ async def _validate_render(
         rendered = render_template_html(html, context)
     except Exception as e:
         return [f"Jinja2 render failed: {e}"]
-    rendered = inject_tokens_into_html(rendered, tokens)
-    rendered = inject_fonts_into_html(rendered, build_google_fonts_link(tokens, {}))
+    rendered = finalize_html(rendered, DSContext(ds_id="", tokens=tokens), katex=False)
     try:
         overflow = await detect_overflow(rendered, width, height)
     except Exception as e:
@@ -183,8 +185,11 @@ async def list_templates(
 async def create_template(request: TemplateCreate, db: AsyncSession = Depends(get_db)):
     repo = TemplateRepository(db)
     ds_repo = DesignSystemRepository(db)
-    if not await ds_repo.get_by_id(request.design_system_id):
+    ds_row = await ds_repo.get_by_id(request.design_system_id)
+    if ds_row is None:
         raise HTTPException(status_code=422, detail="Design system not found")
+    if not ds_row.is_active:
+        raise HTTPException(status_code=422, detail="Design system is inactive")
 
     tid = request.id or request.name
     slug = "".join(c for c in tid.lower() if c.isalnum() or c in "-_").strip("-")
@@ -351,14 +356,8 @@ async def _render_preview_html(
     hidden: list[str] | None = None,
 ) -> str:
     """Render a template string with sample copy + tokens/fonts/logo."""
-    from app.services.design_instruction import (
-        build_google_fonts_link,
-        inject_fonts_into_html,
-        photo_grayscale,
-        substitute_image_keys,
-        substitute_logo,
-    )
-    from app.services.tokens import inject_tokens_into_html
+    from app.services.composer import finalize_html
+    from app.services.ds_context import DSContext
 
     ds_repo = DesignSystemRepository(db)
     ds = await ds_repo.get_by_id(design_system_id)
@@ -373,28 +372,24 @@ async def _render_preview_html(
         tokens.update(ds.tokens or {})
         di = ds.design_instruction or {}
         footer = ds.footer or {}
-        logo = logo_data_uri(ds)
+        logo = logo_data_uri(ds, ground)
         image_slots, _ = scan_template_features(html)
 
     context = build_template_context(
         dict(SAMPLE_COPY), "WRITING", ground, footer, width, height,
         bool(image_slots), seed="preview", family=family, logo=logo,
-        media_position=media_position, hidden=hidden,
+        di_config=di, media_position=media_position, hidden=hidden,
     )
     try:
         rendered = render_template_html(html, context)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"Template render failed: {e}")
 
-    rendered = inject_tokens_into_html(rendered, tokens)
-    rendered = inject_fonts_into_html(rendered, build_google_fonts_link(tokens, di))
-    rendered = substitute_logo(rendered, logo)
+    placeholders = None
     if image_slots and "has_image" not in (hidden or []):
         placeholders = [{"data": _PLACEHOLDER_B64, "mime": "image/svg+xml", "alt": "placeholder"}]
-        rendered = substitute_image_keys(
-            rendered, placeholders, grayscale=photo_grayscale(di)
-        )
-    return rendered
+    ctx = DSContext(ds_id=design_system_id, tokens=tokens, design_instruction=di, logo=logo)
+    return finalize_html(rendered, ctx, placeholders, katex=False)
 
 
 @router.post("/from-image")
@@ -409,8 +404,11 @@ async def create_template_from_image(
     from app.tasks.agent_jobs import run_template_from_image
 
     ds_repo = DesignSystemRepository(db)
-    if not await ds_repo.get_by_id(design_system_id):
+    ds_row = await ds_repo.get_by_id(design_system_id)
+    if ds_row is None:
         raise HTTPException(status_code=422, detail="Design system not found")
+    if not ds_row.is_active:
+        raise HTTPException(status_code=422, detail="Design system is inactive")
 
     raw = await file.read()
     try:
@@ -444,8 +442,11 @@ async def create_template_from_input(
     from app.tasks.agent_jobs import run_template_build_task
 
     ds_repo = DesignSystemRepository(db)
-    if not await ds_repo.get_by_id(design_system_id):
+    ds_row = await ds_repo.get_by_id(design_system_id)
+    if ds_row is None:
         raise HTTPException(status_code=422, detail="Design system not found")
+    if not ds_row.is_active:
+        raise HTTPException(status_code=422, detail="Design system is inactive")
     family = family if family in ("square", "portrait", "story", "landscape") else "square"
     ground = ground if ground in ("white", "black") else "white"
     if not message and not html and not file:

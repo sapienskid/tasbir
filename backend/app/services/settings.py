@@ -63,7 +63,10 @@ async def refresh_runtime_settings(pool=None) -> None:
         async with pool() as session:
             rows = await AppSettingRepository(session).list()
         for r in rows:
-            merged[r.key] = r.value
+            # Only known knobs: internal rows (e.g. the bundled-seed marker)
+            # must not surface in the Studio's settings.
+            if r.key in merged:
+                merged[r.key] = r.value
         _cache = merged
         _cache_ts = time.monotonic()
     except Exception as e:  # noqa: BLE001

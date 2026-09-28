@@ -8,7 +8,12 @@ celery_app = Celery(
     "tasbir",
     broker=settings.redis_url,
     backend=settings.redis_url,
-    include=["app.tasks.generate", "app.tasks.retention", "app.tasks.agent_jobs"],
+    include=[
+        "app.tasks.generate",
+        "app.tasks.compose",
+        "app.tasks.retention",
+        "app.tasks.agent_jobs",
+    ],
 )
 
 celery_app.conf.update(

@@ -41,6 +41,12 @@ async def _run_template_job(job_id: str, payload: dict) -> None:
                 job_id, "failed", error=f"Design system {ds_id!r} not found"
             )
         return
+    if not ds.is_active:
+        async with pool() as session:
+            await AgentJobRepository(session).update_status(
+                job_id, "failed", error=f"Design system {ds_id!r} is inactive"
+            )
+        return
 
     image_bytes = base64.b64decode(payload.get("image", ""))
     mime = payload.get("mime") or "image/png"
@@ -183,6 +189,12 @@ async def _run_template_build_job(job_id: str, payload: dict) -> None:
         async with pool() as session:
             await AgentJobRepository(session).update_status(
                 job_id, "failed", error=f"Design system {ds_id!r} not found"
+            )
+        return
+    if not ds.is_active:
+        async with pool() as session:
+            await AgentJobRepository(session).update_status(
+                job_id, "failed", error=f"Design system {ds_id!r} is inactive"
             )
         return
 

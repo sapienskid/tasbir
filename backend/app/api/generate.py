@@ -218,9 +218,31 @@ class GenerateResponse(BaseModel):
 
 @router.post("", response_model=GenerateResponse)
 async def generate(request: GenerateRequest, db: AsyncSession = Depends(get_db)):
+    # Fail fast on unknown/inactive design systems, languages, and campaigns
+    # (previously these silently fell back to defaults at render time).
+    from app.db.repositories.design_systems import DesignSystemRepository
+    from app.services.design_languages import get_language
+
+    ds_id = request.design_system_id.strip() or "default"
+    ds_row = await DesignSystemRepository(db).get_by_id(ds_id)
+    if ds_row is None:
+        raise HTTPException(status_code=422, detail=f"Unknown design system {ds_id!r}")
+    if not ds_row.is_active:
+        raise HTTPException(status_code=422, detail=f"Design system {ds_id!r} is inactive")
+    if request.style_language and await get_language(db, request.style_language) is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown design language {request.style_language!r}",
+        )
+    campaigns = ds_row.campaigns or {}
+    if request.campaign not in campaigns:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown campaign {request.campaign!r} for design system {ds_id!r}",
+        )
+
     # Validate template ids against the design system's template library up
     # front (fail fast with a clear 422 instead of a silent auto-fallback).
-    ds_id = request.design_system_id
     known_template_ids: set[str] = set()
     if request.template_id or request.platforms_config:
         from app.db.repositories.templates import TemplateRepository
@@ -243,6 +265,7 @@ async def generate(request: GenerateRequest, db: AsyncSession = Depends(get_db))
             _check(pid, cfg.template_id)
 
     data = request.model_dump()
+    data["design_system_id"] = ds_id
     repo = TaskRepository(db)
     task = await repo.create(source_data=data)
     generate_task.delay(str(task.id), data)

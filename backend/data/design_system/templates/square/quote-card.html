@@ -37,6 +37,7 @@ body[data-ground="black"] { background: var(--color-bg-inverted); color: var(--c
   letter-spacing: 0.14em;
   text-transform: uppercase;
   padding: {{ (width * 0.014) | round | int }}px {{ (width * 0.032) | round | int }}px;
+  border-radius: var(--radius-sm, 0px);
 }
 body[data-ground="black"] .kicker { background: var(--color-text-inverted); color: var(--color-bg-inverted); }
 
@@ -55,10 +56,10 @@ body[data-ground="black"] .kicker { background: var(--color-text-inverted); colo
   font-style: italic;
   font-size: {{ (51 * tscale) | round | int }}px;
   line-height: 1.4;
-  color: var(--color-text-tertiary);
+  color: var(--color-text);
   max-width: {{ (width * 0.6) | round | int }}px;
 }
-body[data-ground="black"] .subhead { color: var(--color-text-secondary); }
+body[data-ground="black"] .subhead { color: var(--color-text-inverted); }
 
 .cta {
   display: flex;
@@ -100,6 +101,33 @@ body[data-ground="black"] .subhead { color: var(--color-text-secondary); }
   text-transform: uppercase;
   color: var(--color-text-secondary);
 }
+{% if logo %}
+{% set lh = [ (width * 0.03) | round | int, 24 ] | max %}
+/* brand logo — on solid ground only, clear space >= 1x its own height, never rotated/recoloured */
+body { position: relative; }
+.brand-logo { position: absolute; right: {{ (width * 0.09) | round | int }}px; bottom: {{ (width * 0.09) | round | int }}px; height: {{ lh }}px; width: auto; max-width: {{ (width * 0.22) | round | int }}px; object-fit: contain; display: block; }
+{% endif %}
+{% if has_accent %}
+/* accent · the tag block becomes an accent chip (ink text) with a short bar under the quote */
+.kicker:not(:empty), body[data-ground="black"] .kicker:not(:empty) {
+  background: var(--color-accent, var(--color-text-inverted));
+  color: var(--color-text);
+}
+.kicker:empty { background: none; padding: 0; }
+.headline { position: relative; }
+.headline:not(:empty)::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  margin-top: {{ (width * 0.012) | round | int }}px;
+  width: {{ (width * 0.1) | round | int }}px;
+  height: {{ (width * 0.009) | round | int }}px;
+  transform: translateX(-50%);
+  background: var(--color-accent, transparent);
+  border-radius: var(--radius-sm, 0px);
+}
+{% endif %}
 </style>
 </head>
 <body {% if ground == "black" %}data-ground="black"{% endif %}>
@@ -116,5 +144,6 @@ body[data-ground="black"] .subhead { color: var(--color-text-secondary); }
     </div>
     {% endif %}
   </div>
+{% if logo %}<img class="brand-logo" data-logo src="{{ logo }}" alt="">{% endif %}
 </body>
 </html>

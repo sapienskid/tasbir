@@ -1,0 +1,166 @@
+# Bundled brand design system — Fundaments.work
+# Source: https://fundaments.work/brand/  (palette, typefaces, mark and rules
+# as published there). Seeded once on first boot by
+# app.services.seeding.sync_bundled_design_systems; after that the Studio owns
+# the row (edits are never overwritten; deleting it is respected).
+
+id: fundaments
+name: "Fundaments.work"
+description: >
+  Independent-studio brand: carbon ground, a single acid-lime accent, Inter for
+  text and JetBrains Mono for telemetry. Sharp corners only.
+style_language: fundaments
+logo:
+  file: logo.svg
+  grounds:
+    white: logo-carbon.svg
+    black: logo.svg
+
+# The brand's own design language (a custom row in design_languages, seeded
+# with this system). Colours + rules travel with it; fonts stay on the system.
+language:
+  id: fundaments
+  name: "Fundaments.work"
+  description: >
+    Carbon ground, one acid-lime accent, Inter for text and JetBrains Mono for
+    telemetry. Sharp corners, no gradients or shadows. From fundaments.work/brand.
+  base: bold-modern
+  emoji: false
+  grayscale: true
+  accent: true
+  media_policy: typographic
+  palette_tokens:
+    "--color-bg": "#E3E3DA"
+    "--color-bg-inverted": "#12140F"
+    "--color-text": "#12140F"
+    "--color-text-inverted": "#E3E3DA"
+    "--color-text-secondary": "#767B69"
+    "--color-text-tertiary": "#9CA190"
+    "--color-border": "#C8C8BD"
+    "--color-border-inverted": "#282C22"
+    "--radius-sm": "0px"
+    "--radius-md": "0px"
+    "--shadow-md": "none"
+  accent_tokens:
+    "--color-accent": "#C6F135"
+    "--color-accent-secondary": "#B3D17A"
+  di:
+    default_ground: "black"
+    style:
+      name: "Fundaments — carbon, acid lime, telemetry"
+      palette: "carbon ground with one acid-lime accent; off-white as the light ground"
+      accent: "accent"
+      shadows: false
+      gradients: false
+      emoji: false
+      border_radius: "0px"
+      illustrations: true
+    type_voice:
+      display: "Inter (var(--font-display)) at weight 600 — the headline ONLY. Tight, confident, sentence case."
+      serif: "Inter (var(--font-serif)) regular — subhead and body copy."
+      body: "JetBrains Mono (var(--font-sans)) — category, metadata and the handle. Uppercase, tracked, telemetry-like."
+    do_dont:
+      do:
+        - "Sharp corners only — radius 0, everywhere"
+        - "Set the category label and the handle in JetBrains Mono (var(--font-sans)), uppercase and tracked"
+        - "Use Acid Lime (var(--color-accent)) as a fill, rule or marker behind dark ink text — it is the only hue on the carbon ground"
+        - "Write the brand as Fundaments.work, with the domain suffix"
+        - "Left-align everything and keep generous, deliberate whitespace"
+      dont:
+        - "No gradients, shadows or rounded corners"
+        - "Never use lime as a text color, especially on the off-white ground"
+        - "Never place the mark on gradients, shadows or photographs"
+        - "No emoji"
+        - "No more than 2 weights per family"
+    layout_archetypes:
+      telemetry-stack:
+        description: "Mono category label with a lime marker, tight Inter headline, one short body line, handle bottom-left — all on a strict left grid."
+      lime-block:
+        description: "A solid acid-lime block carries the headline in carbon ink; everything else stays quiet."
+      readout:
+        description: "A large mono index or version number as a readout, headline beneath, the rest sparse."
+
+brand:
+  name: "Fundaments.work"
+  tagline: "An independent studio crafting durable, private tools for reading, note-taking, and typing."
+  mission: "Zero subscriptions, zero tracking, 100% free and open."
+  story: >
+    Fundaments.work is an independent studio crafting durable, private tools
+    for reading, note-taking, and typing. Zero subscriptions, zero tracking,
+    100% free and open.
+  url: "https://fundaments.work"
+  social:
+    github: "Fundaments-Work"
+
+# Footer — a single handle, tracked uppercase in the interface (mono) voice.
+footer:
+  left: ""
+  right: "fundaments.work"
+
+categories:
+  - name: "PROJECT"
+    description: "A tool or app from the studio"
+  - name: "RELEASE"
+    description: "Version releases and changelogs"
+  - name: "WRITING"
+    description: "Essays and devlog posts"
+  - name: "PRIVACY"
+    description: "Privacy, open-source and local-first principles"
+  - name: "NOTE"
+    description: "Short thoughts"
+    ground: "black"
+
+campaigns:
+  default:
+    label: "Default"
+    tone: "precise, plain-spoken, quietly confident"
+    ground: "black"
+    language: "technical telemetry voice, sharp grid, acid lime used sparingly as a marker"
+  release:
+    label: "Release"
+    tone: "clear, factual"
+    ground: "black"
+    language: "version number, one-line change summary, monospace metadata"
+  essay:
+    label: "Essay"
+    tone: "considered, first-person"
+    ground: "white"
+    language: "off-white ground, generous whitespace, ink text, lime only as a small marker"
+
+# Palette: Carbon Base #12140F, Surface Low #1A1C17, Acid Lime #C6F135,
+# Sage Accent #B3D17A, Off-White #E3E3DA, Slate Variant #9CA190.
+# The two grounds are Carbon (black ground) and Off-White (light ground).
+# --color-text-secondary is a mid-tone that clears 3:1 on BOTH grounds; the
+# brand's Slate (#9CA190) fails on Off-White (2.06:1) so it is the tertiary.
+tokens:
+  "--color-bg": "#E3E3DA"
+  "--color-bg-inverted": "#12140F"
+  "--color-text": "#12140F"
+  "--color-text-inverted": "#E3E3DA"
+  "--color-text-secondary": "#767B69"
+  "--color-text-tertiary": "#9CA190"
+  "--color-border": "#C8C8BD"
+  "--color-border-inverted": "#282C22"
+  "--color-accent": "#C6F135"
+  "--color-accent-secondary": "#B3D17A"
+  "--color-surface": "#1A1C17"
+  "--font-display": "Inter, 'Helvetica Neue', Arial, sans-serif"
+  "--font-serif": "Inter, 'Helvetica Neue', Arial, sans-serif"
+  "--font-sans": "JetBrains Mono, 'IBM Plex Mono', ui-monospace, monospace"
+  "--font-weight-display": "600"
+  "--radius-sm": "0px"
+  "--radius-md": "0px"
+  "--shadow-md": "none"
+
+token_roles:
+  "--color-accent": "Acid Lime — the single brand accent. A marker/fill/rule behind dark ink text; never a text color"
+  "--color-accent-secondary": "Sage — a quiet second accent, used sparingly beside lime"
+  "--color-surface": "Surface Low — a raised panel on the carbon ground"
+  "--font-sans": "JetBrains Mono — the telemetry voice: category, metadata and the handle"
+
+# Structural overlay only — the language-owned rules live in `language.di`.
+design_instruction:
+  type_scale:
+    roles:
+      headline:
+        weight: 600

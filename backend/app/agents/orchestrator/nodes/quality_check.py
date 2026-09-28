@@ -25,20 +25,14 @@ from app.agents.orchestrator.state import GenerationState
 from app.config import get_settings
 from app.services.agents import get_agent_config
 from app.services.design_instruction import (
-    build_google_fonts_link,
     format_design_instruction_block,
-    inject_fonts_into_html,
     photo_grayscale,
-    substitute_image_keys,
-    substitute_logo,
 )
 from app.services.dom_extractor import detect_overflow, render_to_png
+from app.services.ds_context import pick_logo
 from app.services.formats import get_format_info
-from app.services.tokens import (
-    DEFAULT_TOKEN_VALUES,
-    inject_katex_into_html,
-    inject_tokens_into_html,
-)
+from app.services.templates import design_language_has_accent
+from app.services.tokens import DEFAULT_TOKEN_VALUES
 
 log = logging.getLogger(__name__)
 
@@ -294,6 +288,29 @@ def _run_deterministic_checks(
     return issues
 
 
+_ACCENT_USE_RE = re.compile(r"var\(\s*--color-accent")
+
+
+def _accent_issues(html: str, di_config: dict, template_id: str | None) -> list[str]:
+    """Hard gate for LLM-designed posts: a language with an accent must use it.
+
+    Template posts are exempt — their accent devices are built in (gated by
+    ``has_accent``). The designer sees the accent rule as a requirement; this
+    makes it enforceable, so a "Vibrant Pop" post can't ship as plain black on
+    white. Token declarations (``--color-accent: #…``) don't count — only a
+    ``var(--color-accent…)`` reference does.
+    """
+    if template_id or not design_language_has_accent(di_config):
+        return []
+    if _ACCENT_USE_RE.search(html or ""):
+        return []
+    return [
+        "Design language requires its accent: use var(--color-accent) as a fill, "
+        "rule bar or highlight behind dark text (var(--color-text)) on at least "
+        "one prominent element — never as a text colour"
+    ]
+
+
 async def quality_check_node_single(state: GenerationState) -> dict:
     """Run multimodal quality check for a single platform."""
     prompt_cfg = await get_agent_config("verifier")
@@ -335,6 +352,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         display_family,
         allow_emoji=allow_emoji,
     )
+    check_issues.extend(_accent_issues(html, di_config, task.get("template_id")))
     if check_issues:
         log.warning("[verifier] Deterministic violations for %s: %s", fmt_id, check_issues)
         _save_html_preview(task_id, fmt_id, html)
@@ -367,24 +385,30 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # preview matches the real artifact.
     slide_images = (state.get("_slide_images") or {}).get(fmt_id)
     images_list = slide_images if slide_images is not None else state.get("images", [])
-    logo = state.get("logo", "")
-    html_with_tokens = inject_tokens_into_html(html, design_tokens)
+    logo = pick_logo(state.get("logo", ""), state.get("logo_variants"), ground)
     di_config = state.get("design_instruction") or {}
+    fallback_tokens = None
     if not di_config:
         from app.services.design_systems import default_design_system_payload
 
         payload = await default_design_system_payload()
         di_config = payload.get("design_instruction") or {}
-        design_tokens = payload.get("design_tokens") or design_tokens
-    html_with_tokens = inject_fonts_into_html(
-        html_with_tokens, build_google_fonts_link(design_tokens, di_config)
-    )
-    html_with_tokens = inject_katex_into_html(html_with_tokens)
-    html_with_tokens = substitute_image_keys(
-        html_with_tokens, images_list,
+        fallback_tokens = payload.get("design_tokens")
+    from app.services.composer import finalize_html
+    from app.services.ds_context import DSContext
+
+    html_with_tokens = finalize_html(
+        html,
+        DSContext(
+            ds_id=state.get("design_system_id") or "",
+            tokens=design_tokens,
+            design_instruction=di_config,
+            logo=logo,
+        ),
+        images_list,
         grayscale=photo_grayscale(state.get("design_instruction")),
     )
-    html_with_tokens = substitute_logo(html_with_tokens, logo)
+    design_tokens = fallback_tokens or design_tokens
     # Universal slide counter (i / N) — mirrors renderer_node_single so the
     # preview this step persists keeps the counter that the renderer wrote.
     from app.agents.orchestrator.nodes.renderer import _inject_slide_counter

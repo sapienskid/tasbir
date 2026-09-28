@@ -21,44 +21,39 @@ from app.agents.orchestrator.nodes.quality_check import (
 )
 from app.db.repositories.chat import ChatRepository
 from app.services.agents import get_agent_config
-from app.services.design_instruction import (
-    build_google_fonts_link,
-    inject_fonts_into_html,
-)
 from app.services.dom_extractor import detect_overflow, render_to_png
 from app.services.formats import get_format_info, validate_platforms
 from app.services.llm import call_llm
 from app.services.sanitizer import sanitize_html
-from app.services.tokens import (
-    DEFAULT_TOKEN_VALUES,
-    inject_katex_into_html,
-    inject_tokens_into_html,
-)
+from app.services.tokens import DEFAULT_TOKEN_VALUES
 
 log = logging.getLogger(__name__)
 
 _HTML_CAP = 80_000  # chars of current HTML shown to the model
 
 
-async def _resolve_payload(db: AsyncSession, task: object) -> dict:
-    """Design-system payload for the task — DB first, default-DS fallback."""
+async def _resolve_payload(db: AsyncSession, task: object, fmt_id: str = "") -> dict:
+    """Design-system payload for a format — per-format override, else the task's.
+
+    Strict: unknown/inactive systems raise :class:`DSResolutionError` (mapped
+    to 422 by the endpoint) instead of silently chatting against ``default``.
+    """
+    from app.services.ds_context import DSResolutionError, effective_design_system_id
+
     source_data = task.source_data or {}
-    ds_id = source_data.get("design_system_id") or "default"
+    ds_id = effective_design_system_id(task, fmt_id) if fmt_id else (
+        source_data.get("design_system_id") or "default"
+    )
 
-    try:
-        from app.db.repositories.design_systems import DesignSystemRepository
-        from app.services.design_systems import build_pipeline_payload
+    from app.db.repositories.design_systems import DesignSystemRepository
+    from app.services.design_systems import build_pipeline_payload
 
-        if ds_id:
-            ds = await DesignSystemRepository(db).get_by_id(ds_id)
-            if ds is not None:
-                return build_pipeline_payload(ds)
-    except Exception as e:
-        log.warning("[chat] Design-system load failed, using default: %s", e)
-
-    from app.services.design_systems import default_design_system_payload
-
-    return await default_design_system_payload()
+    ds = await DesignSystemRepository(db).get_by_id(ds_id)
+    if ds is None:
+        raise DSResolutionError(f"Unknown design system {ds_id!r}")
+    if not ds.is_active:
+        raise DSResolutionError(f"Design system {ds_id!r} is inactive")
+    return build_pipeline_payload(ds)
 
 
 async def _current_html(task: object, fmt_id: str) -> str | None:
@@ -82,11 +77,16 @@ async def _precheck_html(
     tokens = payload.get("design_tokens") or dict(DEFAULT_TOKEN_VALUES)
     di = payload.get("design_instruction") or {}
 
+    from app.services.composer import finalize_html, katex_missing
+    from app.services.ds_context import DSContext
+
     clean = sanitize_html(html, mode="preserve_system")
-    if "cdn.jsdelivr.net/npm/katex" not in clean:
-        clean = inject_katex_into_html(clean)
-    clean = inject_tokens_into_html(clean, tokens)
-    clean = inject_fonts_into_html(clean, build_google_fonts_link(tokens, di))
+    clean = finalize_html(
+        clean,
+        DSContext(ds_id="", tokens=tokens, design_instruction=di),
+        katex=katex_missing(clean),
+        logo=False,
+    )
 
     display_value = tokens.get("--font-display") or DEFAULT_TOKEN_VALUES["--font-display"]
     display_family = display_value.split(",")[0].strip()
@@ -125,7 +125,7 @@ async def run_chat_turn(
     fmt_id = validated[0]
     fmt = get_format_info(fmt_id)
 
-    payload = await _resolve_payload(db, task)
+    payload = await _resolve_payload(db, task, fmt_id)
     tokens = payload.get("design_tokens") or dict(DEFAULT_TOKEN_VALUES)
     footer = payload.get("footer") or {"left": "", "right": ""}
     design_instruction = payload.get("design_instruction") or {}

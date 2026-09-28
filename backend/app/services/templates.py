@@ -122,6 +122,9 @@ def template_to_dict(row) -> dict:
         "design_system_id": row.design_system_id,
         "source": row.source,
         "is_active": bool(row.is_active),
+        "fields": detect_fields(row.html or ""),
+        "media_kinds": media_kinds(row.html or ""),
+        "has_media": has_media(row.html or ""),
     }
 
 
@@ -254,9 +257,62 @@ def select_template(
     return best_tid, pool[best_tid]
 
 
+def match_score(source: dict, target: dict) -> float:
+    """How well ``target`` substitutes ``source`` (same scoring as ``map_templates``).
+
+    Both are ``template_to_dict`` shapes: same id wins outright, then
+    hint-tag overlap, same media capability, shared content fields, weight.
+    """
+    src_tags = {str(t).lower() for t in source.get("hint_tags", [])}
+    tgt_tags = {str(t).lower() for t in target.get("hint_tags", [])}
+    src_html = source.get("html") or ""
+    tgt_html = target.get("html") or ""
+    return (
+        len(src_tags & tgt_tags) * 3.0
+        + (2.0 if has_media(tgt_html) == has_media(src_html) else 0.0)
+        + len(set(detect_fields(tgt_html)) & set(detect_fields(src_html))) * 0.5
+        + float(target.get("weight", 1.0)) * 0.1
+    )
+
+
+def match_template(source: dict, targets: list[dict]) -> dict | None:
+    """Closest template in ``targets`` for ``source`` (same family expected).
+
+    An exact id match wins; otherwise the highest ``match_score`` (stable by
+    id). None when ``targets`` is empty.
+    """
+    if not targets:
+        return None
+    for t in targets:
+        if t.get("id") == source.get("id"):
+            return t
+    ordered = sorted(targets, key=lambda t: str(t.get("id") or ""))
+    return max(ordered, key=lambda t: match_score(source, t))
+
+
+def default_template(targets: list[dict], family: str, ground: str) -> dict | None:
+    """Family default for a design-system switch: ground-compatible, heaviest.
+
+    Mirrors the composer's family-default backfill so a stale/missing template
+    id lands on a sensible choice instead of 422ing.
+    """
+    fam = [t for t in targets if t.get("family") == family]
+    if not fam:
+        return None
+    on_ground = [t for t in fam if ground in (t.get("grounds") or ["white", "black"])]
+    pool = on_ground or fam
+    return max(pool, key=lambda t: (float(t.get("weight") or 1.0), str(t.get("id") or "")))
+
+
 # ---------------------------------------------------------------------------
 # Filling
 # ---------------------------------------------------------------------------
+
+
+def design_language_has_accent(di_config: dict | None) -> bool:
+    """Whether a design instruction declares an accent colour (style.accent)."""
+    accent = ((di_config or {}).get("style") or {}).get("accent")
+    return accent not in (None, "", "none", False)
 
 
 def build_template_context(
@@ -327,6 +383,10 @@ def build_template_context(
         # compat with older saved templates — it renders empty.
         "footer_left": "",
         "footer_right": (footer or {}).get("right", ""),
+        # True when the design language uses an accent colour. Templates put
+        # their accent devices inside {% if has_accent %} so accent-less (Swiss)
+        # output stays byte-identical to the original.
+        "has_accent": design_language_has_accent(di_config),
         "ground": ground if ground in ("white", "black") else "white",
         "width": width,
         "height": height,
@@ -353,7 +413,10 @@ VALID_MEDIA_POSITIONS = {"auto", "left", "right", "top", "bottom"}
 
 # Skips conditions that compare/negate or are structural (ground/variant/loop).
 _IF_SKIP = re.compile(r"==|!=|<=|>=|\bnot\b|\bin\b|\bfor\b|\(|%")
-_STRUCT_VARS = {"ground", "variant", "loop", "loop_index", "slide_index", "slide_total", "range"}
+_STRUCT_VARS = {
+    "ground", "variant", "loop", "loop_index", "slide_index", "slide_total", "range",
+    "has_accent",
+}
 _BOOL_WORDS = {"or", "and", "not", "in", "is", "true", "false"}
 # Elements that are mandatory and must never be hideable. The verifier hard-fails
 # a design missing the footer handle, so `footer_right` is not a toggle.
@@ -401,6 +464,66 @@ def apply_hidden(context: dict, hidden: list[str] | None) -> dict:
         elif name == "badge":
             context[name] = None
     return context
+
+
+# ---------------------------------------------------------------------------
+# Content fields + media (Manual Compose form derivation)
+# ---------------------------------------------------------------------------
+
+# Canonical content vars a composer form can fill, in display order.
+CONTENT_FIELDS = (
+    "kicker",
+    "headline",
+    "subhead",
+    "body",
+    "tagline",
+    "extra.price",
+    "extra.cta",
+    "extra.date",
+    "extra.location",
+    "extra.stat",
+    "extra.source",
+)
+_JINJA_BLOCK_RE = re.compile(r"\{\{(.*?)\}\}|\{%(.*?)%\}", re.DOTALL)
+_EXTRA_REF_RE = re.compile(
+    r"""extra\s*(?:\.get\(\s*['"](\w+)['"]|\[\s*['"](\w+)['"]\s*\]|\.\s*(\w+))"""
+)
+_ILLUSTRATION_RE = re.compile(r"\{\{-?\s*illustration\b")
+
+
+def detect_fields(html: str) -> list[str]:
+    """Content vars a template renders, among :data:`CONTENT_FIELDS`.
+
+    Scans only Jinja expressions/statements (``{{ … }}`` / ``{% … %}``) so CSS
+    or markup that merely contains the word "body" never counts. ``extra``
+    fields are recognized as ``extra.x``, ``extra['x']`` or ``extra.get('x')``.
+    """
+    found: set[str] = set()
+    for m in _JINJA_BLOCK_RE.finditer(html or ""):
+        expr = m.group(1) if m.group(1) is not None else m.group(2)
+        for ident in re.findall(r"(?<![\w.])([A-Za-z_]\w*)", expr):
+            if ident in CONTENT_FIELDS:
+                found.add(ident)
+        for em in _EXTRA_REF_RE.finditer(expr):
+            key = em.group(1) or em.group(2) or em.group(3)
+            if f"extra.{key}" in CONTENT_FIELDS:
+                found.add(f"extra.{key}")
+    return [f for f in CONTENT_FIELDS if f in found]
+
+
+def media_kinds(html: str) -> list[str]:
+    """Media a template can host: ``image`` (a ``data-image-key`` slot, for
+    uploads/photos) and/or ``illustration`` (it renders ``{{ illustration }}``)."""
+    image_slots, _ = scan_template_features(html or "")
+    kinds = ["image"] if image_slots else []
+    if _ILLUSTRATION_RE.search(html or ""):
+        kinds.append("illustration")
+    return kinds
+
+
+def has_media(html: str) -> bool:
+    """True when a template can host any media (see :func:`media_kinds`)."""
+    return bool(media_kinds(html))
 
 
 # ---------------------------------------------------------------------------
@@ -563,6 +686,80 @@ def slotize_html(html: str) -> str:
     return joined
 
 
+def replace_slots(html: str, slots: dict[str, str]) -> tuple[str, list[str]]:
+    """Swap [data-slot] texts in rendered HTML. Returns (html, replaced_names).
+
+    Built on BeautifulSoup (html.parser tree): each matching element's
+    children are replaced with the new text (auto-escaped, never parsed as
+    markup). Unknown slot names (no matching element) are ignored.
+    """
+    if not slots:
+        return html, []
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    replaced: list[str] = []
+    for el in soup.find_all(attrs={"data-slot": True}):
+        name = el.get("data-slot")
+        if isinstance(name, list):
+            name = name[0] if name else ""
+        if not name or name not in slots:
+            continue
+        el.string = slots[name]
+        replaced.append(str(name))
+    return str(soup), sorted(set(replaced))
+
+
+def extract_baked_images(html: str) -> list[dict]:
+    """Pull baked base64 images out of rendered HTML for re-embedding.
+
+    Returns ``[{data, mime, alt}]`` ordered by data-image-key so a template
+    re-fill can preserve the post's media via ``substitute_image_keys``.
+    Non-data-URI sources (unrendered markers) are skipped.
+    """
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html or "", "html.parser")
+    found: dict[int, dict] = {}
+    for img in soup.find_all("img", attrs={"data-image-key": True}):
+        src = str(img.get("src") or "")
+        if not src.startswith("data:") or ";base64," not in src:
+            continue
+        try:
+            key = int(str(img.get("data-image-key")))
+        except (TypeError, ValueError):
+            continue
+        mime, _, data = src[5:].partition(";base64,")
+        found[key] = {"data": data, "mime": mime or "image/png", "alt": str(img.get("alt") or "")}
+    return [found[k] for k in sorted(found)]
+
+
+def extract_baked_photo(html: str) -> dict | None:
+    """The stock photo baked into rendered HTML, if any → ``{image, credit}``.
+
+    ``embed_photo_into_html`` replaces an image slot with
+    ``<span class="auto-photo"><img src="data:…"><span class="credit">…``, which
+    ``extract_baked_images`` (keyed markers) cannot see. Returned in the shape
+    ``fill_template(photo=...)`` takes so a re-fill keeps the photo + credit.
+    """
+    if "auto-photo" not in (html or ""):
+        return None  # skip the parse for the (common) photo-less document
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html or "", "html.parser")
+    wrap = soup.find(class_="auto-photo")
+    img = wrap.find("img") if wrap else None
+    src = str(img.get("src") or "") if img else ""
+    if not img or not src.startswith("data:") or ";base64," not in src:
+        return None
+    mime, _, data = src[5:].partition(";base64,")
+    credit_el = wrap.find(class_="credit")
+    return {
+        "image": {"data": data, "mime": mime or "image/jpeg", "alt": str(img.get("alt") or "")},
+        "credit": credit_el.get_text(strip=True) if credit_el else "",
+    }
+
+
 def scan_template_features(html: str) -> tuple[list[dict], bool]:
     """Derive image_slots + has_logo_slot from a template's markers."""
     keys = set(re.findall(r'data-image-key=["\'](\d+)["\']', html))
@@ -620,16 +817,25 @@ async def push_recent_template_id(template_id: str) -> None:
 
 
 __all__ = [
+    "CONTENT_FIELDS",
     "build_template_context",
     "catalog_path",
+    "default_template",
+    "detect_fields",
+    "extract_baked_images",
     "extract_slots",
     "format_family",
     "get_environment",
     "get_recent_template_ids",
+    "has_media",
     "load_template_catalog",
+    "match_score",
+    "match_template",
+    "media_kinds",
     "push_recent_template_id",
     "render_template_file",
     "render_template_html",
+    "replace_slots",
     "scan_template_features",
     "select_template",
     "slotize_html",

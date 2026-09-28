@@ -9,6 +9,7 @@ or ``DELETE_ON_DOWNLOAD`` is set.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from pathlib import Path
 
@@ -31,6 +32,34 @@ def resolve_output_file(task_id: str, filename: str) -> Path:
     return path
 
 
+def atomic_write(path: str | Path, data: bytes | str) -> None:
+    """Write ``data`` to ``path`` so readers never see a half-written file.
+
+    Writes ``<path>.tmp`` (fsynced), then ``os.replace``s it over the target;
+    the temp file is removed if anything fails, leaving the old file intact.
+    """
+    path = Path(path)
+    tmp = path.with_name(path.name + ".tmp")
+    payload = data.encode("utf-8") if isinstance(data, str) else data
+    try:
+        with open(tmp, "wb") as fh:
+            fh.write(payload)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
+
+
+# Files that live next to a task's artifacts but are not deliverable formats:
+# in-flight atomic-write temp files and the pre-conversion designer backup.
+_AUX_SUFFIXES = (".tmp", ".designer.html")
+
+
 def list_output_files(task_id: str) -> list[dict]:
     """List remaining artifacts as [{format, ext, size, filename}]."""
     base = task_output_dir(task_id)
@@ -38,7 +67,7 @@ def list_output_files(task_id: str) -> list[dict]:
     if not base.is_dir():
         return files
     for f in sorted(base.iterdir()):
-        if f.is_file():
+        if f.is_file() and not f.name.endswith(_AUX_SUFFIXES):
             files.append({
                 "format": f.stem,
                 "ext": f.suffix.lstrip("."),

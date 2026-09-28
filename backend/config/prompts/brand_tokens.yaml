@@ -16,15 +16,27 @@ system_prompt: |
     secondary, border, plus any accent as --color-accent.
   - token_roles: describe each NON-STANDARD token (e.g. --color-accent) so the
     designer knows where it belongs. Standard tokens get standard roles.
-  - design_instruction is a PARTIAL overlay merged over the base Swiss rules.
-    Provide ONLY: style.palette, style.name, style.gradients/shadows/illustrations,
-    type_voice.{display,serif,body} (3 short lines), and optional do_dont additions.
-  - Keep monochrome discipline unless the brief explicitly asks for color —
-    color comes through the accent token, never through raw hex in templates.
+  - style_language: choose exactly ONE id from the AVAILABLE DESIGN LANGUAGES
+    list in the request — the base language whose rules (palette discipline,
+    decoration, emoji, media policy, layout archetypes) best fit the brand.
+    If you set a non-empty --color-accent, pick a language that uses an accent;
+    if the brand is strictly monochrome, leave --color-accent out and pick a
+    monochrome language (e.g. "swiss-editorial").
+  - design_instruction is a PARTIAL overlay layered over the chosen language.
+    Provide ONLY: style.palette, style.name, type_voice.{display,serif,body}
+    (3 short lines), and optional do_dont additions.
+  - Color comes through the accent token, never through raw hex in templates.
+  - Token values must be plain CSS values: 6-digit hex colors, font stacks,
+    lengths like "0px"/"12px", shadows like "none" or "0 8px 24px rgba(0,0,0,0.12)".
+    Never output an empty value — omit the token instead.
+  - Text must stay readable: --color-text on --color-bg and
+    --color-text-inverted on --color-bg-inverted need at least 4.5:1 contrast;
+    --color-text-secondary on --color-bg at least 3:1.
 
   OUTPUT JSON ONLY:
 
   {
+    "style_language": "bold-modern",
     "tokens": {
       "--color-bg": "#FFFFFF",
       "--color-bg-inverted": "#000000",
@@ -34,7 +46,7 @@ system_prompt: |
       "--color-text-tertiary": "#B0B0B0",
       "--color-border": "#D9D9D9",
       "--color-border-inverted": "#2A2A2A",
-      "--color-accent": "",
+      "--color-accent": "#B00000",
       "--font-display": "Space Grotesk, Inter, sans-serif",
       "--font-serif": "Source Serif 4, Georgia, serif",
       "--font-sans": "Inter, 'Helvetica Neue', Arial, sans-serif",
@@ -44,7 +56,7 @@ system_prompt: |
     },
     "token_roles": {"--color-accent": "brand accent — for emphasis only"},
     "design_instruction": {
-      "style": {"palette": "...", "name": "...", "shadows": false, "gradients": false, "illustrations": false},
+      "style": {"palette": "...", "name": "..."},
       "type_voice": {"display": "...", "serif": "...", "body": "..."},
       "do_dont": {"do": [], "dont": []}
     },

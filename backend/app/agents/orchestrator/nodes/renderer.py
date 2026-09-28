@@ -14,25 +14,27 @@ import re
 from pathlib import Path
 
 from app.agents.orchestrator.state import GenerationState
-from app.services.design_instruction import (
-    build_google_fonts_link,
-    inject_fonts_into_html,
-    photo_grayscale,
-    substitute_image_keys,
-    substitute_logo,
-)
+from app.services.design_instruction import photo_grayscale
+from app.services.ds_context import pick_logo
 from app.services.sanitizer import sanitize_html
-from app.services.tokens import (
-    DEFAULT_TOKEN_VALUES,
-    inject_katex_into_html,
-    inject_tokens_into_html,
-)
+from app.services.tokens import DEFAULT_TOKEN_VALUES
 
 log = logging.getLogger(__name__)
 
 
 def _inject_slide_counter(html: str, state: GenerationState, fmt_id: str) -> str:
-    """Add a ``i/N`` slide counter to carousel slides whose template lacks one.
+    """Pipeline wrapper for :func:`inject_slide_counter` (reads ``slide_context``)."""
+    from app.services.formats import parse_carousel_slide
+
+    parsed = parse_carousel_slide(fmt_id)
+    if not parsed:
+        return html
+    total = int((state.get("slide_context") or {}).get(fmt_id, {}).get("total", 0))
+    return inject_slide_counter(html, parsed[1], total)
+
+
+def inject_slide_counter(html: str, index: int, total: int) -> str:
+    """Add a ``i/N`` slide counter to a carousel slide whose template lacks one.
 
     Templates may opt in to their own counter with ``data-slot="counter"``
     (e.g. ``square-slide``); for every other carousel slide a small metadata
@@ -40,15 +42,8 @@ def _inject_slide_counter(html: str, state: GenerationState, fmt_id: str) -> str
     canvas never overflows, and only ``var(--color-*)`` tokens are used so the
     deterministic checks stay green.
     """
-    from app.services.formats import parse_carousel_slide
-
-    parsed = parse_carousel_slide(fmt_id)
-    if not parsed:
-        return html
     if 'data-slot="counter"' in html:
         return html
-    index = parsed[1]
-    total = int((state.get("slide_context") or {}).get(fmt_id, {}).get("total", 0))
     if total < 1:
         return html
 
@@ -87,7 +82,7 @@ async def renderer_node_single(state: GenerationState) -> dict:
     # post-wide list for single formats.
     slide_images = (state.get("_slide_images") or {}).get(fmt_id)
     images = slide_images if slide_images is not None else state.get("images", [])
-    logo = state.get("logo", "")
+    logo = pick_logo(state.get("logo", ""), state.get("logo_variants"), state.get("ground", "white"))
 
     if not html:
         log.warning("[renderer] No HTML for %s, skipping", fmt_id)
@@ -100,33 +95,30 @@ async def renderer_node_single(state: GenerationState) -> dict:
     # Defense in depth: re-sanitize before anything is injected or persisted.
     html = sanitize_html(html, mode="strict")
 
-    # 1. Inject CSS tokens
-    html = inject_tokens_into_html(html, design_tokens)
-
-    # 1b. Guarantee the Google Fonts link (system-controlled, not left to LLM).
-    #     Empty-state (tests / edge) falls back to the DB default design system.
+    # 1. Tokens → Google Fonts (system-controlled, not left to LLM) → KaTeX →
+    #    base64 images via data-image-key markers (honoring the design
+    #    language's photo treatment) → the design system logo (data-logo).
+    #    Empty-state (tests / edge) falls back to the DB default design system.
     di_config = state.get("design_instruction") or {}
     if not di_config:
         from app.services.design_systems import default_design_system_payload
 
         payload = await default_design_system_payload()
         di_config = payload.get("design_instruction") or {}
-        design_tokens = payload.get("design_tokens") or design_tokens
-    html = inject_fonts_into_html(html, build_google_fonts_link(design_tokens, di_config))
+    from app.services.composer import finalize_html
+    from app.services.ds_context import DSContext
 
-    # 2. Inject KaTeX for math rendering
-    html = inject_katex_into_html(html)
-
-    # 3. Embed images as base64 via data-image-key markers (honoring the design
-    #    language's photo treatment — grayscale for monochrome systems).
-    html = substitute_image_keys(
-        html, images, grayscale=photo_grayscale(state.get("design_instruction"))
+    ctx = DSContext(
+        ds_id=state.get("design_system_id") or "",
+        tokens=design_tokens,
+        design_instruction=di_config,
+        logo=logo,
+    )
+    html = finalize_html(
+        html, ctx, images, grayscale=photo_grayscale(state.get("design_instruction"))
     )
 
-    # 3b. Embed the design system logo via data-logo markers
-    html = substitute_logo(html, logo)
-
-    # 3c. Universal carousel slide counter — every slide shows i/N. Templates
+    # 2. Universal carousel slide counter — every slide shows i/N. Templates
     #     that already render a counter (data-slot="counter") are left alone.
     html = _inject_slide_counter(html, state, fmt_id)
 

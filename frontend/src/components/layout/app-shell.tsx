@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 
 const NAV = [
   { to: "/", label: "Tasks", match: /^\/$/ },
+  { to: "/compose", label: "Compose", match: /^\/compose/ },
   { to: "/templates", label: "Templates", match: /^\/templates/ },
   { to: "/design-systems", label: "Design Systems", match: /^\/design-systems/ },
   { to: "/agents", label: "Agents", match: /^\/agents/ },

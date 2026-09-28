@@ -221,9 +221,70 @@ async def apply_language(db: AsyncSession, language_id: str, di: dict | None = N
     return result
 
 
+async def apply_language_to_system(db: AsyncSession, ds, language_id: str) -> tuple:
+    """Switch a design system to a design language (preset or custom) and persist.
+
+    Applies the language's rules to the design_instruction (preserving the
+    user's type scale/spacing/footer), replaces the core color tokens with the
+    language's palette (+ accent, stripped for monochrome languages), backfills
+    a bare system's identity fields, points the default campaign at the
+    language's ground, and swaps the style starter templates. Returns
+    ``(updated_row, seeded_template_ids)``. Raises ``ValueError`` for an
+    unknown language.
+    """
+    from app.db.repositories.design_systems import DesignSystemRepository
+    from app.services import design_systems as ds_service
+    from app.services.ds_context import apply_language_tokens
+    from app.services.style_templates import (
+        remove_other_style_templates,
+        seed_style_templates,
+    )
+
+    lang = await get_language(db, language_id)
+    if lang is None:
+        raise ValueError(f"Unknown design language {language_id!r}")
+
+    new_di = await apply_language(db, language_id, ds.design_instruction or {})
+    tokens = apply_language_tokens(ds.tokens or {}, lang)
+
+    # A pre-existing bare system (created before create seeded a baseline) gets
+    # its missing identity fields backfilled so it is never incomplete.
+    baseline = ds_service.new_design_system_defaults(ds.name or ds.id)
+    updates: dict = {"design_instruction": new_di, "tokens": tokens}
+    if not ds.categories:
+        updates["categories"] = baseline["categories"]
+    if not ds.campaigns:
+        updates["campaigns"] = baseline["campaigns"]
+    if not (ds.brand or {}).get("name"):
+        updates["brand"] = baseline["brand"]
+
+    # The style's preferred ground (dark-luxury → black, others → white) should
+    # drive the default campaign, or posts resolve to white via the seed's
+    # "default" campaign and the language's identity is lost.
+    campaigns = dict(ds.campaigns or baseline["campaigns"])
+    default_campaign = campaigns.get("default")
+    if isinstance(default_campaign, dict):
+        default_campaign = dict(default_campaign)
+        default_campaign["ground"] = new_di.get("default_ground") or "white"
+        campaigns["default"] = default_campaign
+        updates["campaigns"] = campaigns
+
+    # Seed the new style's starters BEFORE pruning the old style's pack:
+    # a seed failure then leaves the old library intact instead of deleting
+    # it first and failing second (which stranded the DS with fewer templates).
+    seeded = await seed_style_templates(db, ds.id, language_id)
+    await remove_other_style_templates(db, ds.id, language_id)
+    # Restyling the default system takes it out of seed control.
+    if ds.id == ds_service.DEFAULT_ID and ds.source == "seed":
+        updates["source"] = "manual"
+    updated = await DesignSystemRepository(db).update(ds.id, updates)
+    return updated, seeded
+
+
 __all__ = [
     "LanguageDefinition",
     "apply_language",
+    "apply_language_to_system",
     "create_custom_language",
     "delete_language",
     "get_language",

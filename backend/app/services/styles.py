@@ -642,8 +642,10 @@ def build_style_rules_block(di: dict) -> str:
     )
     if accent not in ("none", "", False):
         lines.append(
-            "  Accent: use var(--color-accent) / var(--color-accent-secondary) "
-            "for emphasis ONLY — never introduce any other hue"
+            "  Accent: REQUIRED — use var(--color-accent) (optionally "
+            "var(--color-accent-secondary)) as a FILL, rule bar or highlight behind "
+            "dark ink text (var(--color-text)) on at least one prominent element; "
+            "never as a text colour; never introduce any other hue"
         )
     else:
         lines.append("  Accent: none — tonal/grayscale treatment via the token palette")

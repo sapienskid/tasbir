@@ -71,17 +71,33 @@ async def build_retry_state(db, task, fmt_id: str) -> dict | None:
     )
 
     source = task.source_data or {}
-    ds_id = source.get("design_system_id") or "default"
+    from app.services.ds_context import DSResolutionError, effective_design_system_id
+
+    ds_id = effective_design_system_id(task, fmt_id)
     ds = await DesignSystemRepository(db).get_by_id(ds_id)
     if ds is None:
-        from app.db.session import get_shared_session_factory
-
-        pool = await get_shared_session_factory()
-        async with pool() as session:
-            ds = await DesignSystemRepository(session).get_by_id("default")
-        if ds is None:
-            return None
+        raise RuntimeError(f"Cannot retry — unknown design system {ds_id!r}")
+    if not ds.is_active:
+        raise RuntimeError(f"Cannot retry — design system {ds_id!r} is inactive")
     payload = build_pipeline_payload(ds)
+    style_override = str(source.get("style_language") or "")
+    if style_override:
+        try:
+            from app.services.design_languages import apply_language, get_language
+            from app.services.ds_context import apply_language_tokens
+            from app.services.styles import normalize_design_instruction
+
+            lang = await get_language(db, style_override)
+            if lang is None:
+                raise DSResolutionError(f"Unknown design language {style_override!r}")
+            payload["design_instruction"] = normalize_design_instruction(
+                await apply_language(db, style_override, payload.get("design_instruction") or {})
+            )
+            payload["design_tokens"] = apply_language_tokens(
+                payload.get("design_tokens") or {}, lang
+            )
+        except DSResolutionError as e:
+            raise RuntimeError(f"Cannot retry — {e}")
 
     result = task.result or {}
     copy_json = _stored_copy(result, fmt_id)
@@ -111,6 +127,10 @@ async def build_retry_state(db, task, fmt_id: str) -> dict | None:
 
     campaign_name = source.get("campaign", "default")
     campaigns = payload.get("campaigns") or {}
+    if campaign_name not in campaigns:
+        raise RuntimeError(
+            f"Cannot retry — unknown campaign {campaign_name!r} for design system {ds.id!r}"
+        )
     campaign = campaigns.get(campaign_name, campaigns.get("default", {}))
 
     brief = result.get("strategic_brief") or {}

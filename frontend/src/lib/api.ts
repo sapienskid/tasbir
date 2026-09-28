@@ -39,11 +39,21 @@ export function clearApiKey(): void {
 
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  /** Server-suggested wait (from a `Retry-After` header), in milliseconds. */
+  retryAfterMs?: number
+  constructor(status: number, message: string, retryAfterMs?: number) {
     super(message)
     this.name = "ApiError"
     this.status = status
+    this.retryAfterMs = retryAfterMs
   }
+}
+
+function retryAfterOf(res: Response): number | undefined {
+  const raw = res.headers.get("retry-after")
+  if (!raw) return undefined
+  const secs = Number(raw)
+  return Number.isFinite(secs) && secs >= 0 ? Math.min(secs, 120) * 1000 : undefined
 }
 
 async function authHeaders(init: RequestInit): Promise<Headers> {
@@ -69,7 +79,7 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     } catch {
       /* non-JSON error body */
     }
-    throw new ApiError(res.status, detail)
+    throw new ApiError(res.status, detail, retryAfterOf(res))
   }
   if (res.status === 204) return undefined as T
   return (await res.json()) as T
@@ -129,6 +139,8 @@ export interface PlatformResult {
   quality_issues: string[]
   html_path?: string
   template_id?: string | null
+  /** Stored copy JSON (headline/subhead/body/…) for template-built formats. */
+  copy?: string
   error?: string | null
   rerendered_at?: string | null
 }
@@ -179,6 +191,127 @@ export interface RetryResponse {
   html_path: string
   png_path: string | null
   template_id: string | null
+}
+
+export interface RefillRequest {
+  slots?: Record<string, string>
+  hidden?: string[] | null
+  media_position?: string
+  template_id?: string
+  media?: Record<string, string>
+  /** Re-fill under another design system (template is remapped server-side). */
+  design_system_id?: string
+}
+
+/** Persisted editor metadata the server keeps per (task, format). */
+export interface EditorMeta {
+  hidden?: string[] | null
+  media_position?: string
+  media_kind?: string
+  revision?: number
+}
+
+export interface RefillResponse {
+  format: string
+  pass: boolean
+  quality: {
+    score: number
+    issues: string[]
+    critique: string
+  }
+  png_b64: string
+  template_id: string
+  /** Finalized document as persisted — the client never has to refetch it. */
+  html?: string
+  /** +1 per successful persist per (task, format). */
+  revision?: number
+  saved_at?: string
+  editor?: EditorMeta
+  /** True when a designer-LLM post was converted to a template post. */
+  converted?: boolean
+  /** Effective design system after the refill (override or task default). */
+  design_system_id?: string
+  /** Template remap applied by a design-system switch, if any. */
+  remapped?: { from: string; to: string } | null
+}
+
+export interface RefillPreviewResponse {
+  html: string
+  width: number
+  height: number
+  template_id: string
+  slots: Record<string, string>
+  converted: boolean
+  design_system_id?: string
+  remapped?: { from: string; to: string } | null
+}
+
+export interface RequestOpts {
+  signal?: AbortSignal
+  /** Let the request outlive the page (route change / unload flush). */
+  keepalive?: boolean
+}
+
+/** Structured slot edit (template-built formats) — no raw HTML involved. */
+export function refillFormat(
+  taskId: string,
+  format: string,
+  body: RefillRequest,
+  opts: RequestOpts = {}
+): Promise<RefillResponse> {
+  return apiRequest(`/tasks/${taskId}/formats/${format}/refill`, {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal: opts.signal,
+    keepalive: opts.keepalive,
+  })
+}
+
+/** Fast preview of a refill — no PNG, no hard checks, no writes. */
+export function refillPreview(
+  taskId: string,
+  format: string,
+  body: RefillRequest,
+  opts: RequestOpts = {}
+): Promise<RefillPreviewResponse> {
+  return apiRequest(`/tasks/${taskId}/formats/${format}/refill/preview`, {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal: opts.signal,
+  })
+}
+
+/** Media as reported by the editor-state endpoint (never carries base64). */
+export interface EditorMedia {
+  kind: "none" | "upload" | "photo" | "illustration"
+  [key: string]: unknown
+}
+
+export interface EditorState {
+  editable: boolean
+  convertible: boolean
+  reason: string | null
+  template_id: string
+  family: string
+  ground: "white" | "black"
+  width: number
+  height: number
+  slots: Record<string, string>
+  hidden: string[] | null
+  media_position: string
+  media: EditorMedia
+  media_kinds: Array<"image" | "illustration">
+  revision: number
+  design_system_id: string
+  style_language: string
+}
+
+export function getEditorState(
+  taskId: string,
+  format: string,
+  opts: RequestOpts = {}
+): Promise<EditorState> {
+  return apiRequest(`/tasks/${taskId}/formats/${format}/editor`, { signal: opts.signal })
 }
 
 export interface GenerateResponse {
@@ -314,6 +447,12 @@ export interface Template {
   media_position?: string
   supports_text?: boolean
   has_illustration_slot?: boolean
+  /** Content vars the template renders (kicker/headline/…/extra.cta). */
+  fields?: string[]
+  /** True when the template has an image slot or an illustration. */
+  has_media?: boolean
+  /** Media the template can host: "image" (upload/photo), "illustration". */
+  media_kinds?: Array<"image" | "illustration">
   source: string
   is_active: boolean
   html?: string
@@ -795,6 +934,156 @@ export async function uploadMedia(file: File): Promise<{ data: string; mime: str
   const form = new FormData()
   form.append("file", file)
   return apiForm("/uploads", form)
+}
+
+// ─── Manual compose (no AI) ────────────────────────────────────────────────
+
+export type ComposeGround = "white" | "black"
+export type ComposeMediaPosition = "auto" | "left" | "right" | "top" | "bottom"
+export type ComposeExtraKey = "price" | "cta" | "date" | "location" | "stat" | "source"
+
+export interface ComposeCopy {
+  kicker: string
+  headline: string
+  subhead: string
+  body: string
+  tagline: string
+  extra: Record<ComposeExtraKey, string>
+}
+
+export type ComposeMedia =
+  | { kind: "none" }
+  | { kind: "upload"; data: string; mime: string; alt: string }
+  | {
+      kind: "photo"
+      url: string
+      credit: string
+      provider: string
+      photographer: string
+      license: string
+    }
+  | { kind: "illustration"; style: string; seed: string }
+
+export interface ComposeSlideSpec {
+  template_id: string
+  copy: ComposeCopy
+  /** Element toggles; null = the template's default hidden elements. */
+  hidden: string[] | null
+  media_position: ComposeMediaPosition
+  media: ComposeMedia
+}
+
+export interface ComposePostSpec {
+  platform: string
+  slides: ComposeSlideSpec[]
+}
+
+export interface ComposeBatchRequest {
+  design_system_id: string
+  style_language: string
+  ground: ComposeGround
+  title?: string
+  posts: ComposePostSpec[]
+}
+
+/** Per-task stored composition (also the PUT /tasks/{id}/composition body). */
+export interface ComposeComposition {
+  design_system_id: string
+  style_language: string
+  ground: ComposeGround
+  post: ComposePostSpec
+}
+
+export interface ComposePreviewRequest {
+  design_system_id: string
+  style_language: string
+  ground: ComposeGround
+  platform: string
+  slide_index: number
+  slide_total: number
+  slide: ComposeSlideSpec
+}
+
+export interface ComposePreviewResponse {
+  html: string
+  width: number
+  height: number
+}
+
+export interface ComposeCreateResponse {
+  batch_id: string
+  task_ids: string[]
+}
+
+export interface ComposeBatchTask {
+  task_id: string
+  status: string
+  platform: string
+  composition: ComposeComposition | null
+}
+
+export interface ComposeBatch {
+  batch_id: string
+  tasks: ComposeBatchTask[]
+}
+
+export interface ComposePhoto {
+  url: string
+  thumb: string
+  width: number
+  height: number
+  provider: string
+  photographer: string
+  credit: string
+  license: string
+}
+
+export function composePreview(
+  body: ComposePreviewRequest,
+  signal?: AbortSignal
+): Promise<ComposePreviewResponse> {
+  return apiRequest("/compose/preview", { method: "POST", body: JSON.stringify(body), signal })
+}
+
+export function createComposeBatch(body: ComposeBatchRequest): Promise<ComposeCreateResponse> {
+  return apiRequest("/compose", { method: "POST", body: JSON.stringify(body) })
+}
+
+export function getComposeBatch(batchId: string): Promise<ComposeBatch> {
+  return apiRequest(`/compose/batches/${encodeURIComponent(batchId)}`)
+}
+
+export function updateTaskComposition(
+  taskId: string,
+  body: ComposeComposition
+): Promise<{ task_id: string; status: string }> {
+  return apiRequest(`/tasks/${taskId}/composition`, { method: "PUT", body: JSON.stringify(body) })
+}
+
+export function getComposeIllustration(
+  style: string,
+  seed: string,
+  ground: ComposeGround = "white"
+): Promise<{ svg: string }> {
+  const params = new URLSearchParams({ style, seed, ground })
+  return apiRequest(`/compose/illustration?${params.toString()}`)
+}
+
+export function searchComposePhotos(
+  q: string,
+  orientation: "square" | "portrait" | "landscape" = "square"
+): Promise<{ results: ComposePhoto[] }> {
+  const params = new URLSearchParams({ q, orientation })
+  return apiRequest(`/compose/photos?${params.toString()}`)
+}
+
+export function mapComposeTemplates(body: {
+  from_design_system_id: string
+  to_design_system_id: string
+  template_ids: string[]
+  platform: string
+}): Promise<{ mapping: Record<string, string> }> {
+  return apiRequest("/compose/templates/map", { method: "POST", body: JSON.stringify(body) })
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

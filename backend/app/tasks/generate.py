@@ -5,7 +5,6 @@ import asyncio
 import logging
 
 from app.agents.orchestrator.graph import run_pipeline
-from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.tasks import TaskRepository
 from app.db.session import get_shared_session_factory
 from app.tasks.celery_app import celery_app
@@ -35,7 +34,11 @@ def generate_task(self, task_id: str, source_data: dict):
         async def _execute() -> None:
 
             from app.config import get_settings
-            from app.services.design_systems import build_pipeline_payload, load_ds_templates
+            from app.services.design_systems import load_ds_templates
+            from app.services.ds_context import (
+                DSResolutionError,
+                resolve_ds_context_strict,
+            )
             from app.services.image_loader import prepare_images
             from app.services.tokens import DEFAULT_TOKEN_VALUES
 
@@ -43,48 +46,66 @@ def generate_task(self, task_id: str, source_data: dict):
 
             # Design system drives tokens, brand, footer, categories, campaigns,
             # design-instruction, and the logo. Defaults to the seeded system.
-            ds_id = source_data.get("design_system_id") or "default"
-            async with pool() as session:
-                ds = await DesignSystemRepository(session).get_by_id(ds_id)
-                if ds is None:
-                    log.warning(
-                        "[generate_task] Design system %r not found — falling back to default",
-                        ds_id,
+            # A per-post design-language override applies the language's rules
+            # + palette to THIS post only (in-memory), without changing the DS.
+            # Strict: unknown/inactive systems, languages, or campaigns fail
+            # the task loudly instead of silently rendering the wrong brand.
+            override = str(source_data.get("style_language") or "")
+            try:
+                ctx = await resolve_ds_context_strict(
+                    pool, source_data.get("design_system_id") or "default", override
+                )
+            except DSResolutionError as e:
+                async with pool() as session:
+                    await TaskRepository(session).update_status(
+                        task_id=task_id, status="failed", error=str(e),
                     )
-                    async with pool() as s2:
-                        ds = await DesignSystemRepository(s2).get_by_id("default")
-                if ds is None:
-                    raise RuntimeError("No design system available (seed failed)")
+                from app.agents.orchestrator.post_cache import post_cache_clear as _pcc
 
-            payload = build_pipeline_payload(ds)
+                _pcc(task_id)
+                return
+            if ctx.style_language:
+                log.info("[generate] %s uses per-post language override %r", task_id, override)
 
             # Setup pipeline input
             pipeline_input = dict(source_data)
             pipeline_input["_task_id"] = task_id
             pipeline_input.update(
                 {
-                    "design_system_id": ds.id,
-                    "design_tokens": payload["design_tokens"]
-                    or dict(DEFAULT_TOKEN_VALUES),
-                    "token_roles": payload["token_roles"],
-                    "brand_info": payload["brand_info"],
-                    "footer": payload["footer"],
-                    "categories": payload["categories"],
-                    "design_instruction": payload["design_instruction"],
-                    "logo": payload["logo"],
+                    "design_system_id": ctx.ds_id,
+                    "design_tokens": ctx.tokens or dict(DEFAULT_TOKEN_VALUES),
+                    "token_roles": ctx.token_roles,
+                    "brand_info": ctx.brand,
+                    "footer": ctx.footer,
+                    "categories": ctx.categories,
+                    "design_instruction": ctx.design_instruction,
+                    "logo": ctx.logo,
+                    "logo_variants": ctx.logo_variants,
                 }
             )
 
             # Overrides: brand/system-level, then API request (highest priority)
             request_overrides = source_data.get("overrides", {}) or {}
             pipeline_input["overrides"] = {
-                **(payload.get("overrides") or {}),
+                **(ctx.overrides or {}),
                 **request_overrides,
             }
 
             # Campaign preset from this design system's campaigns map.
+            # Strict: an unknown campaign fails loudly (no silent default).
             campaign_name = source_data.get("campaign", "default")
-            campaigns = payload.get("campaigns") or {}
+            campaigns = ctx.campaigns or {}
+            if campaign_name not in campaigns:
+                async with pool() as session:
+                    await TaskRepository(session).update_status(
+                        task_id=task_id,
+                        status="failed",
+                        error=f"Unknown campaign {campaign_name!r} for design system {ctx.ds_id!r}",
+                    )
+                from app.agents.orchestrator.post_cache import post_cache_clear as _pcc2
+
+                _pcc2(task_id)
+                return
             pipeline_input["campaign"] = campaigns.get(
                 campaign_name, campaigns.get("default", {})
             )
@@ -95,45 +116,18 @@ def generate_task(self, task_id: str, source_data: dict):
                 pipeline_input["category"] = source_data["category"]
 
             # The design system's active template library (selection input).
-            pipeline_input["ds_templates"] = await load_ds_templates(pool, ds.id)
+            pipeline_input["ds_templates"] = await load_ds_templates(pool, ctx.ds_id)
             pipeline_input["template_id"] = source_data.get("template_id") or ""
             pipeline_input["platforms_config"] = source_data.get("platforms_config") or {}
             pipeline_input["template_mode"] = source_data.get("template_mode") or "auto"
             pipeline_input["post_type"] = source_data.get("post_type") or "default"
             pipeline_input["verbatim"] = bool(source_data.get("verbatim"))
 
-            # Per-post design-language override: apply the language's rules + palette
-            # to THIS post only (in-memory), without changing the design system.
-            override = str(source_data.get("style_language") or "")
-            if override:
-                async with pool() as session:
-                    from app.services.design_languages import apply_language, get_language
-
-                    lang = await get_language(session, override)
-                    if lang is not None:
-                        di = await apply_language(
-                            session, override, payload.get("design_instruction") or {}
-                        )
-                        tokens = dict(pipeline_input["design_tokens"])
-                        for var, value in (lang.palette_tokens or {}).items():
-                            tokens[var] = value
-                        for var, value in (lang.accent_tokens or {}).items():
-                            tokens[var] = value
-                        pipeline_input["design_instruction"] = di
-                        pipeline_input["design_tokens"] = tokens
-                        log.info(
-                            "[generate] %s uses per-post language override %r", task_id, override
-                        )
-                    else:
-                        log.warning(
-                            "[generate] unknown style_language override %r ignored", override
-                        )
-
             # Effective illustration style: API override → DS default → procedural.
             from app.services.design_systems import resolve_illustration_style
 
             pipeline_input["illustration_style"] = resolve_illustration_style(
-                payload.get("design_instruction") or {},
+                ctx.design_instruction or {},
                 str(source_data.get("illustration_style") or ""),
             )
 

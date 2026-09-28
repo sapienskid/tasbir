@@ -16,7 +16,8 @@ export interface QcState {
 }
 
 interface InspectorRailProps {
-  onClose: () => void
+  onClose?: () => void
+  defaultTab?: "quality" | "agent" | "trace"
   qc: QcState | null
   taskId: string
   format: string
@@ -32,6 +33,7 @@ interface InspectorRailProps {
 
 export function InspectorRail({
   onClose,
+  defaultTab = "quality",
   qc,
   taskId,
   format,
@@ -42,7 +44,7 @@ export function InspectorRail({
   auditing,
   running = false,
 }: InspectorRailProps) {
-  const [tab, setTab] = useState<"quality" | "agent" | "trace">("quality")
+  const [tab, setTab] = useState<"quality" | "agent" | "trace">(defaultTab)
   const { data: audit } = useSWR(
     tab === "trace" ? `/tasks/${taskId}/audit` : null,
     () => getTaskAudit(taskId),
@@ -65,15 +67,17 @@ export function InspectorRail({
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Close inspector"
-          onClick={onClose}
-          className="h-7 w-7"
-        >
-          <X aria-hidden="true" className="size-4" />
-        </Button>
+        {onClose ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Close inspector"
+            onClick={onClose}
+            className="h-7 w-7"
+          >
+            <X aria-hidden="true" className="size-4" />
+          </Button>
+        ) : null}
       </div>
       <div className="flex min-h-0 flex-1 flex-col p-3">
         {tab === "quality" ? (
