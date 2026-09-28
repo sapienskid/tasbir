@@ -83,8 +83,8 @@ async def build_retry_state(db, task, fmt_id: str) -> dict | None:
     style_override = str(source.get("style_language") or "")
     if style_override:
         try:
-            from app.services.ds_context import apply_language_tokens
             from app.services.design_languages import apply_language, get_language
+            from app.services.ds_context import apply_language_tokens
             from app.services.styles import normalize_design_instruction
 
             lang = await get_language(db, style_override)

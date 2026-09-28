@@ -518,7 +518,12 @@ async def retry_format(
         msg = str(e)
         # Bad references (deleted/deactivated system, language, campaign) are
         # client errors; missing copy / busy state stays 409.
-        if "unknown design system" in msg or "is inactive" in msg or "unknown campaign" in msg or "Unknown design language" in msg:
+        if (
+            "unknown design system" in msg
+            or "is inactive" in msg
+            or "unknown campaign" in msg
+            or "Unknown design language" in msg
+        ):
             raise HTTPException(status_code=422, detail=msg)
         raise HTTPException(status_code=409, detail=msg)
     return result

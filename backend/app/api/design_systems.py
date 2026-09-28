@@ -13,7 +13,6 @@ from app.core.errors import NotFoundError
 from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.templates import TemplateRepository
 from app.services import design_systems as ds_service
-from app.services.uploads import validate_upload
 
 log = logging.getLogger(__name__)
 
