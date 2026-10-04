@@ -204,6 +204,9 @@ class GenerationState(TypedDict):
     # Marketing-copy QA (advisory first, blocking per COPY_QA_ENFORCE):
     # {platform_id: {score, verdict, dims, issues}} from Jev/Clef packs.
     copy_qa: Annotated[dict[str, dict], _merge_dicts]
+    # Platforms whose copy QA verdict is "rewrite" while COPY_QA_ENFORCE is
+    # on — the Studio treats these as do-not-publish.
+    copy_qa_blocked: Annotated[list[str], _keep_first_list]
     # Decision-model audit trail: [{pack_id, provider, model, answers...}].
     decision_events: Annotated[list[dict], _keep_first_list]
 

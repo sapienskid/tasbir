@@ -30,7 +30,7 @@ from app.services.design_instruction import (
 )
 from app.services.dom_extractor import detect_overflow, render_to_png
 from app.services.ds_context import pick_logo
-from app.services.formats import get_format_info
+from app.services.formats import get_format_info, parse_carousel_slide
 from app.services.templates import design_language_has_accent
 from app.services.tokens import DEFAULT_TOKEN_VALUES
 
@@ -592,9 +592,25 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         payload = await default_design_system_payload()
         design_instruction = payload.get("design_instruction") or {}
     ds_context = _build_design_system_context(design_tokens, design_instruction, footer, category, ground)
+    # Copy-QA verdicts ride into the audit as extra scrutiny (advisory — the
+    # hard gates above already ran). A "rewrite" verdict tells the auditor to
+    # look harder at text issues without changing the scoring rules.
+    copy_qa_note = ""
+    try:
+        parsed = parse_carousel_slide(fmt_id)
+        qa_key = parsed[0] if parsed else fmt_id
+        qa = (state.get("copy_qa") or {}).get(qa_key, {})
+        if qa:
+            copy_qa_note = (
+                f"COPY QA ({qa.get('provider', '?')}): verdict={qa.get('verdict', '?')} "
+                f"score={qa.get('score', '?')} issues={'; '.join(qa.get('issues', [])) or 'none'}\n"
+            )
+    except Exception:  # noqa: BLE001
+        copy_qa_note = ""
     user_prompt = (
         f"TARGET PLATFORM: {fmt_id} ({fmt.width}x{fmt.height}px)\n"
         f"EXPECTED GROUND: {ground}\n"
+        f"{copy_qa_note}"
         f"{ds_context}\n\n"
         f"Audit this design image. Score it 0-100 and provide actionable critique.\n"
         f"Return ONLY valid JSON: {{\"pass\": bool, \"score\": int, \"issues\": [...], \"critique\": \"...\"}}"

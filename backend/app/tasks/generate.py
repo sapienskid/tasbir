@@ -248,6 +248,7 @@ def generate_task(self, task_id: str, source_data: dict):
                         "carousel_bases": carousel_bases,
                         "media_credits": state.get("media_credits") or [],
                         "copy_qa": state.get("copy_qa") or {},
+                        "copy_qa_blocked": state.get("copy_qa_blocked") or [],
                     },
                 )
 

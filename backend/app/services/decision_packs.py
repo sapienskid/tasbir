@@ -13,7 +13,7 @@ from __future__ import annotations
 PACKS: dict[str, dict] = {
     "intake-router": {
         "version": 1,
-        "providers": ["jev", "clef-flash"],
+        "providers": ["clef-flash", "jev"],
         "thresholds": {"category_min_confidence": 0.5, "safety_block": 0.8},
         "questions": {
             "category": {
@@ -66,7 +66,7 @@ PACKS: dict[str, dict] = {
     },
     "planner-gate": {
         "version": 1,
-        "providers": ["jev", "clef-flash"],
+        "providers": ["clef-flash", "jev"],
         "thresholds": {},
         "questions": {
             "structure": {
@@ -96,7 +96,7 @@ PACKS: dict[str, dict] = {
     },
     "template-pick": {
         "version": 1,
-        "providers": ["jev", "clef-flash"],
+        "providers": ["clef-flash", "jev"],
         "thresholds": {},
         "questions": {
             "no_fit": {
@@ -107,7 +107,7 @@ PACKS: dict[str, dict] = {
     },
     "media-kind": {
         "version": 1,
-        "providers": ["jev", "clef-flash"],
+        "providers": ["clef-flash", "jev"],
         "thresholds": {},
         "questions": {
             "kind": {
@@ -128,7 +128,7 @@ PACKS: dict[str, dict] = {
     },
     "copy-voice": {
         "version": 1,
-        "providers": ["jev", "clef-flash"],
+        "providers": ["clef-flash", "jev"],
         "thresholds": {"hype_block": 3.0},
         "questions": {
             "tone": {
@@ -170,7 +170,7 @@ PACKS: dict[str, dict] = {
     },
     "copy-claims": {
         "version": 1,
-        "providers": ["jev", "clef-flash"],
+        "providers": ["clef-flash", "jev"],
         "thresholds": {"block": 0.8},
         "questions": {
             "absolute_claim": {
@@ -198,7 +198,7 @@ PACKS: dict[str, dict] = {
     },
     "copy-structure": {
         "version": 1,
-        "providers": ["jev", "clef-flash"],
+        "providers": ["clef-flash", "jev"],
         "thresholds": {},
         "questions": {
             "has_hook": {

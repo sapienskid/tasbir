@@ -966,4 +966,9 @@ async def copywriter_node(state: GenerationState) -> dict:
     out: dict = {"format_tasks": format_tasks}
     if copy_qa:
         out["copy_qa"] = copy_qa
+        if enforce:
+            blocked = sorted(pid for pid, qa in copy_qa.items() if qa.get("verdict") == "rewrite")
+            if blocked:
+                log.warning("[copywriter] copy QA blocking %d platform(s): %s", len(blocked), blocked)
+                out["copy_qa_blocked"] = blocked
     return out

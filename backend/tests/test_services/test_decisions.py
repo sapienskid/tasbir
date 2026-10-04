@@ -50,6 +50,35 @@ def test_gateway_not_configured_by_default(monkeypatch):
         get_settings.cache_clear()
 
 
+def test_text_packs_prefer_clef_flash():
+    """Fast text work runs on Clef-flash first; Clef-full is vision-only."""
+    for pid in (
+        "intake-router", "planner-gate", "template-pick", "media-kind",
+        "copy-voice", "copy-claims", "copy-structure", "verifier-pregate",
+    ):
+        assert packs.get_pack(pid)["providers"][0] == "clef-flash", pid
+    for pid in ("verifier-visual", "sequence-cohesion"):
+        assert packs.get_pack(pid)["providers"] == ["clef"], pid
+
+
+def test_intake_policy_actions():
+    from app.agents.orchestrator.nodes.strategist import _intake_policy
+
+    assert _intake_policy({}, {}) == {
+        "safety": 0.0, "needs_human": 0.0, "block": False, "needs_review": False,
+    }
+    safe = {"safety_flag": {"type": "noul", "noul": 0.1},
+            "needs_human": {"type": "noul", "noul": 0.2}}
+    out = _intake_policy(safe, {"safety_block": 0.8})
+    assert out["block"] is False and out["needs_review"] is False
+    risky = {"safety_flag": {"type": "noul", "noul": 0.95},
+             "needs_human": {"type": "noul", "noul": 0.7}}
+    out = _intake_policy(risky, {"safety_block": 0.8})
+    assert out["block"] is True and out["needs_review"] is True
+    # Malformed answers never block (fail-open).
+    assert _intake_policy({"safety_flag": {"noul": "high"}}, {})["block"] is False
+
+
 def test_retired_models_remapped():
     assert models_svc.resolve_model_id("gemini-2.5-flash") == "gemini-3.1-flash-lite"
     assert models_svc.resolve_model_id("gemma-4-31b-it") == "gemma-4-31b-it"
