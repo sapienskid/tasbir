@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     # Cloudflare AI Gateway (single AI control plane for generation +
     # decisions). Jev + Clef both run through here — no TypeSafe key needed
     # (Jev bills as a third-party model via Unified Billing).
+    # Canonical env names (as in .env): CLOUDFLARE_ACCOUNT_ID and
+    # CLOUDFLARE_AI_GATEWAY_TOKEN. CF_ACCOUNT_ID / CF_AIG_TOKEN stay as
+    # legacy aliases.
+    cloudflare_account_id: str = ""
+    cloudflare_ai_gateway_token: str = ""
     cf_account_id: str = ""
     cf_aig_token: str = ""
     cf_gateway_id: str = "tasbir"
@@ -80,6 +85,16 @@ class Settings(BaseSettings):
     campaigns_path: str = "data/design_system/campaigns.yaml"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @property
+    def resolved_cf_account_id(self) -> str:
+        """Account id from either naming (canonical name wins)."""
+        return self.cloudflare_account_id or self.cf_account_id
+
+    @property
+    def resolved_cf_token(self) -> str:
+        """Gateway token from either naming (canonical name wins)."""
+        return self.cloudflare_ai_gateway_token or self.cf_aig_token
 
     @field_validator("cors_origins", mode="before")
     @classmethod

@@ -37,7 +37,7 @@ _API_BASE = "https://api.cloudflare.com/client/v4/accounts"
 
 def providers_configured() -> bool:
     settings = get_settings()
-    return bool(settings.cf_account_id and settings.cf_aig_token)
+    return bool(settings.resolved_cf_account_id and settings.resolved_cf_token)
 
 
 def provider_order() -> list[str]:
@@ -75,9 +75,9 @@ async def _call_provider(
     if not providers_configured():
         raise RuntimeError("Cloudflare decision providers not configured")
     model_id = PROVIDERS[provider]
-    url = f"{_API_BASE}/{settings.cf_account_id}/ai/run/{model_id}"
+    url = f"{_API_BASE}/{settings.resolved_cf_account_id}/ai/run/{model_id}"
     headers = {
-        "Authorization": f"Bearer {settings.cf_aig_token}",
+        "Authorization": f"Bearer {settings.resolved_cf_token}",
         "Content-Type": "application/json",
     }
     if settings.cf_gateway_id:

@@ -166,6 +166,32 @@ async def planner_node(state: GenerationState) -> dict:
     if task_id:
         from app.services.audit import record_audit
 
+        # Decision second opinion (fail-open, audit-only): the hybrid gate
+        # already resolved user intent; the planner-gate pack just records
+        # whether an independent judgment agrees — calibration data for
+        # future threshold tuning, never a behavior change today.
+        decision_info: dict = {}
+        try:
+            from app.services.decisions import decide, providers_configured
+
+            if providers_configured():
+                d_res = await decide(
+                    "planner-gate",
+                    {"title": state.get("title", ""),
+                     "content": str(state.get("content") or "")[:1200],
+                     "platforms": resolved},
+                    metadata={"agent": "planner"},
+                )
+                struct_ans = d_res.get("answers", {}).get("structure", {})
+                decision_info = {
+                    "provider": d_res.get("provider", ""),
+                    "voted_structure": struct_ans.get("choice", ""),
+                    "confidence": struct_ans.get("confidence"),
+                    "agrees": struct_ans.get("choice") == plan.post_type,
+                }
+        except Exception as e:  # noqa: BLE001
+            log.warning("[planner] gate assist skipped: %s", e)
+
         await record_audit(
             task_id,
             "planner",
@@ -175,6 +201,7 @@ async def planner_node(state: GenerationState) -> dict:
                 "slides": plan.slides,
                 "platforms": resolved,
                 "llm": needs_llm,
+                **({"gate_assist": decision_info} if decision_info else {}),
             },
         )
 

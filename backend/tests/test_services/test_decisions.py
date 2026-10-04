@@ -30,8 +30,13 @@ def test_gateway_tiers_cover_model_routes():
 
 
 def test_gateway_not_configured_by_default(monkeypatch):
-    monkeypatch.setenv("CF_ACCOUNT_ID", "")
-    monkeypatch.setenv("CF_AIG_TOKEN", "")
+    for var in (
+        "CF_ACCOUNT_ID",
+        "CF_AIG_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_AI_GATEWAY_TOKEN",
+    ):
+        monkeypatch.setenv(var, "")
     from app.config import get_settings
 
     get_settings.cache_clear()
@@ -40,6 +45,31 @@ def test_gateway_not_configured_by_default(monkeypatch):
         assert dec.providers_configured() is False
     finally:
         get_settings.cache_clear()
+
+
+def test_gateway_env_naming_both_supported(monkeypatch):
+    from app.config import Settings
+
+    legacy = Settings(
+        cf_account_id="acct-legacy", cf_aig_token="tok-legacy",
+    )
+    assert legacy.resolved_cf_account_id == "acct-legacy"
+    assert legacy.resolved_cf_token == "tok-legacy"
+    canonical = Settings(
+        cloudflare_account_id="acct-new",
+        cloudflare_ai_gateway_token="tok-new",
+    )
+    assert canonical.resolved_cf_account_id == "acct-new"
+    assert canonical.resolved_cf_token == "tok-new"
+    # Canonical wins when both are set.
+    both = Settings(
+        cf_account_id="acct-legacy",
+        cf_aig_token="tok-legacy",
+        cloudflare_account_id="acct-new",
+        cloudflare_ai_gateway_token="tok-new",
+    )
+    assert both.resolved_cf_account_id == "acct-new"
+    assert both.resolved_cf_token == "tok-new"
 
 
 def test_pack_registry_valid():

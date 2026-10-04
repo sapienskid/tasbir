@@ -1074,8 +1074,8 @@ Response: `{"status": "ok", "version": "…", "service": "tasbir", "llm_configur
 | `GEMINI_API_KEY` | Yes | — | Google AI Studio API key |
 | `OPENROUTER_API_KEY` | No | — | Fallback LLM provider |
 | `LLM_PROVIDER` | No | `direct` | Generation transport: `direct` or `gateway` (Cloudflare AI Gateway) |
-| `CF_ACCOUNT_ID` | No* | — | Cloudflare account for Gateway + decisions (*needed when `LLM_PROVIDER=gateway` or decisions on) |
-| `CF_AIG_TOKEN` | No* | — | Cloudflare API token (Gateway run) |
+| `CLOUDFLARE_ACCOUNT_ID` | No* | — | Cloudflare account for Gateway + decisions (*needed when `LLM_PROVIDER=gateway` or decisions on; legacy alias `CF_ACCOUNT_ID`) |
+| `CLOUDFLARE_AI_GATEWAY_TOKEN` | No* | — | Cloudflare API token for Gateway runs (legacy alias `CF_AIG_TOKEN`) |
 | `CF_GATEWAY_ID` | No | `tasbir` | Gateway id for generation + decision calls |
 | `DECISION_PROVIDER_ORDER` | No | `jev,clef-flash,clef` | Decision failover order (vision packs force Clef) |
 | `DECISION_CALIBRATION_RATE` | No | `0.0` | Sample rate for dual-provider agreement logging |

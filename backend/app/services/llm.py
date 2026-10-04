@@ -41,7 +41,7 @@ _GATEWAY_API_BASE = "https://api.cloudflare.com"
 def gateway_configured() -> bool:
     """True when Cloudflare Gateway credentials are present."""
     settings = get_settings()
-    return bool(settings.cf_account_id and settings.cf_aig_token)
+    return bool(settings.resolved_cf_account_id and settings.resolved_cf_token)
 
 
 def gateway_route_for_role(agent_role: str) -> str:
@@ -85,10 +85,10 @@ async def _call_gateway_chat(
         raise RuntimeError("Cloudflare AI Gateway not configured")
     url = (
         f"{_GATEWAY_API_BASE}"
-        + _GATEWAY_CHAT_PATH.format(account_id=settings.cf_account_id)
+        + _GATEWAY_CHAT_PATH.format(account_id=settings.resolved_cf_account_id)
     )
     headers = {
-        "Authorization": f"Bearer {settings.cf_aig_token}",
+        "Authorization": f"Bearer {settings.resolved_cf_token}",
         "cf-aig-gateway-id": settings.cf_gateway_id or "tasbir",
         "Content-Type": "application/json",
     }

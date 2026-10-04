@@ -391,6 +391,36 @@ async def _run_sequence_check(state: GenerationState) -> dict:
         "warnings": warnings,
     }
 
+    # Decision second opinion (text-only, fail-open): per-slide headlines go
+    # to the sequence-cohesion pack; the verdict is advisory and never flips
+    # the deterministic ok — it rides along for calibration.
+    try:
+        from app.services.decisions import decide, providers_configured
+
+        if providers_configured() and by_base:
+            import json as _json
+
+            slides_state: dict = {}
+            for base, slides in sorted(by_base.items()):
+                heads = []
+                for sid, _ in sorted(slides, key=lambda s: s[1]):
+                    raw = (state.get("format_tasks", {}).get(sid) or {}).get("copy", "")
+                    try:
+                        data = _json.loads(raw) if raw else {}
+                    except Exception:
+                        data = {}
+                    heads.append(str(data.get("headline", ""))[:120])
+                slides_state[base] = heads
+            d_res = await decide("sequence-cohesion", {"slides": slides_state},
+                                 metadata={"agent": "sequence_check"})
+            result["decision"] = {
+                "provider": d_res.get("provider", ""),
+                "model": d_res.get("model", ""),
+                "answers": d_res.get("answers", {}),
+            }
+    except Exception as e:  # noqa: BLE001
+        log.warning("[sequence] decision assist skipped: %s", e)
+
     if state.get("sequence_audit") and by_base:
         vision = await _sequence_vision_audit(state, by_base)
         if vision:

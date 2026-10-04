@@ -913,11 +913,15 @@ async def copywriter_node(state: GenerationState) -> dict:
 
     log.info("[copywriter] Copy written for %d platforms", len(format_tasks))
 
-    # Advisory copy QA (fail-open, concurrent per platform). Blocking is a
-    # separate rollout gated by COPY_QA_ENFORCE; for now flags ride along in
-    # state + audit so the Studio can display dimensions without changing
-    # pipeline behavior.
+    # Advisory copy QA (fail-open, concurrent per platform). When
+    # COPY_QA_ENFORCE is true, a "rewrite" verdict is flagged as blocking in
+    # the audit + state (the Studio treats it as do-not-publish); the copy
+    # itself is never dropped so a miscalibrated threshold can't silently
+    # lose a platform.
     copy_qa: dict[str, dict] = {}
+    from app.config import get_settings
+
+    enforce = bool(get_settings().copy_qa_enforce)
     try:
         from app.services.decisions import providers_configured
 
@@ -946,11 +950,17 @@ async def copywriter_node(state: GenerationState) -> dict:
         from app.services.audit import record_audit
 
         for platform_id in format_tasks:
+            qa = copy_qa.get(platform_id, {})
+            blocked = bool(enforce and qa and qa.get("verdict") == "rewrite")
+            if blocked:
+                log.warning("[copywriter] copy QA BLOCKS %s (score %s) — flagged, still rendering",
+                            platform_id, qa.get("score"))
             await record_audit(
                 task_id,
                 "copywriter",
                 decision={"format": platform_id, "status": "copy_ready",
-                          **({"copy_qa": copy_qa[platform_id]} if platform_id in copy_qa else {})},
+                          **({"copy_qa": qa} if qa else {}),
+                          **({"copy_qa_block": True} if blocked else {})},
             )
 
     out: dict = {"format_tasks": format_tasks}
