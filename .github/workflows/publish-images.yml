@@ -3,9 +3,13 @@ name: Publish Docker Images to GHCR
 # Builds Tasbir's Docker images and pushes them to GitHub Container Registry
 # so a server can deploy with `image:` pulls — no repo clone needed on the box.
 #
-#   on tag push:       v1.0.0 -> ghcr.io/<owner>/tasbir-api:1.0.0 + :latest
-#   on push to main:             -> :main + :latest (rolling dev image)
-#   on manual dispatch:          -> :<branch-or-ref> + :latest
+#   on tag push:   v1.2.0 -> :1.2.0 + :latest + :<sha>   (a release owns :latest)
+#   on main push:            -> :main + :<sha>          (gated on green CI)
+#
+# Notes:
+#   - `main` builds wait for CI (workflow_run + `if:` gate), so a red test run
+#     can never publish. `:latest` is only ever moved by a release tag.
+#   - `concurrency` serializes publishes so two builds can't race the same tag.
 #
 # Images:
 #   ghcr.io/<owner>/tasbir-api         (backend/Dockerfile — api, worker, beat; SPA baked in)
@@ -16,12 +20,26 @@ on:
     tags: ["v*"]
     branches: [main]
   workflow_dispatch:
+  workflow_run:
+    # Never publish an image behind a red CI: on main, wait for CI to finish
+    # and only build when it succeeded.
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: publish-images-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
   build-and-push:
+    # Gate on a green CI run for the same commit (main pushes + workflow_run).
+    if: >-
+      github.event_name != 'workflow_run'
+      || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,15 +62,22 @@ jobs:
         shell: bash
         run: |
           IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}"
-          TAGS="$IMAGE:${GITHUB_SHA::12}"
+          SHA="${GITHUB_SHA::12}"
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # Tag push: version + latest + the sha tag. `latest` MUST be the
+            # release, so the post-build step below re-asserts it.
             VERSION="${GITHUB_REF_NAME#v}"
-            TAGS="$TAGS,$IMAGE:$VERSION,$IMAGE:latest"
+            TAGS="$IMAGE:$VERSION,$IMAGE:$SHA,$IMAGE:latest"
+          elif [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            # CI-gated main build: main + sha only. Never moves `latest`
+            # (a release owns that tag) — deploys pin a version.
+            SHA="${{ github.event.workflow_run.head_sha }}" && SHA="${SHA:0:12}"
+            TAGS="$IMAGE:main,$IMAGE:$SHA"
           elif [[ "${{ github.ref_name }}" == "main" ]]; then
-            TAGS="$TAGS,$IMAGE:main,$IMAGE:latest"
+            TAGS="$IMAGE:main,$IMAGE:$SHA"
           else
             REF="${GITHUB_REF_NAME//\//-}"
-            TAGS="$TAGS,$IMAGE:$REF,$IMAGE:latest"
+            TAGS="$IMAGE:$REF,$IMAGE:$SHA"
           fi
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
@@ -80,3 +105,15 @@ jobs:
           tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Re-assert :latest from the release tag
+        # Defensive: a release tag must end up as :latest even if a stray
+        # build raced it. `docker buildx imagetools create` moves the tag
+        # to the digest the release build just pushed.
+        if: ${{ github.ref_type == 'tag' }}
+        shell: bash
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.name }}"
+          docker buildx imagetools create \
+            -t "$IMAGE:latest" "$IMAGE:${GITHUB_SHA:0:12}"
+          echo "::notice::$IMAGE:latest now points at ${GITHUB_SHA:0:12}"
