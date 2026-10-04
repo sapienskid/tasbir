@@ -853,7 +853,8 @@ async def _copy_qa_for_platform(
             "verdict": quality["verdict"],
             "dims": quality["dims"],
             "issues": issues,
-            "hook": {k: (v.get("noul") if isinstance(v, dict) else None) for k, v in hook.items()},
+            "hook": {k: (v.get("noul", v.get("score")) if isinstance(v, dict) else None)
+                       for k, v in hook.items()},
             "provider": res_a.get("provider", ""),
             "model": res_a.get("model", ""),
         }
