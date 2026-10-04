@@ -50,6 +50,21 @@ def test_gateway_not_configured_by_default(monkeypatch):
         get_settings.cache_clear()
 
 
+def test_retired_models_remapped():
+    assert models_svc.resolve_model_id("gemini-2.5-flash") == "gemini-3.1-flash-lite"
+    assert models_svc.resolve_model_id("gemma-4-31b-it") == "gemma-4-31b-it"
+    assert "gemini-2.5-flash" not in models_svc.MODEL_REGISTRY
+    assert "gemini-2.5-flash" not in models_svc.FALLBACK_CHAIN
+    registered = set(models_svc.MODEL_REGISTRY)
+    for primary, chain in models_svc.FALLBACK_CHAIN.items():
+        assert primary in registered, primary
+        for m in chain:
+            assert m in registered, (primary, m)
+    assert models_svc.default_fallbacks("gemini-2.5-flash") == models_svc.default_fallbacks(
+        "gemini-3.1-flash-lite"
+    )
+
+
 def test_gateway_env_naming_both_supported(monkeypatch):
     from app.config import Settings
 

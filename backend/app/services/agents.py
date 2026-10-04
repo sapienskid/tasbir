@@ -26,7 +26,7 @@ from app.db.repositories.agents import AgentRepository
 from app.db.session import get_shared_session_factory
 from app.models.agent import Agent
 from app.services.llm import DEFAULT_MODEL
-from app.services.models import MODEL_ROUTES, default_fallbacks
+from app.services.models import MODEL_ROUTES, default_fallbacks, resolve_model_id
 
 log = logging.getLogger(__name__)
 
@@ -60,13 +60,13 @@ async def get_agent_config(name: str) -> PromptConfig:
         async with pool() as session:
             row = await AgentRepository(session).get_by_name(name)
         if row is not None and row.is_active:
-            model = row.model or MODEL_ROUTES.get(name, "")
+            model = resolve_model_id(row.model or MODEL_ROUTES.get(name, ""))
             cfg = PromptConfig(
                 persona=row.persona,
                 role=row.role,
                 system_prompt=row.system_prompt,
                 model=model,
-                fallback_models=list(row.fallback_models or [])
+                fallback_models=[resolve_model_id(m) for m in (row.fallback_models or [])]
                 or default_fallbacks(model),
                 temperature=row.temperature,
                 max_tokens=row.max_tokens,
@@ -95,8 +95,8 @@ def resolve_model(agent_role: str) -> str:
     if cached is not None:
         model = cached[1].model
         if model:
-            return model
-    return MODEL_ROUTES.get(agent_role, DEFAULT_MODEL)
+            return resolve_model_id(model)
+    return resolve_model_id(MODEL_ROUTES.get(agent_role, DEFAULT_MODEL))
 
 
 def agent_to_dict(agent: Agent) -> dict:

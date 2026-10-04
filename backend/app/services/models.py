@@ -47,15 +47,19 @@ MODEL_REGISTRY: dict[str, dict] = {
         "tpm": 250000,
         "rpd": 500,
     },
-    "gemini-2.5-flash": {
-        "name": "Gemini 2.5 Flash",
-        "category": "text",
-        "vision": True,
-        "rpm": 7,
-        "tpm": 9780,
-        "rpd": 22,
-    },
 }
+
+# Retired model ids → replacement. gemini-2.5-flash is fully out (no
+# credits): any stored agent row / fallback list still naming it resolves to
+# gemini-3.1-flash-lite instead of failing at call time.
+RETIRED_MODELS: dict[str, str] = {
+    "gemini-2.5-flash": "gemini-3.1-flash-lite",
+}
+
+
+def resolve_model_id(model: str) -> str:
+    """Map a configured model id to a usable one (retired → replacement)."""
+    return RETIRED_MODELS.get(model, model)
 
 # Default fallback chains per primary model. Vision-capable models are the
 # only valid fallbacks for the verifier path (image audit).
@@ -64,7 +68,6 @@ FALLBACK_CHAIN: dict[str, list[str]] = {
     "gemma-4-26b-a4b-it": ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite", "gemma-4-31b-it"],
     "gemini-3.1-flash-lite": ["gemini-3.5-flash-lite", "gemma-4-31b-it"],
     "gemini-3.5-flash-lite": ["gemini-3.1-flash-lite", "gemma-4-31b-it"],
-    "gemini-2.5-flash": ["gemini-3.1-flash-lite", "gemini-3.5-flash-lite"],
 }
 
 # Primary model per agent role. gemini-3.5-flash-lite stays in active use
@@ -107,5 +110,10 @@ def model_info(model: str) -> dict | None:
 
 
 def default_fallbacks(model: str) -> list[str]:
-    """Default fallback chain for a primary model (vision-capable only)."""
+    """Default fallback chain for a primary model (vision-capable only).
+
+    Retired ids resolve first, so a stored ``gemini-2.5-flash`` row still
+    gets a working chain instead of a dead one.
+    """
+    model = resolve_model_id(model)
     return list(FALLBACK_CHAIN.get(model, FALLBACK_CHAIN.get("gemini-3.1-flash-lite", [])))
