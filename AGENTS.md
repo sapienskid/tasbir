@@ -831,6 +831,49 @@ docker compose up -d            # pulls GHCR images + redis, starts the stack
   `POST /api/system/import` (or the Studio **Settings → Backup** tab). No shell
   scripts.
 
+### Releasing (versioned Docker images + changelog + GitHub Release)
+
+Images are built by `.github/workflows/publish-images.yml` — never by hand.
+A `v*` tag push builds `tasbir-api` + `tasbir-playwright` (amd64+arm64) and
+pushes `:vX.Y.Z` + `:latest`; a `main` push refreshes `:main` + `:latest`.
+Procedure for a release (run these; the agent does steps 1–4, human reviews):
+
+```bash
+# 1. Decide the version (SemVer; backend/pyproject.toml `version` must match).
+# 2. Curate CHANGELOG.md: move entries out of [Unreleased] into a new
+#    `## [X.Y.Z] - YYYY-MM-DD` section. The changelog is the release notes
+#    source of truth — write for operators (behavior change, migration, rollback).
+# 3. Bump the version + commit:
+#      edit backend/pyproject.toml → version = "X.Y.Z"
+#      git add -A && git commit -m "release: vX.Y.Z" && git push origin main
+# 4. Tag + push the tag (this is what triggers the image build):
+git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z
+# 5. Watch the build: gh run watch --exit-status (workflow "Publish Docker Images")
+# 6. Publish the GitHub Release with the changelog section as notes:
+awk '/^## \[X.Y.Z\]/{f=1;print;next} /^## \[/{f=0} f' CHANGELOG.md > /tmp/opencode/notes_X.Y.Z.md
+gh release create vX.Y.Z --title "vX.Y.Z" --notes-file /tmp/opencode/notes_X.Y.Z.md
+# 7. Deploy: on the server, set TASBIR_IMAGE_TAG=X.Y.Z in .env, then
+#    `docker compose pull && docker compose up -d`. Rollback = retag previous.
+```
+
+Rules:
+- `main` is always deployable; `:latest` floats — production pins
+  `TASBIR_IMAGE_TAG` to a version, never `latest`.
+- Every release has a CHANGELOG section; no changelog entry, no tag.
+- Old image versions are pruned from GHCR periodically (keep newest only;
+  anything is rebuildable from its git tag):
+```bash
+# list versions (newest first)
+gh api /users/sapienskid/packages/container/tasbir-api/versions --jq '.[].id'
+# delete one version (repeat per stale id; NEVER delete the newest group —
+# untagged arch manifests belong to the tagged image, keep them together)
+gh api -X DELETE /users/sapienskid/packages/container/tasbir-api/versions/<id>
+```
+  Needs a token with `read:packages` + `delete:packages`
+  (`gh auth refresh -h github.com -s read:packages -s delete:packages` via
+  device flow; the active account must own the packages — `sapienskid`, not
+  the `fundaments-work` bot account).
+
 ## API Endpoints
 
 ### POST /generate
