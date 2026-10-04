@@ -19,9 +19,13 @@ MODEL_REGISTRY: dict[str, dict] = {
         "name": "Gemma 4 31B",
         "category": "text",
         "vision": True,
+        # Google AI Studio free tier, per model.
         "rpm": 30,
         "tpm": 16000,
         "rpd": 14400,
+        # Verified live: echoes the prompt instead of emitting a bare JSON
+        # object, so JSON-only agents must not be routed here.
+        "json_ok": False,
     },
     "gemma-4-26b-a4b-it": {
         "name": "Gemma 4 26B A4B",
@@ -30,6 +34,7 @@ MODEL_REGISTRY: dict[str, dict] = {
         "rpm": 30,
         "tpm": 16000,
         "rpd": 14400,
+        "json_ok": False,
     },
     "gemini-3.1-flash-lite": {
         "name": "Gemini 3.1 Flash Lite",
@@ -38,6 +43,7 @@ MODEL_REGISTRY: dict[str, dict] = {
         "rpm": 15,
         "tpm": 250000,
         "rpd": 500,
+        "json_ok": True,
     },
     "gemini-3.5-flash-lite": {
         "name": "Gemini 3.5 Flash Lite",
@@ -46,8 +52,17 @@ MODEL_REGISTRY: dict[str, dict] = {
         "rpm": 15,
         "tpm": 250000,
         "rpd": 500,
+        "json_ok": True,
     },
 }
+
+# Models that honor a strict "reply with only this JSON object" contract
+# (verified live through the Gateway). JSON-only agents pin to this so a
+# Gemma node in a route can never hand us prose we cannot parse.
+JSON_MODEL = "gemini-3.1-flash-lite"
+JSON_CAPABLE_MODELS: list[str] = [
+    m for m, meta in MODEL_REGISTRY.items() if meta.get("json_ok")
+]
 
 # Retired model ids → replacement. gemini-2.5-flash is fully out (no
 # credits): any stored agent row / fallback list still naming it resolves to

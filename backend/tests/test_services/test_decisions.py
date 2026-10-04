@@ -9,14 +9,94 @@ from app.services import models as models_svc
 
 
 def test_gateway_model_name_mapping():
+    # Verified live: the `google/` slug 400s even for models the account can
+    # serve; `google-ai-studio/` is the only working Google slug on both paths.
     assert llm_svc.gateway_model_name("gemini-3.1-flash-lite") == (
-        "google/gemini-3.1-flash-lite"
+        "google-ai-studio/gemini-3.1-flash-lite"
     )
     assert llm_svc.gateway_model_name("gemini-3.1-flash-lite", for_api_path=True) == (
         "google-ai-studio/gemini-3.1-flash-lite"
     )
     assert llm_svc.gateway_model_name("dynamic/tasbir-fast") == "dynamic/tasbir-fast"
     assert llm_svc.gateway_model_name("workers-ai/@cf/x") == "workers-ai/@cf/x"
+
+
+def test_json_capable_models_exclude_gemma():
+    """Gemma echoes the prompt; JSON-only agents must never route to it."""
+    from app.services.models import JSON_CAPABLE_MODELS, JSON_MODEL, model_info
+
+    assert JSON_MODEL == "gemini-3.1-flash-lite"
+    assert "gemma-4-31b-it" not in JSON_CAPABLE_MODELS
+    assert "gemma-4-26b-a4b-it" not in JSON_CAPABLE_MODELS
+    assert JSON_MODEL in JSON_CAPABLE_MODELS
+    assert model_info("gemma-4-31b-it")["json_ok"] is False
+    assert model_info("gemini-3.1-flash-lite")["json_ok"] is True
+
+
+def test_quota_windows_and_budget():
+    from app.services import model_quota as q
+
+    # Gemma's TPM cap is the binding constraint.
+    assert q.limits("gemma-4-31b-it")["tpm"] == 16_000
+    assert q.limits("gemini-3.1-flash-lite")["tpm"] == 250_000
+    assert q.limits("gemma-4-31b-it")["rpd"] == 14_400
+    assert q.limits("gemini-3.1-flash-lite")["rpd"] == 500
+
+    # pick_model skips JSON-unreliable models when JSON is required.
+    assert q.pick_model(["gemma-4-31b-it", "gemini-3.1-flash-lite"], 500, require_json=True) == (
+        "gemini-3.1-flash-lite"
+    )
+    # ...and without the requirement it takes the first candidate.
+    assert q.pick_model(["gemma-4-31b-it", "gemini-3.1-flash-lite"], 500) == "gemma-4-31b-it"
+    # An oversized request cannot fit Gemma's minute but fits Gemini's.
+    assert q.pick_model(["gemma-4-31b-it"], 20_000) is None
+    assert q.pick_model(["gemini-3.1-flash-lite"], 20_000) == "gemini-3.1-flash-lite"
+
+
+async def test_quota_reserve_then_block():
+    from app.services import model_quota as q
+
+    win = q.window("gemini-3.1-flash-lite")
+    win._minute.clear()
+    win._day.clear()
+    win._day_requests.clear()
+
+    assert await q.reserve("gemini-3.1-flash-lite", 1000)
+    # Draining the minute budget eventually blocks further reservations.
+    for _ in range(400):
+        if not await q.reserve("gemini-3.1-flash-lite", 1000, max_wait=0.05):
+            break
+    assert not await q.reserve("gemini-3.1-flash-lite", 100_000, max_wait=0.05)
+    # An unlisted model is never reservable (no free-tier budget to track).
+    assert not await q.reserve("gemma-9-99b-it", 10, max_wait=0.05)
+
+    win._minute.clear()
+    win._day.clear()
+    win._day_requests.clear()
+
+
+async def test_quota_gemma_tpm_is_the_binding_limit():
+    """A 5,000-word article (~7K tokens) must not be routed to Gemma."""
+    from app.services import model_quota as q
+
+    for model in ("gemma-4-31b-it", "gemma-4-26b-a4b-it"):
+        q.window(model)._minute.clear()
+        q.window(model)._day.clear()
+        q.window(model)._day_requests.clear()
+
+    article_tokens = 6_700  # ~5,000 words
+    # Two calls in one minute exceed Gemma's 16K TPM (with headroom).
+    assert q.fits("gemma-4-31b-it", article_tokens)
+    q.commit("gemma-4-31b-it", article_tokens)
+    q.commit("gemma-4-31b-it", article_tokens)
+    assert not q.fits("gemma-4-31b-it", article_tokens)
+    # Gemini's 250K TPM absorbs the same traffic easily.
+    assert q.fits("gemini-3.1-flash-lite", article_tokens)
+
+    for model in ("gemma-4-31b-it", "gemma-4-26b-a4b-it"):
+        q.window(model)._minute.clear()
+        q.window(model)._day.clear()
+        q.window(model)._day_requests.clear()
 
 
 def test_gateway_route_for_role_tiers():

@@ -360,6 +360,50 @@ PACKS: dict[str, dict] = {
             },
         },
     },
+    "content-judge": {
+        "version": 1,
+        "providers": ["clef-flash", "clef"],
+        "thresholds": {},
+        "questions": {
+            "theme": {
+                "type": "choice",
+                "instructions": "Which single theme best describes `content`?",
+                "criteria": {
+                    "technical": "Engineering, systems, code, infrastructure",
+                    "product": "Shipping features, user-facing product work",
+                    "writing": "Essay, argument, teaching, narrative",
+                    "business": "Strategy, market, economics, org",
+                    "research": "Findings, studies, experiments, analysis",
+                    "other": "None of the above fits",
+                },
+            },
+            "structure": {
+                "type": "choice",
+                "instructions": "How is `content` best structured for a social post?",
+                "criteria": {
+                    "single_claim": "One claim the whole piece argues",
+                    "steps": "A sequence of steps or stages",
+                    "comparison": "A comparison or trade-off",
+                    "narrative": "A story with before/after",
+                    "reference": "A reference list or cheat sheet",
+                    "other": "None of the above fits",
+                },
+            },
+            "has_numbers": {
+                "type": "noul",
+                "instructions": "Does `content` contain concrete figures, metrics, or dates?",
+            },
+            "has_quote": {
+                "type": "noul",
+                "instructions": "Does `content` contain a sentence quotable verbatim?",
+            },
+            "needs_detail": {
+                "type": "score",
+                "instructions": "How much context does a reader need before the main point lands?",
+                "criteria": ["Lands immediately", "One sentence of setup", "Needs real setup"],
+            },
+        },
+    },
     "refine-focus": {
         "version": 1,
         "providers": ["clef-flash", "clef"],

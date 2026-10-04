@@ -14,16 +14,48 @@ only moves failover server-side (no deploy to change models later).
   provider-specific Google path and Clef/Clef-flash (Neurons) run on the
   free daily allocation.
 
-## 1. Create the three routes
+## 1. Model budgets (free tier) — read this before routing
+
+Google AI Studio free-tier limits per model, and they decide everything:
+
+| Model | RPM | TPM | RPD | JSON contract |
+|---|---|---|---|---|
+| Gemma 4 31B | 30 | **16K** | 14.4K | ✗ echoes the prompt |
+| Gemma 4 26B A4B | 30 | **16K** | 14.4K | ✗ echoes the prompt |
+| Gemini 3.1 Flash Lite | 15 | 250K | 500 | ✓ |
+| Gemini 3.5 Flash Lite | 15 | 250K | 500 | ✓ |
+
+Two consequences:
+
+1. **Gemma's 16K TPM is the binding constraint.** A 5,000-word article is
+   ~7.7K tokens — one call eats ~48% of the whole minute budget. Long
+   content is therefore *read by Gemini and compressed* before any Gemma
+   call (`services/content_reduce.py`); Gemma only ever sees the brief.
+2. **Gemma must not serve JSON-only agents.** Verified live: Gemma returns
+   `*   Input: ...` prose instead of the object. JSON-only roles
+   (strategist, planner, copywriter) pin to `gemini-3.1-flash-lite`, and
+   `pick_model(..., require_json=True)` skips Gemma entirely.
+
+So: **Gemini reads, Gemma writes prose, Clef judges.** The `model_quota`
+module reserves tokens against these windows before each call so a burst of
+parallel format branches cannot 429 mid-pipeline.
+
+## 2. Create the three routes
 
 Dashboard → AI Gateway → gateway `tasbir` → Dynamic Routes → Add Route,
 repeat for each row. Provider for every Model node: **Google AI Studio**.
 
 | Route | Node 1 (primary) | Node 2 | Node 3 | Final net (Workers AI, Neuron-billed) | Serves |
 |---|---|---|---|---|---|
-| `tasbir-fast` | `gemma-4-26b-a4b-it` | `gemini-3.1-flash-lite` | `gemini-3.5-flash-lite` | `workers-ai/@cf/ibm-granite/granite-4.0-h-micro` ($0.017/M, strong instruction-following) | strategist, planner, brand_tokens, brand_campaigns |
-| `tasbir-creative` | `gemma-4-31b-it` | `gemini-3.1-flash-lite` | `gemma-4-26b-a4b-it` | `workers-ai/@cf/openai/gpt-oss-120b` (128k ctx, strongest free creative reasoning; alt: `workers-ai/@cf/mistralai/mistral-small-3.1-24b-instruct` if JSON discipline slips) | copywriter, designer, template_author, editor_chat |
+| `tasbir-fast` | `gemma-4-26b-a4b-it` (prose only) | `gemini-3.1-flash-lite` | `gemini-3.5-flash-lite` | `workers-ai/@cf/ibm-granite/granite-4.0-h-micro` ($0.017/M, strong instruction-following) | strategist\*, planner\*, brand_tokens, brand_campaigns |
+| `tasbir-creative` | `gemini-3.1-flash-lite` (JSON-capable) | `gemma-4-31b-it` | `gemma-4-26b-a4b-it` | `workers-ai/@cf/openai/gpt-oss-120b` (128k ctx, strongest free creative reasoning) | copywriter\*, designer, template_author, editor_chat |
 | `tasbir-vision` | `gemini-3.1-flash-lite` | `gemini-3.5-flash-lite` | `gemma-4-31b-it` | `workers-ai/@cf/mistralai/mistral-small-3.1-24b-instruct` (vision-capable, 128k ctx) | verifier, template_vision, brand_vision (all vision-capable) |
+
+\* JSON-only roles never *rely* on the route's primary: they pass
+`model_override=gemini-3.1-flash-lite`, which bypasses the route entirely, and
+retry with an explicit output contract if the first parse fails. Gemma nodes
+are therefore safe to keep for prose, but they must never be the only path to
+a JSON object.
 
 Nodes 1–3 use provider **Google AI Studio**; the final net uses provider
 **Workers AI** with the `@cf/…` id verbatim. Workers AI bills in Neurons
@@ -35,6 +67,18 @@ Gateway credits.
 > verifier stay on direct Google (free tier) — they need native tool
 > calling / vision, which a route swap can't provide. Porting those is
 > separate work.
+
+### Verified live (Oct 2026)
+
+* `google/{model}` returns `400 Model not found` for every model; the working
+  Google slug is **`google-ai-studio/{model}`** on both the compat host and
+  the unified API path. `services/llm.py` uses the working slug.
+* `gemma-4-26b-a4b-it` intermittently returns **500**; `gemini-3.1-flash-lite`
+  intermittently returns **503 high demand**. This is why every route needs
+  its Workers AI net.
+* `gemma-4-3x-it` is **not** resolvable through the chat-completions shape
+  (404) but **is** reachable through the provider passthrough
+  (`/google-ai-studio/v1/models/{id}:generateContent`).
 
 Flow per route: Start → Model 1 → (on failure) Model 2 → (on failure)
 Model 3 → End. Save a version, then **Deploy**.

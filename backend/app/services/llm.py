@@ -61,15 +61,19 @@ def gateway_route_for_role(agent_role: str) -> str:
 def gateway_model_name(model: str, for_api_path: bool = False) -> str:
     """Map a bare model id to its Gateway provider-qualified name.
 
-    Compat host (canonical): ``google/{model}``; unified api path uses the
-    ``google-ai-studio/{model}`` slug. Pass-through for already-qualified
-    (``provider/model``) and ``dynamic/`` route names.
+    The Google slug is ``google-ai-studio/{model}`` on **both** the compat
+    host and the unified API path — the ``google/`` slug returns
+    ``400 Model not found`` even for models the account can serve (verified
+    live: ``google/gemma-4-31b-it`` 400s while
+    ``google-ai-studio/gemini-3.1-flash-lite`` returns 200). ``for_api_path``
+    is kept for symmetry; both paths use the same slug now.
+
+    Pass-through for already-qualified (``provider/model``) and
+    ``dynamic/`` route names.
     """
     if "/" in model or model.startswith("dynamic/"):
         return model
-    if for_api_path:
-        return f"google-ai-studio/{model}"
-    return f"google/{model}"
+    return f"google-ai-studio/{model}"
 
 
 async def _call_gateway_chat(
@@ -270,6 +274,7 @@ async def call_llm(
     user_prompt: str,
     temperature: float = 0.7,
     max_tokens: int = 2000,
+    model_override: str | None = None,
 ) -> str:
     """Call the LLM with system + user prompt; walk the fallback model chain.
 
@@ -291,11 +296,32 @@ async def call_llm(
     models = [m for m in ([cfg.model] + list(cfg.fallback_models or [])) if m]
     if not models:
         models = [DEFAULT_MODEL]
+    # An explicit override (e.g. the JSON-contract retry) leads the chain and
+    # the role's own models remain as fallbacks.
+    if model_override:
+        models = [model_override] + [m for m in models if m != model_override]
 
     settings = get_settings()
     use_gateway = (settings.llm_provider or "direct").lower() == "gateway"
+    if model_override:
+        # Bypass the dynamic route: an override is a precise model request, and
+        # a route would resolve to whatever its nodes happen to be.
+        use_gateway = False
     if use_gateway and gateway_configured():
         metadata = {"agent_role": agent_role}
+        # Free-tier budget: reserve against the agent's primary model before
+        # spending it. Gemma is capped at 16K tokens/min, so a long article
+        # can blow the whole minute's budget on one call — this waits for the
+        # window instead of letting the provider 429 mid-pipeline.
+        from app.services.model_quota import estimate_tokens, reserve
+
+        est = estimate_tokens(system_prompt) + estimate_tokens(user_prompt) + max_tokens
+        primary = models[0]
+        if not await reserve(primary, est, max_wait=45.0):
+            log.warning(
+                "[LLM] quota reservation failed for %s (%s, ~%d tokens) — "
+                "walking the fallback chain", primary, agent_role, est,
+            )
         # Dynamic route first (server-side failover, no deploy to change).
         try:
             text, served = await _call_gateway_chat(

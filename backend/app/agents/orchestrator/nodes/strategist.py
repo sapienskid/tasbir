@@ -23,7 +23,9 @@ from pydantic import BaseModel, field_validator
 
 from app.agents.orchestrator.state import GenerationState
 from app.services.agents import get_agent_config
+from app.services.content_reduce import needs_reduction
 from app.services.llm import call_llm
+from app.services.models import JSON_MODEL
 from app.services.tokens import category_matches, resolve_ground
 
 log = logging.getLogger(__name__)
@@ -241,6 +243,25 @@ async def strategist_node(state: GenerationState) -> dict:
     tags_str = ", ".join(state.get("tags", []))
     excerpt_str = state.get("excerpt", "")
 
+    # Long content: reduce ONCE per task (Clef judges → Gemini compresses) so
+    # every downstream agent reads a brief instead of the raw article. Gemma
+    # has only 16K TPM, so a 5K-word article would otherwise blow the minute
+    # budget on a single call.
+    content_block = content[:3000]
+    reduction: dict = {}
+    if needs_reduction(content):
+        from app.agents.orchestrator.post_cache import post_cached
+        from app.services.content_reduce import reduce_content
+
+        async def _loader() -> dict:
+            return await reduce_content(content, title)
+
+        # Cached per task: the strategist, copywriter and designer all read the
+        # same brief, so the (paid) compression call happens exactly once.
+        reduction = await post_cached(state.get("_task_id", ""), "content_reduce", _loader) or {}
+        if reduction:
+            content_block = reduction.get("context", "")
+
     user_prompt = (
         f"TITLE: {title}\n\n"
         f"{brand_block}\n"
@@ -250,7 +271,7 @@ async def strategist_node(state: GenerationState) -> dict:
         f"TARGET PLATFORMS: {', '.join(platforms)}\n"
         f"TAGS: {tags_str}\n"
         f"EXCERPT: {excerpt_str}\n\n"
-        f"CONTENT:\n{content[:3000]}"
+        f"CONTENT:\n{content_block}"
     )
 
     log.info("[strategist] Analyzing content for %d platform(s)", len(platforms))
@@ -287,7 +308,27 @@ async def strategist_node(state: GenerationState) -> dict:
             max_tokens=prompt_cfg.max_tokens,
         )
 
-        data = _extract_json(raw)
+        # JSON contract: some models (notably Gemma) echo the prompt instead
+        # of emitting a bare object. One corrective retry with the schema
+        # repeated, pinned to a JSON-capable model, before giving up.
+        try:
+            data = _extract_json(raw)
+        except ValueError:
+            log.warning("[strategist] unparseable JSON — retrying with JSON-only contract")
+            raw = await call_llm(
+                agent_role="strategist",
+                system_prompt=(
+                    f"{prompt_cfg.system_prompt}\n\n"
+                    "CRITICAL OUTPUT CONTRACT: reply with a single raw JSON "
+                    "object and nothing else. No preamble, no explanation, no "
+                    "markdown fences, no echoed prompt."
+                ),
+                user_prompt=f"{user_prompt}\n\nRequired keys: {sorted(StrategicBrief.model_fields)}",
+                temperature=0.2,
+                max_tokens=prompt_cfg.max_tokens,
+                model_override=JSON_MODEL,
+            )
+            data = _extract_json(raw)
 
         # Ensure platform_notes has entries for all requested platforms
         if "platform_notes" not in data:
