@@ -10,9 +10,9 @@ only moves failover server-side (no deploy to change models later).
 - Gateway id `tasbir` (code default `CF_GATEWAY_ID`; any id works if the
   env var matches).
 - Google AI Studio key stored (BYOK) or available via Unified Billing.
-- Gateway credits topped up if you want the `google/` compat slug and
-  Jev (third-party billing). The provider-specific Google path and
-  Clef/Clef-flash (Neurons) work without credits.
+- Gateway credits are only needed for the `google/` compat slug — the
+  provider-specific Google path and Clef/Clef-flash (Neurons) run on the
+  free daily allocation.
 
 ## 1. Create the three routes
 
@@ -57,17 +57,32 @@ and per-agent audit rows.
 
 ## 3. Decision-model policy (code, not dashboard)
 
+Running dev containers with these wired:
+
+```bash
+docker compose -f docker-compose.dev.yml up -d --build
+```
+
+`x-shared-env` passes `LLM_PROVIDER`, `CLOUDFLARE_ACCOUNT_ID`,
+`CLOUDFLARE_AI_GATEWAY_TOKEN`, `CF_GATEWAY_ID`,
+`DECISION_PROVIDER_ORDER`, `DECISION_CALIBRATION_RATE`, and
+`COPY_QA_ENFORCE` into api/worker/beat, and the renderer is published on
+`localhost:4000`. Both api and worker hot-reload the bind-mounted backend,
+so decision/pack edits apply without a rebuild.
+
 Text judgments run **Clef-flash first, Clef fallback** (`decision_packs.py`
 — flash is the fast workhorse on free Neurons; Clef-full is the precision
-second opinion). Jev stays wired as an opt-in third provider but is off by
-default (no access — needs Gateway credits). **Full Clef leads only the
-vision packs** (`verifier-visual`, `sequence-cohesion`, `image-relevance`;
-Jev is text-only and cannot serve them).
+second opinion). **Full Clef leads the vision packs** (`verifier-visual`,
+`sequence-cohesion`, `image-relevance` — the only packs that send images).
+Clef is the only decision model we run; both providers bill in Neurons, so
+decisions never need Gateway credits.
 
 > Dynamic routes cannot front decision calls: routes accept the OpenAI chat
 > shape only, while decisions use the System One `ai/run` shape (`{state,
-> questions}`). Decision failover lives client-side in `decide()` order —
-> proven live (Jev 402 → automatic Clef-flash with a good answer).
+> questions}`). Decision failover lives client-side in `decide()` order,
+> which is where the "decide fast, act in a loop" budget lives: one cheap
+> flash call answers every gate question in parallel (~40 ms), and only the
+> answer's probabilities decide the next branch.
 
 Per-pack actions (probabilities → code, never prose):
 
@@ -79,8 +94,25 @@ Per-pack actions (probabilities → code, never prose):
 | `design-brief` | Post-HTML semantic check (headline/body/focus/craft) after deterministic gates pass. Advisory — stored in verification for calibration against the syntactic checks. |
 | `media-kind` vote, `critique-actionable` | Advisory audit trail (agreement calibration). They never flip a deterministic result today — the logs tell us which pack earns enforcement next. |
 | `planner-gate`, `verifier-pregate`, `sequence-cohesion` | Advisory audit trail (agreement calibration). They never flip a deterministic result today — the logs tell us which pack earns enforcement next. |
+| `refine-focus` (loop driver) | On any failed gate (deterministic, overflow, contrast, vision audit) one flash call picks the single highest-leverage fix + whether it's reachable from HTML/CSS, and renders a targeted brief appended to the critique the next attempt sees. Confident + reachable → retry with a pointed brief; low confidence or unreachable → the loop **stops** instead of burning attempts. |
 
-## 4. Question-writing rules (when adding a pack)
+## 4. The loops (this is where the cost win is)
+
+Two bounded loops are driven by decisions, not by blind replay:
+
+1. **Design loop** (`verifier.max_retries`, default 3): render → gate → Clef
+   picks the fix → next attempt reads the targeted brief → repeat, or stop
+   when Clef says no reachable fix exists. Each turn costs one ~40 ms flash
+   call instead of another round of "do better" prompting.
+2. **Copy loop** (`copywriter.qa_max_rounds`, default 1; 0 disables): write →
+   QA packs score it → the failing dimensions become an explicit revision
+   brief → one rewrite pass → re-score. The revised copy is what ships.
+
+Tuning: both knobs are Studio-editable under Settings (seed-once defaults
+above); `COPY_QA_ENFORCE` additionally marks `rewrite` verdicts as
+do-not-publish in the task result.
+
+## 5. Question-writing rules (when adding a pack)
 
 One judgment per question; positive framing (high = yes); Choice 2–255
 options + `other` escape hatch; Score 2–10 ordered levels, lowest first;

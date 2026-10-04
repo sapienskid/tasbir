@@ -1,4 +1,4 @@
-"""Versioned decision question packs (Jev/Clef System One schema).
+"""Versioned decision question packs (Clef System One schema).
 
 Each pack: ``questions`` (1–12, parallel), ``providers`` (primary → fallback),
 ``thresholds`` (applied in code, never in the model), ``version`` (bump on any
@@ -360,6 +360,35 @@ PACKS: dict[str, dict] = {
             },
         },
     },
+    "refine-focus": {
+        "version": 1,
+        "providers": ["clef-flash", "clef"],
+        "thresholds": {"confidence_gate": 0.5},
+        "questions": {
+            "focus": {
+                "type": "choice",
+                "instructions": "Which single fix moves `failed_format` furthest toward passing?",
+                "criteria": {
+                    "fix_overflow": "Text clips, overflows, or collides with other elements",
+                    "restore_missing_element": "A required element (footer handle, category label, accent) is absent",
+                    "fix_hierarchy": "The headline does not dominate or the layout reads as flat",
+                    "tighten_copy": "Body or subhead is too long, vague, or off-voice",
+                    "simplify_ground": "Wrong canvas ground or an off-system colour treatment",
+                    "rebalance_layout": "Elements are unbalanced, crowded to one side, or empty",
+                    "other": "None of the above fits",
+                },
+            },
+            "worth_retry": {
+                "type": "noul",
+                "instructions": "Is this fix reachable by editing the HTML/CSS (not by inventing content)?",
+            },
+            "severity": {
+                "type": "score",
+                "instructions": "How badly does `failed_format` violate its spec?",
+                "criteria": ["Cosmetic drift", "Visible defect", "Spec violation"],
+            },
+        },
+    },
     "image-relevance": {
         "version": 1,
         "providers": ["clef", "clef-flash"],
@@ -388,6 +417,38 @@ POST_TYPE_EXTRAS: dict[str, dict[str, str]] = {
     "comparison": {"stat": "the key figure being compared"},
     "tutorial": {"stat": "count or metric (e.g. '5 steps')"},
 }
+
+
+def refine_brief(answers: dict, attempt: int, max_retries: int) -> str:
+    """Turn ``refine-focus`` answers into a targeted retry instruction.
+
+    The retry loop is the decision model's payoff: one cheap flash call
+    picks the single highest-leverage fix and this renders it as a short,
+    imperative brief the next design attempt can follow. Returns "" when the
+    model judged the format not worth retrying (the loop stops early).
+    """
+    if not answers:
+        return ""
+    try:
+        worth = float((answers.get("worth_retry") or {}).get("noul", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        worth = 0.0
+    try:
+        confidence = float((answers.get("focus") or {}).get("confidence", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    choice = str((answers.get("focus") or {}).get("choice") or "")
+    if not choice or choice == "other":
+        return ""
+    # Not confident what to fix, or not reachable from HTML/CSS: don't spin.
+    if confidence < 0.5 or worth < 0.5:
+        return ""
+    attempts_left = max(0, max_retries - attempt + 1)
+    return (
+        f"RETRY FOCUS (attempt {attempt + 1}, {attempts_left} left) — the "
+        f"decision model picked `{choice}` as the single highest-leverage fix. "
+        f"Make that fix and change nothing else."
+    )
 
 
 def extras_questions(post_type: str, extra_keys: list[str]) -> dict:

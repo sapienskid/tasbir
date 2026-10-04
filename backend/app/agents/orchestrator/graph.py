@@ -165,6 +165,26 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
                                              "provider": c_res.get("provider", "")})
             except Exception as e:  # noqa: BLE001
                 log.warning("[graph] critique-actionable check skipped for %s: %s", fmt_id, e)
+            # Loop control: the refine-focus decision pick (computed inside
+            # the verifier) decides whether another pass is worth running. An
+            # explicit "no worthwhile fix" verdict stops the loop early rather
+            # than burning the remaining attempts on the same critique.
+            refine = verification.get("decision_refine") or {}
+            if refine and not refine.get("brief"):
+                log.info(
+                    "[graph] %s — decision model reports no worthwhile fix; stopping loop",
+                    fmt_id,
+                )
+                await _audit(
+                    "verifier",
+                    {
+                        "format": fmt_id,
+                        "loop_stopped_by": "decision",
+                        "answers": refine.get("answers", {}),
+                        "provider": refine.get("provider", ""),
+                    },
+                )
+                break
             if use_template and template_mode != "template":
                 # Chosen template failed QC (e.g. overflow) → LLM designer.
                 use_template = False

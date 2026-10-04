@@ -59,12 +59,48 @@ def test_text_packs_prefer_clef_flash():
     ):
         providers = packs.get_pack(pid)["providers"]
         assert providers[0] == "clef-flash", pid
-        assert "jev" not in providers, pid
+        assert set(providers) <= {"clef-flash", "clef"}, pid
     for pid in ("verifier-visual", "sequence-cohesion", "image-relevance"):
         assert packs.get_pack(pid)["providers"] == ["clef", "clef-flash"], pid
     assert len(packs.get_pack("copy-voice")["questions"]) + len(
         packs.get_pack("copy-structure")["questions"]
     ) + len(packs.get_pack("headline-hook")["questions"]) <= 12
+
+
+def test_refine_brief_loop_driver():
+    """The loop brief is produced only for a confident, reachable fix."""
+    strong = {
+        "focus": {"type": "choice", "choice": "fix_overflow", "confidence": 0.9},
+        "worth_retry": {"type": "noul", "noul": 0.95},
+        "severity": {"type": "score", "score": 2.0},
+    }
+    brief = packs.refine_brief(strong, attempt=0, max_retries=3)
+    assert "fix_overflow" in brief and "change nothing else" in brief
+    assert "4 left" in brief
+    # Low confidence → no brief (the loop stops instead of spinning).
+    weak = {**strong, "focus": {"type": "choice", "choice": "fix_overflow", "confidence": 0.2}}
+    assert packs.refine_brief(weak, attempt=0, max_retries=3) == ""
+    # Not reachable from HTML/CSS → no brief.
+    unreachable = {**strong, "worth_retry": {"type": "noul", "noul": 0.1}}
+    assert packs.refine_brief(unreachable, attempt=0, max_retries=3) == ""
+    # 'other' / empty answers → no brief.
+    assert packs.refine_brief({"focus": {"choice": "other", "confidence": 1.0}}, 0, 3) == ""
+    assert packs.refine_brief({}, 0, 3) == ""
+
+
+def test_copy_revision_brief_names_failing_dimensions():
+    from app.agents.orchestrator.nodes.copywriter import _qa_revision_brief
+
+    assert _qa_revision_brief({}) == ""
+    assert _qa_revision_brief({"verdict": "pass", "dims": {"cta": 0.2}}) == ""
+    brief = _qa_revision_brief({
+        "verdict": "rewrite", "score": 0.42,
+        "dims": {"cta": 0.2, "brand": 0.9, "clarity": 0.5, "value": 0.4},
+        "issues": ["weak headline hook (0.30)"],
+    })
+    assert "0.42" in brief and "rewrite" in brief
+    assert "cta" in brief and "value" in brief
+    assert "weak headline hook" in brief
 
 
 def test_extras_questions_builder():

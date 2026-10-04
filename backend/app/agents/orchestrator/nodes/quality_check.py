@@ -31,6 +31,7 @@ from app.services.design_instruction import (
 from app.services.dom_extractor import detect_overflow, render_to_png
 from app.services.ds_context import pick_logo
 from app.services.formats import get_format_info, parse_carousel_slide
+from app.services.settings import get_runtime_setting
 from app.services.templates import design_language_has_accent
 from app.services.tokens import DEFAULT_TOKEN_VALUES
 
@@ -206,6 +207,48 @@ async def _decision_visual(png_bytes: bytes, notes: str, fmt_id: str) -> dict:
                 "model": res.get("model", "")}
     except Exception as e:  # noqa: BLE001
         log.warning("[verifier] decision visual skipped for %s: %s", fmt_id, e)
+        return {}
+
+
+async def _decision_refine_focus(
+    fmt_id: str,
+    issues: list[str],
+    critique: str,
+    html: str,
+    attempt: int,
+    max_retries: int,
+) -> dict:
+    """Pick the next loop's focus with a decision call (fail-open).
+
+    This is the loop driver: on a failed gate the pipeline asks Clef which
+    single fix matters most instead of replaying the same generic critique.
+    Returns ``{"brief": str, ...}``; an empty brief means "not worth
+    retrying" (the loop then stops early instead of burning attempts).
+    """
+    try:
+        from app.services.decision_packs import refine_brief
+        from app.services.decisions import decide, providers_configured
+
+        if not providers_configured():
+            return {}
+        issue_text = "; ".join(issues)[:800]
+        res = await decide(
+            "refine-focus",
+            {
+                "failed_format": (
+                    f"format={fmt_id} attempt={attempt + 1}/{max_retries + 1}\n"
+                    f"issues={issue_text or '(none reported)'}\n"
+                    f"critique={critique[:400] or '(none)'}\n"
+                    f"html_head={(html or '')[:800]}"
+                )
+            },
+            metadata={"agent": "verifier", "format": fmt_id, "attempt": attempt},
+        )
+        answers = res.get("answers", {})
+        brief = refine_brief(answers, attempt, max_retries)
+        return {"brief": brief, "answers": answers, "provider": res.get("provider", "")}
+    except Exception as e:  # noqa: BLE001
+        log.warning("[verifier] refine-focus skipped for %s: %s", fmt_id, e)
         return {}
 
 
@@ -396,6 +439,12 @@ async def quality_check_node_single(state: GenerationState) -> dict:
 
     settings = get_settings()
     skip_verify = settings.skip_verify
+    # Bounded loop budget. The decision model drives each retry
+    # (refine-focus below), so give it a few attempts but stop early when it
+    # says the format isn't worth another pass.
+    max_retries = int(
+        await get_runtime_setting("verifier.max_retries", MAX_RETRIES)
+    )
 
     if not html:
         log.warning("[verifier] No HTML for %s, marking failed", fmt_id)
@@ -422,12 +471,25 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     if check_issues:
         log.warning("[verifier] Deterministic violations for %s: %s", fmt_id, check_issues)
         _save_html_preview(task_id, fmt_id, html)
+        # Decision-driven retry: one flash call picks the single fix that
+        # matters most; the brief rides into the next design attempt.
+        focus = await _decision_refine_focus(
+            fmt_id, check_issues, "", html, retry_count, max_retries
+        )
+        # Loop guard: when the decision model says no reachable fix exists,
+        # further identical attempts only burn budget — stop at needs_retry
+        # (the Studio shows it as retryable) instead of re-running.
+        exhausted = bool(focus) and not focus.get("brief") and retry_count >= max_retries
+        critique = "Automated design-system checks failed. Fix: " + "; ".join(check_issues)
+        if focus.get("brief"):
+            critique += f"\n{focus['brief']}"
         verification = dict(state.get("verification", {}))
         verification[fmt_id] = {
             "pass": False,
             "score": 20,
             "issues": check_issues,
-            "critique": "Automated design-system checks failed. Fix: " + "; ".join(check_issues),
+            "critique": critique,
+            **({"decision_refine": focus} if focus else {}),
         }
         new_retry_count = dict(state.get("retry_count", {}))
         new_retry_count[fmt_id] = retry_count + 1
@@ -437,7 +499,8 @@ async def quality_check_node_single(state: GenerationState) -> dict:
                     **task,
                     "quality_score": 20,
                     "quality_issues": check_issues,
-                    "status": "needs_retry",
+                    "status": "failed" if exhausted else "needs_retry",
+                    **({"error": "Decision model found no reachable fix"} if exhausted else {}),
                 }
             },
             "verification": verification,
@@ -513,12 +576,19 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     if overflow_issues:
         log.warning("[verifier] Overflow for %s: %s", fmt_id, overflow_issues)
         _save_html_preview(task_id, fmt_id, html_with_tokens)
+        focus = await _decision_refine_focus(
+            fmt_id, overflow_issues, "", html_with_tokens, retry_count, max_retries
+        )
+        critique = "Content overflows the canvas. Fix: " + "; ".join(overflow_issues)
+        if focus.get("brief"):
+            critique += f"\n{focus['brief']}"
         verification = dict(state.get("verification", {}))
         verification[fmt_id] = {
             "pass": False,
             "score": 30,
             "issues": overflow_issues,
-            "critique": "Content overflows the canvas. Fix: " + "; ".join(overflow_issues),
+            "critique": critique,
+            **({"decision_refine": focus} if focus else {}),
         }
         new_retry_count = dict(state.get("retry_count", {}))
         new_retry_count[fmt_id] = retry_count + 1
@@ -543,12 +613,19 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     if contrast_issues:
         log.warning("[verifier] Low-contrast text for %s: %s", fmt_id, contrast_issues)
         _save_html_preview(task_id, fmt_id, html_with_tokens)
+        focus = await _decision_refine_focus(
+            fmt_id, contrast_issues, "", html_with_tokens, retry_count, max_retries
+        )
+        critique = "Illegible text. Fix: " + "; ".join(contrast_issues)
+        if focus.get("brief"):
+            critique += f"\n{focus['brief']}"
         verification = dict(state.get("verification", {}))
         verification[fmt_id] = {
             "pass": False,
             "score": 35,
             "issues": contrast_issues,
-            "critique": "Illegible text. Fix: " + "; ".join(contrast_issues),
+            "critique": critique,
+            **({"decision_refine": focus} if focus else {}),
         }
         new_retry_count = dict(state.get("retry_count", {}))
         new_retry_count[fmt_id] = retry_count + 1
@@ -682,6 +759,20 @@ async def quality_check_node_single(state: GenerationState) -> dict:
 
     log.info("[verifier] %s — pass=%s score=%d", fmt_id, passed, score)
 
+    # Decision loop driver on a vision-audit failure: one flash call picks the
+    # single highest-leverage fix so the retry isn't a blind replay of the
+    # same critique.
+    decision_refine: dict = {}
+    if not passed:
+        decision_refine = await _decision_refine_focus(
+            fmt_id, issues, critique, html_with_tokens, retry_count, max_retries
+        )
+        if decision_refine.get("brief"):
+            critique = f"{critique}\n{decision_refine['brief']}"
+    elif retry_count:
+        # A later attempt that now clears everything — note the loop closed.
+        decision_refine = {"resolved": True, "attempt": retry_count}
+
     # Decision visual second opinion (Clef vision, advisory only).
     decision_visual: dict = {}
     try:
@@ -699,6 +790,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         "issues": issues,
         "critique": critique,
         **({"decision_design": decision_design} if decision_design else {}),
+        **({"decision_refine": decision_refine} if decision_refine else {}),
         **({"decision_gate": decision_gate} if decision_gate else {}),
         **({"decision_visual": decision_visual} if decision_visual else {}),
     }

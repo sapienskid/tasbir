@@ -27,6 +27,10 @@ DEFAULT_APP_SETTINGS: dict[str, dict] = {
         "value": 2,
         "description": "Max concurrent copywriter LLM calls (parallel, like the original design)",
     },
+    "copywriter.qa_max_rounds": {
+        "value": 1,
+        "description": "Decision-driven copy QA rewrite rounds (0 disables the copy loop)",
+    },
     "vision.min_interval_seconds": {
         "value": 5.0,
         "description": "Min seconds between vision LLM calls (vision-only pacing)",

@@ -14,6 +14,14 @@ volumes:
 x-shared-env: &shared-env
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+  # Cloudflare AI Gateway: generation transport + decision models (Clef).
+  LLM_PROVIDER: ${LLM_PROVIDER:-direct}
+  CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+  CLOUDFLARE_AI_GATEWAY_TOKEN: ${CLOUDFLARE_AI_GATEWAY_TOKEN:-}
+  CF_GATEWAY_ID: ${CF_GATEWAY_ID:-tasbir}
+  DECISION_PROVIDER_ORDER: ${DECISION_PROVIDER_ORDER:-clef-flash,clef}
+  DECISION_CALIBRATION_RATE: ${DECISION_CALIBRATION_RATE:-0.0}
+  COPY_QA_ENFORCE: ${COPY_QA_ENFORCE:-false}
   PEXELS_API_KEY: ${PEXELS_API_KEY:-}
   PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
   DATABASE_URL: sqlite+aiosqlite:///data/tasbir.db
@@ -53,6 +61,9 @@ services:
     restart: unless-stopped
     networks:
       - tasbir-dev
+    ports:
+      # Host access for local runs (`RENDERER_URL=http://localhost:4000`).
+      - "4000:4000"
     environment:
       PORT: 4000
       RENDER_SERVICE_KEY: ${RENDER_SERVICE_KEY:-dev-render-secret}

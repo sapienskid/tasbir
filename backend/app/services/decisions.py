@@ -1,10 +1,10 @@
-"""Decision models — Jev + Clef behind one System One interface, via Cloudflare.
+"""Decision models — Clef + Clef-flash behind one System One interface.
 
-Both models share the ``{state, questions} → {answers}`` shape (Jev-native,
-Clef-compatible). All calls go through Cloudflare so no TypeSafe key is ever
-needed: Jev runs as third-party ``typesafe/jev`` (Unified Billing), Clef as
-``@cf/cloudflare/clef[-flash]`` (Neurons). REST ``ai/run`` envelopes differ
-(Jev ``{result}`` vs Clef ``{success, result}``) — unwrapped here.
+Both run on Workers AI through Cloudflare: ``@cf/cloudflare/clef-flash``
+(fast text work) and ``@cf/cloudflare/clef`` (vision / precision), both
+billed in Neurons with a free daily allocation. The shared contract is the
+``{state, questions} → {answers}`` shape; REST answers arrive under
+``result`` and are unwrapped here.
 
 Question rules (docs.typesafe.ai): one judgment per question, positive
 framing (high=yes), Choice 2–255 options + ``other`` escape hatch, Score 2–10
@@ -25,11 +25,9 @@ log = logging.getLogger(__name__)
 TEXT_TIMEOUT = 30.0
 VISION_TIMEOUT = 90.0
 
-# Provider → REST model id. clef-flash does fast text work, clef-full is
-# vision/precision. jev stays wired (third-party REST shape) as an opt-in
-# third provider — off by default until Gateway credits exist.
+# Provider → REST model id. clef-flash does fast text work; clef-full is
+# vision/precision. Clef is the only decision model we run.
 PROVIDERS: dict[str, str] = {
-    "jev": "typesafe/jev",
     "clef-flash": "@cf/cloudflare/clef-flash",
     "clef": "@cf/cloudflare/clef",
 }
@@ -77,26 +75,20 @@ async def _call_provider(
     if not providers_configured():
         raise RuntimeError("Cloudflare decision providers not configured")
     model_id = PROVIDERS[provider]
-    base = f"{_API_BASE}/{settings.resolved_cf_account_id}"
+    url = f"{_API_BASE}/{settings.resolved_cf_account_id}/ai/run/{model_id}"
     headers = {
         "Authorization": f"Bearer {settings.resolved_cf_token}",
         "Content-Type": "application/json",
     }
     if settings.cf_gateway_id:
         headers["cf-aig-gateway-id"] = settings.cf_gateway_id
-    if provider == "jev":
-        # Third-party REST shape (docs: ai/models/typesafe/jev): the model
-        # goes in the body and state/questions nest under "input".
-        url = f"{base}/ai/run"
-        body: dict = {"model": model_id, "input": {"state": state, "questions": questions}}
-        if images:
-            raise ValueError("Jev is text-only; route image packs to Clef")
-    else:
-        url = f"{base}/ai/run/{model_id}"
-        body = {"state": state, "questions": questions}
-        body["model"] = "clef-flash" if provider == "clef-flash" else "clef"
-        if images:
-            body["images"] = images
+    body: dict = {
+        "state": state,
+        "questions": questions,
+        "model": "clef-flash" if provider == "clef-flash" else "clef",
+    }
+    if images:
+        body["images"] = images
     timeout = VISION_TIMEOUT if images else TEXT_TIMEOUT
     started = time.monotonic()
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -107,8 +99,8 @@ async def _call_provider(
             # Surface the API error body (no secrets in it) for diagnosis.
             raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
         data = resp.json()
-    # Jev REST: {result: {...}} or the answer object directly;
-    # Clef REST: {success, result: {...}}.
+    # Workers AI REST: {success, result: {model, answers, usage}} — answers
+    # occasionally arrive at the top level depending on the response wrapper.
     result = data.get("result", data) if isinstance(data, dict) else {}
     if not isinstance(result, dict) or "answers" not in result:
         result = data if isinstance(data, dict) and "answers" in data else result
@@ -166,8 +158,8 @@ async def decide(
     pack = get_pack(pack_id)
     questions = questions or pack["questions"]
     order = list(pack.get("providers") or provider_order())
-    if images and "jev" in order:
-        order = [p for p in order if p != "jev"] or ["clef"]
+    if images and order[0] != "clef":
+        order = ["clef", *[p for p in order if p != "clef"]]
     meta = {"pack_id": pack_id, **(metadata or {})}
     last_error: Exception | None = None
     primary_result: dict | None = None

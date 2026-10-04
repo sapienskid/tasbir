@@ -15,19 +15,15 @@ class Settings(BaseSettings):
     llm_provider: str = "direct"
 
     # Cloudflare AI Gateway (single AI control plane for generation +
-    # decisions). Jev + Clef both run through here — no TypeSafe key needed
-    # (Jev bills as a third-party model via Unified Billing).
-    # Canonical env names (as in .env): CLOUDFLARE_ACCOUNT_ID and
-    # CLOUDFLARE_AI_GATEWAY_TOKEN. CF_ACCOUNT_ID / CF_AIG_TOKEN stay as
-    # legacy aliases.
+    # decisions). Decisions run on Workers AI (Clef / Clef-flash, billed in
+    # Neurons), so they need only the Cloudflare token — no Gateway credits.
     cloudflare_account_id: str = ""
     cloudflare_ai_gateway_token: str = ""
     cf_account_id: str = ""
     cf_aig_token: str = ""
     cf_gateway_id: str = "tasbir"
     # Decision-model routing order. Clef-flash does fast text work, Clef-full
-    # is vision/precision. Jev stays supported as an opt-in third entry
-    # (needs Gateway credits) but is off by default — no access right now.
+    # is vision/precision. Clef is the only decision model we run.
     decision_provider_order: str = "clef-flash,clef"
     # Dual-run calibration: fraction sampled + log disagreements (0 disables).
     decision_calibration_rate: float = 0.0

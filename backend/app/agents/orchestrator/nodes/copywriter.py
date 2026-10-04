@@ -200,6 +200,100 @@ def _post_type_block(post_type: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _qa_revision_brief(qa: dict) -> str:
+    """Turn a copy-QA verdict into a rewrite brief for the next copy pass.
+
+    This is the copy loop's decision input: the QA pack already told us which
+    dimension failed (brand / clarity / cta / value) and the hook pack why,
+    so the retry prompt names the exact problem instead of "do better".
+    Returns "" when there is nothing actionable.
+    """
+    if not qa:
+        return ""
+    dims = qa.get("dims") or {}
+    if not isinstance(dims, dict):
+        return ""
+    try:
+        verdict = str(qa.get("verdict") or "")
+        score = float(qa.get("score") or 0.0)
+    except (TypeError, ValueError):
+        return ""
+    if verdict not in ("review", "rewrite"):
+        return ""
+    ordered = sorted(
+        ((k, float(v)) for k, v in dims.items() if isinstance(v, (int, float))),
+        key=lambda kv: kv[1],
+    )
+    fixes = {
+        "brand": "sound like this brand's editorial voice — restrained, concrete, no hype",
+        "clarity": "make the claim precise and non-misleading; cut hedges and absolutes",
+        "cta": "add an explicit call to action that fits the platform",
+        "value": "make the value proposition obvious in the first line",
+    }
+    lines = [
+        f"COPY QA (decision model, score {score:.2f}, verdict {verdict}) — fix these, "
+        "change nothing else:",
+    ]
+    for name, value in ordered[:2]:
+        lines.append(f"- {name}: {fixes.get(name, 'improve this dimension')}")
+    for issue in (qa.get("issues") or [])[:3]:
+        lines.append(f"- flagged: {issue}")
+    return "\n".join(lines)
+
+
+async def _rewrite_copy_for_platform(
+    platform_id: str,
+    content: str,
+    title: str,
+    prompt_cfg: Any,
+    prior: PlatformCopy,
+    qa: dict,
+    brand_info: dict | None = None,
+    campaign: dict | None = None,
+) -> tuple[str, PlatformCopy] | None:
+    """One decision-guided rewrite pass. Returns None to keep the prior copy."""
+    brief = _qa_revision_brief(qa)
+    if not brief:
+        return None
+    fmt = get_format_info(platform_id)
+    system = (
+        f"{prompt_cfg.system_prompt}\n\n"
+        "You are revising existing social copy after an automated review. "
+        "Keep the platform, the factual content, and the length limits. "
+        "Fix only the listed problems. Return the same JSON shape as asked."
+    )
+    user_prompt = (
+        f"PLATFORM: {platform_id} ({fmt.width}x{fmt.height}px)\n"
+        f"BRAND: {(brand_info or {}).get('name', '')}\n"
+        f"CAMPAIGN: {(campaign or {}).get('name', '')}\n\n"
+        f"{brief}\n\n"
+        f"CURRENT COPY:\n{prior.model_dump_json()[:2000]}\n\n"
+        f"SOURCE TITLE: {title}\n"
+        f"SOURCE CONTENT (excerpt):\n{_clean_markdown(content)[:1500]}\n\n"
+        'Return ONLY the JSON object with headline/subhead/body (and "slides" '
+        "for carousels)."
+    )
+    sem = await _get_copy_semaphore()
+    async with sem:
+        try:
+            raw = await call_llm(
+                agent_role="copywriter",
+                system_prompt=system,
+                user_prompt=user_prompt,
+                temperature=min(0.8, (prompt_cfg.temperature or 0.7) + 0.1),
+                max_tokens=max(prompt_cfg.max_tokens or 2000, 2000),
+            )
+            data = _extract_json(raw)
+            revised = PlatformCopy(**data)
+            revised.headline = _clean_markdown(revised.headline)
+            revised.subhead = _clean_markdown(revised.subhead)
+            revised.body = _clean_markdown(revised.body)
+            return platform_id, revised
+        except Exception as e:  # noqa: BLE001
+            log.warning("[copywriter] decision-guided rewrite failed for %s: %s", platform_id, e)
+            return None
+
+
 async def _write_copy_for_platform(
     platform_id: str,
     brief: dict,
@@ -966,18 +1060,26 @@ async def copywriter_node(state: GenerationState) -> dict:
     # itself is never dropped so a miscalibrated threshold can't silently
     # lose a platform.
     copy_qa: dict[str, dict] = {}
+    import json as _json
+
     from app.config import get_settings
+
+    def _json_loads(raw: str) -> dict:
+        try:
+            data = _json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
 
     enforce = bool(get_settings().copy_qa_enforce)
     try:
         from app.services.decisions import providers_configured
 
         if providers_configured() and format_tasks:
-            import json as _json
 
             async def _qa_one(pid: str) -> tuple[str, dict]:
                 try:
-                    data = _json.loads((format_tasks[pid].get("copy") or "{}"))
+                    data = _json_loads(format_tasks[pid].get("copy") or "")
                     pc = PlatformCopy(**data)
                 except Exception:
                     return pid, {}
@@ -995,6 +1097,46 @@ async def copywriter_node(state: GenerationState) -> dict:
                 log.info("[copywriter] copy QA scored %d platform(s)", len(copy_qa))
     except Exception as e:  # noqa: BLE001
         log.warning("[copywriter] copy QA batch skipped: %s", e)
+
+    # Decision loop: rewrite the platforms the QA verdict says are weak, then
+    # re-score them. Bounded (COPY_QA_MAX_ROUNDS); the improved copy replaces
+    # the original in state so the design step sees the better version.
+    if copy_qa:
+        from app.services.settings import get_runtime_setting
+
+        rounds = int(await get_runtime_setting("copywriter.qa_max_rounds", 1))
+        for round_no in range(1, max(0, rounds) + 1):
+            weak = {
+                pid: qa for pid, qa in copy_qa.items()
+                if qa.get("verdict") in ("review", "rewrite") and not verbatim
+            }
+            if not weak:
+                break
+            log.info("[copywriter] QA round %d: rewriting %d platform(s)", round_no, len(weak))
+            rewrites = await asyncio.gather(*(
+                _rewrite_copy_for_platform(
+                    pid, content, title, prompt_cfg,
+                    PlatformCopy(**_json_loads(format_tasks[pid].get("copy") or "{}")),
+                    qa, brand_info, campaign,
+                )
+                for pid, qa in weak.items()
+            ))
+            improved: dict[str, dict] = {}
+            for res in rewrites:
+                if not res:
+                    continue
+                pid, revised = res
+                format_tasks[pid] = FormatTask(
+                    **{
+                        **format_tasks[pid],
+                        "copy": revised.model_dump_json(),
+                        "refinement_count": (format_tasks[pid].get("refinement_count") or 0) + 1,
+                    }
+                )
+                improved[pid] = await _copy_qa_for_platform(pid, revised, state.get("category", ""))
+            if not improved:
+                break
+            copy_qa.update({pid: qa for pid, qa in improved.items() if qa})
 
     task_id = state.get("_task_id", "")
     if task_id:
