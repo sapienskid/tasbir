@@ -1073,6 +1073,13 @@ Response: `{"status": "ok", "version": "…", "service": "tasbir", "llm_configur
 |----------|----------|---------|-------------|
 | `GEMINI_API_KEY` | Yes | — | Google AI Studio API key |
 | `OPENROUTER_API_KEY` | No | — | Fallback LLM provider |
+| `LLM_PROVIDER` | No | `direct` | Generation transport: `direct` or `gateway` (Cloudflare AI Gateway) |
+| `CF_ACCOUNT_ID` | No* | — | Cloudflare account for Gateway + decisions (*needed when `LLM_PROVIDER=gateway` or decisions on) |
+| `CF_AIG_TOKEN` | No* | — | Cloudflare API token (Gateway run) |
+| `CF_GATEWAY_ID` | No | `tasbir` | Gateway id for generation + decision calls |
+| `DECISION_PROVIDER_ORDER` | No | `jev,clef-flash,clef` | Decision failover order (vision packs force Clef) |
+| `DECISION_CALIBRATION_RATE` | No | `0.0` | Sample rate for dual-provider agreement logging |
+| `COPY_QA_ENFORCE` | No | `false` | Block publish on low copy-quality score (default advisory) |
 | `PEXELS_API_KEY` | No | — | Stock-photo search (media tools) |
 | `PIXABAY_API_KEY` | No | — | Stock-photo search (media tools); Wikimedia Commons needs none |
 | `REDIS_URL` | Yes | `redis://localhost:6379/0` | Celery broker |

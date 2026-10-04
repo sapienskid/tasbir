@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.services import decisions as dec
 from app.services import decision_packs as packs
+from app.services import decisions as dec
 from app.services import llm as llm_svc
 from app.services import models as models_svc
 

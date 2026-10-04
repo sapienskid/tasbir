@@ -789,6 +789,68 @@ def _slides_from_overrides(overrides: dict, content: str, title: str, n: int) ->
     return base
 
 
+async def _copy_qa_for_platform(
+    platform_id: str,
+    copy: PlatformCopy,
+    category: str = "",
+) -> dict:
+    """Advisory marketing-copy QA via decision packs (fail-open).
+
+    Merges voice + claims + structure questions into minimal calls and
+    reduces to the composite ``copy_quality`` score. Never raises — an
+    empty dict means QA was skipped (providers unconfigured).
+    """
+    try:
+        from app.services.decision_packs import copy_quality, get_pack
+        from app.services.decisions import decide, providers_configured
+
+        if not providers_configured():
+            return {}
+        state = {
+            "copy": {
+                "headline": copy.headline,
+                "subhead": copy.subhead,
+                "body": copy.body[:800],
+            },
+            "category": category,
+            "platform": platform_id,
+        }
+        voice_q = dict(get_pack("copy-voice")["questions"])
+        struct_q = dict(get_pack("copy-structure")["questions"])
+        claims_q = dict(get_pack("copy-claims")["questions"])
+        merged_a = {**voice_q, **struct_q}
+        merged_b = dict(claims_q)
+        res_a = await decide("copy-voice", state, questions=merged_a,
+                             metadata={"agent": "copywriter", "format": platform_id})
+        res_b = await decide("copy-claims", state, questions=merged_b,
+                             metadata={"agent": "copywriter", "format": platform_id})
+        answers_a = res_a.get("answers", {})
+        answers_b = res_b.get("answers", {})
+        voice = {k: answers_a.get(k, {}) for k in voice_q}
+        structure = {k: answers_a.get(k, {}) for k in struct_q}
+        claims = {k: answers_b.get(k, {}) for k in claims_q}
+        quality = copy_quality(voice, claims, structure)
+        issues: list[str] = []
+        block = float(get_pack("copy-claims").get("thresholds", {}).get("block", 0.8))
+        for key in ("absolute_claim", "unverifiable_stat", "misleading"):
+            try:
+                if float(claims.get(key, {}).get("noul", 0) or 0) >= block:
+                    issues.append(f"{key} flagged ({claims[key].get('noul')})")
+            except (TypeError, ValueError):
+                continue
+        return {
+            "score": quality["score"],
+            "verdict": quality["verdict"],
+            "dims": quality["dims"],
+            "issues": issues,
+            "provider": res_a.get("provider", ""),
+            "model": res_a.get("model", ""),
+        }
+    except Exception as e:  # noqa: BLE001
+        log.warning("[copywriter] copy QA skipped for %s: %s", platform_id, e)
+        return {}
+
+
 async def copywriter_node(state: GenerationState) -> dict:
     """Write platform-optimized copy for all requested platforms in parallel."""
     # Retry-from-failure: copy for every platform is already present.
@@ -851,6 +913,32 @@ async def copywriter_node(state: GenerationState) -> dict:
 
     log.info("[copywriter] Copy written for %d platforms", len(format_tasks))
 
+    # Advisory copy QA (fail-open, concurrent per platform). Blocking is a
+    # separate rollout gated by COPY_QA_ENFORCE; for now flags ride along in
+    # state + audit so the Studio can display dimensions without changing
+    # pipeline behavior.
+    copy_qa: dict[str, dict] = {}
+    try:
+        from app.services.decisions import providers_configured
+
+        if providers_configured() and format_tasks:
+            import json as _json
+
+            async def _qa_one(pid: str) -> tuple[str, dict]:
+                try:
+                    data = _json.loads((format_tasks[pid].get("copy") or "{}"))
+                    pc = PlatformCopy(**data)
+                except Exception:
+                    return pid, {}
+                return pid, await _copy_qa_for_platform(pid, pc, state.get("category", ""))
+
+            qa_results = await asyncio.gather(*(_qa_one(pid) for pid in format_tasks))
+            copy_qa = {pid: qa for pid, qa in qa_results if qa}
+            if copy_qa:
+                log.info("[copywriter] copy QA scored %d platform(s)", len(copy_qa))
+    except Exception as e:  # noqa: BLE001
+        log.warning("[copywriter] copy QA batch skipped: %s", e)
+
     task_id = state.get("_task_id", "")
     if task_id:
         # One audit row per platform so the trace + progress endpoint show
@@ -861,7 +949,11 @@ async def copywriter_node(state: GenerationState) -> dict:
             await record_audit(
                 task_id,
                 "copywriter",
-                decision={"format": platform_id, "status": "copy_ready"},
+                decision={"format": platform_id, "status": "copy_ready",
+                          **({"copy_qa": copy_qa[platform_id]} if platform_id in copy_qa else {})},
             )
 
-    return {"format_tasks": format_tasks}
+    out: dict = {"format_tasks": format_tasks}
+    if copy_qa:
+        out["copy_qa"] = copy_qa
+    return out

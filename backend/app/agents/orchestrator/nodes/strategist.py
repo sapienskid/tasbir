@@ -216,6 +216,40 @@ async def strategist_node(state: GenerationState) -> dict:
             log.warning("[strategist] Category '%s' not approved — falling back to WRITING", category)
             category = "WRITING"
 
+        # Decision assist (fail-open): when the LLM category missed the
+        # taxonomy and Cloudflare decisions are configured, let the
+        # intake-router pack cast a second vote — it never overrides an
+        # explicit user/brand category.
+        decision_info: dict = {}
+        if category == "WRITING" and not override_category:
+            try:
+                from app.services.decisions import decide, providers_configured
+
+                if providers_configured():
+                    approved = [str(c.get("name", "")) for c in (categories or [])]
+                    d_state = {
+                        "title": title,
+                        "excerpt": str(state.get("excerpt", ""))[:500],
+                        "content": str(content)[:1500],
+                        "approved_categories": approved,
+                    }
+                    d_res = await decide("intake-router", d_state, metadata={"agent": "strategist"})
+                    answers = d_res.get("answers", {})
+                    cat_ans = answers.get("category", {})
+                    voted = str(cat_ans.get("choice", "") or "").upper().strip()
+                    decision_info = {
+                        "provider": d_res.get("provider", ""),
+                        "model": d_res.get("model", ""),
+                        "voted_category": voted,
+                        "confidence": cat_ans.get("confidence"),
+                    }
+                    if voted and voted != "OTHER" and category_matches(voted, categories):
+                        log.info("[strategist] intake-router voted %s (conf %s) — adopting", voted, cat_ans.get("confidence"))
+                        category = voted
+                        brief.category = voted
+            except Exception as e:  # noqa: BLE001
+                log.warning("[strategist] intake-router assist skipped: %s", e)
+
         ground = resolve_ground(
             campaign,
             category,
@@ -236,6 +270,7 @@ async def strategist_node(state: GenerationState) -> dict:
                     "category": category,
                     "ground": ground,
                     "template_hint": brief.template_hint or "",
+                    **({"intake_router": decision_info} if decision_info else {}),
                 },
                 critique=brief.angle,
             )

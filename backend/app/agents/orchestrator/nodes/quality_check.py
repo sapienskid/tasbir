@@ -143,6 +143,72 @@ async def _call_vision_llm(
     )
 
 
+async def _decision_pregate(notes: str, fmt_id: str) -> dict:
+    """Cheap Clef-flash triage before the expensive vision LLM (fail-open)."""
+    try:
+        from app.services.decision_packs import get_pack
+        from app.services.decisions import decide, providers_configured
+
+        if not providers_configured() or not notes.strip():
+            return {}
+        res = await decide("verifier-pregate", {"notes": notes[:1500]},
+                           metadata={"agent": "verifier", "format": fmt_id})
+        answers = res.get("answers", {})
+        retry_p = 0.0
+        try:
+            retry_p = float(answers.get("retry_needed", {}).get("noul", 0) or 0)
+        except (TypeError, ValueError):
+            retry_p = 0.0
+        threshold = float(get_pack("verifier-pregate").get("thresholds", {}).get("retry", 0.7))
+        return {"retry_needed": retry_p, "over_threshold": retry_p >= threshold,
+                "provider": res.get("provider", ""), "model": res.get("model", "")}
+    except Exception as e:  # noqa: BLE001
+        log.warning("[verifier] decision pregate skipped for %s: %s", fmt_id, e)
+        return {}
+
+
+async def _decision_visual(png_bytes: bytes, notes: str, fmt_id: str) -> dict:
+    """Clef vision second opinion on the render (async advisory, fail-open)."""
+    try:
+        import base64
+
+        from app.services.decisions import decide, providers_configured
+
+        if not providers_configured() or not png_bytes:
+            return {}
+        # Size guard: Clef counts base64 toward the 64k window — prefer ~190KB.
+        # Downscale with Pillow when available; otherwise send the original up
+        # to the 4 MiB API cap and let the call fail open beyond it.
+        raw = png_bytes
+        if len(raw) > 190 * 1024:
+            try:
+                from io import BytesIO
+
+                from PIL import Image
+
+                img = Image.open(BytesIO(raw)).convert("RGB")
+                img.thumbnail((1024, 1024))
+                buf = BytesIO()
+                img.save(buf, format="JPEG", quality=80)
+                raw = buf.getvalue()
+            except Exception:
+                if len(raw) > 4 * 1024 * 1024:
+                    log.warning("[verifier] PNG too large for decision visual (%d bytes) — skipping", len(raw))
+                    return {}
+        b64 = base64.b64encode(raw).decode("ascii")
+        res = await decide(
+            "verifier-visual",
+            {"notes": notes[:500]},
+            images=[f"data:image/jpeg;base64,{b64}"],
+            metadata={"agent": "verifier", "format": fmt_id},
+        )
+        return {"answers": res.get("answers", {}), "provider": res.get("provider", ""),
+                "model": res.get("model", "")}
+    except Exception as e:  # noqa: BLE001
+        log.warning("[verifier] decision visual skipped for %s: %s", fmt_id, e)
+        return {}
+
+
 def _build_design_system_context(
     tokens: dict,
     design_instruction: dict,
@@ -509,6 +575,16 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # Save PNG and HTML for output
     _save_png(task_id, fmt_id, png_bytes)
     _save_html_preview(task_id, fmt_id, html_with_tokens)
+    # Decision pregate (cheap, fail-open): a second opinion on whether this
+    # render smells like a retry before spending the vision-LLM call. Advisory
+    # only — it never changes pass/fail, only enriches the audit trail.
+    decision_gate: dict = {}
+    try:
+        decision_gate = await _decision_pregate(
+            f"format={fmt_id} ground={ground} category={category} retry={retry_count}", fmt_id
+        )
+    except Exception:  # noqa: BLE001
+        decision_gate = {}
     design_instruction = state.get("design_instruction") or {}
     if not design_instruction:
         from app.services.design_systems import default_design_system_payload
@@ -570,6 +646,15 @@ async def quality_check_node_single(state: GenerationState) -> dict:
 
     log.info("[verifier] %s — pass=%s score=%d", fmt_id, passed, score)
 
+    # Decision visual second opinion (Clef vision, advisory only).
+    decision_visual: dict = {}
+    try:
+        decision_visual = await _decision_visual(
+            png_bytes, f"ground={ground} category={category} score={score}", fmt_id
+        )
+    except Exception:  # noqa: BLE001
+        decision_visual = {}
+
     # Update verification state
     verification = dict(state.get("verification", {}))
     verification[fmt_id] = {
@@ -577,6 +662,8 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         "score": score,
         "issues": issues,
         "critique": critique,
+        **({"decision_gate": decision_gate} if decision_gate else {}),
+        **({"decision_visual": decision_visual} if decision_visual else {}),
     }
 
     new_retry_count = dict(state.get("retry_count", {}))

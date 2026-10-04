@@ -201,6 +201,12 @@ class GenerationState(TypedDict):
     # Set once per post by process_all_formats (concatenated across branches).
     media_credits: Annotated[list[dict], _keep_first_list]
 
+    # Marketing-copy QA (advisory first, blocking per COPY_QA_ENFORCE):
+    # {platform_id: {score, verdict, dims, issues}} from Jev/Clef packs.
+    copy_qa: Annotated[dict[str, dict], _merge_dicts]
+    # Decision-model audit trail: [{pack_id, provider, model, answers...}].
+    decision_events: Annotated[list[dict], _keep_first_list]
+
 
 def initial_state(
     title: str,
