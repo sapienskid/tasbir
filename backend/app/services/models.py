@@ -83,6 +83,16 @@ MODEL_ROUTES: dict[str, str] = {
     "editor_chat": "gemini-3.1-flash-lite",
 }
 
+# Cloudflare dynamic-route tiers (Phase 1). The primary → fallback chains
+# live in the Gateway UI as `dynamic/tasbir-{tier}` (versioned, no deploy);
+# this map only decides which route an agent role calls. Keep the local
+# FALLBACK_CHAIN above as the emergency fallback when the Gateway is down.
+GATEWAY_TIERS: dict[str, list[str]] = {
+    "fast": ["strategist", "planner", "brand_tokens", "brand_campaigns"],
+    "creative": ["copywriter", "designer", "template_author", "editor_chat"],
+    "vision": ["verifier", "template_vision", "brand_vision"],
+}
+
 
 def list_models() -> list[dict]:
     """Registry entries sorted by name, for the Studio dropdown."""

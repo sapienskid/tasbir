@@ -1,10 +1,17 @@
-"""LLM service — Google Gemini/Genma via LangChain ChatGoogleGenerativeAI.
+"""LLM service — Google Gemini/Gemma via direct API or Cloudflare AI Gateway.
 
 All agents use this service. Provides both a high-level LangChain
 integration (with tool binding support) and a simple call_llm() helper.
 Model selection + per-role routing live in ``services.models`` (MODEL_ROUTES)
 with DB-backed per-agent overrides; ``call_llm`` walks the primary → fallback
 chain when a model times out / 504s / is rate-limited.
+
+Generation transport (``LLM_PROVIDER``):
+- ``direct`` (default): LangChain ChatGoogleGenerativeAI, unchanged behavior.
+- ``gateway``: Cloudflare AI Gateway unified REST
+  (``POST /accounts/{id}/ai/v1/chat/completions`` with
+  ``model="google-ai-studio/{model}"`` or ``"dynamic/tasbir-{tier}"``),
+  then direct as the emergency fallback.
 """
 
 import asyncio
@@ -25,6 +32,90 @@ LLM_TIMEOUT = 180.0
 # Loop guard for call_llm_tool_loop: if the model calls the same tool with the
 # same args this many times, force a final answer instead of looping forever.
 MAX_REPEAT_TOOL = 3
+
+# Cloudflare AI Gateway unified REST endpoint (generation path).
+_GATEWAY_CHAT_PATH = "/client/v4/accounts/{account_id}/ai/v1/chat/completions"
+_GATEWAY_API_BASE = "https://api.cloudflare.com"
+
+
+def gateway_configured() -> bool:
+    """True when Cloudflare Gateway credentials are present."""
+    settings = get_settings()
+    return bool(settings.cf_account_id and settings.cf_aig_token)
+
+
+def gateway_route_for_role(agent_role: str) -> str:
+    """Dynamic route name for an agent tier (Phase 1 server-side failover).
+
+    Tiers mirror the pipeline's latency/quality needs; the actual
+    primary → fallback chains live in the Gateway UI (versioned, no deploy).
+    """
+    from app.services.models import GATEWAY_TIERS
+
+    for tier, roles in GATEWAY_TIERS.items():
+        if agent_role in roles:
+            return f"dynamic/tasbir-{tier}"
+    return "dynamic/tasbir-fast"
+
+
+def gateway_model_name(model: str) -> str:
+    """Map a bare model id to its Gateway provider-qualified name."""
+    if "/" in model or model.startswith("dynamic/"):
+        return model
+    return f"google-ai-studio/{model}"
+
+
+async def _call_gateway_chat(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float = 0.7,
+    max_tokens: int = 2000,
+    metadata: dict | None = None,
+) -> tuple[str, str | None]:
+    """Call generation via Cloudflare AI Gateway unified REST.
+
+    Returns ``(text, served_model)`` where ``served_model`` comes from the
+    ``cf-aig-model`` response header (which dynamic route node actually ran).
+    """
+    import httpx
+
+    settings = get_settings()
+    if not gateway_configured():
+        raise RuntimeError("Cloudflare AI Gateway not configured")
+    url = (
+        f"{_GATEWAY_API_BASE}"
+        + _GATEWAY_CHAT_PATH.format(account_id=settings.cf_account_id)
+    )
+    headers = {
+        "Authorization": f"Bearer {settings.cf_aig_token}",
+        "cf-aig-gateway-id": settings.cf_gateway_id or "tasbir",
+        "Content-Type": "application/json",
+    }
+    payload: dict = {
+        "model": gateway_model_name(model),
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if metadata:
+        payload["metadata"] = metadata
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        text = ""
+        try:
+            text = data["choices"][0]["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError):
+            text = ""
+        served = resp.headers.get("cf-aig-model")
+        if not text:
+            raise RuntimeError("Gateway returned empty completion")
+        return text, served
 
 def _model_for(agent_role: str) -> str:
     """Resolve the model for a role — DB agent row first, MODEL_ROUTES fallback."""
@@ -107,10 +198,10 @@ async def call_llm(
 ) -> str:
     """Call the LLM with system + user prompt; walk the fallback model chain.
 
-    Uses LangChain's ChatGoogleGenerativeAI under the hood. Tries the agent's
-    primary model first, then its fallback_models on timeout/504/429. If
-    Gemini+fallbacks all fail and an OpenRouter key is configured, falls back
-    to OpenRouter.
+    Transport order: Gateway (when ``LLM_PROVIDER=gateway`` and credentials
+    exist — dynamic route first, then provider-qualified model) → direct
+    LangChain Gemini chain → OpenRouter. The Gateway path records the
+    serving model (``cf-aig-model``) in the log for audit parity.
     """
     import logging
 
@@ -125,6 +216,40 @@ async def call_llm(
     models = [m for m in ([cfg.model] + list(cfg.fallback_models or [])) if m]
     if not models:
         models = [DEFAULT_MODEL]
+
+    settings = get_settings()
+    use_gateway = (settings.llm_provider or "direct").lower() == "gateway"
+    if use_gateway and gateway_configured():
+        metadata = {"agent_role": agent_role}
+        # Dynamic route first (server-side failover, no deploy to change).
+        try:
+            text, served = await _call_gateway_chat(
+                gateway_route_for_role(agent_role),
+                system_prompt,
+                user_prompt,
+                temperature,
+                max_tokens,
+                metadata,
+            )
+            log.info("[LLM] gateway route served by %s (%s)", served, agent_role)
+            return text
+        except Exception as e:  # noqa: BLE001
+            log.warning("[LLM] gateway route failed for %r (%s) — trying model path", agent_role, e)
+        # Provider-qualified primary model through the same Gateway (keeps
+        # dashboard/logging even without a route configured yet).
+        try:
+            text, served = await _call_gateway_chat(
+                models[0],
+                system_prompt,
+                user_prompt,
+                temperature,
+                max_tokens,
+                metadata,
+            )
+            log.info("[LLM] gateway model served by %s (%s)", served, agent_role)
+            return text
+        except Exception as e:  # noqa: BLE001
+            log.warning("[LLM] gateway model path failed for %r (%s) — falling back to direct", agent_role, e)
 
     messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
     last_error: Exception | None = None

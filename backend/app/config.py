@@ -9,6 +9,23 @@ class Settings(BaseSettings):
     # LLM
     gemini_api_key: str = ""
     openrouter_api_key: str = ""
+    # Preferred generation transport: "direct" (ChatGoogleGenerativeAI) or
+    # "gateway" (Cloudflare AI Gateway unified REST). Gateway keeps working
+    # when keys rotate; direct stays as the emergency fallback.
+    llm_provider: str = "direct"
+
+    # Cloudflare AI Gateway (single AI control plane for generation +
+    # decisions). Jev + Clef both run through here — no TypeSafe key needed
+    # (Jev bills as a third-party model via Unified Billing).
+    cf_account_id: str = ""
+    cf_aig_token: str = ""
+    cf_gateway_id: str = "tasbir"
+    # Decision-model routing order, e.g. "jev,clef-flash,clef".
+    decision_provider_order: str = "jev,clef-flash,clef"
+    # Dual-run calibration: fraction sampled + log disagreements (0 disables).
+    decision_calibration_rate: float = 0.0
+    # Copy QA starts advisory-only in the Studio; blocking enforced per setting.
+    copy_qa_enforce: bool = False
 
     # Stock-photo providers (media tools). Wikimedia Commons needs no key.
     pexels_api_key: str = ""
