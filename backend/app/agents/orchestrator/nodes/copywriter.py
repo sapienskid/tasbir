@@ -796,9 +796,9 @@ async def _copy_qa_for_platform(
 ) -> dict:
     """Advisory marketing-copy QA via decision packs (fail-open).
 
-    Merges voice + claims + structure questions into minimal calls and
-    reduces to the composite ``copy_quality`` score. Never raises — an
-    empty dict means QA was skipped (providers unconfigured).
+    Merges voice + structure + headline-hook questions into one call and
+    claims into a second, then reduces to the composite ``copy_quality``
+    score. Never raises — an empty dict means QA was skipped.
     """
     try:
         from app.services.decision_packs import copy_quality, get_pack
@@ -812,13 +812,15 @@ async def _copy_qa_for_platform(
                 "subhead": copy.subhead,
                 "body": copy.body[:800],
             },
+            "headline": copy.headline,
             "category": category,
             "platform": platform_id,
         }
         voice_q = dict(get_pack("copy-voice")["questions"])
         struct_q = dict(get_pack("copy-structure")["questions"])
+        hook_q = dict(get_pack("headline-hook")["questions"])
         claims_q = dict(get_pack("copy-claims")["questions"])
-        merged_a = {**voice_q, **struct_q}
+        merged_a = {**voice_q, **struct_q, **hook_q}
         merged_b = dict(claims_q)
         res_a = await decide("copy-voice", state, questions=merged_a,
                              metadata={"agent": "copywriter", "format": platform_id})
@@ -828,6 +830,7 @@ async def _copy_qa_for_platform(
         answers_b = res_b.get("answers", {})
         voice = {k: answers_a.get(k, {}) for k in voice_q}
         structure = {k: answers_a.get(k, {}) for k in struct_q}
+        hook = {k: answers_a.get(k, {}) for k in hook_q}
         claims = {k: answers_b.get(k, {}) for k in claims_q}
         quality = copy_quality(voice, claims, structure)
         issues: list[str] = []
@@ -838,16 +841,59 @@ async def _copy_qa_for_platform(
                     issues.append(f"{key} flagged ({claims[key].get('noul')})")
             except (TypeError, ValueError):
                 continue
+        try:
+            hook_p = float(hook.get("has_hook", {}).get("noul", 1) or 1)
+            weak_at = float(get_pack("headline-hook").get("thresholds", {}).get("weak_hook", 0.4))
+            if hook_p < weak_at:
+                issues.append(f"weak headline hook ({hook_p:.2f})")
+        except (TypeError, ValueError):
+            pass
         return {
             "score": quality["score"],
             "verdict": quality["verdict"],
             "dims": quality["dims"],
             "issues": issues,
+            "hook": {k: (v.get("noul") if isinstance(v, dict) else None) for k, v in hook.items()},
             "provider": res_a.get("provider", ""),
             "model": res_a.get("model", ""),
         }
     except Exception as e:  # noqa: BLE001
         log.warning("[copywriter] copy QA skipped for %s: %s", platform_id, e)
+        return {}
+
+
+async def _extras_qa_for_platform(
+    platform_id: str,
+    copy: PlatformCopy,
+    post_type: str,
+    source_excerpt: str,
+) -> dict:
+    """Advisory post-type extras check (fail-open).
+
+    Builds presence + groundedness questions from ``POST_TYPE_EXTRAS`` for
+    the extras the copy actually filled. Empty dict when the post type
+    expects nothing (caller skips the decision call).
+    """
+    try:
+        from app.services.decision_packs import extras_questions
+        from app.services.decisions import decide, providers_configured
+
+        if not providers_configured():
+            return {}
+        filled = [k for k, v in (copy.extra or {}).items() if str(v or "").strip()]
+        questions = extras_questions(post_type, filled)
+        if not questions:
+            return {}
+        res = await decide(
+            "copy-structure",
+            {"copy": {"headline": copy.headline, "body": copy.body[:800], "extra": copy.extra},
+             "source": source_excerpt[:1200]},
+            questions=questions,
+            metadata={"agent": "copywriter", "format": platform_id, "pack": "extras-check"},
+        )
+        return {"answers": res.get("answers", {}), "provider": res.get("provider", "")}
+    except Exception as e:  # noqa: BLE001
+        log.warning("[copywriter] extras QA skipped for %s: %s", platform_id, e)
         return {}
 
 
@@ -934,7 +980,13 @@ async def copywriter_node(state: GenerationState) -> dict:
                     pc = PlatformCopy(**data)
                 except Exception:
                     return pid, {}
-                return pid, await _copy_qa_for_platform(pid, pc, state.get("category", ""))
+                qa = await _copy_qa_for_platform(pid, pc, state.get("category", ""))
+                if qa:
+                    ptype = (platforms_config.get(pid, {}) or {}).get("post_type") or post_type
+                    extras = await _extras_qa_for_platform(pid, pc, ptype, content)
+                    if extras:
+                        qa["extras"] = extras
+                return pid, qa
 
             qa_results = await asyncio.gather(*(_qa_one(pid) for pid in format_tasks))
             copy_qa = {pid: qa for pid, qa in qa_results if qa}

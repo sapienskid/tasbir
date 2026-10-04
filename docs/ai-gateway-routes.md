@@ -46,18 +46,27 @@ and per-agent audit rows.
 
 ## 3. Decision-model policy (code, not dashboard)
 
-Text judgments run **Clef-flash first, Jev fallback**
-(`decision_packs.py` — flash is the fast workhorse on free Neurons;
-Jev takes over automatically once credits exist). **Clef-full is
-vision-only** (`verifier-visual`, `sequence-cohesion` — the only packs
-that send images; Jev is text-only and cannot serve them).
+Text judgments run **Clef-flash first, Clef fallback** (`decision_packs.py`
+— flash is the fast workhorse on free Neurons; Clef-full is the precision
+second opinion). Jev stays wired as an opt-in third provider but is off by
+default (no access — needs Gateway credits). **Full Clef leads only the
+vision packs** (`verifier-visual`, `sequence-cohesion`, `image-relevance`;
+Jev is text-only and cannot serve them).
+
+> Dynamic routes cannot front decision calls: routes accept the OpenAI chat
+> shape only, while decisions use the System One `ai/run` shape (`{state,
+> questions}`). Decision failover lives client-side in `decide()` order —
+> proven live (Jev 402 → automatic Clef-flash with a good answer).
 
 Per-pack actions (probabilities → code, never prose):
 
 | Pack | Action |
 |---|---|
 | `intake-router` | `safety_flag ≥ 0.8` → task refused with a clear error (no silent fallback). `needs_human ≥ 0.5` → `needs_review` flag on the brief. Approved-category vote adopted only when the LLM missed the taxonomy. Provider errors → no action (fail-open). |
-| `copy-voice/claims/structure` | Merged into one composite `copy_quality` score (brand 0.35 / clarity 0.25 / CTA 0.2 / value 0.2). `≥ 0.80` pass, `0.60–0.80` human review, `< 0.60` rewrite. Blocking (`copy_qa_blocked`) only when `COPY_QA_ENFORCE=true`; copy is never dropped. Failing claim dimensions ride into the verifier prompt as extra scrutiny. |
+| `copy-voice/claims/structure` + `headline-hook` | Merged into two calls (12 + 5 questions) → composite `copy_quality` score (brand 0.35 / clarity 0.25 / CTA 0.2 / value 0.2). `≥ 0.80` pass, `0.60–0.80` human review, `< 0.60` rewrite; weak hooks (`< 0.40`) flagged. Blocking (`copy_qa_blocked`) only when `COPY_QA_ENFORCE=true`; copy is never dropped. Failing claim dimensions ride into the verifier prompt as extra scrutiny. |
+| `extras-check` (built per post type) | Presence Noul per filled extra + groundedness vs source. Advisory in copy QA; empty for `default` posts (no call). |
+| `design-brief` | Post-HTML semantic check (headline/body/focus/craft) after deterministic gates pass. Advisory — stored in verification for calibration against the syntactic checks. |
+| `media-kind` vote, `critique-actionable` | Advisory audit trail (agreement calibration). They never flip a deterministic result today — the logs tell us which pack earns enforcement next. |
 | `planner-gate`, `verifier-pregate`, `sequence-cohesion` | Advisory audit trail (agreement calibration). They never flip a deterministic result today — the logs tell us which pack earns enforcement next. |
 
 ## 4. Question-writing rules (when adding a pack)

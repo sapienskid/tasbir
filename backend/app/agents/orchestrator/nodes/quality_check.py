@@ -444,6 +444,25 @@ async def quality_check_node_single(state: GenerationState) -> dict:
             "retry_count": new_retry_count,
         }
 
+    # Step 0b: Decision semantic check (fail-open, advisory). The
+    # deterministic gates above are syntactic; the design-brief pack judges
+    # whether the HTML reads as one finished post idea. Never blocks — its
+    # verdict rides into the audit for calibration.
+    decision_design: dict = {}
+    try:
+        from app.services.decisions import decide, providers_configured
+
+        if providers_configured() and html.strip():
+            d_res = await decide("design-brief", {"html": html[:3000]},
+                                 metadata={"agent": "verifier", "format": fmt_id})
+            decision_design = {
+                "provider": d_res.get("provider", ""),
+                "model": d_res.get("model", ""),
+                "answers": d_res.get("answers", {}),
+            }
+    except Exception as e:  # noqa: BLE001
+        log.warning("[verifier] design-brief check skipped for %s: %s", fmt_id, e)
+
     # Step 1: Inject tokens, fonts, KaTeX, and images into HTML
     log.info("[verifier] Rendering %s to PNG for visual audit", fmt_id)
     # Per-slide user images (auto-distributed in the graph); fall back to the
@@ -558,6 +577,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
             "issues": [],
             "critique": "Designer-authored template — deterministic + overflow checks passed.",
             "preapproved": True,
+            **({"decision_design": decision_design} if decision_design else {}),
         }
         log.info("[verifier] %s — template pre-approved (%s)", fmt_id, task["template_id"])
         return {
@@ -678,6 +698,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         "score": score,
         "issues": issues,
         "critique": critique,
+        **({"decision_design": decision_design} if decision_design else {}),
         **({"decision_gate": decision_gate} if decision_gate else {}),
         **({"decision_visual": decision_visual} if decision_visual else {}),
     }

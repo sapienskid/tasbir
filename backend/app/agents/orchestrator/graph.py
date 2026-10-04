@@ -143,6 +143,28 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
         if status in ("verified", "error", "failed"):
             break
         if status == "needs_retry":
+            # Is the critique worth retrying on? (fail-open advisory.) An
+            # unactionable critique means the next attempt flies blind — the
+            # loop still retries (bounded by max_retries), but the audit
+            # records that the retry had weak guidance.
+            try:
+                from app.services.decisions import decide, providers_configured
+
+                if providers_configured() and str(verification.get("critique") or "").strip():
+                    c_res = await decide(
+                        "critique-actionable",
+                        {"critique": str(verification.get("critique") or "")[:800]},
+                        metadata={"agent": "verifier", "format": fmt_id},
+                    )
+                    c_ans = c_res.get("answers", {})
+                    try:
+                        actionable = float(c_ans.get("actionable", {}).get("noul", 1) or 1)
+                    except (TypeError, ValueError):
+                        actionable = 1.0
+                    await _audit("verifier", {"format": fmt_id, "critique_actionable": actionable,
+                                             "provider": c_res.get("provider", "")})
+            except Exception as e:  # noqa: BLE001
+                log.warning("[graph] critique-actionable check skipped for %s: %s", fmt_id, e)
             if use_template and template_mode != "template":
                 # Chosen template failed QC (e.g. overflow) → LLM designer.
                 use_template = False
@@ -250,6 +272,36 @@ async def process_all_formats_node(state: GenerationState) -> dict:
     from app.services.media_plan import build_media_plan
 
     base_state["media_plan"] = await build_media_plan(base_state)
+
+    # Decision advisory vote (fail-open, one flash call per post): does an
+    # independent judgment agree with the director's cover-slide kind? Audit
+    # only — the director's plan stands. Teaches us whether media-kind earns
+    # a vote in the plan itself.
+    try:
+        from app.services.decisions import decide, providers_configured
+
+        if providers_configured():
+            brief = base_state.get("strategic_brief") or {}
+            d_res = await decide(
+                "media-kind",
+                {"title": base_state.get("title", ""),
+                 "content": str(brief.get("content_summary") or "")[:800]},
+                metadata={"agent": "media_plan"},
+            )
+            cover_kind = (base_state.get("media_plan") or {}).get(
+                runnable[0] if runnable else "", {}).get("kind", "") if runnable else ""
+            voted = d_res.get("answers", {}).get("kind", {}).get("choice", "")
+            if base_state.get("_task_id"):
+                from app.services.audit import record_audit
+
+                await record_audit(
+                    base_state["_task_id"], "media_plan",
+                    decision={"vote_kind": voted, "plan_cover_kind": cover_kind,
+                              "agree": bool(voted) and voted == cover_kind,
+                              "provider": d_res.get("provider", "")},
+                )
+    except Exception as e:  # noqa: BLE001
+        log.warning("[graph] media-kind advisory vote skipped: %s", e)
 
     results = await asyncio.gather(
         *(_run_format_chain(base_state, fmt_id) for fmt_id in runnable)

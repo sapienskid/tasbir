@@ -25,8 +25,10 @@ class Settings(BaseSettings):
     cf_account_id: str = ""
     cf_aig_token: str = ""
     cf_gateway_id: str = "tasbir"
-    # Decision-model routing order, e.g. "jev,clef-flash,clef".
-    decision_provider_order: str = "jev,clef-flash,clef"
+    # Decision-model routing order. Clef-flash does fast text work, Clef-full
+    # is vision/precision. Jev stays supported as an opt-in third entry
+    # (needs Gateway credits) but is off by default — no access right now.
+    decision_provider_order: str = "clef-flash,clef"
     # Dual-run calibration: fraction sampled + log disagreements (0 disables).
     decision_calibration_rate: float = 0.0
     # Copy QA starts advisory-only in the Studio; blocking enforced per setting.

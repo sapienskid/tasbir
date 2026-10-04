@@ -13,7 +13,7 @@ from __future__ import annotations
 PACKS: dict[str, dict] = {
     "intake-router": {
         "version": 1,
-        "providers": ["clef-flash", "jev"],
+        "providers": ["clef-flash", "clef"],
         "thresholds": {"category_min_confidence": 0.5, "safety_block": 0.8},
         "questions": {
             "category": {
@@ -66,7 +66,7 @@ PACKS: dict[str, dict] = {
     },
     "planner-gate": {
         "version": 1,
-        "providers": ["clef-flash", "jev"],
+        "providers": ["clef-flash", "clef"],
         "thresholds": {},
         "questions": {
             "structure": {
@@ -96,7 +96,7 @@ PACKS: dict[str, dict] = {
     },
     "template-pick": {
         "version": 1,
-        "providers": ["clef-flash", "jev"],
+        "providers": ["clef-flash", "clef"],
         "thresholds": {},
         "questions": {
             "no_fit": {
@@ -107,7 +107,7 @@ PACKS: dict[str, dict] = {
     },
     "media-kind": {
         "version": 1,
-        "providers": ["clef-flash", "jev"],
+        "providers": ["clef-flash", "clef"],
         "thresholds": {},
         "questions": {
             "kind": {
@@ -128,7 +128,7 @@ PACKS: dict[str, dict] = {
     },
     "copy-voice": {
         "version": 1,
-        "providers": ["clef-flash", "jev"],
+        "providers": ["clef-flash", "clef"],
         "thresholds": {"hype_block": 3.0},
         "questions": {
             "tone": {
@@ -170,7 +170,7 @@ PACKS: dict[str, dict] = {
     },
     "copy-claims": {
         "version": 1,
-        "providers": ["clef-flash", "jev"],
+        "providers": ["clef-flash", "clef"],
         "thresholds": {"block": 0.8},
         "questions": {
             "absolute_claim": {
@@ -198,7 +198,7 @@ PACKS: dict[str, dict] = {
     },
     "copy-structure": {
         "version": 1,
-        "providers": ["clef-flash", "jev"],
+        "providers": ["clef-flash", "clef"],
         "thresholds": {},
         "questions": {
             "has_hook": {
@@ -231,7 +231,7 @@ PACKS: dict[str, dict] = {
     },
     "verifier-pregate": {
         "version": 1,
-        "providers": ["clef-flash", "jev"],
+        "providers": ["clef-flash", "clef"],
         "thresholds": {"retry": 0.7},
         "questions": {
             "retry_needed": {
@@ -251,7 +251,7 @@ PACKS: dict[str, dict] = {
     },
     "verifier-visual": {
         "version": 1,
-        "providers": ["clef"],
+        "providers": ["clef", "clef-flash"],
         "thresholds": {},
         "questions": {
             "ground_correct": {
@@ -283,7 +283,7 @@ PACKS: dict[str, dict] = {
     },
     "sequence-cohesion": {
         "version": 1,
-        "providers": ["clef"],
+        "providers": ["clef", "clef-flash"],
         "thresholds": {},
         "questions": {
             "cohesive": {
@@ -301,7 +301,117 @@ PACKS: dict[str, dict] = {
             },
         },
     },
+    "headline-hook": {
+        "version": 1,
+        "providers": ["clef-flash", "clef"],
+        "thresholds": {"weak_hook": 0.4},
+        "questions": {
+            "has_hook": {
+                "type": "noul",
+                "instructions": "Does `headline` work as a hook (makes the reader want the next line)?",
+            },
+            "concrete": {
+                "type": "noul",
+                "instructions": "Does `headline` name something concrete (a thing, number, or outcome)?",
+            },
+            "curiosity": {
+                "type": "score",
+                "instructions": "How much curiosity does `headline` create?",
+                "criteria": ["Flat statement", "Mild interest", "Must read on"],
+            },
+        },
+    },
+    "design-brief": {
+        "version": 1,
+        "providers": ["clef-flash", "clef"],
+        "thresholds": {},
+        "questions": {
+            "has_headline": {
+                "type": "noul",
+                "instructions": "Does `html` render one dominant headline?",
+            },
+            "readable_body": {
+                "type": "noul",
+                "instructions": "Does `html` carry a readable supporting text layer (subhead or body)?",
+            },
+            "single_focus": {
+                "type": "noul",
+                "instructions": "Does `html` communicate one idea (not two competing messages)?",
+            },
+            "craft": {
+                "type": "score",
+                "instructions": "How finished does `html` feel as a designed post?",
+                "criteria": ["Rough draft", "Decent layout", "Publication-ready"],
+            },
+        },
+    },
+    "critique-actionable": {
+        "version": 1,
+        "providers": ["clef-flash", "clef"],
+        "thresholds": {"actionable": 0.5},
+        "questions": {
+            "actionable": {
+                "type": "noul",
+                "instructions": "Does `critique` name at least one concrete fix (not just a verdict)?",
+            },
+            "specific": {
+                "type": "noul",
+                "instructions": "Does `critique` point at a specific element or region (not vague overall)?",
+            },
+        },
+    },
+    "image-relevance": {
+        "version": 1,
+        "providers": ["clef", "clef-flash"],
+        "thresholds": {"relevant": 0.5},
+        "questions": {
+            "relevant": {
+                "type": "noul",
+                "instructions": "Does the attached image illustrate `headline` (not just decorate)?",
+            },
+            "text_clash": {
+                "type": "noul",
+                "instructions": "Does the attached image fight the overlaid text (busy behind words)?",
+            },
+        },
+    },
 }
+
+
+# Post-type extras spec: which optional fields each post type must fill, and
+# what each one means. Used to build per-post extras-check questions.
+POST_TYPE_EXTRAS: dict[str, dict[str, str]] = {
+    "quote": {"source": "the author/source of the quote"},
+    "promo": {"cta": "a short call to action"},
+    "event": {"date": "date/time", "location": "venue or link"},
+    "product": {"price": "price", "cta": "call to action"},
+    "comparison": {"stat": "the key figure being compared"},
+    "tutorial": {"stat": "count or metric (e.g. '5 steps')"},
+}
+
+
+def extras_questions(post_type: str, extra_keys: list[str]) -> dict:
+    """Build extras-check questions for a post type.
+
+    One presence Noul per expected extra + one groundedness Noul (every
+    filled extra must be supported by the source). Empty when the post type
+    (or its extras) calls for nothing — the caller skips the decision call.
+    """
+    spec = POST_TYPE_EXTRAS.get(post_type or "default", {})
+    questions: dict = {}
+    for key in extra_keys:
+        if key not in spec:
+            continue
+        questions[f"{key}_present"] = {
+            "type": "noul",
+            "instructions": f"Does `copy` state the {spec[key]} ({key}) clearly?",
+        }
+    if questions:
+        questions["grounded"] = {
+            "type": "noul",
+            "instructions": "Is every extra in `copy` supported by `source` (nothing invented)?",
+        }
+    return questions
 
 
 def get_pack(pack_id: str) -> dict:

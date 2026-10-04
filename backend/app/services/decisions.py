@@ -25,7 +25,9 @@ log = logging.getLogger(__name__)
 TEXT_TIMEOUT = 30.0
 VISION_TIMEOUT = 90.0
 
-# Provider → REST model id for POST /accounts/{id}/ai/run/{model-id}.
+# Provider → REST model id. clef-flash does fast text work, clef-full is
+# vision/precision. jev stays wired (third-party REST shape) as an opt-in
+# third provider — off by default until Gateway credits exist.
 PROVIDERS: dict[str, str] = {
     "jev": "typesafe/jev",
     "clef-flash": "@cf/cloudflare/clef-flash",
@@ -44,7 +46,7 @@ def provider_order() -> list[str]:
     settings = get_settings()
     order = [p.strip() for p in (settings.decision_provider_order or "").split(",") if p.strip()]
     known = [p for p in order if p in PROVIDERS]
-    return known or ["jev", "clef-flash", "clef"]
+    return known or ["clef-flash", "clef"]
 
 
 def noul_confidence(p: float) -> float:

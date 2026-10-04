@@ -1077,7 +1077,7 @@ Response: `{"status": "ok", "version": "…", "service": "tasbir", "llm_configur
 | `CLOUDFLARE_ACCOUNT_ID` | No* | — | Cloudflare account for Gateway + decisions (*needed when `LLM_PROVIDER=gateway` or decisions on; legacy alias `CF_ACCOUNT_ID`) |
 | `CLOUDFLARE_AI_GATEWAY_TOKEN` | No* | — | Cloudflare API token for Gateway runs (legacy alias `CF_AIG_TOKEN`) |
 | `CF_GATEWAY_ID` | No | `tasbir` | Gateway id for generation + decision calls |
-| `DECISION_PROVIDER_ORDER` | No | `jev,clef-flash,clef` | Decision failover order (vision packs force Clef) |
+| `DECISION_PROVIDER_ORDER` | No | `clef-flash,clef` | Decision failover order (vision packs force Clef; `jev` opt-in needs Gateway credits) |
 | `DECISION_CALIBRATION_RATE` | No | `0.0` | Sample rate for dual-provider agreement logging |
 | `COPY_QA_ENFORCE` | No | `false` | Block publish on low copy-quality score (default advisory) |
 | `PEXELS_API_KEY` | No | — | Stock-photo search (media tools) |

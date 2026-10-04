@@ -51,14 +51,28 @@ def test_gateway_not_configured_by_default(monkeypatch):
 
 
 def test_text_packs_prefer_clef_flash():
-    """Fast text work runs on Clef-flash first; Clef-full is vision-only."""
+    """Fast text work runs on Clef-flash first; Clef-full is vision/precision."""
     for pid in (
         "intake-router", "planner-gate", "template-pick", "media-kind",
         "copy-voice", "copy-claims", "copy-structure", "verifier-pregate",
+        "headline-hook", "design-brief", "critique-actionable",
     ):
-        assert packs.get_pack(pid)["providers"][0] == "clef-flash", pid
-    for pid in ("verifier-visual", "sequence-cohesion"):
-        assert packs.get_pack(pid)["providers"] == ["clef"], pid
+        providers = packs.get_pack(pid)["providers"]
+        assert providers[0] == "clef-flash", pid
+        assert "jev" not in providers, pid
+    for pid in ("verifier-visual", "sequence-cohesion", "image-relevance"):
+        assert packs.get_pack(pid)["providers"] == ["clef", "clef-flash"], pid
+    assert len(packs.get_pack("copy-voice")["questions"]) + len(
+        packs.get_pack("copy-structure")["questions"]
+    ) + len(packs.get_pack("headline-hook")["questions"]) <= 12
+
+
+def test_extras_questions_builder():
+    assert packs.extras_questions("default", ["cta"]) == {}
+    assert packs.extras_questions("promo", []) == {}
+    qs = packs.extras_questions("event", ["date", "location", "bogus"])
+    assert set(qs) == {"date_present", "location_present", "grounded"}
+    assert qs["date_present"]["type"] == "noul"
 
 
 def test_intake_policy_actions():
