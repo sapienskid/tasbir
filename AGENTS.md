@@ -834,8 +834,11 @@ docker compose up -d            # pulls GHCR images + redis, starts the stack
 ### Releasing (versioned Docker images + changelog + GitHub Release)
 
 Images are built by `.github/workflows/publish-images.yml` — never by hand.
-A `v*` tag push builds `tasbir-api` + `tasbir-playwright` (amd64+arm64) and
-pushes `:vX.Y.Z` + `:latest`; a `main` push refreshes `:main` + `:latest`.
+- A `v*` tag push builds `tasbir-api` + `tasbir-playwright` (amd64+arm64) and
+  pushes `:vX.Y.Z` + `:latest` + `:sha` — **a release owns `:latest`**.
+- A `main` push pushes `:main` + `:sha` only, and only *after CI succeeds*
+  (the workflow waits on `workflow_run` and skips on a red run), so an
+  unreleased commit can never become `:latest`.
 Procedure for a release (run these; the agent does steps 1–4, human reviews):
 
 ```bash
@@ -857,17 +860,22 @@ gh release create vX.Y.Z --title "vX.Y.Z" --notes-file /tmp/opencode/notes_X.Y.Z
 ```
 
 Rules:
-- `main` is always deployable; `:latest` floats — production pins
-  `TASBIR_IMAGE_TAG` to a version, never `latest`.
+- `:latest` is owned by a release tag. Production always pins
+  `TASBIR_IMAGE_TAG` to a version; `:main` is the rolling dev image.
 - Every release has a CHANGELOG section; no changelog entry, no tag.
-- Old image versions are pruned from GHCR periodically (keep newest only;
-  anything is rebuildable from its git tag):
+- Point the tag at a CI-green commit (`gh run list --commit <sha>`) before
+  pushing it — the image build no longer waits for CI on tag pushes.
+- Old image versions are pruned from GHCR periodically. **Never delete a
+  tagged version** — only untagged manifests that are stale:
 ```bash
-# list versions (newest first)
-gh api /users/sapienskid/packages/container/tasbir-api/versions --jq '.[].id'
-# delete one version (repeat per stale id; NEVER delete the newest group —
-# untagged arch manifests belong to the tagged image, keep them together)
-gh api -X DELETE /users/sapienskid/packages/container/tasbir-api/versions/<id>
+# list versions (newest first) with their tags
+gh api "/users/sapienskid/packages/container/<pkg>/versions?per_page=100" \
+  --jq '.[] | "\(.id) \(.metadata.container.tags | join(","))"'
+# delete ONE untagged version (arch manifests of a kept image are untagged
+# but required — delete them only when their whole image is being dropped)
+gh api -X DELETE "/users/sapienskid/packages/container/<pkg>/versions/<id>"
+# delete a whole orphaned package
+gh api -X DELETE "/users/sapienskid/packages/container/<pkg>"
 ```
   Needs a token with `read:packages` + `delete:packages`
   (`gh auth refresh -h github.com -s read:packages -s delete:packages` via
