@@ -221,6 +221,8 @@ def generate_task(self, task_id: str, source_data: dict):
                     "copy": ft.get("copy", ""),
                     **({"copy_qa": (state.get("copy_qa") or {}).get(fmt_id)}
                        if (state.get("copy_qa") or {}).get(fmt_id) else {}),
+                    **({"publish": (state.get("publish") or {}).get(fmt_id)}
+                       if (state.get("publish") or {}).get(fmt_id) else {}),
                 }
                 for fmt_id, ft in format_tasks.items()
                 # Carousel base entries only hold the slide copy — the slides
@@ -249,6 +251,7 @@ def generate_task(self, task_id: str, source_data: dict):
                         "media_credits": state.get("media_credits") or [],
                         "copy_qa": state.get("copy_qa") or {},
                         "copy_qa_blocked": state.get("copy_qa_blocked") or [],
+                        "publish": state.get("publish") or {},
                     },
                 )
 

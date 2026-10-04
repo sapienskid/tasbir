@@ -52,6 +52,38 @@ async def get_chat(
     }
 
 
+class FeedbackRequest(BaseModel):
+    format: str
+    verdict: str = Field(pattern="^(approve|reject)$")
+    note: str = Field(default="", max_length=2000)
+
+
+@router.post("/{task_id}/feedback", status_code=201)
+async def send_feedback(
+    task_id: str,
+    request: FeedbackRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Record a human verdict on one format (approve/reject + note).
+
+    Stored as an audit row (agent "human") so decision thresholds can be
+    tuned against real judgments later. Never changes task state.
+    """
+    from app.services.audit import record_audit
+
+    repo = TaskRepository(db)
+    task = await repo.get_by_id(task_id)
+    if not task:
+        raise NotFoundError(f"Task {task_id} not found")
+    fmt = validate_platforms([request.format])[0]
+    await record_audit(
+        task_id, "human",
+        decision={"format": fmt, "verdict": request.verdict,
+                  "note": request.note or ""},
+    )
+    return {"task_id": task_id, "format": fmt, "verdict": request.verdict}
+
+
 @router.post("/{task_id}/chat")
 async def send_chat_message(
     task_id: str,

@@ -37,12 +37,11 @@ async def test_update_agent(authed_client):
     r = await authed_client.put(
         "/api/agents/strategist",
         headers={"x-api-key": "test-key"},
-        json={"persona": "Aura Vance II", "model": "gemini-3.5-flash-lite"},
+        json={"persona": "Aura Vance II"},
     )
     assert r.status_code == 200, r.text
     agent = r.json()
     assert agent["persona"] == "Aura Vance II"
-    assert agent["model"] == "gemini-3.5-flash-lite"
 
     # persisted + cache invalidated — a fresh GET reflects the edit
     r2 = await authed_client.get("/api/agents/strategist", headers={"x-api-key": "test-key"})
@@ -53,7 +52,28 @@ async def test_update_agent(authed_client):
 
     cfg = await get_agent_config("strategist")
     assert cfg.persona == "Aura Vance II"
-    assert cfg.model == "gemini-3.5-flash-lite"
+    invalidate_agent_config()
+
+
+async def test_update_agent_model_keys_ignored(authed_client):
+    """Model routing is code-owned: model/fallback_models PUTs are ignored."""
+    before = await authed_client.get("/api/agents/strategist", headers={"x-api-key": "test-key"})
+    assert before.status_code == 200
+    original_model = before.json()["model"]
+
+    r = await authed_client.put(
+        "/api/agents/strategist",
+        headers={"x-api-key": "test-key"},
+        json={"model": "gemini-3.5-flash-lite",
+              "fallback_models": ["gemini-3.1-flash-lite"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["model"] == original_model
+
+    from app.services.agents import get_agent_config
+
+    cfg = await get_agent_config("strategist")
+    assert cfg.model == original_model
     invalidate_agent_config()
 
 
@@ -64,29 +84,6 @@ async def test_update_agent_empty_prompt_422(authed_client):
         json={"system_prompt": "   "},
     )
     assert r.status_code == 422
-
-
-async def test_update_agent_bad_model_422(authed_client):
-    r = await authed_client.put(
-        "/api/agents/strategist",
-        headers={"x-api-key": "test-key"},
-        json={"model": "gemini 3.5 flash"},
-    )
-    assert r.status_code == 422
-
-    r2 = await authed_client.put(
-        "/api/agents/strategist",
-        headers={"x-api-key": "test-key"},
-        json={"fallback_models": ["openai/gpt-4o", "bad model!"]},
-    )
-    assert r2.status_code == 422
-
-    r3 = await authed_client.put(
-        "/api/agents/strategist",
-        headers={"x-api-key": "test-key"},
-        json={"model": "gemini-3.5-flash-lite"},
-    )
-    assert r3.status_code == 200
 
 
 async def test_reset_agent_restores_seed(authed_client):

@@ -27,26 +27,17 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAgentGraph, useAgents } from "@/hooks/use-library"
 import {
   getTaskProgress,
-  listModels,
   listTasks,
   promptPreview,
   resetAgent,
   updateAgent,
   type AgentConfig,
   type AgentGraphSpec,
-  type ModelInfo,
   type PromptPreview,
   type TaskProgress,
 } from "@/lib/api"
@@ -290,9 +281,6 @@ export function AgentsPage() {
     () => getTaskProgress(liveTaskId as string),
     { refreshInterval: live ? 3000 : 0 }
   )
-  const { data: modelData } = useSWR("/models", () => listModels())
-  const models: ModelInfo[] = modelData?.models ?? []
-
   const { nodes, edges } = useMemo(() => (spec ? buildGraph(spec) : { nodes: [], edges: [] }), [spec])
   const liveNodes = useMemo(
     () => applyLiveState(nodes, liveProgress),
@@ -345,8 +333,6 @@ export function AgentsPage() {
         persona: draft.persona,
         role: draft.role,
         system_prompt: draft.system_prompt,
-        model: draft.model,
-        fallback_models: draft.fallback_models,
         temperature: draft.temperature,
         max_tokens: draft.max_tokens,
         is_active: draft.is_active,
@@ -486,41 +472,19 @@ export function AgentsPage() {
                     <Input id="persona" value={draft.persona} onChange={(e) => setDraft({ ...draft, persona: e.target.value })} />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="model">Model</Label>
-                    <Select value={draft.model} onValueChange={(v) => setDraft({ ...draft, model: v })}>
-                      <SelectTrigger id="model" className="w-full min-w-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="max-w-[var(--radix-select-trigger-width)]">
-                        {models.map((m) => (
-                          <SelectItem key={m.id} value={m.id}>
-                            <span className="min-w-0 flex-1 truncate">{m.name}</span>
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {m.rpd} RPD
-                            </span>
-                          </SelectItem>
-                        ))}
-                        {!models.some((m) => m.id === draft.model) && draft.model ? (
-                          <SelectItem value={draft.model}>{draft.model}</SelectItem>
-                        ) : null}
-                      </SelectContent>
-                    </Select>
+                    <Label>Model (code-owned routing)</Label>
+                    <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm">
+                      <span className="min-w-0 flex-1 truncate">{draft.model || "—"}</span>
+                      {draft.fallback_models?.length ? (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          +{draft.fallback_models.length} fallback{draft.fallback_models.length > 1 ? "s" : ""}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Served via the Gateway route; edit MODEL_ROUTES to change.
+                    </p>
                   </div>
-                </div>
-
-                <div className="space-y-1">
-                  <Label htmlFor="fallback">Fallback models (comma-separated)</Label>
-                  <Input
-                    id="fallback"
-                    placeholder="gemini-3.1-flash-lite, gemini-3.5-flash-lite"
-                    value={(draft.fallback_models ?? []).join(", ")}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        fallback_models: e.target.value.split(",").map((s) => s.trim()).filter(Boolean),
-                      })
-                    }
-                  />
                 </div>
 
                 <div className="space-y-1">

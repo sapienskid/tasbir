@@ -175,6 +175,57 @@ async def build_media_plan(state: GenerationState) -> dict:
 
     task_id = state.get("_task_id", "")
 
+    # Pre-gate (one cheap flash call): an independent judgment of what media
+    # fits, made BEFORE the director spends up to MAX_TURNS of tool calls. A
+    # "none" verdict (or a low photo-worthiness) becomes a hard constraint in
+    # the director prompt so abstract subjects never waste turns on photo
+    # search — the most common source of empty/generic media slots.
+    pre_constraint = ""
+    try:
+        from app.services.decision_packs import get_pack
+        from app.services.decisions import decide, providers_configured
+
+        if providers_configured():
+            brief = state.get("strategic_brief") or {}
+            pre_res = await decide(
+                "media-kind",
+                {"title": state.get("title", "") or "(untitled)",
+                 "content": str(brief.get("content_summary") or "")[:800]},
+                metadata={"agent": "media_plan", "stage": "pregate"},
+            )
+            pre_answers = pre_res.get("answers", {})
+            pre_kind = str((pre_answers.get("kind") or {}).get("choice") or "")
+            try:
+                pre_photo = float((pre_answers.get("photo_worthy") or {}).get("noul", 0) or 0)
+            except (TypeError, ValueError):
+                pre_photo = 0.0
+            vote_block = float(get_pack("media-kind").get("thresholds", {}).get("photo_vote", 0.4))
+            if pre_kind == "none":
+                pre_constraint = (
+                    "CONSTRAINT from an independent media judge: this post wants "
+                    "PURE TYPOGRAPHY. Output an all-\"none\" plan. Do NOT call "
+                    "find_photo or illustrate at all."
+                )
+            elif pre_photo < vote_block:
+                pre_constraint = (
+                    "CONSTRAINT from an independent media judge: the subject is "
+                    "abstract, not photographable. Do NOT call find_photo — use "
+                    "illustrate or no media for every slide."
+                )
+            if task_id:
+                from app.services.audit import record_audit
+
+                await record_audit(
+                    task_id, "media_plan",
+                    decision={"pregate_kind": pre_kind, "pregate_photo_worthy": pre_photo,
+                              "pregate_constrained": bool(pre_constraint),
+                              "provider": pre_res.get("provider", "")},
+                )
+    except Exception as e:  # noqa: BLE001
+        log.warning("[media_plan] pregate skipped: %s", e)
+
+    _pre_constraint = pre_constraint
+
     async def _handler_photo(args: dict) -> str:
         q = str(args.get("query") or "").strip()
         if not q:
@@ -242,9 +293,14 @@ async def build_media_plan(state: GenerationState) -> dict:
             ILLUSTRATE_TOOL["function"]["name"]: _handler_illustrate,
         }
         tools = [FIND_PHOTO_TOOL, CHOOSE_PHOTO_TOOL, ILLUSTRATE_TOOL]
+        system_prompt = _plan_system_prompt(state)
+        if _pre_constraint:
+            # The pre-gate verdict leads the prompt so it binds the whole
+            # session, not just one turn.
+            system_prompt = f"{_pre_constraint}\n\n{system_prompt}"
         return await call_llm_tool_loop(
             agent_role="designer",
-            system_prompt=_plan_system_prompt(state),
+            system_prompt=system_prompt,
             user_prompt=_build_user_prompt(state, llm_targets),
             tools=tools,
             handlers=handlers,

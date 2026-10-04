@@ -24,37 +24,37 @@ from app.services.tools.photo import (
 @pytest.mark.asyncio
 async def test_call_llm_tool_loop_roundtrip(monkeypatch):
     """find_photo → (tool result fed back) → final text, in one loop."""
+    import json as _json
     from types import SimpleNamespace
-
-    from langchain_core.messages import AIMessage
 
     from app.services.llm import call_llm_tool_loop
 
+    def _msg(content="", calls=()):
+        return {"choices": [{"message": {"role": "assistant", "content": content,
+                "tool_calls": [
+                    {"id": c[0], "type": "function",
+                     "function": {"name": c[1], "arguments": _json.dumps(c[2])}}
+                    for c in calls]}}]}
+
     script = [
-        AIMessage(content="", tool_calls=[
-            {"name": "find_photo", "args": {"query": "minimal"}, "id": "c1"}
-        ]),
-        AIMessage(content="reviewed, declining", tool_calls=[]),
+        _msg(calls=[("c1", "find_photo", {"query": "minimal"})]),
+        _msg(content="reviewed, declining"),
     ]
     state = {"i": 0, "messages": None}
 
-    async def fake_retry(bound, messages):
+    async def fake_post(payload):
         r = script[state["i"]]
         state["i"] += 1
         if state["i"] == 2:
-            state["messages"] = list(messages)
-        return r
+            state["messages"] = [dict(m) for m in payload["messages"]]
+        return r, None
 
-    monkeypatch.setattr("app.services.llm.call_llm_with_retry", fake_retry)
+    monkeypatch.setattr("app.services.llm._compat_post", fake_post)
+
     async def _cfg(name):
         return SimpleNamespace(model="test-model", fallback_models=[])
 
     monkeypatch.setattr("app.services.agents.get_agent_config", _cfg)
-
-    monkeypatch.setattr(
-        "app.services.llm.get_settings",
-        lambda: SimpleNamespace(gemini_api_key="test-key"),
-    )
 
     handled = []
 
@@ -71,35 +71,31 @@ async def test_call_llm_tool_loop_roundtrip(monkeypatch):
     )
     assert out == "reviewed, declining"
     assert handled == [{"query": "minimal"}]
-    # the tool result was fed back as a ToolMessage before the final turn
-    types = [type(m).__name__ for m in state["messages"]]
-    assert types[-1] == "ToolMessage"
-    assert "pexels" in state["messages"][-1].content
+    # the tool result was fed back as a tool message before the final turn
+    roles = [m.get("role") for m in state["messages"]]
+    assert roles[-1] == "tool"
+    assert "pexels" in state["messages"][-1]["content"]
 
 
 @pytest.mark.asyncio
 async def test_call_llm_tool_loop_hits_turn_cap(monkeypatch):
+    import json as _json
     from types import SimpleNamespace
-
-    from langchain_core.messages import AIMessage
 
     from app.services.llm import call_llm_tool_loop
 
-    async def always_tool(bound, messages):
-        return AIMessage(content="", tool_calls=[
-            {"name": "find_photo", "args": {"query": "x"}, "id": "c"}
-        ])
+    async def always_tool(payload):
+        return ({"choices": [{"message": {"role": "assistant", "content": "",
+                "tool_calls": [{"id": "c", "type": "function",
+                    "function": {"name": "find_photo",
+                                "arguments": _json.dumps({"query": "x"})}}]}}]}, None)
 
-    monkeypatch.setattr("app.services.llm.call_llm_with_retry", always_tool)
+    monkeypatch.setattr("app.services.llm._compat_post", always_tool)
+
     async def _cfg(name):
         return SimpleNamespace(model="test-model", fallback_models=[])
 
     monkeypatch.setattr("app.services.agents.get_agent_config", _cfg)
-
-    monkeypatch.setattr(
-        "app.services.llm.get_settings",
-        lambda: SimpleNamespace(gemini_api_key="test-key"),
-    )
 
     async def find_handler(args):
         return "[0] pexels · 1200x627"
@@ -118,33 +114,30 @@ async def test_call_llm_tool_loop_hits_turn_cap(monkeypatch):
 @pytest.mark.asyncio
 async def test_call_llm_tool_loop_breaks_same_tool_loop(monkeypatch):
     """Same tool+args repeated MAX_REPEAT_TOOL times forces a final answer."""
+    import json as _json
     from types import SimpleNamespace
-
-    from langchain_core.messages import AIMessage
 
     from app.services.llm import MAX_REPEAT_TOOL, call_llm_tool_loop
 
     calls = {"n": 0}
 
-    async def fake_retry(bound, messages):
+    async def fake_post(payload):
+        # The forced final turn drops the tools — answer with the plan text.
+        if "tools" not in payload:
+            return ({"choices": [{"message": {"role": "assistant",
+                    "content": '[{"target": "x", "kind": "none"}]'}}]}, None)
         calls["n"] += 1
-        # Every identical find_photo call → tool call, except the forced final
-        # turn which must return text (the plan).
-        if calls["n"] <= MAX_REPEAT_TOOL:
-            return AIMessage(content="", tool_calls=[
-                {"name": "find_photo", "args": {"query": "minimal"}, "id": f"c{calls['n']}"}
-            ])
-        return AIMessage(content='[{"target": "x", "kind": "none"}]', tool_calls=[])
+        return ({"choices": [{"message": {"role": "assistant", "content": "",
+                "tool_calls": [{"id": f"c{calls['n']}", "type": "function",
+                    "function": {"name": "find_photo",
+                                "arguments": _json.dumps({"query": "minimal"})}}]}}]}, None)
 
-    monkeypatch.setattr("app.services.llm.call_llm_with_retry", fake_retry)
+    monkeypatch.setattr("app.services.llm._compat_post", fake_post)
+
     async def _cfg(name):
         return SimpleNamespace(model="test-model", fallback_models=[])
 
     monkeypatch.setattr("app.services.agents.get_agent_config", _cfg)
-    monkeypatch.setattr(
-        "app.services.llm.get_settings",
-        lambda: SimpleNamespace(gemini_api_key="test-key"),
-    )
 
     async def photo_handler(args):
         return "[0] minimal"
@@ -160,45 +153,50 @@ async def test_call_llm_tool_loop_breaks_same_tool_loop(monkeypatch):
     # The loop forced a final answer after MAX_REPEAT_TOOL identical calls —
     # it did NOT run all 10 turns or return "".
     assert out.startswith('[{"target"')
-    assert calls["n"] == MAX_REPEAT_TOOL + 1
+    assert calls["n"] == MAX_REPEAT_TOOL
 
 
 @pytest.mark.asyncio
-async def test_call_llm_tool_loop_forced_answer_loop_gives_up(monkeypatch):
-    """If even the forced final turn calls a tool, return ""."""
+async def test_call_llm_tool_loop_unknown_tool_fed_back(monkeypatch):
+    """A tool with no handler is reported back, then the model answers."""
+    import json as _json
     from types import SimpleNamespace
-
-    from langchain_core.messages import AIMessage
 
     from app.services.llm import call_llm_tool_loop
 
-    async def always_tool(bound, messages):
-        return AIMessage(content="", tool_calls=[
-            {"name": "find_photo", "args": {"query": "x"}, "id": "c"}
-        ])
+    def _msg(content="", calls=()):
+        return {"choices": [{"message": {"role": "assistant", "content": content,
+                "tool_calls": [
+                    {"id": c[0], "type": "function",
+                     "function": {"name": c[1], "arguments": _json.dumps(c[2])}}
+                    for c in calls]}}]}
 
-    monkeypatch.setattr("app.services.llm.call_llm_with_retry", always_tool)
+    script = [
+        _msg(calls=[("c9", "mystery_tool", {"x": 1})]),
+        _msg(content="done without tools"),
+    ]
+    state = {"i": 0}
+
+    async def fake_post(payload):
+        r = script[state["i"]]
+        state["i"] += 1
+        return r, None
+
+    monkeypatch.setattr("app.services.llm._compat_post", fake_post)
+
     async def _cfg(name):
         return SimpleNamespace(model="test-model", fallback_models=[])
 
     monkeypatch.setattr("app.services.agents.get_agent_config", _cfg)
-    monkeypatch.setattr(
-        "app.services.llm.get_settings",
-        lambda: SimpleNamespace(gemini_api_key="test-key"),
-    )
-
-    async def photo_handler(args):
-        return "[0] x"
 
     out = await call_llm_tool_loop(
         agent_role="designer",
         system_prompt="sys",
         user_prompt="user",
         tools=[FIND_PHOTO_TOOL],
-        handlers={"find_photo": photo_handler},
-        max_turns=10,
+        handlers={},
     )
-    assert out == ""
+    assert out == "done without tools"
 
 
 HEX_RE = re.compile(r"#[0-9a-fA-F]{3,8}")

@@ -88,8 +88,8 @@ def resolve_model(agent_role: str) -> str:
     """DB model for a role, falling back to MODEL_ROUTES defaults.
 
     Sync: reads the warm cache (populated by get_agent_config in the same
-    node flow) or falls back to MODEL_ROUTES. Kept sync so ``get_llm`` can
-    stay synchronous.
+    node flow) or falls back to MODEL_ROUTES. ``call_llm`` is the single
+    runtime entry point and talks to the Gateway, so this stays sync.
     """
     cached = _agent_cache.get(agent_role)
     if cached is not None:

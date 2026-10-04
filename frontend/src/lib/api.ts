@@ -577,9 +577,11 @@ export function getAgent(name: string): Promise<AgentConfig> {
 
 export function updateAgent(
   name: string,
+  // Model routing is code-owned — persona/prompts/knobs only. The GET
+  // response still carries model info read-only.
   patch: Partial<Pick<
     AgentConfig,
-    "persona" | "role" | "system_prompt" | "model" | "fallback_models" | "temperature" | "max_tokens" | "is_active"
+    "persona" | "role" | "system_prompt" | "temperature" | "max_tokens" | "is_active"
   >>
 ): Promise<AgentConfig> {
   return apiRequest(`/agents/${name}`, { method: "PUT", body: JSON.stringify(patch) })

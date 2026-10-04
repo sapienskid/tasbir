@@ -108,7 +108,7 @@ PACKS: dict[str, dict] = {
     "media-kind": {
         "version": 1,
         "providers": ["clef-flash", "clef"],
-        "thresholds": {},
+        "thresholds": {"photo_vote": 0.4},
         "questions": {
             "kind": {
                 "type": "choice",
@@ -252,7 +252,13 @@ PACKS: dict[str, dict] = {
     "verifier-visual": {
         "version": 1,
         "providers": ["clef", "clef-flash"],
-        "thresholds": {},
+        "thresholds": {
+            # A flag becomes "hard" (caps the score, forces retry) only when
+            # the judgment is both strong and decisive — an unsure model must
+            # not burn designer retries.
+            "hard_noul": 0.6,
+            "hard_conf": 0.4,
+        },
         "questions": {
             "ground_correct": {
                 "type": "noul",
@@ -360,6 +366,25 @@ PACKS: dict[str, dict] = {
             },
         },
     },
+    "publish-gate": {
+        "version": 1,
+        "providers": ["clef-flash", "clef"],
+        "thresholds": {"block": 0.6},
+        "questions": {
+            "decision": {
+                "type": "choice",
+                "instructions": "Given `evidence` (scores, issues, copy verdicts), should this post go out?",
+                "criteria": {
+                    "publish": "Clean enough to share as-is",
+                    "hold": "Has a defect the audience would notice — do not share",
+                },
+            },
+            "blocker": {
+                "type": "noul",
+                "instructions": "Does `evidence` describe a defect the audience would notice?",
+            },
+        },
+    },
     "content-judge": {
         "version": 1,
         "providers": ["clef-flash", "clef"],
@@ -436,7 +461,7 @@ PACKS: dict[str, dict] = {
     "image-relevance": {
         "version": 1,
         "providers": ["clef", "clef-flash"],
-        "thresholds": {"relevant": 0.5},
+        "thresholds": {"relevant": 0.5, "clash": 0.6, "min_conf": 0.3},
         "questions": {
             "relevant": {
                 "type": "noul",

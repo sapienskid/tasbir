@@ -138,3 +138,35 @@ class TestChat:
             rows = list(result.scalars().all())
         assert len(rows) == 2
         assert {r.role for r in rows} == {"user", "assistant"}
+
+
+async def test_feedback_endpoint_records_audit(authed_client):
+    """Human approve/reject verdicts persist as audit rows (threshold tuning data)."""
+    import uuid
+
+    from tests.test_api.conftest import seed_task
+
+    tid = str(uuid.uuid4())
+    await seed_task(tid)
+    r = await authed_client.post(
+        f"/api/tasks/{tid}/feedback",
+        headers={"x-api-key": "test-key"},
+        json={"format": "instagram-square", "verdict": "reject",
+              "note": "headline weak"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["verdict"] == "reject"
+
+    r2 = await authed_client.post(
+        f"/api/tasks/{tid}/feedback",
+        headers={"x-api-key": "test-key"},
+        json={"format": "instagram-square", "verdict": "maybe"},
+    )
+    assert r2.status_code == 422
+
+    r3 = await authed_client.post(
+        "/api/tasks/does-not-exist/feedback",
+        headers={"x-api-key": "test-key"},
+        json={"format": "instagram-square", "verdict": "approve"},
+    )
+    assert r3.status_code == 404

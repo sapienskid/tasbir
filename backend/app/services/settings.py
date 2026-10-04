@@ -43,6 +43,18 @@ DEFAULT_APP_SETTINGS: dict[str, dict] = {
         "value": 8,
         "description": "Anti-repeat: how many recently-used template ids to exclude",
     },
+    "verifier.clef_first": {
+        "value": True,
+        "description": "Clef vision first; skip the Gemini audit on a clean pass",
+    },
+    "claims.hold_on_mismatch": {
+        "value": True,
+        "description": "Hold publish when copy contains figures missing from the source",
+    },
+    "publish.enabled": {
+        "value": True,
+        "description": "Record a per-format publish/hold gate in the task result",
+    },
 }
 
 

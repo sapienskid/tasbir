@@ -1,23 +1,31 @@
-"""LLM service — Google Gemini/Gemma via direct API or Cloudflare AI Gateway.
+"""LLM service — 100% of generation traffic goes through Cloudflare AI Gateway.
 
-All agents use this service. Provides both a high-level LangChain
-integration (with tool binding support) and a simple call_llm() helper.
-Model selection + per-role routing live in ``services.models`` (MODEL_ROUTES)
-with DB-backed per-agent overrides; ``call_llm`` walks the primary → fallback
-chain when a model times out / 504s / is rate-limited.
+Transport is the Gateway compat endpoint (OpenAI chat shape), verified live:
+- plain chat → ``model: dynamic/tasbir-{tier}`` or ``google-ai-studio/{model}``
+- tools → same endpoint with a ``tools`` array; ``tool_calls`` come back on
+  the assistant message (verified through both a route and a direct model)
+- vision → same endpoint with ``image_url`` parts (verified through a route)
 
-Generation transport (``LLM_PROVIDER``):
-- ``direct`` (default): LangChain ChatGoogleGenerativeAI, unchanged behavior.
-- ``gateway``: Cloudflare AI Gateway unified REST
-  (``POST /accounts/{id}/ai/v1/chat/completions`` with
-  ``model="google-ai-studio/{model}"`` or ``"dynamic/tasbir-{tier}"``),
-  then direct as the emergency fallback.
+There are no direct provider calls, no LangChain, no OpenRouter fallback.
+The Gateway holds the Google AI Studio key server-side (BYOK) — nothing
+calls `googleapis.com` directly, and this module never even sends the key. If every Gateway attempt fails,
+the call raises and the pipeline records the failure (fail-loud, no silent
+direct fallback that would bypass quotas, logging, and caching).
+
+Model selection + per-role routing live in ``services.models``
+(MODEL_ROUTES) with DB-backed per-agent overrides; every entry point below
+walks route → model chain when the Gateway errors.
 """
 
-import asyncio
+from __future__ import annotations
+
 import json
+import logging
+import re
 
 from app.config import get_settings
+
+log = logging.getLogger(__name__)
 
 # Catch-all default when a role has no MODEL_ROUTES entry and no DB row.
 # gemini-3.1-flash-lite is the reliable free text-out model.
@@ -25,17 +33,22 @@ DEFAULT_MODEL = "gemini-3.1-flash-lite"
 
 # Hard per-call timeout so a stalled model request becomes an exception instead
 # of hanging the pipeline forever. Generous (180s) because the free-tier models
-# legitimately take 25-90s under load; the fallback chain handles models that
-# exceed it.
+# legitimately take 25-90s under load; the model chain handles the rest.
 LLM_TIMEOUT = 180.0
 
 # Loop guard for call_llm_tool_loop: if the model calls the same tool with the
 # same args this many times, force a final answer instead of looping forever.
 MAX_REPEAT_TOOL = 3
 
-# Cloudflare AI Gateway unified REST endpoint (generation path).
-_GATEWAY_CHAT_PATH = "/client/v4/accounts/{account_id}/ai/v1/chat/completions"
-_GATEWAY_API_BASE = "https://api.cloudflare.com"
+# The ONLY network endpoint this module talks to: Cloudflare AI Gateway,
+# OpenAI-compatible shape. (The unified ``api.cloudflare.com/.../ai/v1``
+# path was probed live: ``google-ai-studio/`` 404s there and ``google/``
+# bills Gateway credits (402) — so compat is the single path.)
+_COMPAT_PATH = "https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/compat/chat/completions"
+
+# Route responses wrap reasoning in <thought> blocks (Gemma) — strip them so
+# agents never see chain-of-thought preamble as content.
+_THOUGHT_RE = re.compile(r"<thought>.*?</thought>\s*", re.DOTALL)
 
 
 def gateway_configured() -> bool:
@@ -45,7 +58,7 @@ def gateway_configured() -> bool:
 
 
 def gateway_route_for_role(agent_role: str) -> str:
-    """Dynamic route name for an agent tier (Phase 1 server-side failover).
+    """Dynamic route name for an agent tier (server-side failover).
 
     Tiers mirror the pipeline's latency/quality needs; the actual
     primary → fallback chains live in the Gateway UI (versioned, no deploy).
@@ -61,12 +74,10 @@ def gateway_route_for_role(agent_role: str) -> str:
 def gateway_model_name(model: str, for_api_path: bool = False) -> str:
     """Map a bare model id to its Gateway provider-qualified name.
 
-    The Google slug is ``google-ai-studio/{model}`` on **both** the compat
-    host and the unified API path — the ``google/`` slug returns
-    ``400 Model not found`` even for models the account can serve (verified
-    live: ``google/gemma-4-31b-it`` 400s while
-    ``google-ai-studio/gemini-3.1-flash-lite`` returns 200). ``for_api_path``
-    is kept for symmetry; both paths use the same slug now.
+    The Google slug is ``google-ai-studio/{model}`` — the ``google/`` slug
+    returns ``400 Model not found`` even for models the account can serve
+    (verified live). ``for_api_path`` is kept for symmetry; both paths use
+    the same slug now.
 
     Pass-through for already-qualified (``provider/model``) and
     ``dynamic/`` route names.
@@ -76,197 +87,129 @@ def gateway_model_name(model: str, for_api_path: bool = False) -> str:
     return f"google-ai-studio/{model}"
 
 
-async def _call_gateway_chat(
-    model: str,
-    system_prompt: str,
-    user_prompt: str,
-    temperature: float = 0.7,
-    max_tokens: int = 2000,
-    metadata: dict | None = None,
-) -> tuple[str, str | None]:
-    """Call generation via Cloudflare AI Gateway.
-
-    Endpoint strategy (first success wins):
-    - ``dynamic/*`` routes → compat host (plus unified api path fallback).
-    - Bare Google models → provider-specific ``google-ai-studio`` REST
-      (proven live; uses the local ``GEMINI_API_KEY`` when set, otherwise the
-      Gateway-stored BYOK) → compat ``google/`` slug → unified api path.
-    Returns ``(text, served_model)``; ``served_model`` comes from the
-    ``cf-aig-model`` header on compat/api responses (provider-specific
-    responses carry no such header → ``None``).
-    """
-    import httpx
-
+def _compat_url_and_headers() -> tuple[str, dict]:
     settings = get_settings()
     if not gateway_configured():
         raise RuntimeError("Cloudflare AI Gateway not configured")
-    account = settings.resolved_cf_account_id
-    gateway = settings.cf_gateway_id or "tasbir"
-    compat = f"https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/compat/chat/completions"
-    compat_headers = {
+    url = _COMPAT_PATH.format(
+        account=settings.resolved_cf_account_id,
+        gateway=settings.cf_gateway_id or "tasbir",
+    )
+    return url, {
         "cf-aig-authorization": f"Bearer {settings.resolved_cf_token}",
         "Content-Type": "application/json",
     }
-    chat_payload: dict = {
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-    }
-    if metadata:
-        chat_payload["metadata"] = metadata
 
-    attempts: list[tuple[str, dict, dict]] = []
-    if model.startswith("dynamic/"):
-        attempts.append((compat, compat_headers, {**chat_payload, "model": model}))
-        attempts.append(
-            (
-                f"{_GATEWAY_API_BASE}" + _GATEWAY_CHAT_PATH.format(account_id=account),
-                {
-                    "Authorization": f"Bearer {settings.resolved_cf_token}",
-                    "cf-aig-gateway-id": gateway,
-                    "Content-Type": "application/json",
-                },
-                {**chat_payload, "model": model},
-            )
-        )
-    else:
-        bare = model.split("/", 1)[-1] if "/" in model else model
-        gs_headers = dict(compat_headers)
-        if settings.gemini_api_key:
-            gs_headers["x-goog-api-key"] = settings.gemini_api_key
-        attempts.append(
-            (
-                f"https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/"
-                f"google-ai-studio/v1/models/{bare}:generateContent",
-                gs_headers,
-                {"contents": [{"role": "user", "parts": [
-                    {"text": f"{system_prompt}\n\n{user_prompt}"}
-                ]}]},
-            )
-        )
-        attempts.append((compat, compat_headers,
-                         {**chat_payload, "model": gateway_model_name(model)}))
-        attempts.append(
-            (
-                f"{_GATEWAY_API_BASE}" + _GATEWAY_CHAT_PATH.format(account_id=account),
-                {
-                    "Authorization": f"Bearer {settings.resolved_cf_token}",
-                    "cf-aig-gateway-id": gateway,
-                    "Content-Type": "application/json",
-                },
-                {**chat_payload, "model": gateway_model_name(model, for_api_path=True)},
-            )
-        )
-    last_error: Exception | None = None
+
+async def _compat_post(payload: dict) -> tuple[dict, str | None]:
+    """POST one OpenAI-shaped payload to the Gateway compat endpoint.
+
+    Returns ``(response_json, served_model)`` where the served model comes
+    from the ``cf-aig-model`` header when present. Raises on HTTP errors.
+    """
+    import httpx
+
+    url, headers = _compat_url_and_headers()
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        for url, headers, payload in attempts:
-            try:
-                resp = await client.post(url, headers=headers, json=payload)
-                try:
-                    resp.raise_for_status()
-                except Exception:
-                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
-                text = _gateway_text(resp.json())
-                if not text:
-                    raise RuntimeError("Gateway returned empty completion")
-                return text, resp.headers.get("cf-aig-model")
-            except Exception as e:  # noqa: BLE001
-                # 402 (insufficient Gateway credits) is an account state, not
-                # a transport problem — later attempts can't fix it.
-                if "HTTP 402" in str(e):
-                    raise
-                last_error = e
-    raise last_error or RuntimeError("Gateway chat failed")
-
-
-def _gateway_text(data: dict) -> str:
-    """Extract completion text from compat (choices) or generateContent shapes."""
-    try:
-        text = data["choices"][0]["message"]["content"] or ""
-        if text:
-            return text
-    except (KeyError, IndexError, TypeError):
-        pass
-    try:
-        parts = data["candidates"][0]["content"].get("parts", [])
-        return "".join(p.get("text", "") for p in parts if isinstance(p, dict))
-    except (KeyError, IndexError, TypeError):
-        return ""
-
-def _model_for(agent_role: str) -> str:
-    """Resolve the model for a role — DB agent row first, MODEL_ROUTES fallback."""
-    from app.services.agents import resolve_model
-
-    return resolve_model(agent_role)
-
-def get_llm(agent_role: str = "strategist", temperature: float = 0.7, max_tokens: int | None = None):
-    """Get a LangChain ChatGoogleGenerativeAI instance for the given role.
-
-    Supports tool binding via .bind_tools() on the returned instance.
-    Uses Gemini 2.0 Flash for most agents (free tier).
-    """
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    settings = get_settings()
-    model = _model_for(agent_role)
-    api_key = settings.gemini_api_key or None
-
-    return ChatGoogleGenerativeAI(
-        model=model,
-        api_key=api_key,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        max_retries=0,
-    )
-
-async def call_llm_with_retry(llm, messages, max_retries=3, agent_role: str = ""):
-    """Call an LLM with retry on 429 rate limit errors (server retryDelay).
-
-    Raises on final failure — the OpenRouter fallback lives in ``call_llm``
-    (single fallback point, so agent temperature/max_tokens are honored).
-    Retries are capped (default 3) so a heavily throttled key fails forward
-    instead of sitting in backoff for minutes (the "stalled pipeline" symptom).
-    """
-    import logging
-    import re
-    log = logging.getLogger(__name__)
-
-    last_error = None
-    for attempt in range(max_retries):
+        resp = await client.post(url, headers=headers, json=payload)
         try:
-            return await asyncio.wait_for(
-                llm.ainvoke(messages), timeout=LLM_TIMEOUT
-            )
-        except asyncio.TimeoutError:
-            log.warning(
-                "[LLM] Call timed out after %.0fs — no more retries", LLM_TIMEOUT
-            )
-            raise
-        except Exception as e:
-            err_str = str(e)
-            is_retryable = (
-                "429" in err_str
-                or "RESOURCE_EXHAUSTED" in err_str
-                or "Quota exceeded" in err_str
-                or "504" in err_str
-                or "DEADLINE_EXCEEDED" in err_str
-            )
-            if is_retryable and attempt < max_retries - 1:
-                match = re.search(r'(?:retry(?:Delay)?\s*[:in]\s*)(\d+)(?:\.\d+)?s', err_str, re.IGNORECASE)
-                wait = (int(match.group(1)) + 2) if match else (2 ** (attempt + 2)) + 5
-                log.warning(
-                    f"[LLM] 429/504. Retrying attempt {attempt + 1}/{max_retries} in {wait}s..."
-                )
-                last_error = e
-                await asyncio.sleep(wait)
-                continue
-            last_error = e
-            break
+            resp.raise_for_status()
+        except Exception:
+            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+        data = resp.json()
+        if not isinstance(data, dict) or not data.get("choices"):
+            raise RuntimeError("Gateway returned empty completion")
+        return data, resp.headers.get("cf-aig-model")
 
-    raise last_error or RuntimeError("LLM call failed")
+
+def _strip_thought(text: str) -> str:
+    """Remove <thought> reasoning wrappers route models prepend."""
+    return _THOUGHT_RE.sub("", text or "").strip()
+
+
+def _message_text(message: dict) -> str:
+    """Extract plain text from an OpenAI assistant message (str or parts)."""
+    content = message.get("content")
+    if isinstance(content, str):
+        return _strip_thought(content)
+    if isinstance(content, list):
+        texts = []
+        for b in content:
+            if isinstance(b, str):
+                texts.append(b)
+            elif isinstance(b, dict):
+                if b.get("type") == "text":
+                    texts.append(b.get("text", ""))
+                elif "text" in b and isinstance(b["text"], str):
+                    texts.append(b["text"])
+        return _strip_thought("".join(texts))
+    return _strip_thought(str(content or ""))
+
+
+def _parse_tool_calls(message: dict) -> list[dict]:
+    """Normalize OpenAI tool_calls → [{id, name, args}].
+
+    Provider extras (e.g. ``extra_content.google.thought_signature``) are
+    dropped — only the standard fields are echoed back on later turns.
+    Unparseable ``arguments`` degrade to ``{}`` instead of crashing the loop.
+    """
+    out: list[dict] = []
+    for call in message.get("tool_calls") or []:
+        if not isinstance(call, dict):
+            continue
+        fn = call.get("function") or {}
+        name = fn.get("name") or ""
+        raw_args = fn.get("arguments") or {}
+        if isinstance(raw_args, dict):
+            args = raw_args
+        elif isinstance(raw_args, str):
+            try:
+                parsed = json.loads(raw_args or "{}")
+                args = parsed if isinstance(parsed, dict) else {}
+            except (json.JSONDecodeError, ValueError):
+                args = {}
+        else:
+            args = {}
+        if not name:
+            continue
+        out.append({
+            "id": call.get("id") or "",
+            "name": name,
+            "args": args,
+        })
+    return out
+
+
+def _assistant_echo(content: str | None, calls: list[dict]) -> dict:
+    """Rebuild a clean assistant message for the next loop turn."""
+    return {
+        "role": "assistant",
+        "content": content,
+        "tool_calls": [
+            {
+                "id": c["id"],
+                "type": "function",
+                "function": {"name": c["name"], "arguments": json.dumps(c["args"])},
+            }
+            for c in calls
+        ],
+    }
+
+
+async def _attempt_targets(
+    agent_role: str, models: list[str], skip_route: bool = False
+) -> list[str]:
+    """Ordered Gateway model names: dynamic route first, then each model."""
+    _ = agent_role  # routing is by tier map, kept explicit for readability
+    targets: list[str] = []
+    if not skip_route:
+        targets.append(gateway_route_for_role(agent_role))
+    for m in models:
+        name = gateway_model_name(m)
+        if name not in targets:
+            targets.append(name)
+    return targets
+
 
 async def call_llm(
     agent_role: str,
@@ -276,139 +219,57 @@ async def call_llm(
     max_tokens: int = 2000,
     model_override: str | None = None,
 ) -> str:
-    """Call the LLM with system + user prompt; walk the fallback model chain.
+    """Call the LLM with system + user prompt — always via the Gateway.
 
-    Transport order: Gateway (when ``LLM_PROVIDER=gateway`` and credentials
-    exist — dynamic route first, then provider-qualified model) → direct
-    LangChain Gemini chain → OpenRouter. The Gateway path records the
-    serving model (``cf-aig-model``) in the log for audit parity.
+    Tries the role's dynamic route first (server-side failover), then each
+    model in the agent's chain as ``google-ai-studio/{model}``. An explicit
+    ``model_override`` pins the chain to that model (still via the Gateway —
+    overrides no longer bypass it). Raises when every attempt fails.
     """
-    import logging
-
-    from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    log = logging.getLogger(__name__)
-
     from app.services.agents import get_agent_config
 
     cfg = await get_agent_config(agent_role)
     models = [m for m in ([cfg.model] + list(cfg.fallback_models or [])) if m]
     if not models:
         models = [DEFAULT_MODEL]
-    # An explicit override (e.g. the JSON-contract retry) leads the chain and
-    # the role's own models remain as fallbacks.
     if model_override:
         models = [model_override] + [m for m in models if m != model_override]
 
-    settings = get_settings()
-    use_gateway = (settings.llm_provider or "direct").lower() == "gateway"
-    if model_override:
-        # Bypass the dynamic route: an override is a precise model request, and
-        # a route would resolve to whatever its nodes happen to be.
-        use_gateway = False
-    if use_gateway and gateway_configured():
-        metadata = {"agent_role": agent_role}
-        # Free-tier budget: reserve against the agent's primary model before
-        # spending it. Gemma is capped at 16K tokens/min, so a long article
-        # can blow the whole minute's budget on one call — this waits for the
-        # window instead of letting the provider 429 mid-pipeline.
-        from app.services.model_quota import estimate_tokens, reserve
+    # Free-tier budget: reserve against the primary before spending it. Gemma
+    # is capped at 16K tokens/min, so a long article can blow the whole
+    # minute's budget on one call — this waits for the window instead of
+    # letting the provider 429 mid-pipeline.
+    from app.services.model_quota import estimate_tokens, reserve
 
-        est = estimate_tokens(system_prompt) + estimate_tokens(user_prompt) + max_tokens
-        primary = models[0]
-        if not await reserve(primary, est, max_wait=45.0):
-            log.warning(
-                "[LLM] quota reservation failed for %s (%s, ~%d tokens) — "
-                "walking the fallback chain", primary, agent_role, est,
-            )
-        # Dynamic route first (server-side failover, no deploy to change).
-        try:
-            text, served = await _call_gateway_chat(
-                gateway_route_for_role(agent_role),
-                system_prompt,
-                user_prompt,
-                temperature,
-                max_tokens,
-                metadata,
-            )
-            log.info("[LLM] gateway route served by %s (%s)", served, agent_role)
-            return text
-        except Exception as e:  # noqa: BLE001
-            log.warning("[LLM] gateway route failed for %r (%s) — trying model path", agent_role, e)
-        # Provider-qualified primary model through the same Gateway (keeps
-        # dashboard/logging even without a route configured yet).
-        try:
-            text, served = await _call_gateway_chat(
-                models[0],
-                system_prompt,
-                user_prompt,
-                temperature,
-                max_tokens,
-                metadata,
-            )
-            log.info("[LLM] gateway model served by %s (%s)", served, agent_role)
-            return text
-        except Exception as e:  # noqa: BLE001
-            log.warning("[LLM] gateway model path failed for %r (%s) — falling back to direct", agent_role, e)
-
-    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
-    last_error: Exception | None = None
-    for model in models:
-        llm = ChatGoogleGenerativeAI(
-            model=model,
-            api_key=get_settings().gemini_api_key or None,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_retries=0,
+    est = estimate_tokens(system_prompt) + estimate_tokens(user_prompt) + max_tokens
+    if not await reserve(models[0], est, max_wait=45.0):
+        log.warning(
+            "[LLM] quota reservation failed for %s (%s, ~%d tokens) — trying anyway",
+            models[0], agent_role, est,
         )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    last_error: Exception | None = None
+    for target in await _attempt_targets(agent_role, models, skip_route=bool(model_override)):
         try:
-            response = await call_llm_with_retry(llm, messages)
-            return _response_text(response)
+            data, served = await _compat_post({
+                "model": target,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            })
+            text = _message_text(data["choices"][0]["message"])
+            if not text:
+                raise RuntimeError("Gateway returned empty completion")
+            log.info("[LLM] %s served by %s (%s)", target, served or "?", agent_role)
+            return text
         except Exception as e:  # noqa: BLE001
             last_error = e
-            log.warning(
-                "[LLM] model %s failed for %r (%s) — trying next", model, agent_role, e
-            )
-
-    # All primary+fallback models failed → OpenRouter if configured.
-    settings = get_settings()
-    if settings.openrouter_api_key:
-        try:
-            return await _call_openrouter(
-                api_key=settings.openrouter_api_key,
-                model=models[0],
-                system_prompt=system_prompt,
-                user_prompt=user_prompt,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-        except Exception as or_err:  # noqa: BLE001
-            log.error("[LLM] OpenRouter fallback also failed: %s", or_err)
+            log.warning("[LLM] %s failed for %r (%s) — trying next", target, agent_role, e)
     raise last_error or RuntimeError("LLM call failed")
-
-
-async def _call_openrouter(
-    api_key: str,
-    model: str,
-    system_prompt: str,
-    user_prompt: str,
-    temperature: float,
-    max_tokens: int,
-) -> str:
-    import openai
-
-    client = openai.AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=api_key)
-    response = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    return response.choices[0].message.content or ""
 
 
 async def call_llm_for_tool(
@@ -419,11 +280,10 @@ async def call_llm_for_tool(
     temperature: float = 0.7,
     max_tokens: int = 1024,
 ) -> dict:
-    """Call the LLM with one function-calling tool bound; return the args dict.
+    """Call the LLM with one function-calling tool bound — via the Gateway.
 
-    Walks the same per-agent fallback model chain as :func:`call_llm`. The
-    model is expected to emit a single ``generate_illustration``-style tool
-    call; its ``args`` are returned. Raises if no tool call comes back.
+    Walks the same route → model chain as :func:`call_llm`. Returns the
+    first tool call's ``args`` dict. Raises if no attempt yields a tool call.
     """
     _, args = await call_llm_for_tools(
         agent_role=agent_role,
@@ -435,6 +295,7 @@ async def call_llm_for_tool(
     )
     return args
 
+
 async def call_llm_for_tools(
     agent_role: str,
     system_prompt: str,
@@ -443,19 +304,11 @@ async def call_llm_for_tools(
     temperature: float = 0.7,
     max_tokens: int = 1024,
 ) -> tuple[str, dict]:
-    """Call the LLM with one or more function-calling tools bound.
+    """Call the LLM with function-calling tools bound — via the Gateway.
 
-    Walks the same per-agent fallback model chain as :func:`call_llm`. The
-    model is expected to emit a single tool call. Returns ``(tool_name, args)``.
-    Raises if no tool call comes back.
+    Returns ``(tool_name, args)`` for the first tool call. Raises if no
+    attempt yields a tool call.
     """
-    import logging
-
-    from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    log = logging.getLogger(__name__)
-
     from app.services.agents import get_agent_config
 
     cfg = await get_agent_config(agent_role)
@@ -463,36 +316,33 @@ async def call_llm_for_tools(
     if not models:
         models = [DEFAULT_MODEL]
 
-    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
     last_error: Exception | None = None
-    for model in models:
-        llm = ChatGoogleGenerativeAI(
-            model=model,
-            api_key=get_settings().gemini_api_key or None,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_retries=0,
-        )
+    for target in await _attempt_targets(agent_role, models):
         try:
-            bound = llm.bind_tools(tools)
-            response = await call_llm_with_retry(bound, messages)
-            tool_calls = getattr(response, "tool_calls", None) or []
-            if not tool_calls:
+            data, served = await _compat_post({
+                "model": target,
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": "auto",
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            })
+            calls = _parse_tool_calls(data["choices"][0]["message"])
+            if not calls:
                 raise RuntimeError("model returned no tool call")
-            args = tool_calls[0].get("args")
-            if not isinstance(args, dict):
-                raise RuntimeError(f"unexpected tool args: {args!r}")
-            name = tool_calls[0].get("name") or tools[0]["function"]["name"]
-            log.info("[llm] tool %r args=%r (model %s)", name, args, model)
-            return (name, dict(args))
+            log.info("[llm] tool %r args=%r (%s served by %s)",
+                     calls[0]["name"], calls[0]["args"], target, served or "?")
+            return calls[0]["name"], dict(calls[0]["args"])
         except Exception as e:  # noqa: BLE001
             last_error = e
-            log.warning(
-                "[LLM] model %s tool call failed for %r (%s) — trying next", model, agent_role, e
-            )
-
-    log.warning("[LLM] tool-calling has no OpenRouter fallback; skipping (agent %s)", agent_role)
+            log.warning("[LLM] %s tool call failed for %r (%s) — trying next",
+                        target, agent_role, e)
     raise last_error or RuntimeError("LLM tool call failed")
+
 
 async def call_llm_tool_loop(
     agent_role: str,
@@ -504,29 +354,21 @@ async def call_llm_tool_loop(
     temperature: float = 0.7,
     max_tokens: int = 1024,
 ) -> str:
-    """Multi-turn function-calling loop: the model may call tools repeatedly.
+    """Multi-turn function-calling loop — via the Gateway.
 
     Each ``name -> async (args) -> str`` entry in ``handlers`` executes a tool
-    and returns the result text fed back to the model as a ``ToolMessage``.
+    and returns the result text fed back to the model as a ``tool`` message.
     The loop runs until the model stops calling tools (its final text is
-    returned) or ``max_turns`` is exhausted. Walks the same per-agent fallback
-    model chain as :func:`call_llm`. Returns "" if no model produced an answer.
+    returned) or ``max_turns`` is exhausted. The whole loop runs against one
+    Gateway target; transport errors fail over to the next target with a
+    fresh message list (handlers are read-only searches or pure renders, so
+    re-running them is safe). Returns "" if no target produced an answer.
 
-    Loop guard: Gemini (and similar models) can fixate on one tool and keep
-    calling it without ever emitting a final answer (see the "infinite tool
-    call loop" reports). Two defenses:
-      - a same-tool-same-input counter (circuit breaker) — after
-        ``MAX_REPEAT_TOOL`` identical calls a system message forces the final
-        answer and one more model call runs;
-      - a hard turn budget — exceeding it returns "".
+    Loop guard: a same-tool-same-input counter (circuit breaker) — after
+    ``MAX_REPEAT_TOOL`` identical calls the tools are dropped and one final
+    text-only call runs.
     """
-    import logging
     from collections import Counter
-
-    from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    log = logging.getLogger(__name__)
 
     from app.services.agents import get_agent_config
 
@@ -535,43 +377,52 @@ async def call_llm_tool_loop(
     if not models:
         models = [DEFAULT_MODEL]
 
-    messages = [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)]
+    base_messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
     last_error: Exception | None = None
 
-    for model in models:
-        llm = ChatGoogleGenerativeAI(
-            model=model,
-            api_key=get_settings().gemini_api_key or None,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            max_retries=0,
-        )
+    for target in await _attempt_targets(agent_role, models):
+        messages = [dict(m) for m in base_messages]
         try:
-            bound = llm.bind_tools(tools)
             call_counts: Counter[str] = Counter()
             for _turn in range(max_turns):
-                response = await call_llm_with_retry(bound, messages)
-                tool_calls = getattr(response, "tool_calls", None) or []
-                if not tool_calls:
-                    text = _response_text(response)
+                data, _served = await _compat_post({
+                    "model": target,
+                    "messages": messages,
+                    "tools": tools,
+                    "tool_choice": "auto",
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                })
+                assistant = data["choices"][0]["message"]
+                calls = _parse_tool_calls(assistant)
+                text = _message_text(assistant)
+                if not calls:
                     return text or ""
-                for call in tool_calls:
-                    name = call.get("name") or ""
-                    args = call.get("args") or {}
+                messages.append(_assistant_echo(text or None, calls))
+                for call in calls:
+                    name = call["name"]
+                    args = call["args"]
                     handler = handlers.get(name)
                     if handler is None:
-                        messages.append(
-                            ToolMessage(
-                                content=f"Unknown tool: {name}",
-                                tool_call_id=call.get("id", ""),
-                            )
-                        )
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": call["id"],
+                            "content": f"Unknown tool: {name}",
+                        })
                         continue
                     result = await handler(args)
-                    log.info("[llm] tool %r args=%r (model %s)", name, args, model)
-                    messages.append(ToolMessage(content=result or "ok", tool_call_id=call.get("id", "")))
+                    log.info("[llm] tool %r args=%r (%s)", name, args, target)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call["id"],
+                        "content": result or "ok",
+                    })
                     # Circuit breaker: the same tool called repeatedly with the
-                    # same input is a loop, not progress. Force the final answer.
+                    # same input is a loop, not progress. Drop the tools and
+                    # force the final answer as plain text.
                     key = f"{name}:{json.dumps(args, sort_keys=True, default=str)}"
                     call_counts[key] += 1
                     if call_counts[key] >= MAX_REPEAT_TOOL:
@@ -579,43 +430,28 @@ async def call_llm_tool_loop(
                             "[llm] tool %r called %d times identically — forcing final answer",
                             name, call_counts[key],
                         )
-                        messages.append(
-                            SystemMessage(
-                                content=(
-                                    "You appear to be looping — you keep calling the "
-                                    "same tool with the same input. STOP calling tools "
-                                    "now. Output your final answer as plain text (the "
-                                    "JSON plan) immediately."
-                                )
-                            )
-                        )
-                        forced = await call_llm_with_retry(bound, messages)
-                        if getattr(forced, "tool_calls", None):
-                            log.warning("[llm] forced final answer still emitted a tool call — giving up")
-                            return ""
-                        text = _response_text(forced)
-                        return text or ""
+                        messages.append({
+                            "role": "system",
+                            "content": (
+                                "You keep calling the same tool with the same input. "
+                                "STOP calling tools now. Output your final answer as "
+                                "plain text (the JSON plan) immediately."
+                            ),
+                        })
+                        forced, _ = await _compat_post({
+                            "model": target,
+                            "messages": messages,
+                            "temperature": temperature,
+                            "max_tokens": max_tokens,
+                        })
+                        return _message_text(forced["choices"][0]["message"])
             log.warning("[LLM] tool loop exceeded %d turns (%s)", max_turns, agent_role)
             return ""
         except Exception as e:  # noqa: BLE001
             last_error = e
-            log.warning("[LLM] model %s tool loop failed for %r (%s) — trying next", model, agent_role, e)
+            log.warning("[LLM] %s tool loop failed for %r (%s) — trying next",
+                        target, agent_role, e)
 
     if last_error:
-        log.warning("[LLM] tool loop exhausted all models for %s", agent_role)
+        log.warning("[LLM] tool loop exhausted all targets for %s", agent_role)
     return ""
-
-def _response_text(response) -> str:
-    """Extract text from a LangChain AIMessage content (str or blocks)."""
-    if isinstance(response.content, str):
-        return response.content
-    if isinstance(response.content, list):
-        texts = []
-        for b in response.content:
-            if isinstance(b, str):
-                texts.append(b)
-            elif isinstance(b, dict) and b.get("type") == "text":
-                texts.append(b.get("text", ""))
-        return "".join(texts)
-    return str(response.content)
-

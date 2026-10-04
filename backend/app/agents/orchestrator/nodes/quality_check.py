@@ -168,6 +168,32 @@ async def _decision_pregate(notes: str, fmt_id: str) -> dict:
         return {}
 
 
+async def _shrink_for_decision(png_bytes: bytes, fmt_id: str) -> bytes | None:
+    """Downscale a render for decision-vision calls (base64 counts at 64K).
+
+    Returns the (possibly resized) bytes, or None when the image is too big
+    to send even after a resize attempt.
+    """
+    raw = png_bytes
+    if len(raw) > 190 * 1024:
+        try:
+            from io import BytesIO
+
+            from PIL import Image
+
+            img = Image.open(BytesIO(raw)).convert("RGB")
+            img.thumbnail((1024, 1024))
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=80)
+            raw = buf.getvalue()
+        except Exception:
+            if len(raw) > 4 * 1024 * 1024:
+                log.warning("[verifier] PNG too large for decision vision (%d bytes) — skipping",
+                            len(raw))
+                return None
+    return raw
+
+
 async def _decision_visual(png_bytes: bytes, notes: str, fmt_id: str) -> dict:
     """Clef vision second opinion on the render (async advisory, fail-open)."""
     try:
@@ -180,22 +206,9 @@ async def _decision_visual(png_bytes: bytes, notes: str, fmt_id: str) -> dict:
         # Size guard: Clef counts base64 toward the 64k window — prefer ~190KB.
         # Downscale with Pillow when available; otherwise send the original up
         # to the 4 MiB API cap and let the call fail open beyond it.
-        raw = png_bytes
-        if len(raw) > 190 * 1024:
-            try:
-                from io import BytesIO
-
-                from PIL import Image
-
-                img = Image.open(BytesIO(raw)).convert("RGB")
-                img.thumbnail((1024, 1024))
-                buf = BytesIO()
-                img.save(buf, format="JPEG", quality=80)
-                raw = buf.getvalue()
-            except Exception:
-                if len(raw) > 4 * 1024 * 1024:
-                    log.warning("[verifier] PNG too large for decision visual (%d bytes) — skipping", len(raw))
-                    return {}
+        raw = await _shrink_for_decision(png_bytes, fmt_id)
+        if not raw:
+            return {}
         b64 = base64.b64encode(raw).decode("ascii")
         res = await decide(
             "verifier-visual",
@@ -208,6 +221,123 @@ async def _decision_visual(png_bytes: bytes, notes: str, fmt_id: str) -> dict:
     except Exception as e:  # noqa: BLE001
         log.warning("[verifier] decision visual skipped for %s: %s", fmt_id, e)
         return {}
+
+
+async def _decision_image_relevance(
+    png_bytes: bytes, headline: str, fmt_id: str
+) -> dict:
+    """Clef vision: does the rendered photo illustrate the headline?
+
+    Only meaningful for photo slots — callers check the media plan first.
+    A confident mismatch / text-clash drives the retry loop (with teeth),
+    not the audit trail.
+    """
+    try:
+        import base64
+
+        from app.services.decision_packs import get_pack
+        from app.services.decisions import decide, providers_configured
+
+        if not providers_configured() or not png_bytes or not headline.strip():
+            return {}
+        raw = await _shrink_for_decision(png_bytes, fmt_id)
+        if not raw:
+            return {}
+        b64 = base64.b64encode(raw).decode("ascii")
+        res = await decide(
+            "image-relevance",
+            {"headline": headline[:300]},
+            images=[f"data:image/jpeg;base64,{b64}"],
+            metadata={"agent": "verifier", "format": fmt_id},
+        )
+        answers = res.get("answers", {})
+        pack = get_pack("image-relevance")
+        thresholds = pack.get("thresholds", {})
+
+        def _f(ans: dict, key: str) -> float:
+            try:
+                return float(ans.get(key, {}).get("noul", 0) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        from app.services.decisions import noul_confidence
+
+        rel = _f(answers, "relevant")
+        clash = _f(answers, "text_clash")
+        rel_ok = rel >= float(thresholds.get("relevant", 0.5))
+        clash_ok = clash < float(thresholds.get("clash", 0.6))
+        confident = min(noul_confidence(rel), noul_confidence(clash)) >= float(
+            thresholds.get("min_conf", 0.3)
+        )
+        return {
+            "answers": answers,
+            "provider": res.get("provider", ""),
+            "model": res.get("model", ""),
+            "relevant": rel_ok,
+            "clash": not clash_ok,
+            # Only a confident verdict may burn a designer retry.
+            "hard": confident and (not rel_ok or not clash_ok),
+            "issues": [
+                s for s, bad in (
+                    (f"photo does not illustrate the headline (relevant={rel:.2f})", not rel_ok),
+                    (f"photo fights the overlaid text (clash={clash:.2f})", not clash_ok),
+                ) if bad
+            ],
+        }
+    except Exception as e:  # noqa: BLE001
+        log.warning("[verifier] image-relevance skipped for %s: %s", fmt_id, e)
+        return {}
+
+
+def _clef_hard_flags(
+    visual: dict, relevance: dict, allow_emoji: bool
+) -> tuple[list[str], list[str]]:
+    """Split Clef vision verdicts into hard flags (force retry) and soft ones.
+
+    A flag is hard only when the judgment is strong AND decisive — an unsure
+    model must not burn designer retries. Returns (hard, soft) issue lists.
+    """
+    from app.services.decision_packs import get_pack
+    from app.services.decisions import noul_confidence
+
+    hard: list[str] = []
+    soft: list[str] = []
+    try:
+        thresholds = get_pack("verifier-visual").get("thresholds", {})
+        need = float(thresholds.get("hard_noul", 0.6))
+        conf_need = float(thresholds.get("hard_conf", 0.4))
+        ans = visual.get("answers", {}) if visual else {}
+
+        def _p(key: str) -> tuple[float, float]:
+            try:
+                p = float(ans.get(key, {}).get("noul", 0.5) or 0.5)
+            except (TypeError, ValueError):
+                p = 0.5
+            return p, noul_confidence(p)
+
+        p, c = _p("has_overflow")
+        if p >= need and c >= conf_need:
+            hard.append(f"Clef vision: text clips/overflows (p={p:.2f})")
+        p, c = _p("ground_correct")
+        if p <= 1 - need and c >= conf_need:
+            hard.append(f"Clef vision: wrong canvas ground (p={p:.2f})")
+        if not allow_emoji:
+            p, c = _p("emoji_present")
+            if p >= need and c >= conf_need:
+                hard.append(f"Clef vision: emoji visible (p={p:.2f})")
+        p, _ = _p("hierarchy_ok")
+        if p <= 1 - need:
+            soft.append("Clef vision: headline hierarchy weak")
+        p, _ = _p("footer_present")
+        if p <= 1 - need:
+            soft.append("Clef vision: footer/handle not visible")
+        if relevance and relevance.get("hard"):
+            hard.extend(relevance.get("issues", []))
+        elif relevance and relevance.get("issues"):
+            soft.extend(relevance.get("issues", []))
+    except Exception:  # noqa: BLE001
+        pass
+    return hard, soft
 
 
 async def _decision_refine_focus(
@@ -672,6 +802,71 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # Save PNG and HTML for output
     _save_png(task_id, fmt_id, png_bytes)
     _save_html_preview(task_id, fmt_id, html_with_tokens)
+
+    # Clef-first vision (cheap, with teeth): run Clef vision + photo
+    # relevance BEFORE the expensive Gemini audit. A fully clean Clef pass
+    # skips Gemini entirely; any hard flag merges into the issues below and
+    # caps the score under the mercy threshold so it forces a real retry.
+    from app.services.settings import get_runtime_setting as _grs
+
+    clef_first = bool(await _grs("verifier.clef_first", True))
+    _di = state.get("design_instruction") or {}
+    _allow_emoji = bool((_di.get("style") or {}).get("emoji"))
+    _headline = ""
+    try:
+        _headline = str(json.loads(task.get("copy") or "{}").get("headline") or "")
+    except Exception:
+        _headline = ""
+    _photo_slot = (state.get("media_plan") or {}).get(fmt_id, {}).get("kind") == "photo"
+    decision_visual: dict = {}
+    decision_relevance: dict = {}
+    clef_hard: list[str] = []
+    clef_soft: list[str] = []
+    if clef_first:
+        try:
+            decision_visual = await _decision_visual(
+                png_bytes, f"ground={ground} category={category}", fmt_id
+            )
+        except Exception:  # noqa: BLE001
+            decision_visual = {}
+        try:
+            if _photo_slot:
+                decision_relevance = await _decision_image_relevance(
+                    png_bytes, _headline, fmt_id
+                )
+        except Exception:  # noqa: BLE001
+            decision_relevance = {}
+        if decision_visual:
+            clef_hard, clef_soft = _clef_hard_flags(
+                decision_visual, decision_relevance, _allow_emoji
+            )
+        if decision_visual and not clef_hard and not clef_soft and not (
+            decision_relevance and decision_relevance.get("issues")
+        ):
+            log.info("[verifier] %s — Clef vision clean, Gemini audit skipped", fmt_id)
+            verification = dict(state.get("verification", {}))
+            verification[fmt_id] = {
+                "pass": True,
+                "score": 85,
+                "issues": [],
+                "critique": "Clef vision clean on all checks — full audit skipped.",
+                "clef_skipped_audit": True,
+                "decision_visual": decision_visual,
+                **({"decision_relevance": decision_relevance} if decision_relevance else {}),
+            }
+            if task_id:
+                from app.services.audit import record_audit as _ra
+
+                await _ra(task_id, "verifier",
+                          decision={"format": fmt_id, "clef_first": "clean-skip",
+                                    "score": 85})
+            return {
+                "format_tasks": {
+                    fmt_id: {**task, "quality_score": 85, "quality_issues": [],
+                             "status": "verified"}
+                },
+                "verification": verification,
+            }
     # Decision pregate (cheap, fail-open): a second opinion on whether this
     # render smells like a retry before spending the vision-LLM call. Advisory
     # only — it never changes pass/fail, only enriches the audit trail.
@@ -749,6 +944,20 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     issues = list(result.get("issues", []))
     critique = str(result.get("critique", ""))
 
+    # Clef verdicts have teeth: hard flags merge into the issues and cap the
+    # score below the mercy threshold, so a confident Clef objection forces a
+    # retry even when the Gemini auditor would pass. Soft flags ride along
+    # as extra scrutiny for the retry brief.
+    if clef_hard or clef_soft:
+        issues = issues + clef_hard + clef_soft
+        if clef_hard:
+            score = min(score, 60)
+            passed = False
+            log.info("[verifier] %s — Clef hard flags cap score at %d: %s",
+                     fmt_id, score, "; ".join(clef_hard))
+        if clef_soft:
+            critique = (critique + "\nClef notes: " + "; ".join(clef_soft)).strip()
+
     # Mercy: the design already cleared every hard gate (canvas, hex, emoji,
     # footer, category, overflow, contrast). If the vision model scores it
     # strongly, a strict pass=false caused by minor spec drift (a few px, an
@@ -773,14 +982,20 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         # A later attempt that now clears everything — note the loop closed.
         decision_refine = {"resolved": True, "attempt": retry_count}
 
-    # Decision visual second opinion (Clef vision, advisory only).
-    decision_visual: dict = {}
-    try:
-        decision_visual = await _decision_visual(
-            png_bytes, f"ground={ground} category={category} score={score}", fmt_id
-        )
-    except Exception:  # noqa: BLE001
-        decision_visual = {}
+    # Clef vision already ran pre-audit (decision_visual / decision_relevance
+    # above) — its verdicts merged into the issues before the mercy rule, so
+    # nothing more to do here.
+    if decision_relevance and task_id and (clef_hard or clef_soft):
+        try:
+            from app.services.audit import record_audit as _ra2
+
+            await _ra2(task_id, "verifier",
+                       decision={"format": fmt_id,
+                                 "image_relevance": decision_relevance.get("relevant"),
+                                 "hard": decision_relevance.get("hard"),
+                                 "issues": decision_relevance.get("issues", [])})
+        except Exception:  # noqa: BLE001
+            pass
 
     # Update verification state
     verification = dict(state.get("verification", {}))
@@ -793,6 +1008,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         **({"decision_refine": decision_refine} if decision_refine else {}),
         **({"decision_gate": decision_gate} if decision_gate else {}),
         **({"decision_visual": decision_visual} if decision_visual else {}),
+        **({"decision_relevance": decision_relevance} if decision_relevance else {}),
     }
 
     new_retry_count = dict(state.get("retry_count", {}))

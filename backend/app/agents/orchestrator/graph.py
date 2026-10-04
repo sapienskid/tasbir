@@ -341,6 +341,8 @@ async def process_all_formats_node(state: GenerationState) -> dict:
     merged_state["format_tasks"] = merged_tasks
     merged_state["verification"] = verification
 
+    publish = await _run_publish_gate(merged_state)
+
     sequence = await _run_sequence_check(merged_state)
 
     # Bounded duplicate-media retry: if two+ slides share the same image/SVG,
@@ -378,7 +380,90 @@ async def process_all_formats_node(state: GenerationState) -> dict:
         "retry_count": retry_count,
         "sequence_check": sequence,
         "media_credits": media_credits,
+        "publish": publish,
     }
+
+
+async def _run_publish_gate(state: GenerationState) -> dict:
+    """Final publish/hold gate per format (fail-open).
+
+    Deterministic hard signals (failed verification, ungrounded figures,
+    blocked copy QA) hold without spending a call. Everything else gets one
+    cheap flash judgment over the evidence — the pipeline is allowed to
+    refuse to ship. Stored on the task result for the Studio/n8n to honor.
+    """
+    publish: dict[str, dict] = {}
+    try:
+        from app.services.decision_packs import get_pack
+        from app.services.decisions import decide, providers_configured
+        from app.services.settings import get_runtime_setting
+
+        if not bool(await get_runtime_setting("publish.enabled", True)):
+            return {}
+        configured = providers_configured()
+        tasks = state.get("format_tasks") or {}
+        verification = state.get("verification") or {}
+        copy_qa = state.get("copy_qa") or {}
+        for fmt_id, task in tasks.items():
+            if not isinstance(task, dict) or not task.get("html_path"):
+                continue  # carousel bases / unrendered entries have no gate
+            ver = verification.get(fmt_id, {}) if isinstance(verification, dict) else {}
+            qa = copy_qa.get(fmt_id, {}) if isinstance(copy_qa, dict) else {}
+            hard_reasons: list[str] = []
+            if task.get("status") in ("failed", "error") or ver.get("error"):
+                hard_reasons.append(ver.get("error") or task.get("status", "failed"))
+            if qa.get("claims_hold"):
+                inv = (qa.get("claims_grounding") or {}).get("invented") or []
+                hard_reasons.append(f"ungrounded figures: {', '.join(inv)}")
+            if qa.get("verdict") == "rewrite" and task.get("status") != "verified":
+                hard_reasons.append("copy QA still demands a rewrite")
+            if hard_reasons:
+                publish[fmt_id] = {"decision": "hold", "reasons": hard_reasons,
+                                   "source": "deterministic"}
+                continue
+            if not configured:
+                publish[fmt_id] = {"decision": "publish", "reasons": [],
+                                   "source": "no-decisions"}
+                continue
+            try:
+                evidence = (
+                    f"format={fmt_id} status={task.get('status')} "
+                    f"visual_score={ver.get('score')} "
+                    f"visual_issues={'; '.join(ver.get('issues', [])) or 'none'} "
+                    f"copy_verdict={qa.get('verdict', 'n/a')} "
+                    f"copy_score={qa.get('score', 'n/a')} "
+                    f"copy_issues={'; '.join(qa.get('issues', [])) or 'none'}"
+                )
+                res = await decide("publish-gate", {"evidence": evidence[:1200]},
+                                   metadata={"agent": "publish_gate", "format": fmt_id})
+                answers = res.get("answers", {})
+                choice = str((answers.get("decision") or {}).get("choice") or "publish")
+                try:
+                    blocker = float((answers.get("blocker") or {}).get("noul", 0) or 0)
+                except (TypeError, ValueError):
+                    blocker = 0.0
+                gate = float(get_pack("publish-gate").get("thresholds", {}).get("block", 0.6))
+                hold = choice == "hold" or blocker >= gate
+                publish[fmt_id] = {
+                    "decision": "hold" if hold else "publish",
+                    "reasons": ([f"judge: {choice} (blocker={blocker:.2f})"] if hold else []),
+                    "source": res.get("provider", ""),
+                }
+            except Exception as e:  # noqa: BLE001
+                log.warning("[publish] gate skipped for %s: %s", fmt_id, e)
+                publish[fmt_id] = {"decision": "publish", "reasons": [],
+                                   "source": "fail-open"}
+        if state.get("_task_id") and publish:
+            from app.services.audit import record_audit
+
+            holds = sorted(f for f, p in publish.items() if p.get("decision") == "hold")
+            await record_audit(
+                state["_task_id"], "publish_gate",
+                decision={"holds": holds, "gates": publish},
+            )
+    except Exception as e:  # noqa: BLE001
+        log.warning("[publish] gate batch skipped: %s", e)
+    return publish
 
 
 def _duplicate_media_slides(state: GenerationState) -> list[str]:

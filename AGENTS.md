@@ -80,7 +80,7 @@ renders to PNG for visual verification.
 - **Template Author agent**: mockup image → validated Jinja2 template
 - YAML design system (`data/design_system/*.yaml`) — seeds the `default`
   system on first boot; templates' YAML catalog only used for that seed
-- LLM client (Gemini Flash Lite / Gemma 4 via OpenRouter, free tier)
+- LLM client (Gemini Flash Lite / Gemma 4, 100% via Cloudflare AI Gateway)
 - KaTeX automatic injection for math rendering
 - Image embedding (SSRF-guarded download, base64 encode, inject into HTML)
 - Campaign presets (tone, ground, language) + category taxonomy
@@ -110,7 +110,7 @@ renders to PNG for visual verification.
 | API | FastAPI (Python) |
 | Task Queue | Celery + Redis (worker + beat) |
 | Pipeline | LangGraph (3 nodes + per-format chain) |
-| LLM | Gemini Flash Lite / Gemma 4 via OpenRouter (free tier) |
+| LLM | Gemini Flash Lite / Gemma 4, always through Cloudflare AI Gateway (free tier) |
 | Rendering | Playwright (headless Chromium, slim image, internal network) |
 | Database | SQLite (aiosqlite, create_all on boot) |
 | Frontend | React 19 + Vite + shadcn/ui + SWR + Monaco (Tasbir Studio) |
@@ -119,7 +119,7 @@ renders to PNG for visual verification.
 ### Cost Target
 
 Zero API costs:
-- Free-tier models (Gemini Flash Lite / Gemma 4 via OpenRouter)
+- Free-tier models (Gemini Flash Lite / Gemma 4 through the Gateway, BYOK)
 - CSS backgrounds (no Unsplash unless free tier works)
 - No SaaS dependencies
 
@@ -517,7 +517,7 @@ tasbir/
 │   │   │       └── registry.py          ← YAML prompt loader
 │   │   │
 │   │   ├── services/
-│   │   │   ├── llm.py                   ← Gemini/OpenRouter client (+ call_llm_for_tools)
+│   │   │   ├── llm.py                   ← Gateway-only client (chat + tools + loop, OpenAI shape)
 │   │   │   ├── vision.py                ← shared Gemini Vision helper (verifier + agents)
 │   │   │   ├── media_plan.py            ← per-slide media plan (one LLM session/post)
 │   │   │   ├── tools/                   ← LLM media tools (find_photo, illustrate)
@@ -1071,11 +1071,9 @@ Response: `{"status": "ok", "version": "…", "service": "tasbir", "llm_configur
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `GEMINI_API_KEY` | Yes | — | Google AI Studio API key |
-| `OPENROUTER_API_KEY` | No | — | Fallback LLM provider |
-| `LLM_PROVIDER` | No | `direct` | Generation transport: `direct` or `gateway` (Cloudflare AI Gateway) |
-| `CLOUDFLARE_ACCOUNT_ID` | No* | — | Cloudflare account for Gateway + decisions (*needed when `LLM_PROVIDER=gateway` or decisions on; legacy alias `CF_ACCOUNT_ID`) |
-| `CLOUDFLARE_AI_GATEWAY_TOKEN` | No* | — | Cloudflare API token for Gateway runs (legacy alias `CF_AIG_TOKEN`) |
+| `GEMINI_API_KEY` | No | — | Kept for compat; unused at runtime (Gateway holds the provider key server-side) |
+| `CLOUDFLARE_ACCOUNT_ID` | Yes | — | Cloudflare account for Gateway + decisions (legacy alias `CF_ACCOUNT_ID`) |
+| `CLOUDFLARE_AI_GATEWAY_TOKEN` | Yes | — | Cloudflare API token for Gateway runs (legacy alias `CF_AIG_TOKEN`) |
 | `CF_GATEWAY_ID` | No | `tasbir` | Gateway id for generation + decision calls |
 | `DECISION_PROVIDER_ORDER` | No | `clef-flash,clef` | Decision failover order (vision packs force Clef) |
 | `DECISION_CALIBRATION_RATE` | No | `0.0` | Sample rate for dual-provider agreement logging |

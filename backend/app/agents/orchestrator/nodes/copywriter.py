@@ -883,10 +883,55 @@ def _slides_from_overrides(overrides: dict, content: str, title: str, n: int) ->
     return base
 
 
+_FIGURE_RE = re.compile(r"\d[\d,.]*%?")
+_STOP_FIGURES = {"100%"}  # "100%" as emphasis, not a sourced claim
+
+
+def _figures(text: str) -> list[str]:
+    """Number-like tokens in copy that read as factual claims."""
+    out = []
+    for m in _FIGURE_RE.findall(text or ""):
+        tok = m.strip().strip(".,")
+        if not tok or tok in _STOP_FIGURES:
+            continue
+        # Bare years / slide counters ("2026", "1/3") are not claims.
+        bare = tok.rstrip("%")
+        if re.fullmatch(r"\d{1,2}", bare or "") and "%" not in tok:
+            continue
+        out.append(tok)
+    seen: list[str] = []
+    for t in out:
+        if t not in seen:
+            seen.append(t)
+    return seen
+
+
+def _claims_grounding(copy: PlatformCopy, source_text: str) -> dict:
+    """Deterministic claims check: every figure in copy must occur in source.
+
+    Catches invented stats/dates before they ship. Comparison is on
+    punctuation-normalized text so "9 percent" vs "9%" still counts as a
+    MISS (only exact figures ground — wording drift is the rewrite loop's
+    job, not this gate's). Returns {"invented": [...]} (empty = grounded).
+    """
+    if not source_text.strip():
+        return {"invented": []}
+
+    def _norm(s: str | None) -> str:
+        return re.sub(r"[\s,]", "", s or "")
+
+    hay = _norm(source_text)
+    fields = [copy.headline, copy.subhead, copy.body,
+              *[str(v or "") for v in (copy.extra or {}).values()]]
+    invented = [f for f in _figures(" ".join(fields)) if _norm(f) not in hay]
+    return {"invented": invented}
+
+
 async def _copy_qa_for_platform(
     platform_id: str,
     copy: PlatformCopy,
     category: str = "",
+    source_text: str = "",
 ) -> dict:
     """Advisory marketing-copy QA via decision packs (fail-open).
 
@@ -942,11 +987,29 @@ async def _copy_qa_for_platform(
                 issues.append(f"weak headline hook ({hook_p:.2f})")
         except (TypeError, ValueError):
             pass
+        # Deterministic claims grounding (hard): figures in copy that never
+        # appear in the source are invented until proven otherwise. Forces a
+        # rewrite verdict so the loop must fix them; survivors are flagged
+        # for the publish gate via claims_hold.
+        from app.services.settings import get_runtime_setting
+
+        grounding = _claims_grounding(copy, source_text)
+        claims_hold = False
+        if grounding["invented"] and bool(
+            await get_runtime_setting("claims.hold_on_mismatch", True)
+        ):
+            issues.append(f"ungrounded figures: {', '.join(grounding['invented'])}")
+            claims_hold = True
+        verdict = quality["verdict"]
+        if claims_hold:
+            verdict = "rewrite"
         return {
             "score": quality["score"],
-            "verdict": quality["verdict"],
+            "verdict": verdict,
             "dims": quality["dims"],
             "issues": issues,
+            "claims_grounding": grounding,
+            "claims_hold": claims_hold,
             "hook": {k: (v.get("noul", v.get("score")) if isinstance(v, dict) else None)
                        for k, v in hook.items()},
             "provider": res_a.get("provider", ""),
@@ -1072,6 +1135,7 @@ async def copywriter_node(state: GenerationState) -> dict:
             return {}
 
     enforce = bool(get_settings().copy_qa_enforce)
+    _qa_source = "\n".join([title or "", state.get("excerpt", "") or "", content or ""])
     try:
         from app.services.decisions import providers_configured
 
@@ -1083,7 +1147,7 @@ async def copywriter_node(state: GenerationState) -> dict:
                     pc = PlatformCopy(**data)
                 except Exception:
                     return pid, {}
-                qa = await _copy_qa_for_platform(pid, pc, state.get("category", ""))
+                qa = await _copy_qa_for_platform(pid, pc, state.get("category", ""), _qa_source)
                 if qa:
                     ptype = (platforms_config.get(pid, {}) or {}).get("post_type") or post_type
                     extras = await _extras_qa_for_platform(pid, pc, ptype, content)
@@ -1133,7 +1197,7 @@ async def copywriter_node(state: GenerationState) -> dict:
                         "refinement_count": (format_tasks[pid].get("refinement_count") or 0) + 1,
                     }
                 )
-                improved[pid] = await _copy_qa_for_platform(pid, revised, state.get("category", ""))
+                improved[pid] = await _copy_qa_for_platform(pid, revised, state.get("category", ""), _qa_source)
             if not improved:
                 break
             copy_qa.update({pid: qa for pid, qa in improved.items() if qa})

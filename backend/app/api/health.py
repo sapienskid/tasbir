@@ -64,14 +64,13 @@ async def _check_render() -> tuple[bool, str]:
 
 @router.get("/health")
 async def health():
-    from app.config import get_settings
+    from app.services.llm import gateway_configured
 
-    settings = get_settings()
     return {
         "status": "ok",
         "version": "1.0.1",
         "service": "tasbir",
-        "llm_configured": bool(settings.gemini_api_key),
+        "llm_configured": gateway_configured(),
     }
 
 

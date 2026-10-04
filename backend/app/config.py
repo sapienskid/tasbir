@@ -6,13 +6,11 @@ from pydantic_settings import BaseSettings, NoDecode
 
 
 class Settings(BaseSettings):
-    # LLM
+    # LLM — every generation call goes through Cloudflare AI Gateway (compat
+    # endpoint, OpenAI chat shape). The Gateway holds the Google AI Studio
+    # key server-side (BYOK); no direct provider calls exist anywhere.
+    # GEMINI_API_KEY is kept only as a "configured" signal for /health.
     gemini_api_key: str = ""
-    openrouter_api_key: str = ""
-    # Preferred generation transport: "direct" (ChatGoogleGenerativeAI) or
-    # "gateway" (Cloudflare AI Gateway unified REST). Gateway keeps working
-    # when keys rotate; direct stays as the emergency fallback.
-    llm_provider: str = "direct"
 
     # Cloudflare AI Gateway (single AI control plane for generation +
     # decisions). Decisions run on Workers AI (Clef / Clef-flash, billed in
@@ -26,7 +24,8 @@ class Settings(BaseSettings):
     # is vision/precision. Clef is the only decision model we run.
     decision_provider_order: str = "clef-flash,clef"
     # Dual-run calibration: fraction sampled + log disagreements (0 disables).
-    decision_calibration_rate: float = 0.0
+    # Small default sample so flash-vs-full agreement is continuously measured.
+    decision_calibration_rate: float = 0.05
     # Copy QA starts advisory-only in the Studio; blocking enforced per setting.
     copy_qa_enforce: bool = False
 
@@ -82,7 +81,7 @@ class Settings(BaseSettings):
     platforms_path: str = "data/design_system/platforms.yaml"
     campaigns_path: str = "data/design_system/campaigns.yaml"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     @property
     def resolved_cf_account_id(self) -> str:

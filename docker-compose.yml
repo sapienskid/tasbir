@@ -15,7 +15,6 @@ volumes:
 
 x-shared: &shared-env
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-  OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
   PEXELS_API_KEY: ${PEXELS_API_KEY:-}
   PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
   DATABASE_URL: sqlite+aiosqlite:///data/tasbir.db

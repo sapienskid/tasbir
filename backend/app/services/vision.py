@@ -1,8 +1,11 @@
-"""Shared Gemini Vision helper — multimodal (image + text) LLM calls.
+"""Shared Vision helper — multimodal (image + text) calls via Cloudflare AI Gateway.
 
 Used by the verifier and the template/brand authoring agents. Vision calls
 are serialized among themselves (a lock + min-interval knob) so the pipeline
 paces the expensive vision path without serializing the whole pipeline.
+
+Transport is the Gateway compat endpoint with ``image_url`` parts (verified
+live through the ``tasbir-vision`` route). No direct provider calls.
 """
 
 from __future__ import annotations
@@ -11,9 +14,13 @@ import asyncio
 import base64
 import logging
 
-from app.config import get_settings
 from app.core.loop_lock import loop_lock
-from app.services.llm import DEFAULT_MODEL, LLM_TIMEOUT
+from app.services.llm import (
+    DEFAULT_MODEL,
+    _compat_post,
+    _message_text,
+    gateway_route_for_role,
+)
 
 log = logging.getLogger(__name__)
 
@@ -29,50 +36,41 @@ async def call_vision_llm(
     model: str | None = None,
     fallback_models: list[str] | None = None,
 ) -> str:
-    """Call a multimodal LLM with an image + text prompt.
+    """Call a multimodal LLM with an image + text prompt — via the Gateway.
 
-    ``model`` is the primary; ``fallback_models`` are tried on timeout/504/429.
+    Tries the ``tasbir-vision`` dynamic route first, then ``model`` and each
+    fallback as ``google-ai-studio/{model}``. Raises when all fail (fail-loud:
+    callers decide whether to auto-pass, never this helper).
     Callers with a DB-backed agent config pass ``prompt_cfg.model`` and
     ``prompt_cfg.fallback_models`` so the Agents UI routing drives vision too.
     """
+    from app.services.llm import gateway_model_name
     from app.services.settings import get_runtime_setting
 
     min_interval = float(
         await get_runtime_setting("vision.min_interval_seconds", 5.0)
     )
-    settings = get_settings()
-    api_key = settings.gemini_api_key
-
-    if not api_key:
-        log.warning("[vision] No Gemini API key — raising (no silent auto-pass)")
-        raise RuntimeError("Gemini API key not configured for visual analysis")
-
-    from langchain_core.messages import HumanMessage, SystemMessage
-    from langchain_google_genai import ChatGoogleGenerativeAI
 
     models = [m for m in ([model or DEFAULT_MODEL] + list(fallback_models or [])) if m]
     if not models:
         models = [DEFAULT_MODEL]
+    targets = [gateway_route_for_role("verifier")]
+    for m in models:
+        name = gateway_model_name(m)
+        if name not in targets:
+            targets.append(name)
 
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
     messages = [
-        SystemMessage(content=system_prompt),
-        HumanMessage(content=[
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-            },
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": [
             {"type": "text", "text": user_prompt},
-        ]),
+            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
+        ]},
     ]
 
     last_error: Exception | None = None
-    for mdl in models:
-        llm = ChatGoogleGenerativeAI(
-            model=mdl,
-            google_api_key=api_key,
-            max_output_tokens=max_tokens,
-        )
+    for target in targets:
         try:
             global _vision_last
             loop = asyncio.get_event_loop()
@@ -81,26 +79,19 @@ async def call_vision_llm(
                 if elapsed < min_interval:
                     await asyncio.sleep(min_interval - elapsed)
                 _vision_last = loop.time()
-                response = await asyncio.wait_for(
-                    llm.ainvoke(messages),
-                    timeout=LLM_TIMEOUT,
-                )
-            return _content_text(response)
+                data, served = await _compat_post({
+                    "model": target,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                })
+            text = _message_text(data["choices"][0]["message"])
+            if not text:
+                raise RuntimeError("Gateway returned empty completion")
+            log.info("[vision] %s served by %s", target, served or "?")
+            return text
         except Exception as e:  # noqa: BLE001
             last_error = e
-            log.warning("[vision] model %s failed (%s) — trying next", mdl, e)
+            log.warning("[vision] %s failed (%s) — trying next", target, e)
 
     raise last_error or RuntimeError("Vision LLM call failed")
-
-
-def _content_text(response) -> str:
-    content = response.content or ""
-    if isinstance(content, list):
-        texts = []
-        for block in content:
-            if isinstance(block, dict) and "text" in block:
-                texts.append(block["text"])
-            elif isinstance(block, str):
-                texts.append(block)
-        content = "\n".join(texts)
-    return content

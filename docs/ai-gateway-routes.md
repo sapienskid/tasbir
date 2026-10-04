@@ -1,18 +1,27 @@
 # AI Gateway setup — routes for Tasbir
 
-The pipeline calls three dynamic routes when `LLM_PROVIDER=gateway`.
-Until they exist, generation transparently uses the provider-specific
-Google path (same models, same Gateway logging) — creating the routes
-only moves failover server-side (no deploy to change models later).
+100% of LLM traffic goes through the Gateway compat endpoint
+(`gateway.ai.cloudflare.com/.../compat/chat/completions`, OpenAI chat shape).
+There are no direct provider calls anywhere — no LangChain, no OpenRouter.
+`GEMINI_API_KEY` is only ever sent as the Gateway's BYOK credential
+(`x-goog-api-key` is not even needed: the Gateway holds the key); nothing
+calls `googleapis.com` directly. If every Gateway attempt fails the call
+raises (fail-loud — no silent fallback that would bypass quotas/logging).
+
+The pipeline calls three dynamic routes. Until they exist, generation
+transparently uses the provider-specific Google path (same models, same
+Gateway logging) — creating the routes only moves failover server-side
+(no deploy to change models later).
 
 ## 0. Prerequisites
 
 - Gateway id `tasbir` (code default `CF_GATEWAY_ID`; any id works if the
   env var matches).
 - Google AI Studio key stored (BYOK) or available via Unified Billing.
-- Gateway credits are only needed for the `google/` compat slug — the
-  provider-specific Google path and Clef/Clef-flash (Neurons) run on the
-  free daily allocation.
+- Gateway credits are NOT needed: every generation path uses the
+  `google-ai-studio` provider slug (BYOK, free tier), and Clef/Clef-flash
+  bill Neurons (free daily allocation). Do NOT use the `google/` slug —
+  probed live, it bills Gateway credits (402) instead of the free tier.
 
 ## 1. Model budgets (free tier) — read this before routing
 
@@ -62,14 +71,26 @@ Nodes 1–3 use provider **Google AI Studio**; the final net uses provider
 (free 10k/day covers these volumes), so the net holds even with zero
 Gateway credits.
 
-> Scope note: routes cover the plain-chat generation calls. The media
-> tool-loop (`call_llm_for_tools` / `call_llm_tool_loop`) and the vision
-> verifier stay on direct Google (free tier) — they need native tool
-> calling / vision, which a route swap can't provide. Porting those is
-> separate work.
+> Scope note: none — every generation path (plain chat, tool-calling loops,
+> vision audits) goes through the Gateway compat endpoint. The old direct
+> Google (LangChain) and OpenRouter fallbacks are deleted; decisions were
+> always Cloudflare-native (Workers AI).
 
 ### Verified live (Oct 2026)
 
+* The **compat endpoint is the single path**. The unified REST path
+  (`api.cloudflare.com/.../ai/v1/chat/completions`) was probed:
+  `google-ai-studio/{model}` → 404, `google/{model}` → 402 (bills Gateway
+  credits instead of the free tier). Compat + `google-ai-studio/` is 200.
+* **Tools work through the Gateway** (Oct 2026): `tools` + `tool_choice`
+  through both `dynamic/tasbir-fast` (served by gemini-3.1-flash-lite) and
+  `google-ai-studio/gemini-3.1-flash-lite` return OpenAI-shaped `tool_calls`.
+  Provider extras (`extra_content.google.thought_signature`) are dropped
+  when the message is echoed back; route models may also prepend
+  `<thought>` blocks, which the client strips.
+* **Vision works through the Gateway** (Oct 2026): `image_url` parts
+  through `dynamic/tasbir-fast` (served by gemma-4-26b-a4b-it) correctly
+  described a 102KB 1080×1080 render.
 * `google/{model}` returns `400 Model not found` for every model; the working
   Google slug is **`google-ai-studio/{model}`** on both the compat host and
   the unified API path. `services/llm.py` uses the working slug.
