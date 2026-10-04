@@ -10,6 +10,9 @@ from app.services import models as models_svc
 
 def test_gateway_model_name_mapping():
     assert llm_svc.gateway_model_name("gemini-3.1-flash-lite") == (
+        "google/gemini-3.1-flash-lite"
+    )
+    assert llm_svc.gateway_model_name("gemini-3.1-flash-lite", for_api_path=True) == (
         "google-ai-studio/gemini-3.1-flash-lite"
     )
     assert llm_svc.gateway_model_name("dynamic/tasbir-fast") == "dynamic/tasbir-fast"

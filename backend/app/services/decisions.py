@@ -75,29 +75,42 @@ async def _call_provider(
     if not providers_configured():
         raise RuntimeError("Cloudflare decision providers not configured")
     model_id = PROVIDERS[provider]
-    url = f"{_API_BASE}/{settings.resolved_cf_account_id}/ai/run/{model_id}"
+    base = f"{_API_BASE}/{settings.resolved_cf_account_id}"
     headers = {
         "Authorization": f"Bearer {settings.resolved_cf_token}",
         "Content-Type": "application/json",
     }
     if settings.cf_gateway_id:
         headers["cf-aig-gateway-id"] = settings.cf_gateway_id
-    body: dict = {"state": state, "questions": questions}
-    if provider.startswith("clef"):
+    if provider == "jev":
+        # Third-party REST shape (docs: ai/models/typesafe/jev): the model
+        # goes in the body and state/questions nest under "input".
+        url = f"{base}/ai/run"
+        body: dict = {"model": model_id, "input": {"state": state, "questions": questions}}
+        if images:
+            raise ValueError("Jev is text-only; route image packs to Clef")
+    else:
+        url = f"{base}/ai/run/{model_id}"
+        body = {"state": state, "questions": questions}
         body["model"] = "clef-flash" if provider == "clef-flash" else "clef"
         if images:
             body["images"] = images
-    elif images:
-        raise ValueError("Jev is text-only; route image packs to Clef")
     timeout = VISION_TIMEOUT if images else TEXT_TIMEOUT
     started = time.monotonic()
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(url, headers=headers, json=body)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except Exception:
+            # Surface the API error body (no secrets in it) for diagnosis.
+            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
         data = resp.json()
-    # Jev binding shape: {result: {...}}; Clef REST: {success, result: {...}}.
-    result = data.get("result", data)
-    answers = result.get("answers", {})
+    # Jev REST: {result: {...}} or the answer object directly;
+    # Clef REST: {success, result: {...}}.
+    result = data.get("result", data) if isinstance(data, dict) else {}
+    if not isinstance(result, dict) or "answers" not in result:
+        result = data if isinstance(data, dict) and "answers" in data else result
+    answers = result.get("answers", {}) if isinstance(result, dict) else {}
     elapsed = time.monotonic() - started
     log.info(
         "[decide] provider=%s questions=%d latency=%.2fs model=%s",

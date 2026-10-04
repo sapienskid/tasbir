@@ -58,11 +58,18 @@ def gateway_route_for_role(agent_role: str) -> str:
     return "dynamic/tasbir-fast"
 
 
-def gateway_model_name(model: str) -> str:
-    """Map a bare model id to its Gateway provider-qualified name."""
+def gateway_model_name(model: str, for_api_path: bool = False) -> str:
+    """Map a bare model id to its Gateway provider-qualified name.
+
+    Compat host (canonical): ``google/{model}``; unified api path uses the
+    ``google-ai-studio/{model}`` slug. Pass-through for already-qualified
+    (``provider/model``) and ``dynamic/`` route names.
+    """
     if "/" in model or model.startswith("dynamic/"):
         return model
-    return f"google-ai-studio/{model}"
+    if for_api_path:
+        return f"google-ai-studio/{model}"
+    return f"google/{model}"
 
 
 async def _call_gateway_chat(
@@ -73,27 +80,30 @@ async def _call_gateway_chat(
     max_tokens: int = 2000,
     metadata: dict | None = None,
 ) -> tuple[str, str | None]:
-    """Call generation via Cloudflare AI Gateway unified REST.
+    """Call generation via Cloudflare AI Gateway.
 
-    Returns ``(text, served_model)`` where ``served_model`` comes from the
-    ``cf-aig-model`` response header (which dynamic route node actually ran).
+    Endpoint strategy (first success wins):
+    - ``dynamic/*`` routes → compat host (plus unified api path fallback).
+    - Bare Google models → provider-specific ``google-ai-studio`` REST
+      (proven live; uses the local ``GEMINI_API_KEY`` when set, otherwise the
+      Gateway-stored BYOK) → compat ``google/`` slug → unified api path.
+    Returns ``(text, served_model)``; ``served_model`` comes from the
+    ``cf-aig-model`` header on compat/api responses (provider-specific
+    responses carry no such header → ``None``).
     """
     import httpx
 
     settings = get_settings()
     if not gateway_configured():
         raise RuntimeError("Cloudflare AI Gateway not configured")
-    url = (
-        f"{_GATEWAY_API_BASE}"
-        + _GATEWAY_CHAT_PATH.format(account_id=settings.resolved_cf_account_id)
-    )
-    headers = {
-        "Authorization": f"Bearer {settings.resolved_cf_token}",
-        "cf-aig-gateway-id": settings.cf_gateway_id or "tasbir",
+    account = settings.resolved_cf_account_id
+    gateway = settings.cf_gateway_id or "tasbir"
+    compat = f"https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/compat/chat/completions"
+    compat_headers = {
+        "cf-aig-authorization": f"Bearer {settings.resolved_cf_token}",
         "Content-Type": "application/json",
     }
-    payload: dict = {
-        "model": gateway_model_name(model),
+    chat_payload: dict = {
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
@@ -102,20 +112,85 @@ async def _call_gateway_chat(
         "max_tokens": max_tokens,
     }
     if metadata:
-        payload["metadata"] = metadata
+        chat_payload["metadata"] = metadata
+
+    attempts: list[tuple[str, dict, dict]] = []
+    if model.startswith("dynamic/"):
+        attempts.append((compat, compat_headers, {**chat_payload, "model": model}))
+        attempts.append(
+            (
+                f"{_GATEWAY_API_BASE}" + _GATEWAY_CHAT_PATH.format(account_id=account),
+                {
+                    "Authorization": f"Bearer {settings.resolved_cf_token}",
+                    "cf-aig-gateway-id": gateway,
+                    "Content-Type": "application/json",
+                },
+                {**chat_payload, "model": model},
+            )
+        )
+    else:
+        bare = model.split("/", 1)[-1] if "/" in model else model
+        gs_headers = dict(compat_headers)
+        if settings.gemini_api_key:
+            gs_headers["x-goog-api-key"] = settings.gemini_api_key
+        attempts.append(
+            (
+                f"https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/"
+                f"google-ai-studio/v1/models/{bare}:generateContent",
+                gs_headers,
+                {"contents": [{"role": "user", "parts": [
+                    {"text": f"{system_prompt}\n\n{user_prompt}"}
+                ]}]},
+            )
+        )
+        attempts.append((compat, compat_headers,
+                         {**chat_payload, "model": gateway_model_name(model)}))
+        attempts.append(
+            (
+                f"{_GATEWAY_API_BASE}" + _GATEWAY_CHAT_PATH.format(account_id=account),
+                {
+                    "Authorization": f"Bearer {settings.resolved_cf_token}",
+                    "cf-aig-gateway-id": gateway,
+                    "Content-Type": "application/json",
+                },
+                {**chat_payload, "model": gateway_model_name(model, for_api_path=True)},
+            )
+        )
+    last_error: Exception | None = None
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        text = ""
-        try:
-            text = data["choices"][0]["message"]["content"] or ""
-        except (KeyError, IndexError, TypeError):
-            text = ""
-        served = resp.headers.get("cf-aig-model")
-        if not text:
-            raise RuntimeError("Gateway returned empty completion")
-        return text, served
+        for url, headers, payload in attempts:
+            try:
+                resp = await client.post(url, headers=headers, json=payload)
+                try:
+                    resp.raise_for_status()
+                except Exception:
+                    raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:300]}")
+                text = _gateway_text(resp.json())
+                if not text:
+                    raise RuntimeError("Gateway returned empty completion")
+                return text, resp.headers.get("cf-aig-model")
+            except Exception as e:  # noqa: BLE001
+                # 402 (insufficient Gateway credits) is an account state, not
+                # a transport problem — later attempts can't fix it.
+                if "HTTP 402" in str(e):
+                    raise
+                last_error = e
+    raise last_error or RuntimeError("Gateway chat failed")
+
+
+def _gateway_text(data: dict) -> str:
+    """Extract completion text from compat (choices) or generateContent shapes."""
+    try:
+        text = data["choices"][0]["message"]["content"] or ""
+        if text:
+            return text
+    except (KeyError, IndexError, TypeError):
+        pass
+    try:
+        parts = data["candidates"][0]["content"].get("parts", [])
+        return "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+    except (KeyError, IndexError, TypeError):
+        return ""
 
 def _model_for(agent_role: str) -> str:
     """Resolve the model for a role — DB agent row first, MODEL_ROUTES fallback."""
