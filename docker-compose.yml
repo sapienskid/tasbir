@@ -35,7 +35,9 @@ x-shared: &shared-env
 
 services:
   redis:
-    image: redis:7-alpine
+    # Same tag the Overleaf stack pulls, so this host keeps one redis image
+    # instead of two. Functionally identical — a disposable LRU cache.
+    image: redis:7.4
     restart: unless-stopped
     networks:
       - tasbir

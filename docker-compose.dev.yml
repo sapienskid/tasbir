@@ -40,7 +40,10 @@ x-shared-env: &shared-env
 
 services:
   redis:
-    image: redis:7-alpine
+    # Pinned to the same tag the Overleaf stack pulls, so this host holds one
+    # redis image instead of two. Functionally identical — it is only a
+    # disposable LRU cache (Celery payloads + rate-limit buckets).
+    image: redis:7.4
     restart: unless-stopped
     networks:
       - tasbir-dev
@@ -52,7 +55,10 @@ services:
     command: redis-server --maxmemory 32mb --maxmemory-policy allkeys-lru
     mem_limit: 48m
     ports:
-      - "6379:6379"
+      # Loopback only. An unauthenticated redis published on 0.0.0.0 is reachable
+      # from the whole LAN, which is a standard exploit path. Still usable from
+      # this machine, so a host-run backend/Celery keeps working.
+      - "127.0.0.1:6379:6379"
 
   playwright:
     image: ghcr.io/${TASBIR_IMAGE_OWNER:-sapienskid}/tasbir-playwright:${TASBIR_IMAGE_TAG:-latest}
@@ -95,7 +101,13 @@ services:
       SERVICE: api
     volumes:
       - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-exclude "data/*" --reload-exclude "*.db*" --reload-exclude "__pycache__/*"
+    # --reload-dir narrows the watch ROOT to app/, so editing tests, docs or the
+    # data dir no longer restarts the API. This must be --reload-dir, not
+    # --reload-include: uvicorn hardcodes a default include of "*.py" and merges
+    # --reload-include on top of it, so an include cannot narrow anything.
+    # Prompt/design-system YAML live outside app/ and are re-read on their own
+    # ~5s TTL, so they never needed a reload to take effect.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir app
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 10s
