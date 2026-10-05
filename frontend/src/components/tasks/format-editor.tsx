@@ -5,6 +5,7 @@ import { SlotPreview, type FrameKey, type SlotPreviewHandle } from "@/components
 import { SavePill } from "@/components/tasks/save-pill"
 import { useEditorSession } from "@/hooks/use-editor-session"
 import { StructuredEditor } from "@/components/tasks/structured-editor"
+import { ConvertPanel } from "@/components/tasks/convert-panel"
 import { InspectorRail, type QcState } from "@/components/tasks/inspector-rail"
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +20,8 @@ import {
   Eye,
   FileCode2,
   FileImage,
+  Image,
+  ImageOff,
   MoreVertical,
   Redo2,
   RefreshCw,
@@ -172,6 +175,22 @@ export function FormatEditor({
   )
 
   const livePreviewHtml = useDebouncedValue(draft, 300)
+
+  // Autosave persists recipe + HTML without rendering (that is the ~90x
+  // difference). This catches the PNG artifact up and re-runs the hard checks.
+  const [rendering, setRendering] = useState(false)
+  const renderNow = useCallback(async () => {
+    setRendering(true)
+    try {
+      await session.renderNow()
+      await onMutate()
+      toast.success("Rendered — PNG and checks are up to date")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Render failed")
+    } finally {
+      setRendering(false)
+    }
+  }, [session, onMutate])
 
   // Ctrl/Cmd ± / 0 and Ctrl+wheel zoom the preview, never the browser page.
   useEffect(() => {
@@ -525,16 +544,35 @@ export function FormatEditor({
             </Button>
           ) : null}
           {structured && mode === "content" ? (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void flushNow(true)}
-              disabled={snap.save.phase === "saved"}
-              title="Save now (Ctrl/Cmd+S)"
-            >
-              <Save aria-hidden="true" className="size-4" />
-              Save
-            </Button>
+            <>
+              {snap.info?.render_stale ? (
+                <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <ImageOff aria-hidden="true" className="size-3.5" />
+                  PNG is behind the saved design
+                </span>
+              ) : null}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void flushNow(true)}
+                disabled={snap.save.phase === "saved"}
+                title="Save now (Ctrl/Cmd+S)"
+              >
+                <Save aria-hidden="true" className="size-4" />
+                Save
+              </Button>
+              {/* Autosave persists the recipe + HTML only (recipe -> HTML is
+                  Jinja, not Chromium), so the shared PNG lags until rendered. */}
+              <Button
+                size="sm"
+                onClick={() => void renderNow()}
+                disabled={rendering || snap.save.phase === "saving"}
+                title="Render the PNG and run the checks — the shared image is behind the saved design"
+              >
+                <Image aria-hidden="true" className="size-4" />
+                {rendering ? "Rendering…" : "Render PNG"}
+              </Button>
+            </>
           ) : (
             <Button size="sm" onClick={() => void handleRerender(false)} disabled={busy}>
               <Save aria-hidden="true" className="size-4" />
@@ -575,17 +613,21 @@ export function FormatEditor({
                 {snap.error ?? "Couldn't load the editor."}
               </p>
             ) : mode === "content" ? (
-              <div className="grid gap-2 text-sm">
-                <p className="font-medium">Freeform AI design</p>
-                <p className="text-xs text-muted-foreground">
-                  {snap.info?.reason === "manual"
-                    ? "Manually composed posts are edited from their composition."
-                    : "This post wasn't built from a template, so there are no structured fields. Edit the HTML directly, or ask the agent chat to change it."}
-                </p>
-                <Button size="sm" variant="outline" onClick={() => setMode("code")}>
-                  Open Code
-                </Button>
-              </div>
+              <ConvertPanel
+                taskId={taskId}
+                format={format}
+                reason={snap.info?.reason ?? null}
+                convertible={snap.info?.convertible ?? false}
+                designSystemId={curDs}
+                family={snap.info?.family}
+                ground={snap.info?.ground ?? "white"}
+                busy={remapping}
+                onConverted={async () => {
+                  onMutate()
+                  await session.load(() => prefetchFormat(format))
+                }}
+                onOpenCode={() => setMode("code")}
+              />
             ) : (
               <div className="h-[50vh] xl:h-full">
                 <HtmlEditor value={draft} onChange={setDraft} />

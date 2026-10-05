@@ -103,6 +103,9 @@ const EMPTY_DOC: EditorDoc = {
   mediaPosition: "auto",
   media: null,
   designSystemId: "default",
+  ground: "white",
+  styleLanguage: "",
+  category: "",
 }
 
 export class EditorSession {
@@ -159,7 +162,14 @@ export class EditorSession {
         const size = JSON.stringify(body).length
         // keepalive requests are capped at 64 KB by browsers.
         const keepalive = ctx.keepalive && size < 60_000
-        return serial(this.taskId, () => this.api.refill(this.taskId, this.fmt, body, { keepalive }))
+        // Autosave persists recipe + HTML only. Rendering needs headless
+        // Chromium (~3.3s) and used to ship a 128 KB base64 PNG back on every
+        // keystroke-batch; recipe -> HTML is Jinja-only, so the visible editor
+        // never needed it. The PNG is produced on demand via renderNow().
+        const payload = ctx.render ? { ...body, render: true } : { ...body, render: false }
+        return serial(this.taskId, () =>
+          this.api.refill(this.taskId, this.fmt, payload, { keepalive })
+        )
       },
       onSaved: (token, res) => this.onSaved(token as EditorDoc, res),
       onChange: (s) => {
@@ -315,13 +325,27 @@ export class EditorSession {
       this.baseHtml = res.html
       // The sequencer's cache is keyed by revision, so nothing stale can hit.
     }
-    this.qc = {
-      score: res.quality.score,
-      issues: res.quality.issues,
-      critique: res.quality.critique,
-      pass: res.pass,
+    // A save that skipped rendering reports no verdict — keep the previous QC
+    // rather than overwriting it with "not checked".
+    if (res.pass !== null && res.pass !== undefined) {
+      this.qc = {
+        score: res.quality.score,
+        issues: res.quality.issues,
+        critique: res.quality.critique,
+        pass: res.pass,
+      }
     }
-    if (this.info) this.info = { ...this.info, revision: this.revision }
+    if (this.info) {
+      this.info = {
+        ...this.info,
+        revision: this.revision,
+        // Only a rendered save brings the PNG up to date.
+        render_stale: res.rendered ? false : true,
+        ground: (res.ground as EditorState["ground"]) ?? this.info.ground,
+        style_language: res.style_language ?? this.info.style_language,
+        category: res.category ?? this.info.category,
+      }
+    }
     this.callbacks.onPersisted?.({ html: res.html ?? "", pngB64: res.png_b64, res })
     // The DOM the user sees already matches what was persisted — no swap.
     this.emit()
@@ -331,6 +355,18 @@ export class EditorSession {
 
   flush(opts: { keepalive?: boolean } = {}): Promise<boolean> {
     return this.queue.flush(opts)
+  }
+
+  /**
+   * Persist and render: produces the PNG artifact and runs the hard checks.
+   *
+   * Autosave deliberately skips both (recipe -> HTML is Jinja-only), which
+   * leaves the saved HTML ahead of the PNG on disk. This is the explicit action
+   * that catches the PNG up — and it is what the "render" affordance in the
+   * editor calls.
+   */
+  renderNow(): Promise<boolean> {
+    return this.queue.flush({ render: true })
   }
 
   retrySave(): Promise<boolean> {

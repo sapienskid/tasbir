@@ -29,7 +29,7 @@ export interface SaveSnapshot {
 export interface SaveQueueOptions<P, R> {
   /** Build the payload from the latest state; null = nothing to save. */
   prepare: () => { payload: P; token: unknown } | null
-  send: (payload: P, ctx: { keepalive: boolean }) => Promise<R>
+  send: (payload: P, ctx: { keepalive: boolean; render: boolean }) => Promise<R>
   onSaved: (token: unknown, result: R) => void
   onChange?: (snap: SaveSnapshot) => void
   idleMs?: number
@@ -52,6 +52,8 @@ export class SaveQueue<P, R> {
   private dirtySince: number | null = null
   private loop: Promise<void> | null = null
   private wantFlush = false
+  /** Set by flush({render:true}); consumed by the next send(). */
+  private renderRequested = false
   private disposed = false
   private readonly idleMs: number
   private readonly maxWaitMs: number
@@ -129,15 +131,20 @@ export class SaveQueue<P, R> {
   /**
    * Persist everything now. Resolves true once nothing is left unsaved,
    * false if the queue ended in an error state.
+   *
+   * `render: true` asks the server to also render the PNG and run QC — used by
+   * the explicit "render now" action, since autosave deliberately skips both.
    */
-  async flush(opts: { keepalive?: boolean } = {}): Promise<boolean> {
+  async flush(opts: { keepalive?: boolean; render?: boolean } = {}): Promise<boolean> {
     if (this.disposed) return true
     this.wantFlush = true
+    this.renderRequested = opts.render ?? false
     this.clearTimers()
     try {
       await this.drain(opts.keepalive ?? false)
     } finally {
       this.wantFlush = false
+      this.renderRequested = false
     }
     return this.phase === "saved"
   }
@@ -194,7 +201,10 @@ export class SaveQueue<P, R> {
     keepalive: boolean
   ): Promise<void> {
     try {
-      const result = await this.opts.send(job.payload, { keepalive })
+      // A requested render applies to this save only.
+      const render = this.renderRequested
+      this.renderRequested = false
+      const result = await this.opts.send(job.payload, { keepalive, render })
       this.lastSavedAt = this.now()
       this.error = null
       this.attempts = 0
