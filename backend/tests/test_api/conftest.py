@@ -1,5 +1,6 @@
 """Shared API test fixtures — authed client with lifespan + tmp output dir."""
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
@@ -66,3 +67,39 @@ async def seed_task(task_id: str, **kwargs) -> None:
     async with pool() as session:
         session.add(GenerationTask(id=task_id, **defaults))
         await session.commit()
+
+
+async def read_entry(task_id: str, fmt: str = "instagram-square") -> dict:
+    """The persisted per-format entry, read straight from the DB.
+
+    Lets a test assert what was actually stored (recipe, legacy keys) rather
+    than trusting the response body.
+    """
+    from app.db.repositories.tasks import TaskRepository
+    from app.db.session import get_shared_session_factory
+
+    pool = await get_shared_session_factory()
+    async with pool() as session:
+        row = await TaskRepository(session).get_by_id(task_id)
+        platforms = (row.result or {}).get("platforms") or {}
+        return platforms.get(fmt) or {}
+
+
+@pytest.fixture
+def mock_render_services(monkeypatch):
+    """Stub the Playwright render + overflow calls so refill tests need no service.
+
+    Shared by the refill test modules; keeps them hermetic and fast.
+    """
+    from app.agents.orchestrator.nodes import quality_check
+    from app.services import dom_extractor
+
+    async def fake_render(html, width, height):
+        return b"PNGRENDERED"
+
+    async def fake_overflow(html, width, height):
+        return []
+
+    monkeypatch.setattr(dom_extractor, "render_to_png", fake_render)
+    monkeypatch.setattr(dom_extractor, "detect_overflow", fake_overflow)
+    monkeypatch.setattr(quality_check, "_run_deterministic_checks", lambda *a, **k: [])

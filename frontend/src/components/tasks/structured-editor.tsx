@@ -16,7 +16,9 @@ import {
   type FieldKey,
 } from "@/components/compose/model"
 import { useEditorDoc } from "@/hooks/use-editor-session"
-import { useTemplates } from "@/hooks/use-library"
+import { useDesignSystems, useTemplates } from "@/hooks/use-library"
+import { useStyleLanguages } from "@/hooks/use-style-languages"
+import { RecipeControls } from "@/components/tasks/recipe-controls"
 import type { EditorSession } from "@/lib/editor-session"
 import type { MediaChoice } from "@/lib/editor-store"
 import type {
@@ -59,7 +61,17 @@ export function StructuredEditor({
   const store = session.store
   const [tab, setTab] = useState<"template" | "text" | "media">("text")
   const { data: templates, isLoading } = useTemplates(info.design_system_id, info.family)
+  const { styles: rawStyles } = useStyleLanguages()
+  const { data: systems } = useDesignSystems()
+  // The picker wants {id,label}; provenance is surfaced elsewhere already.
+  const styles = rawStyles.map((s) => ({ id: s.id, label: s.label, source: s.source }))
   const selected = (templates ?? []).find((t) => t.id === doc.templateId)
+  // What "System's own" resolves to, so that option is informative. A design
+  // system records its language on its design-instruction bundle.
+  const ownLanguageId =
+    (systems ?? []).find((s) => s.id === info.design_system_id)?.design_instruction
+      ?.style_language ?? ""
+  const ownLanguageLabel = rawStyles.find((s) => s.id === ownLanguageId)?.label
 
   // Template default toggles feed the request builder (explicit hidden lists).
   useEffect(() => {
@@ -105,13 +117,13 @@ export function StructuredEditor({
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="template">
+      <TabsContent value="template" className="grid gap-4">
         <TemplatePicker
           family={info.family}
           templates={templates ?? []}
           loading={isLoading}
           selected={selected}
-          ground={info.ground}
+          ground={doc.ground}
           hidden={doc.hidden ? [...doc.hidden] : null}
           mediaPosition={doc.mediaPosition as ComposeMediaPosition}
           multiSlide={false}
@@ -121,6 +133,17 @@ export function StructuredEditor({
           onMediaPosition={(p) => store.setMediaPosition(p)}
           onApplyAll={() => {}}
         />
+        <div className="border-t pt-3">
+          <RecipeControls
+            ground={doc.ground}
+            styleLanguage={doc.styleLanguage}
+            styles={styles}
+            ownLanguageLabel={ownLanguageLabel}
+            templateGrounds={selected?.grounds}
+            onGround={(g) => store.setGround(g)}
+            onStyleLanguage={(id) => store.setStyleLanguage(id)}
+          />
+        </div>
       </TabsContent>
 
       <TabsContent value="text" className="grid gap-3">
@@ -149,7 +172,7 @@ export function StructuredEditor({
             <MediaPicker
               media={shownMedia}
               mediaKinds={mediaKinds}
-              ground={info.ground}
+              ground={doc.ground}
               orientation={orientation}
               multiSlide={false}
               onChange={handleMedia}

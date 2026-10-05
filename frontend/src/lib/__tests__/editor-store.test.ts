@@ -6,6 +6,7 @@ import {
   editorDocFromState,
   effectiveHidden,
   mediaFingerprint,
+  structureOf,
   type EditorDoc,
   type StoreChange,
 } from "@/lib/editor-store"
@@ -19,6 +20,9 @@ function baseDoc(over: Partial<EditorDoc> = {}): EditorDoc {
     mediaPosition: "auto",
     media: null,
     designSystemId: "default",
+    ground: "white",
+    styleLanguage: "",
+    category: "",
     ...over,
   }
 }
@@ -206,7 +210,7 @@ describe("EditorStore server sync", () => {
 
   it("revertStructure restores the last good structure and keeps typed text", () => {
     const s = new EditorStore(baseDoc())
-    const good = { templateId: s.doc.templateId, hidden: s.doc.hidden, mediaPosition: "auto", media: null, designSystemId: s.doc.designSystemId }
+    const good = structureOf(s.doc)
     s.setTemplate("broken")
     s.setSlot("headline", "typed meanwhile")
     s.revertStructure(good)
@@ -230,6 +234,9 @@ describe("EditorStore server sync", () => {
       slots: { headline: "H" },
       hidden: ["body"],
       media_position: "",
+      ground: "black",
+      style_language: "dark-luxury",
+      category: "PROJECT",
     } as unknown as EditorState
     expect(editorDocFromState(st)).toEqual({
       templateId: "t",
@@ -238,7 +245,19 @@ describe("EditorStore server sync", () => {
       mediaPosition: "auto",
       media: null,
       designSystemId: "default",
+      ground: "black",
+      styleLanguage: "dark-luxury",
+      category: "PROJECT",
     })
+  })
+
+  it("editorDocFromState coerces a missing/odd ground and language", () => {
+    // A pre-recipe server (or a hand-edited row) must not produce an invalid doc.
+    const st = { template_id: "t", slots: {} } as unknown as EditorState
+    const doc = editorDocFromState(st)
+    expect(doc.ground).toBe("white")
+    expect(doc.styleLanguage).toBe("")
+    expect(doc.category).toBe("")
   })
 })
 
@@ -249,6 +268,56 @@ describe("buildRefillBody", () => {
     const d = baseDoc()
     expect(buildRefillBody(d, d)).toBeNull()
     expect(buildRefillBody({ ...d, slots: { ...d.slots } }, d)).toBeNull()
+  })
+
+  it("a ground change is structural and sends only `ground`", () => {
+    const saved = baseDoc({ ground: "white" })
+    const doc = baseDoc({ ground: "black" })
+    const r = buildRefillBody(doc, saved)
+    expect(r?.structural).toBe(true)
+    // It must force a full re-fill, hence the structural fields.
+    expect(r?.body.template_id).toBe("square-editorial-stack")
+    expect(r?.body.hidden).toEqual([])
+    expect(r?.body.ground).toBe("black")
+    expect(r?.body.style_language).toBeUndefined()
+  })
+
+  it("a design-language change is structural and is sent verbatim", () => {
+    const saved = baseDoc({ styleLanguage: "" })
+    const doc = baseDoc({ styleLanguage: "dark-luxury" })
+    const r = buildRefillBody(doc, saved)
+    expect(r?.structural).toBe(true)
+    expect(r?.body.style_language).toBe("dark-luxury")
+  })
+
+  it('"" is a real language (the system\'s own), not "no change"', () => {
+    const saved = baseDoc({ styleLanguage: "bold-modern" })
+    const doc = baseDoc({ styleLanguage: "" })
+    const r = buildRefillBody(doc, saved)
+    expect(r?.structural).toBe(true)
+    expect(r?.body.style_language).toBe("")
+  })
+
+  it("a category change is structural and sent", () => {
+    const saved = baseDoc({ category: "WRITING" })
+    const doc = baseDoc({ category: "PROJECT" })
+    const r = buildRefillBody(doc, saved)
+    expect(r?.structural).toBe(true)
+    expect(r?.body.category).toBe("PROJECT")
+  })
+
+  it("docKey separates states that differ only by a recipe override", () => {
+    // The preview cache is keyed by docKey: if it ignored the overrides, a
+    // ground switch would reuse the previous ground's preview.
+    const k1 = docKey(baseDoc({ ground: "white", styleLanguage: "bold-modern" }), 1)
+    const k2 = docKey(baseDoc({ ground: "black", styleLanguage: "bold-modern" }), 1)
+    const k3 = docKey(baseDoc({ ground: "white", styleLanguage: "" }), 1)
+    const k4 = docKey(baseDoc({ ground: "white", styleLanguage: "bold-modern", category: "NOTE" }), 1)
+    expect(k1).not.toBe(k2)
+    expect(k1).not.toBe(k3)
+    expect(k1).not.toBe(k4)
+    // …and a real change is not a false positive.
+    expect(docKey(baseDoc({ ground: "white", styleLanguage: "bold-modern" }), 1)).toBe(k1)
   })
 
   it("text-only edit sends only the changed slots (cheap path)", () => {

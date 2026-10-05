@@ -701,10 +701,15 @@ class RefillRequest(BaseModel):
     """Structured content edit for a template-built format (no raw HTML).
 
     ``slots`` maps data-slot names (headline, subhead, body, …) to new text.
-    ``hidden`` / ``media_position`` / ``template_id`` / ``media`` trigger a
-    full template re-fill; otherwise only the slot texts are swapped in place
-    (media, illustration, and counters are preserved exactly). A
-    ``template_id`` on a post that has none converts a designer-LLM post.
+    ``hidden`` / ``media_position`` / ``template_id`` / ``media`` /
+    ``ground`` / ``style_language`` / ``category`` trigger a full template
+    re-fill; otherwise only the slot texts are swapped in place (media,
+    illustration, and counters are preserved exactly). A ``template_id`` on a
+    post that has none converts a designer-LLM post.
+
+    ``ground`` / ``style_language`` / ``category`` are ``None`` when omitted
+    (keep the recipe's value). Note ``style_language=""`` is meaningful — it
+    means "the design system's own language" — so it cannot be a plain default.
     """
 
     slots: dict[str, str] = Field(default_factory=dict)
@@ -718,10 +723,23 @@ class RefillRequest(BaseModel):
     # footer/logo come from the new system). Omitted = the format's current
     # system (a previous switch) or the task's.
     design_system_id: str = Field(default="", max_length=64)
+    # Per-format recipe overrides. Each is None = keep what the recipe says.
+    ground: str | None = Field(default=None, max_length=8)
+    style_language: str | None = Field(default=None, max_length=64)
+    category: str | None = Field(default=None, max_length=128)
+    # Persist the edit without rendering a PNG or running QC (the autosave
+    # path). Recipe -> HTML is Jinja-only; the browser render is a separate,
+    # expensive job (see POST …/rerender or refill with render=true).
+    render: bool = True
 
 
 def _as_dict(value) -> dict:
     return value if isinstance(value, dict) else {}
+
+
+def _next_revision(entry: dict) -> int:
+    """The revision the next persist will land on (mirrors _persist_format)."""
+    return int(_as_dict(_as_dict(entry).get("editor")).get("revision") or 0) + 1
 
 
 def _platform_entries(task) -> dict:
@@ -967,12 +985,30 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
         )
     switching = bool(target_template != current_template)
     converted = not current_template
+    # Recipe overrides. Each None keeps the recipe's own value; "" for
+    # style_language is a real setting ("the system's own language").
+    target_ground = recipe.ground if request.ground is None else request.ground
+    if target_ground not in ("white", "black"):
+        raise HTTPException(
+            status_code=422, detail=f"ground must be white or black (got {target_ground!r})"
+        )
+    target_language = (
+        recipe.style_language if request.style_language is None else request.style_language
+    )
+    target_category = recipe.category if request.category is None else request.category
+    switching_ground = target_ground != recipe.ground
+    switching_language = target_language != recipe.style_language
+    switching_category = bool(target_category != recipe.category)
+
     full = (
         switching
         or ds_switching
         or request.hidden is not None
         or request.media_position != "auto"
         or request.media is not None
+        or switching_ground
+        or switching_language
+        or switching_category
     )
 
     # The template row is only needed to *re-fill*; a text-only edit of a post
@@ -994,6 +1030,18 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
             status_code=422,
             detail=f"Template {target_template!r} is {row.family}, not {format_family(fmt_id)}",
         )
+    # A template only declares the grounds it was authored for. Refilling a
+    # black post onto a white-only template renders black CSS on a white-only
+    # layout, so refuse it up front instead of silently shipping a broken post.
+    if row is not None:
+        allowed = [g for g in (row.grounds or []) if g in ("white", "black")]
+        if allowed and target_ground not in allowed:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Template {target_template!r} is built for "
+                f"{'/'.join(allowed)} ground only — pick a template that "
+                f"supports {target_ground}, or switch the ground back",
+            )
     template_html = (row.html or "") if row is not None else ""
     kinds = media_kinds(template_html)
 
@@ -1015,11 +1063,11 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
     light, payloads = hoist_data_uris(prior_html)
 
     try:
-        ctx = await resolve_ds_context_strict(db, target_ds, recipe.style_language)
+        ctx = await resolve_ds_context_strict(db, target_ds, target_language)
     except DSResolutionError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    category = recipe.category
-    ground = recipe.ground
+    category = target_category
+    ground = target_ground
 
     # Layered copy: the recipe's copy (keeps text of currently-hidden slots),
     # then what the document renders now, then the edit itself.
@@ -1219,6 +1267,9 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
                 "origin": "template" if target_template else recipe.origin,
                 "template_id": target_template or recipe.template_id,
                 "design_system_id": target_ds,
+                "style_language": target_language,
+                "ground": target_ground,
+                "category": target_category,
                 "headline": merged.get("headline", ""),
                 "subhead": merged.get("subhead", ""),
                 "body": merged.get("body", ""),
@@ -1424,10 +1475,16 @@ def _editor_payload(
         "media": media,
         "media_kinds": media_kinds(template_html),
         "revision": int(persisted.get("revision") or 0),
+        # The PNG on disk was produced at this revision; a lower number means the
+        # saved HTML is ahead of the last render (the autosave path skips it).
+        "render_stale": bool(html)
+        and int(entry.get("rendered_revision") or 0) < int(persisted.get("revision") or 0),
         "design_system_id": recipe.design_system_id
         or str(source.get("design_system_id") or "")
         or "default",
-        "style_language": source.get("style_language") or "",
+        # Recipe-owned (falls back to the task value for pre-recipe rows).
+        "style_language": recipe.style_language,
+        "category": recipe.category,
         # Additive: what the template renders / can toggle (drives the form).
         "fields": detect_fields(template_html),
         "elements": detect_elements(template_html),
@@ -1496,14 +1553,21 @@ async def refill_format(
     request: RefillRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Apply a structured slot edit to a template-built format and re-render.
+    """Apply a structured slot edit to a template-built format.
 
     Text-only edits swap ``[data-slot]`` content in the current HTML (zero
-    LLM, media preserved). Element toggles, media position, media, or a
-    template switch re-fill the template deterministically, preserving baked
-    media. A ``template_id`` on a designer-LLM post converts it to a template
-    post (the original is kept as ``{fmt}.designer.html``). Runs the
-    deterministic hard gate (no vision audit) and persists like a rerender.
+    LLM, media preserved). Element toggles, media position, media, a ground /
+    design-language / category change, or a template switch re-fill the
+    template deterministically, preserving baked media. A ``template_id`` on a
+    designer-LLM post converts it to a template post (the original is kept as
+    ``{fmt}.designer.html``).
+
+    ``render=false`` persists the recipe + HTML only — no Chromium render, no
+    QC, and no PNG in the response. Recipe -> HTML is Jinja-only, so this is
+    the autosave path; it turns a ~3.3s save (headless render + 128KB base64
+    payload) into tens of ms. The format's PNG then lags the HTML, which
+    ``GET …/editor`` reports as ``render_stale`` so the client can offer an
+    explicit render.
 
     Serialized per (task, format): the latest document is re-read under the
     lock so concurrent edits of different slots merge. The response carries
@@ -1520,25 +1584,43 @@ async def refill_format(
         html, meta = await _build_refill(task, fmt_id, request, db)
         fmt_id = meta["fmt_id"]
         width, height = meta["width"], meta["height"]
+        prev_entry = _as_dict(_platform_entries(task).get(fmt_id))
+        prev_status = str(prev_entry.get("status") or "verified")
+        prev_score = int(prev_entry.get("quality_score") or 0)
+        prev_issues = list(prev_entry.get("quality_issues") or [])
 
-        try:
-            from app.services.composer import run_hard_checks
+        issues: list[str] = []
+        if request.render:
+            try:
+                from app.services.composer import run_hard_checks
 
-            issues = await run_hard_checks(html, meta["ctx"], width, height, meta["category"])
-        except Exception as e:  # noqa: BLE001 — checks are advisory; never lose the edit
-            log.warning("[refill] hard checks failed for %s/%s: %s", task_id, fmt_id, e)
-            issues = [f"Automatic checks unavailable: {e}"]
-        passed = not issues
-        score = 100 if passed else 20
-        critique = "No issues." if passed else "Fix: " + "; ".join(issues)
+                issues = await run_hard_checks(
+                    html, meta["ctx"], width, height, meta["category"]
+                )
+            except Exception as e:  # noqa: BLE001 — checks are advisory
+                log.warning("[refill] hard checks failed for %s/%s: %s", task_id, fmt_id, e)
+                issues = [f"Automatic checks unavailable: {e}"]
+            passed = not issues
+            score = 100 if passed else 20
+            critique = "No issues." if passed else "Fix: " + "; ".join(issues)
+        else:
+            # No render → the previous verdict still stands for the PNG on disk,
+            # but this revision has not been checked yet.
+            passed = None
+            score = prev_score
+            issues = prev_issues
+            critique = "Not checked — this revision has not been rendered yet."
 
-        png_bytes = await _render_png_safe(html, width, height)
-        if not png_bytes:
-            issues.append(
-                "PNG render unavailable — the HTML was saved; re-render to regenerate the image"
-            )
-            passed = False
-            score = min(score, 40)
+        png_bytes = None
+        if request.render:
+            png_bytes = await _render_png_safe(html, width, height)
+            if not png_bytes:
+                issues.append(
+                    "PNG render unavailable — the HTML was saved; re-render to "
+                    "regenerate the image"
+                )
+                passed = False
+                score = min(score, 40)
 
         editor = meta["editor"]
         media_kind = editor.get("media_kind")
@@ -1548,7 +1630,11 @@ async def refill_format(
             media = _derive_media(html, (row.html or "") if row is not None else "")
             media_kind = media["kind"]
         patch = {
-            "status": "verified" if passed else "needs_review",
+            "status": (
+                ("verified" if passed else "needs_review")
+                if passed is not None
+                else prev_status
+            ),
             "quality_score": score,
             "quality_issues": issues,
             "template_id": meta["template_id"],
@@ -1558,6 +1644,10 @@ async def refill_format(
             # transition (see services/format_recipe).
             "recipe": recipe_json(meta["recipe"]),
         }
+        # The PNG on disk corresponds to this revision only when we just rendered.
+        patch["rendered_revision"] = _next_revision(prev_entry) if request.render else int(
+            prev_entry.get("rendered_revision") or 0
+        )
         if meta["converted"]:
             patch["converted_from"] = "designer"
             patch["designer_backup"] = f"{fmt_id}.designer.html"
@@ -1600,5 +1690,9 @@ async def refill_format(
             "converted": meta["converted"],
             "slots": meta["slots"],
             "design_system_id": meta["design_system_id"],
+            "style_language": meta["recipe"].style_language,
+            "ground": meta["recipe"].ground,
+            "category": meta["recipe"].category,
+            "rendered": bool(request.render),
             "remapped": meta["remapped"],
         }

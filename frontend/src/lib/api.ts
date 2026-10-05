@@ -201,6 +201,13 @@ export interface RefillRequest {
   media?: Record<string, string>
   /** Re-fill under another design system (template is remapped server-side). */
   design_system_id?: string
+  /** Per-format recipe overrides. Omit to keep the recipe's value. Note
+   *  `style_language: ""` is meaningful — it means "the system's own language". */
+  ground?: string | null
+  style_language?: string | null
+  category?: string | null
+  /** Render a PNG + run QC. False = autosave (recipe + HTML only, no browser). */
+  render?: boolean
 }
 
 /** Persisted editor metadata the server keeps per (task, format). */
@@ -213,12 +220,14 @@ export interface EditorMeta {
 
 export interface RefillResponse {
   format: string
-  pass: boolean
+  /** null when the save skipped rendering (autosave) — nothing was re-checked. */
+  pass: boolean | null
   quality: {
     score: number
     issues: string[]
     critique: string
   }
+  /** Empty unless this save rendered (``render: true``). */
   png_b64: string
   template_id: string
   /** Finalized document as persisted — the client never has to refetch it. */
@@ -231,6 +240,11 @@ export interface RefillResponse {
   converted?: boolean
   /** Effective design system after the refill (override or task default). */
   design_system_id?: string
+  style_language?: string
+  ground?: string
+  category?: string
+  /** Whether this call actually rendered a PNG + ran QC. */
+  rendered?: boolean
   /** Template remap applied by a design-system switch, if any. */
   remapped?: { from: string; to: string } | null
 }
@@ -286,7 +300,6 @@ export interface EditorMedia {
   kind: "none" | "upload" | "photo" | "illustration"
   [key: string]: unknown
 }
-
 export interface EditorState {
   editable: boolean
   convertible: boolean
@@ -303,7 +316,11 @@ export interface EditorState {
   media_kinds: Array<"image" | "illustration">
   revision: number
   design_system_id: string
+  /** "" = the design system's own language (not an explicit preset). */
   style_language: string
+  category?: string
+  /** The saved HTML is ahead of the PNG on disk (an autosave skipped the render). */
+  render_stale?: boolean
 }
 
 export function getEditorState(
@@ -799,6 +816,9 @@ export interface StyleLanguage {
   media_policy: string
   accent_tokens: Record<string, string>
   palette_tokens: Record<string, string>
+  /** "seed" (immutable built-in), "bundled", or "manual" (Studio-owned). */
+  source?: string
+  is_active?: boolean
 }
 
 export function listStyleLanguages(): Promise<StyleLanguage[]> {

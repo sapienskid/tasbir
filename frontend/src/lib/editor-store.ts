@@ -21,11 +21,23 @@ export interface EditorDoc {
   media: MediaChoice | null
   /** Effective design system (per-format override or the task's). */
   designSystemId: string
+  /** Per-format recipe overrides (see services/format_recipe). "" language =
+   *  the design system's own. */
+  ground: "white" | "black"
+  styleLanguage: string
+  category: string
 }
 
 export type Structure = Pick<
   EditorDoc,
-  "templateId" | "hidden" | "mediaPosition" | "media" | "designSystemId"
+  | "templateId"
+  | "hidden"
+  | "mediaPosition"
+  | "media"
+  | "designSystemId"
+  | "ground"
+  | "styleLanguage"
+  | "category"
 >
 
 export type ChangeSource = "form" | "inline" | "undo" | "redo" | "system" | "revert"
@@ -88,12 +100,19 @@ export function structureOf(doc: EditorDoc): Structure {
     mediaPosition: doc.mediaPosition,
     media: doc.media,
     designSystemId: doc.designSystemId,
+    ground: doc.ground,
+    styleLanguage: doc.styleLanguage,
+    category: doc.category,
   }
 }
 
 export function sameStructure(a: Structure, b: Structure): boolean {
   if (a.templateId !== b.templateId || a.mediaPosition !== b.mediaPosition) return false
   if (a.designSystemId !== b.designSystemId) return false
+  // Recipe overrides each force a full template re-fill server-side.
+  if (a.ground !== b.ground) return false
+  if (a.styleLanguage !== b.styleLanguage) return false
+  if (a.category !== b.category) return false
   if (!mediaEqual(a.media, b.media)) return false
   if (a.hidden === null || b.hidden === null) return a.hidden === b.hidden
   return sameList(a.hidden, b.hidden)
@@ -143,6 +162,9 @@ export function editorDocFromState(s: EditorState): EditorDoc {
     mediaPosition: s.media_position || "auto",
     media: null,
     designSystemId: s.design_system_id || "default",
+    ground: s.ground === "black" ? "black" : "white",
+    styleLanguage: s.style_language || "",
+    category: s.category || "",
   }
 }
 
@@ -181,6 +203,9 @@ export function buildRefillBody(
   const changedSlots = changedSlotNames(doc.slots, saved.slots).filter((n) => n in doc.slots)
   const tplChanged = doc.templateId !== saved.templateId
   const dsChanged = doc.designSystemId !== saved.designSystemId
+  const groundChanged = doc.ground !== saved.ground
+  const languageChanged = doc.styleLanguage !== saved.styleLanguage
+  const categoryChanged = doc.category !== saved.category
   const hiddenChanged = !sameList(
     effectiveHidden(doc, ctx.defaultHidden),
     effectiveHidden(saved, ctx.defaultHidden)
@@ -190,7 +215,15 @@ export function buildRefillBody(
   const live = ctx.liveSlots
   const slotStructural = !!live && changedSlots.some((n) => !live.has(n))
   const structural =
-    tplChanged || dsChanged || hiddenChanged || posChanged || mediaChanged || slotStructural
+    tplChanged ||
+    dsChanged ||
+    groundChanged ||
+    languageChanged ||
+    categoryChanged ||
+    hiddenChanged ||
+    posChanged ||
+    mediaChanged ||
+    slotStructural
   if (!structural && changedSlots.length === 0) return null
 
   const body: RefillRequest = {}
@@ -198,6 +231,9 @@ export function buildRefillBody(
     body.slots = Object.fromEntries(changedSlots.map((n) => [n, doc.slots[n]]))
   }
   if (dsChanged) body.design_system_id = doc.designSystemId
+  if (groundChanged) body.ground = doc.ground
+  if (languageChanged) body.style_language = doc.styleLanguage
+  if (categoryChanged) body.category = doc.category
   if (structural) {
     body.template_id = doc.templateId
     body.hidden = [...effectiveHidden(doc, ctx.defaultHidden)]
@@ -216,6 +252,9 @@ export function docKey(doc: EditorDoc, revision: number, defaults?: HiddenDefaul
     revision,
     doc.templateId,
     doc.designSystemId,
+    doc.ground,
+    doc.styleLanguage,
+    doc.category,
     [...effectiveHidden(doc, defaults)].sort(),
     doc.mediaPosition,
     mediaFingerprint(doc.media),
@@ -368,6 +407,23 @@ export class EditorStore {
 
   setHidden(hidden: readonly string[] | null): boolean {
     return this.commit({ ...this._doc, hidden: hidden ? [...hidden] : null }, "form", null)
+  }
+
+  /** Switch the post's ground (white/black). A full re-fill, one undo step. */
+  setGround(ground: "white" | "black"): boolean {
+    if (ground === this._doc.ground) return false
+    return this.commit({ ...this._doc, ground }, "form", null)
+  }
+
+  /** Switch the post's design language. "" = the design system's own. */
+  setStyleLanguage(styleLanguage: string): boolean {
+    if (styleLanguage === this._doc.styleLanguage) return false
+    return this.commit({ ...this._doc, styleLanguage }, "form", null)
+  }
+
+  setCategory(category: string): boolean {
+    if (category === this._doc.category) return false
+    return this.commit({ ...this._doc, category }, "form", null)
   }
 
   setMediaPosition(pos: string): boolean {
