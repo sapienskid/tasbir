@@ -15,14 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
+from app.core.ratelimit import interactive_rate_limiter
 from app.db.repositories.platforms import PlatformRepository
 from app.services import platforms as platform_service
+from app.services.platforms import VALID_FAMILIES
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(interactive_rate_limiter)])
 
-_VALID_FAMILIES = {"square", "portrait", "story", "landscape"}
 
 
 class PlatformCreate(BaseModel):
@@ -45,10 +46,10 @@ class PlatformUpdate(BaseModel):
 
 
 def _validate_family(family: str) -> None:
-    if family not in _VALID_FAMILIES:
+    if family not in VALID_FAMILIES:
         raise HTTPException(
             status_code=422,
-            detail=f"family must be one of {sorted(_VALID_FAMILIES)}",
+            detail=f"family must be one of {sorted(VALID_FAMILIES)}",
         )
 
 

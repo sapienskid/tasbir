@@ -22,7 +22,9 @@ _CACHE_TTL = 5.0
 _platform_cache: list[dict] | None = None
 _platform_cache_ts = 0.0
 
-_VALID_FAMILIES = {"square", "portrait", "story", "landscape"}
+# The single source of truth for platform families — imported by the API layer
+# and published to the Studio via GET /api/settings/meta.
+VALID_FAMILIES = ("square", "portrait", "story", "landscape")
 
 
 @dataclass
@@ -132,9 +134,33 @@ def get_platform_dims(platform_id: str) -> tuple[int, int] | None:
     return int(row["width"]), int(row["height"])
 
 
+# Seed dimensions per family, used only when the platform table has no active
+# row for a family (unknown family / an operator deactivated them all).
+DEFAULT_FAMILY_DIMS: dict[str, tuple[int, int]] = {
+    "square": (1080, 1080),
+    "portrait": (1080, 1350),
+    "story": (1080, 1920),
+    "landscape": (1200, 627),
+}
+
+
+def family_dims(family: str) -> tuple[int, int]:
+    """Dimensions for a format family, derived from the platforms table.
+
+    The first *active* platform in that family wins (``_platforms()`` is already
+    ordered by ``sort_order, id``), so editing a platform's size in the Studio
+    changes what template preview/validation renders at. Falls back to
+    :data:`DEFAULT_FAMILY_DIMS` when the family has no active platform.
+    """
+    for row in _platforms():
+        if row.get("family") == family and row.get("is_active", True):
+            return int(row["width"]), int(row["height"])
+    return DEFAULT_FAMILY_DIMS.get(family, DEFAULT_FAMILY_DIMS["square"])
+
+
 def family_of(platform_id: str) -> str:
     row = get_platform(platform_id)
-    if row and row.get("family") in _VALID_FAMILIES:
+    if row and row.get("family") in VALID_FAMILIES:
         return row["family"]
     # Carousel slide ids (instagram-carousel-N / instagram-carousel-portrait-N)
     # resolve to their base platform's family.
@@ -143,7 +169,7 @@ def family_of(platform_id: str) -> str:
     m = _re.match(r"^(.+)-(\d+)$", platform_id)
     base = m.group(1) if m else platform_id
     row = get_platform(base)
-    if row and row.get("family") in _VALID_FAMILIES:
+    if row and row.get("family") in VALID_FAMILIES:
         return row["family"]
     dims = get_platform_dims(base)
     if dims:

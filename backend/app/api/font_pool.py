@@ -15,14 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
+from app.core.ratelimit import interactive_rate_limiter
 from app.db.repositories.fonts import FontRepository
 from app.services import fonts as font_service
+from app.services.fonts import VALID_ROLES
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
-
-_VALID_ROLES = {"sans", "serif", "display", "mono"}
+router = APIRouter(dependencies=[Depends(interactive_rate_limiter)])
 
 
 class FontCreate(BaseModel):
@@ -43,9 +43,9 @@ class FontUpdate(BaseModel):
 
 
 def _validate_role(role: str) -> None:
-    if role not in _VALID_ROLES:
+    if role not in VALID_ROLES:
         raise HTTPException(
-            status_code=422, detail=f"role must be one of {sorted(_VALID_ROLES)}"
+            status_code=422, detail=f"role must be one of {sorted(VALID_ROLES)}"
         )
 
 

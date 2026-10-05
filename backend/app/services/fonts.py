@@ -16,6 +16,10 @@ _FONT_CACHE_TTL = 5.0
 _font_cache: list[dict] | None = None
 _font_cache_ts = 0.0
 
+# The single source of truth for curated-font roles — imported by the API layer
+# and published to the Studio via GET /api/settings/meta.
+VALID_ROLES = ("sans", "serif", "display", "mono")
+
 
 def font_to_dict(row) -> dict:
     from app.core.time import iso_utc
