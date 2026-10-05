@@ -6,7 +6,61 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Per-format ground and design language on AI-generated posts** — an AI post
+  could never change its own ground or design language, because those values were
+  stored only at *task* level (`strategic_brief.ground`, `source_data.style_language`)
+  and baked in at generation time. They are now part of the format's recipe and
+  editable per format, so the Studio's structured editor has the same controls
+  Manual Compose has (`components/tasks/recipe-controls.tsx`). Each is a recipe
+  override that forces a full template re-fill.
+- **`category` is a per-format recipe override** too, closing the last of the
+  three task-level values that blocked parity with the composer.
+- **"Convert to a template" for designer posts** (`components/tasks/convert-panel.tsx`)
+  — the backend could always convert a designer-LLM post, but the Studio had no
+  control for it: the only trigger was switching design system, and that dropdown
+  only renders with 2+ design systems. With a single system there was no way to
+  convert at all, so those posts were uneditable except through raw HTML. The
+  dialog picks a template, warns that the freeform layout is replaced, and notes
+  that the original is kept as `{fmt}.designer.html`.
+- **`GET …/editor` reports `render_stale`** and the editor shows a "Render PNG"
+  action with a "PNG is behind the saved design" hint, so the save/render split
+  is visible rather than silent.
+
 ### Changed
+- **Saving a post no longer renders it.** `POST …/refill` takes `render`
+  (default `true`, so existing clients are unaffected); autosave sends
+  `render: false`, which persists the recipe + HTML and skips the headless
+  render and the hard checks. Measured on a live carousel post: **3.3s → 37ms**,
+  and the response drops from ~134 KB to ~11 KB (128 KB of the old payload was
+  the base64 PNG). This is the fix for "the AI editor feels slow" — saves are
+  serialized per task, so a 3.3s save was blocking every subsequent edit of every
+  other format of that task. Rendering is now an explicit action; until it runs,
+  the PNG lags the HTML and `render_stale` says so.
+
+### Fixed
+- **A ground/template mismatch is now rejected instead of silently mis-rendered.**
+  Refill never consulted the template's `grounds` list, so a black-ground post
+  could be refilled onto a `grounds: ["white"]` template: the template's
+  `{% if ground == "black" %}` branch still fired and produced black CSS on a
+  white-only layout, with no 422 and no warning. The picker badge that hinted at
+  the restriction was cosmetic.
+
+### Changed (internal)
+- **`FormatRecipe` is the single record of a format** (`app/services/format_recipe.py`).
+  `template_id` / `copy` / `editor` were per-format while `ground`,
+  `style_language` and `category` were task-level, so re-rendering had to
+  re-derive values that belonged to the format. `read_recipe()` synthesizes a
+  recipe for rows written before recipes existed, reproducing the previous
+  derivation exactly — no migration, existing posts render identically — and a
+  corrupt stored recipe falls back to synthesis rather than bricking the post.
+  Legacy keys are still written in sync, so EditorState, the result shape,
+  media_credits and retries are unaffected.
+- The recipe flattens copy into `headline`/`subhead`/`body`/`tagline`/`extra`
+  rather than nesting it, since those are already the slot names the editor and
+  templates speak.
+
+### Changed (earlier in this release)
 - **Settings is now nested routes with a left nav** — `/settings` redirects to
   `/settings/platforms`, and each section (`platforms`, `fonts`, `runtime`,
   `system`) is its own route and its own lazily-loaded chunk. Previously the page

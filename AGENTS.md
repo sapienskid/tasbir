@@ -639,6 +639,36 @@ bounded number input from `spec.type`). Adding a knob means adding it to
 `DEFAULT_APP_SETTINGS` only — no frontend change, and a boolean can never
 round-trip through a number input again.
 
+**Every format carries a recipe.** `app/services/format_recipe.py` defines a
+`FormatRecipe` — the complete, self-contained description of one rendered post:
+`origin`, `template_id`, `design_system_id`, `style_language`, `ground`,
+`category`, the flattened copy, `hidden`, `media_position`, `media`. It lives
+inside the `result` JSON column on `platforms[fmt]` (not a DB table).
+Re-rendering a format is "apply the recipe", with no reference to how it was
+originally produced.
+
+`ground` / `style_language` / `category` used to live only at *task* level
+(`strategic_brief`, `source_data`) — which is exactly why a format could not
+carry its own and the editor had to re-derive them on every refill. They are
+copied into the recipe at generation time and are now **per-format editable**
+(via `RefillRequest`, so the two editors speak one model).
+
+`read_recipe()` is total and lazy: an entry written before recipes existed is
+synthesized from the old scattered fields + task-level fallbacks, reproducing
+the previous derivation exactly, so **there is no migration** and existing posts
+render identically. A corrupt stored recipe falls back to synthesis rather than
+bricking the post. The legacy `template_id` / `copy` / `editor` keys are still
+written in sync, so existing consumers (EditorState, the result shape,
+media_credits, retries) are unaffected.
+
+**Saving is not rendering.** `refill` takes `render` (default `true`).
+`render: false` — what autosave uses — persists the recipe + HTML and skips the
+Playwright render and QC: **3.3s → ~37ms**, and the response drops from ~134 KB
+(128 KB of it base64 PNG) to ~11 KB. The editor's "Render PNG" action
+(`session.renderNow()`) does the render and runs the checks; until then the
+format's PNG lags its HTML, which `GET …/editor` reports as `render_stale` (via
+`rendered_revision` vs `revision`) so the UI can say so.
+
 **Family canvas comes from the platforms table.** `platforms.family_dims()`
 returns the first *active* platform's dimensions per family, falling back to
 `DEFAULT_FAMILY_DIMS`. Template preview/validation call it instead of a local
@@ -1170,10 +1200,12 @@ All three are interactive-tier endpoints (own rate bucket, see
 - `GET /tasks/{id}/formats/{fmt}/editor` → `{editable, convertible, reason,
   template_id, family, ground, width, height, slots, hidden|null,
   media_position, media{kind,…no base64}, media_kinds, revision,
-  design_system_id, style_language, fields, elements}`. `reason` is
-  `designer` (convertible), `manual`, `running`, `template_missing`, or
-  `expired`. Toggles / media position / media kind survive a reload (persisted
-  in `result.platforms[fmt].editor` on every refill).
+  render_stale, design_system_id, style_language, category, fields, elements}`.
+  `reason` is `designer` (convertible), `manual`, `running`, `template_missing`,
+  or `expired`. Toggles / media position / media kind survive a reload
+  (persisted in the format's recipe on every refill). `render_stale` is true when
+  the saved HTML is ahead of the PNG on disk (`rendered_revision < revision`) —
+  i.e. an autosave has run since the last render.
 - `POST /tasks/{id}/formats/{fmt}/refill/preview` — body = the refill body;
   returns `{html, width, height, template_id, slots, converted, editor}`.
   Same validation and 404/409/422 as refill but **no PNG, no hard checks, no
@@ -1181,14 +1213,24 @@ All three are interactive-tier endpoints (own rate bucket, see
   2 MB uploaded image). Shares `_build_refill` with refill, so it is exactly
   what a save would persist.
 - `POST /tasks/{id}/formats/{fmt}/refill` — body `{slots, hidden, media_position,
-  template_id, media}`. Serialized per (task, format); re-reads the latest HTML
-  under the lock so concurrent edits merge. Files are written atomically (temp +
-  `os.replace`), then the task row is updated (per-task read-modify-write).
-  Response adds `html`, `revision` (+1 per persist), `saved_at`, `editor`,
-  `converted`, `slots` to `{format, pass, quality, png_b64, template_id}`. A PNG
-  service failure still saves the HTML and reports the issue. A `template_id` on
-  a designer-LLM post converts it (copy from the stored copy JSON; the original
-  is kept as `{fmt}.designer.html`, hidden from the files list).
+  template_id, media, design_system_id, ground, style_language, category, render}`.
+  `ground` / `style_language` / `category` are per-format recipe overrides; each
+  omitted field keeps the recipe's value, and `style_language: ""` is a real
+  setting ("the design system's own language") rather than "no change". Any of
+  them forces a full template re-fill. `ground` must be `white`/`black` **and
+  supported by the target template's `grounds`** — refilling a black post onto a
+  white-only template is a 422, not a silently broken render.
+  Serialized per (task, format); re-reads the latest HTML under the lock so
+  concurrent edits merge. Files are written atomically (temp + `os.replace`),
+  then the task row is updated (per-task read-modify-write). Response adds
+  `html`, `revision` (+1 per persist), `saved_at`, `editor`, `converted`, `slots`,
+  `style_language`, `ground`, `category`, `rendered` to
+  `{format, pass, quality, png_b64, template_id}`. `render: false` (the autosave
+  path) skips the render and QC: `png_b64` is empty, `pass` is `null` (nothing was
+  re-checked) and `rendered` is false, in ~37 ms instead of ~3.3 s. A PNG service
+  failure still saves the HTML and reports the issue. A `template_id` on a
+  designer-LLM post converts it (copy from the recipe; the original is kept as
+  `{fmt}.designer.html`, hidden from the files list).
 
 ### POST /tasks/{id}/formats/{fmt}/retry
 Re-runs the **designer LLM** for one format (with the previous verifier critique),
