@@ -23,6 +23,7 @@ from app.services.artifacts import (
     list_output_files,
     resolve_output_file,
 )
+from app.services.format_recipe import read_recipe, recipe_json
 from app.services.formats import get_format_info, validate_platforms
 
 log = logging.getLogger(__name__)
@@ -900,12 +901,12 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
         raise HTTPException(status_code=404, detail=f"Format {fmt_id!r} is not part of this task")
     entry = _as_dict(entry)
     source = _as_dict(task.source_data)
+    brief_now = _as_dict(_as_dict(task.result).get("strategic_brief"))
+    # Single source of truth for this format. Legacy rows are synthesized from
+    # the old scattered fields + task-level fallbacks, so they behave identically.
+    recipe = read_recipe(entry, source_data=source, brief=brief_now)
     prev_editor = _as_dict(entry.get("editor"))
-    current_ds = (
-        str(prev_editor.get("design_system_id") or "")
-        or str(source.get("design_system_id") or "")
-        or "default"
-    )
+    current_ds = recipe.design_system_id or str(source.get("design_system_id") or "") or "default"
     requested_ds = request.design_system_id.strip()
     target_ds = requested_ds or current_ds
     ds_switching = bool(requested_ds and requested_ds != current_ds)
@@ -921,7 +922,7 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
             raise HTTPException(
                 status_code=422, detail=f"Design system {requested_ds!r} is inactive"
             )
-    current_template = str(entry.get("template_id") or "")
+    current_template = recipe.template_id
     requested_template = request.template_id.strip()
     target_template = requested_template or current_template
     remapped: dict[str, str] | None = None
@@ -1014,28 +1015,23 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
     light, payloads = hoist_data_uris(prior_html)
 
     try:
-        ctx = await resolve_ds_context_strict(
-            db, target_ds, source.get("style_language") or ""
-        )
+        ctx = await resolve_ds_context_strict(db, target_ds, recipe.style_language)
     except DSResolutionError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    brief = _as_dict(_as_dict(task.result).get("strategic_brief"))
-    category = source.get("category") or brief.get("category") or ""
-    ground = brief.get("ground", "white")
-    if ground not in ("white", "black"):
-        ground = "white"
+    category = recipe.category
+    ground = recipe.ground
 
-    # Layered copy: the stored copy (keeps text of currently-hidden slots),
+    # Layered copy: the recipe's copy (keeps text of currently-hidden slots),
     # then what the document renders now, then the edit itself.
-    merged = _stored_copy_flat(entry)
+    merged = recipe.flat_slots()
     merged.update(extract_slots(light))
     merged.update(request.slots)
 
     editor = {
-        "hidden": prev_editor.get("hidden"),
-        "media_position": prev_editor.get("media_position") or "auto",
-        "media_kind": prev_editor.get("media_kind"),
-        "media": prev_editor.get("media"),
+        "hidden": recipe.hidden,
+        "media_position": recipe.media_position or "auto",
+        "media_kind": (recipe.media or {}).get("kind") if recipe.media else None,
+        "media": recipe.media,
         "design_system_id": target_ds,
     }
 
@@ -1217,6 +1213,24 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
             "badge": None,
         },
         "editor": editor,
+        # The recipe is the durable record; everything above is derived from it.
+        "recipe": recipe.model_copy(
+            update={
+                "origin": "template" if target_template else recipe.origin,
+                "template_id": target_template or recipe.template_id,
+                "design_system_id": target_ds,
+                "headline": merged.get("headline", ""),
+                "subhead": merged.get("subhead", ""),
+                "body": merged.get("body", ""),
+                "tagline": merged.get("tagline", ""),
+                "extra": {
+                    k[6:]: v for k, v in merged.items() if k.startswith("extra.") and v
+                },
+                "hidden": editor.get("hidden"),
+                "media_position": editor.get("media_position") or "auto",
+                "media": editor.get("media"),
+            }
+        ),
         "prior_html": prior_html,
         "category": category,
         "ground": ground,
@@ -1384,33 +1398,33 @@ def _editor_payload(
     fmt = get_format_info(fmt_id)
     source = _as_dict(task.source_data)
     brief = _as_dict(_as_dict(task.result).get("strategic_brief"))
-    ground = brief.get("ground", "white")
     template_html = (row.html or "") if row is not None else ""
     persisted = _as_dict(entry.get("editor"))
+    recipe = read_recipe(entry, source_data=source, brief=brief)
 
-    slots = _stored_copy_flat(entry)
+    slots = recipe.flat_slots()
     if html:
         slots.update(extract_slots(html))
-    media = persisted.get("media")
+    media = recipe.media
     if not isinstance(media, dict) or not media.get("kind"):
         media = _derive_media(html, template_html) if html else {"kind": "none"}
-    hidden = persisted.get("hidden")
+    hidden = recipe.hidden
     return {
         "editable": editable,
         "convertible": convertible,
         "reason": reason,
-        "template_id": str(entry.get("template_id") or ""),
+        "template_id": recipe.template_id,
         "family": format_family(fmt_id),
-        "ground": ground if ground in ("white", "black") else "white",
+        "ground": recipe.ground,
         "width": fmt.width,
         "height": fmt.height,
         "slots": slots,
         "hidden": list(hidden) if isinstance(hidden, list) else None,
-        "media_position": persisted.get("media_position") or "auto",
+        "media_position": recipe.media_position or "auto",
         "media": media,
         "media_kinds": media_kinds(template_html),
         "revision": int(persisted.get("revision") or 0),
-        "design_system_id": str(persisted.get("design_system_id") or "")
+        "design_system_id": recipe.design_system_id
         or str(source.get("design_system_id") or "")
         or "default",
         "style_language": source.get("style_language") or "",
@@ -1539,6 +1553,10 @@ async def refill_format(
             "quality_issues": issues,
             "template_id": meta["template_id"],
             "copy": json.dumps(meta["copy"]),
+            # The recipe is the durable per-format record; the legacy keys above
+            # stay in sync so existing consumers are unaffected during the
+            # transition (see services/format_recipe).
+            "recipe": recipe_json(meta["recipe"]),
         }
         if meta["converted"]:
             patch["converted_from"] = "designer"

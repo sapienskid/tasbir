@@ -208,7 +208,38 @@ def generate_task(self, task_id: str, source_data: dict):
             brief = state.get("strategic_brief", {})
             format_tasks = state.get("format_tasks", {})
 
+            from app.services.format_recipe import FormatRecipe, parse_copy, recipe_json
             from app.services.formats import is_carousel_base
+
+            def _recipe_for(fmt_id: str, ft: dict) -> dict:
+                """Self-contained per-format recipe (see services/format_recipe).
+
+                Ground/language/category used to live only at task level, which
+                is why a format could not carry its own. They are copied in here
+                once, at generation time, and are authoritative from then on.
+                """
+                _copy_d = parse_copy(ft.get("copy"))
+                return recipe_json(
+                    FormatRecipe(
+                        origin="template" if ft.get("template_id") else "designer",
+                        template_id=str(ft.get("template_id") or ""),
+                        design_system_id=str(source_data.get("design_system_id") or ""),
+                        style_language=str(source_data.get("style_language") or ""),
+                        ground=(
+                            brief.get("ground")
+                            if brief.get("ground") in ("white", "black")
+                            else "white"
+                        ),
+                        category=str(
+                            source_data.get("category") or brief.get("category") or ""
+                        ),
+                        headline=str(_copy_d.get("headline") or ""),
+                        subhead=str(_copy_d.get("subhead") or ""),
+                        body=str(_copy_d.get("body") or ""),
+                        tagline=str(_copy_d.get("tagline") or ""),
+                        extra=dict(_copy_d.get("extra") or {}),
+                    )
+                )
 
             platform_results = {
                 fmt_id: {
@@ -219,6 +250,7 @@ def generate_task(self, task_id: str, source_data: dict):
                     "template_id": ft.get("template_id"),
                     "error": ft.get("error"),
                     "copy": ft.get("copy", ""),
+                    "recipe": _recipe_for(fmt_id, ft),
                     **({"copy_qa": (state.get("copy_qa") or {}).get(fmt_id)}
                        if (state.get("copy_qa") or {}).get(fmt_id) else {}),
                     **({"publish": (state.get("publish") or {}).get(fmt_id)}
