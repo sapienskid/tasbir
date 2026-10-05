@@ -10,12 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
+from app.core.ratelimit import interactive_rate_limiter
 from app.db.repositories.agents import AgentRepository
 from app.services import agents as agent_service
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(interactive_rate_limiter)])
 
 class AgentUpdate(BaseModel):
     """Editable agent fields.

@@ -142,3 +142,17 @@ async def rate_limiter(
     :func:`interactive`.
     """
     await consume(request_tier(request), api_key, settings)
+
+
+async def interactive_rate_limiter(
+    request: Request,
+    api_key: str | None = Depends(api_key_header),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """Force the interactive bucket for every route on the router.
+
+    Used by the settings/config routers: browsing the Studio (Settings,
+    Agents, Design Systems) is not generation traffic and must not compete
+    with ``POST /generate`` for the small default bucket.
+    """
+    await consume(TIER_INTERACTIVE, api_key, settings)

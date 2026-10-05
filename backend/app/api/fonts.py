@@ -1,10 +1,11 @@
 """Google Fonts search API — used by the design-system font picker."""
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.core.ratelimit import interactive_rate_limiter
 from app.services.google_fonts import default_fonts, search_fonts
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(interactive_rate_limiter)])
 
 
 @router.get("/search")

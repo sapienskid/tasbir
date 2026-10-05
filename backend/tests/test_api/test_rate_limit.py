@@ -100,6 +100,47 @@ class TestInteractiveTier:
         await authed_client.get("/api/compose/illustration", headers=h)
         assert "rl:interactive:test-key" in seen and "rl:token:test-key" not in seen
 
+    async def test_config_routes_are_interactive(self, authed_client: AsyncClient, monkeypatch):
+        """Browsing config must not draw from the small generation bucket."""
+        seen: dict = {}
+        self._fake_redis(monkeypatch, seen)
+        h = {"x-api-key": "test-key"}
+        for url in (
+            "/api/platforms",
+            "/api/fonts/pool",
+            "/api/fonts/search",
+            "/api/settings",
+            "/api/settings/meta",
+            "/api/agents",
+            "/api/design-languages",
+            "/api/system/info",
+            "/api/system/export",
+        ):
+            await authed_client.get(url, headers=h)
+        assert "rl:interactive:test-key" in seen, "config routes must use the interactive bucket"
+        assert "rl:token:test-key" not in seen
+
+    async def test_config_writes_are_interactive(self, authed_client: AsyncClient, monkeypatch):
+        seen: dict = {}
+        self._fake_redis(monkeypatch, seen)
+        h = {"x-api-key": "test-key"}
+        r = await authed_client.put(
+            "/api/settings", headers=h, json={"values": {"templates.recent_limit": 9}}
+        )
+        assert r.status_code == 200, r.text
+        assert "rl:interactive:test-key" in seen and "rl:token:test-key" not in seen
+        await authed_client.post("/api/settings/reset", headers=h)
+
+    async def test_generation_still_uses_default_bucket(
+        self, authed_client: AsyncClient, monkeypatch
+    ):
+        seen: dict = {}
+        self._fake_redis(monkeypatch, seen)
+        h = {"x-api-key": "test-key"}
+        await authed_client.post("/api/generate", headers=h, json={"content": "x", "title": "y"})
+        assert "rl:token:test-key" in seen
+        assert "rl:interactive:test-key" not in seen
+
     async def test_interactive_fails_open(self, authed_client: AsyncClient, monkeypatch):
         from app.core import ratelimit
 

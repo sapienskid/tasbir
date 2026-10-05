@@ -188,6 +188,11 @@ app.add_middleware(
 app.include_router(health.router, tags=["health"])
 
 # Protected (under /api so the SPA routes — /, /new, /templates, /design-systems — never collide)
+#
+# Rate limiting: generation/task traffic carries `rate_limiter` here. The
+# config routers (fonts, agents, platforms, settings, models, system,
+# design-languages) declare `interactive_rate_limiter` on the router itself, so
+# browsing the Studio never competes with POST /generate for the small bucket.
 app.include_router(
     generate.router, prefix="/api/generate", tags=["generate"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
@@ -210,7 +215,7 @@ app.include_router(
 )
 app.include_router(
     design_languages.router, prefix="/api/design-languages", tags=["design-languages"],
-    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+    dependencies=[Depends(verify_api_key)]
 )
 app.include_router(
     templates.router, prefix="/api/templates", tags=["templates"],
@@ -230,31 +235,31 @@ app.include_router(
 )
 app.include_router(
     fonts.router, prefix="/api/fonts", tags=["fonts"],
-    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+    dependencies=[Depends(verify_api_key)]
 )
 app.include_router(
     agents.router, prefix="/api/agents", tags=["agents"],
-    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+    dependencies=[Depends(verify_api_key)]
 )
 app.include_router(
     platforms.router, prefix="/api/platforms", tags=["platforms"],
-    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+    dependencies=[Depends(verify_api_key)]
 )
 app.include_router(
     font_pool.router, prefix="/api/fonts/pool", tags=["fonts"],
-    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+    dependencies=[Depends(verify_api_key)]
 )
 app.include_router(
     settings_api.router, prefix="/api/settings", tags=["settings"],
-    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+    dependencies=[Depends(verify_api_key)]
 )
 app.include_router(
     models_api.router, prefix="/api/models", tags=["models"],
-    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+    dependencies=[Depends(verify_api_key)]
 )
 app.include_router(
     system.router, prefix="/api/system", tags=["system"],
-    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+    dependencies=[Depends(verify_api_key)]
 )
 
 
