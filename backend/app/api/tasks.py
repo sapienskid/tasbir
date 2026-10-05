@@ -14,6 +14,7 @@ from starlette.background import BackgroundTask
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
 from app.core.keylock import KeyedLocks
+from app.core.limits import MAX_UPLOAD_B64
 from app.core.ratelimit import interactive
 from app.core.time import iso_utc
 from app.db.repositories.tasks import TaskRepository
@@ -689,7 +690,8 @@ _TASK_LOCKS = KeyedLocks()
 
 _MAX_SLOTS = 32
 _MAX_HIDDEN = 64
-_MAX_UPLOAD_B64 = 15_000_000
+# Shared with /api/compose — one cap for every base64 image upload.
+_MAX_UPLOAD_B64 = MAX_UPLOAD_B64
 _COPY_FIELDS = ("headline", "subhead", "body", "tagline")
 _MEDIA_META_KEYS = ("url", "credit", "photographer", "provider", "license", "style", "seed", "alt")
 

@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
+from app.core.limits import MAX_UPLOAD_B64
 from app.core.ratelimit import interactive
 from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.tasks import TaskRepository
@@ -43,7 +44,6 @@ tasks_router = APIRouter()
 MAX_POSTS = 20
 MIN_CAROUSEL_SLIDES = 2
 MAX_CAROUSEL_SLIDES = 10
-MAX_UPLOAD_B64 = 10 * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
