@@ -113,3 +113,30 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def get_version() -> str:
+    """App version.
+
+    Prefers ``pyproject.toml`` — the declared source of truth. Installed package
+    metadata is only a fallback: an editable install keeps whatever version it
+    was installed at, so it silently goes stale after a bump.
+    """
+    try:
+        import tomllib
+        from pathlib import Path
+
+        pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        if pyproject.exists():
+            with open(pyproject, "rb") as f:
+                version = tomllib.load(f).get("project", {}).get("version")
+                if version:
+                    return str(version)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from importlib.metadata import version as _pkg_version
+
+        return _pkg_version("tasbir")
+    except Exception:  # noqa: BLE001
+        return "0"

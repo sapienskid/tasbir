@@ -64,11 +64,12 @@ async def _check_render() -> tuple[bool, str]:
 
 @router.get("/health")
 async def health():
+    from app.config import get_version
     from app.services.llm import gateway_configured
 
     return {
         "status": "ok",
-        "version": "1.0.1",
+        "version": get_version(),
         "service": "tasbir",
         "llm_configured": gateway_configured(),
     }
