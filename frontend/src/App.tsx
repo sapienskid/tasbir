@@ -1,10 +1,12 @@
-import { lazy, Suspense, useEffect } from "react"
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
+import { lazy, useEffect } from "react"
+import { BrowserRouter, Route, Routes } from "react-router-dom"
 import { AppShell } from "@/components/layout/app-shell"
 import { ApiKeyPrompt } from "@/components/settings/api-key-prompt"
 import { Toaster } from "@/components/ui/sonner"
 import { ThemeProvider } from "@/lib/theme"
+import { page } from "@/lib/route-page"
 import { loadPlatforms } from "@/lib/platforms"
+import { settingsRoutes } from "@/pages/settings/routes"
 
 // Route-level code splitting: every page ships in its own chunk so the shell
 // and dashboard paint without pulling in page-specific code.
@@ -20,26 +22,6 @@ const DesignSystemsPage = lazy(() => import("@/pages/design-systems"))
 const AgentsPage = lazy(() =>
   import("@/pages/agents").then((m) => ({ default: m.AgentsPage }))
 )
-// Settings is a nested layout with one route per section, so each panel is
-// deep-linkable and mounts once instead of remounting on every tab switch.
-const SettingsLayout = lazy(() => import("@/pages/settings/layout"))
-const SettingsPlatforms = lazy(() => import("@/pages/settings/platforms"))
-const SettingsFonts = lazy(() => import("@/pages/settings/fonts"))
-const SettingsRuntime = lazy(() => import("@/pages/settings/runtime"))
-const SettingsSystem = lazy(() => import("@/pages/settings/system"))
-
-function FullPageSkeleton() {
-  return (
-    <div className="grid gap-4">
-      <div className="h-8 w-1/3 animate-pulse rounded-md bg-muted" />
-      <div className="h-96 animate-pulse rounded-md border bg-muted/30" />
-    </div>
-  )
-}
-
-function page(node: React.ReactNode) {
-  return <Suspense fallback={<FullPageSkeleton />}>{node}</Suspense>
-}
 
 export default function App() {
   // Warm the DB-backed platform dimension cache on boot.
@@ -52,86 +34,18 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<AppShell />}>
-            <Route
-              index
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <TaskListPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="tasks/:taskId"
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <TaskDetailPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="jobs/:jobId"
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <JobDetailPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="new"
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <NewTaskPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="compose"
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <ComposePage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="compose/:batchId"
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <ComposePage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="templates"
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <TemplatesPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="design-systems"
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <DesignSystemsPage />
-                </Suspense>
-              }
-            />
-            <Route
-              path="agents"
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <AgentsPage />
-                </Suspense>
-              }
-            />
-            <Route path="settings" element={<Navigate to="/settings/platforms" replace />}>
-              <Route element={page(<SettingsLayout />)}>
-                <Route path="platforms" element={page(<SettingsPlatforms />)} />
-                <Route path="fonts" element={page(<SettingsFonts />)} />
-                <Route path="runtime" element={page(<SettingsRuntime />)} />
-                <Route path="system" element={page(<SettingsSystem />)} />
-              </Route>
-            </Route>
+            <Route index element={page(<TaskListPage />)} />
+            <Route path="tasks/:taskId" element={page(<TaskDetailPage />)} />
+            <Route path="jobs/:jobId" element={page(<JobDetailPage />)} />
+            <Route path="new" element={page(<NewTaskPage />)} />
+            <Route path="compose" element={page(<ComposePage />)} />
+            <Route path="compose/:batchId" element={page(<ComposePage />)} />
+            <Route path="templates" element={page(<TemplatesPage />)} />
+            <Route path="design-systems" element={page(<DesignSystemsPage />)} />
+            <Route path="agents" element={page(<AgentsPage />)} />
+            {/* Settings is a nested layout with one route per section — see
+                pages/settings/routes.tsx for the route-tree invariant. */}
+            {settingsRoutes}
           </Route>
         </Routes>
         <Toaster richColors position="top-right" />
