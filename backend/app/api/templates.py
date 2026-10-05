@@ -47,12 +47,19 @@ SAMPLE_COPY = {
     "badge": None,
 }
 
-DIMS = {
-    "square": (1080, 1080),
-    "portrait": (1080, 1350),
-    "story": (1080, 1920),
-    "landscape": (1200, 627),
-}
+
+def _family_dims(family: str) -> tuple[int, int]:
+    """Canvas for a family, taken from the platforms table.
+
+    Uses the first active platform of that family so resizing a platform in
+    Settings actually changes what preview/validation renders and measures at
+    (these dims used to be hardcoded here, so the two silently drifted).
+    ``platforms.family_dims`` already falls back to the seed dims, so there is
+    no second fallback needed.
+    """
+    from app.services.platforms import family_dims
+
+    return family_dims(family)
 
 
 def _entry(row) -> dict:
@@ -130,7 +137,7 @@ async def _validate_render(
     from app.services.dom_extractor import detect_overflow
     from app.services.ds_context import DSContext
 
-    width, height = DIMS.get(family, DIMS["square"])
+    width, height = _family_dims(family)
     tokens = dict(DEFAULT_TOKEN_VALUES)
     # Neutral sample footer (a handle only) — never a hardcoded brand identity.
     footer = {"left": "", "right": "@handle"}
@@ -362,7 +369,7 @@ async def _render_preview_html(
     ds_repo = DesignSystemRepository(db)
     ds = await ds_repo.get_by_id(design_system_id)
 
-    width, height = DIMS.get(family, DIMS["square"])
+    width, height = _family_dims(family)
     tokens = dict(DEFAULT_TOKEN_VALUES)
     di = {}
     footer = {"left": "", "right": "@handle"}

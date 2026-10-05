@@ -255,3 +255,100 @@ async def test_from_input_rejects_bad_ds(authed_client):
         )
         assert r.status_code == 422
         delay.assert_not_called()
+
+
+def _dims_html() -> str:
+    """A template that echoes its canvas, so the resolved dims are observable."""
+    return (
+        "<!DOCTYPE html><html><body>"
+        "<div data-slot=\"headline\">CANVAS {{ width }}x{{ height }}</div>"
+        "</body></html>"
+    )
+
+
+async def test_preview_dims_follow_the_platforms_table(authed_client):
+    """Template preview/validation must use platform dims, not hardcoded ones.
+
+    Previously the canvas was a literal dict in templates.py, so resizing a
+    platform in Settings silently had no effect on previews.
+    """
+    from app.services.platforms import family_dims
+
+    try:
+        # Create a dedicated square platform and make it the family's first row.
+        r = await authed_client.post(
+            "/api/platforms",
+            headers=H,
+            json={
+                "id": "dims-probe",
+                "name": "Dims Probe",
+                "width": 1080,
+                "height": 1080,
+                "family": "square",
+                "is_active": True,
+                "sort_order": -100,
+            },
+        )
+        assert r.status_code in (200, 201), r.text
+
+        assert family_dims("square") == (1080, 1080)
+        r = await authed_client.post(
+            "/api/templates/preview-draft",
+            headers=H,
+            json={
+                "html": _dims_html(),
+                "family": "square",
+                "design_system_id": "default",
+            },
+        )
+        assert r.status_code == 200, r.text
+        assert "CANVAS 1080x1080" in r.json()["html"]
+
+        # Resize it in Settings — preview must follow immediately.
+        r = await authed_client.put(
+            "/api/platforms/dims-probe",
+            headers=H,
+            json={"width": 900, "height": 1200},
+        )
+        assert r.status_code == 200, r.text
+
+        assert family_dims("square") == (900, 1200)
+        r = await authed_client.post(
+            "/api/templates/preview-draft",
+            headers=H,
+            json={
+                "html": _dims_html(),
+                "family": "square",
+                "design_system_id": "default",
+            },
+        )
+        assert r.status_code == 200, r.text
+        assert "CANVAS 900x1200" in r.json()["html"]
+    finally:
+        await authed_client.delete("/api/platforms/dims-probe", headers=H)
+
+
+async def test_family_dims_falls_back_when_family_deactivated(authed_client):
+    """No active platform for a family → the seed dims, not a crash."""
+    from app.services.platforms import DEFAULT_FAMILY_DIMS, family_dims
+
+    try:
+        r = await authed_client.post(
+            "/api/platforms",
+            headers=H,
+            json={
+                "id": "solo-square",
+                "name": "Solo",
+                "width": 1000,
+                "height": 1000,
+                "family": "square",
+                "is_active": False,
+                "sort_order": -200,
+            },
+        )
+        assert r.status_code in (200, 201), r.text
+        # Inactive rows are not eligible, so the seeded square platform wins.
+        assert family_dims("square") != (1000, 1000)
+        assert family_dims("not-a-family") == DEFAULT_FAMILY_DIMS["square"]
+    finally:
+        await authed_client.delete("/api/platforms/solo-square", headers=H)
