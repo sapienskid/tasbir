@@ -19,8 +19,21 @@ from app.config import get_settings
 
 log = logging.getLogger(__name__)
 
-PLAYWRIGHT_SERVICE_URL = "http://playwright:4000"
-RENDER_TIMEOUT = 45.0  # seconds
+# Timeouts are split deliberately. Rendering a page in headless Chromium is slow
+# and legitimately needs a long budget, but *reaching* the service either works
+# in milliseconds or never will — a service that is down must fail fast, not
+# stall a pipeline node for the full render budget on every call.
+CONNECT_TIMEOUT = 3.0
+RENDER_TIMEOUT = 45.0  # seconds, for the actual render work
+
+# Kept as the public name callers/tests already use; httpx takes either a scalar
+# (all phases) or an httpx.Timeout breakdown.
+TIMEOUT = httpx.Timeout(RENDER_TIMEOUT, connect=CONNECT_TIMEOUT)
+
+
+def _renderer_url() -> str:
+    """The render service base URL (Docker default lives in Settings)."""
+    return get_settings().renderer_url
 
 
 @dataclass
@@ -106,7 +119,7 @@ async def extract_dom_tree(
         Root DOMNode with full tree, or None if extraction failed.
     """
     settings = get_settings()
-    renderer_url = getattr(settings, "renderer_url", PLAYWRIGHT_SERVICE_URL)
+    renderer_url = _renderer_url()
 
     payload = {
         "html": html,
@@ -119,7 +132,7 @@ async def extract_dom_tree(
         headers["X-Render-Key"] = settings.render_service_key
 
     try:
-        async with httpx.AsyncClient(timeout=RENDER_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             response = await client.post(
                 f"{renderer_url}/extract-dom",
                 json=payload,
@@ -149,7 +162,7 @@ async def render_to_png(
         PNG bytes, or None if rendering failed.
     """
     settings = get_settings()
-    renderer_url = getattr(settings, "renderer_url", PLAYWRIGHT_SERVICE_URL)
+    renderer_url = _renderer_url()
 
     has_mermaid = "mermaid.run()" in html or "data-mermaid-ready" in html
 
@@ -174,7 +187,7 @@ async def render_to_png(
     last_error: Exception | None = None
     for attempt in range(3):
         try:
-            async with httpx.AsyncClient(timeout=RENDER_TIMEOUT) as client:
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
                 response = await client.post(
                     f"{renderer_url}/render",
                     json=payload,
@@ -205,7 +218,7 @@ async def detect_overflow(
     element text that overflows (clipped by overflow:hidden).
     """
     settings = get_settings()
-    renderer_url = getattr(settings, "renderer_url", PLAYWRIGHT_SERVICE_URL)
+    renderer_url = _renderer_url()
 
     payload = {"html": html, "width": width, "height": height}
 
@@ -214,7 +227,7 @@ async def detect_overflow(
         headers["X-Render-Key"] = settings.render_service_key
 
     try:
-        async with httpx.AsyncClient(timeout=RENDER_TIMEOUT) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             response = await client.post(
                 f"{renderer_url}/extract-dom",
                 json=payload,

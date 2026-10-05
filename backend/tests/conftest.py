@@ -38,6 +38,13 @@ async def _shared_db():
     # explicit rate-limit test mocks Redis itself, so it still exercises the
     # 429 path.
     settings.redis_url = "redis://127.0.0.1:1/0"
+    # Point the Playwright render service at a closed local port for the same
+    # reason: overflow checks and PNG renders FAIL OPEN, so pointing at the
+    # Docker hostname would just burn a connect timeout on every call (there is
+    # no render service in CI, and the default `http://playwright:4000` makes
+    # every DNS lookup + connect attempt stall). A refused connection returns in
+    # milliseconds, which keeps the suite fast and deterministic.
+    settings.renderer_url = "http://127.0.0.1:1"
     await close_shared_engine()
 
     from sqlalchemy.ext.asyncio import create_async_engine
