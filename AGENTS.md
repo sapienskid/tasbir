@@ -72,7 +72,11 @@ renders to PNG for visual verification.
 - **DB-backed platforms / curated fonts / runtime settings** (v3.6): platform
   dimensions, the Google Fonts pool, and pipeline tuning knobs (verifier
   retries, copywriter concurrency, vision interval, chat cap, template
-  anti-repeat) are all seed-once tables editable in the Studio Settings page
+  anti-repeat) are all seed-once tables editable in the Studio Settings page.
+  Knobs are **typed + server-validated** (`type`/`min`/`max` per knob drive both
+  the 422 on `PUT /api/settings` and the control the Studio renders), and the
+  vocabularies (platform families, font roles) are published by
+  `GET /api/settings/meta` rather than hardcoded in the frontend
 - **DB-backed template library** (v0.5): 16 seeded templates + AI-generated
   ones, scoped per design system, template-first pipeline with LLM fallback
 - **Brand Builder agent**: form + optional reference/logo images → complete
@@ -604,13 +608,63 @@ tasbir/
 │   │       ├── new-task.tsx             ← /new wizard (design system → content → template → media)
 │   │       ├── templates.tsx            ← Template library management (+ from-image job)
 │   │       ├── design-systems.tsx       ← Design system editor (+ from-input job)
-│   │       ├── agents.tsx               ← Agent configs + pipeline graph
-│   │       └── settings.tsx             ← Platforms / curated fonts / runtime knobs
+│   │       ├── agents.tsx               ← Agent configs + pipeline graph (no model names)
+│   │       └── settings/                ← Nested layout + one route per section
+│   │           ├── layout.tsx            ← Left nav + <Outlet/>; `/settings` redirects here
+│   │           ├── platforms.tsx         ← Platform dims/families (search, show-inactive, delete confirm)
+│   │           ├── fonts.tsx             ← Curated font pool (same affordances)
+│   │           ├── runtime.tsx           ← Typed tuning knobs (dirty tracking, reset confirm)
+│   │           └── system.tsx            ← Environment info + export/import backup
 │   └── routes: `/`, `/new`, `/tasks/:taskId`, `/templates`, `/design-systems`,
-│              `/agents`, `/settings`
+│              `/agents`, `/settings/{platforms,fonts,runtime,system}`
 ```
 
+Settings is a **nested layout**: `pages/settings/layout.tsx` renders a persistent
+left nav and each section is its own route (and its own lazily-loaded chunk), so
+sections are deep-linkable and never remount on switch. `AppShell`'s `/settings`
+nav match already covers the sub-routes.
+
+## Settings Architecture
+
+**Vocabulary is server-owned.** Platform families and font roles live in
+`services.platforms.VALID_FAMILIES` / `services.fonts.VALID_ROLES` and are
+published to the Studio by `GET /api/settings/meta`. Never redeclare them in the
+frontend — derive from `useSettingsMeta()`.
+
+**Runtime knobs are typed.** Every entry in `DEFAULT_APP_SETTINGS` carries
+`type` (`int` / `float` / `bool`) plus `min` / `max` / `step`. That contract is
+the single source of truth for *both* server-side validation (`_coerce` →
+422, atomic batch) and the Studio's control (`RuntimeKnob` picks a checkbox or a
+bounded number input from `spec.type`). Adding a knob means adding it to
+`DEFAULT_APP_SETTINGS` only — no frontend change, and a boolean can never
+round-trip through a number input again.
+
+**Family canvas comes from the platforms table.** `platforms.family_dims()`
+returns the first *active* platform's dimensions per family, falling back to
+`DEFAULT_FAMILY_DIMS`. Template preview/validation call it instead of a local
+dict, so resizing a platform really does change what previews render at.
+
+**Config routes are interactive-tier.** `platforms`, `fonts`, `font_pool`,
+`settings`, `models`, `agents`, `design_languages` and `system` declare
+`interactive_rate_limiter` on the router and are mounted **without**
+`rate_limiter` in `main.py` — adding both would consume both buckets per
+request. Browsing config must never starve or be starved by `POST /generate`.
+
+**Backup covers 7 tables.** `design_systems`, `templates`, `design_languages`,
+`platforms`, `fonts`, `agents`, `app_settings`. Import upserts by primary key
+and never deletes. Code-owned built-in language rows (`source: "seed"`) are
+skipped — they resolve live from `styles.STYLE_PRESETS`. `SCHEMA_VERSION` is 2;
+version 1 payloads (no `design_languages`) still import, since a table a
+payload's version predates is optional for it (`TABLE_SINCE`).
+
 ## Common Tasks For AI Agents
+
+### Adding a new runtime setting knob
+1. Add one entry to `DEFAULT_APP_SETTINGS` in `backend/app/services/settings.py`
+   with `value`, `type`, `min`/`max`/`step`, and a `description`.
+2. Read it with `await get_runtime_setting("your.key", default)`.
+3. Nothing else — seeding creates the row, the API serves the contract, and the
+   Studio renders the right control automatically.
 
 ### Adding a new platform (format)
 1. Add it in the Studio **Settings → Platforms** (or `POST /api/platforms`)
@@ -828,8 +882,8 @@ docker compose up -d            # pulls GHCR images + redis, starts the stack
   and served at `/` — no separate frontend container. `beat` runs the hourly
   `retention.sweep_expired` sweep.
 - Configuration backups are API-based: `GET /api/system/export` /
-  `POST /api/system/import` (or the Studio **Settings → Backup** tab). No shell
-  scripts.
+  `POST /api/system/import` (or the Studio **Settings → System** section). No
+  shell scripts.
 
 ### Releasing (versioned Docker images + changelog + GitHub Release)
 
@@ -978,15 +1032,26 @@ figure instead of shipping empty.
   backfills identity if missing
 
 ### Design languages API
-- `GET /design-languages` · `POST /design-languages` (custom language `{name,
-  base, description}` — copies a base language's rules) · `PUT /design-languages/{id}`
-  · `DELETE /design-languages/{id}`
+- `GET /design-languages?include_inactive=&include_di=` · `POST /design-languages`
+  (custom language `{name, base, description}` — copies a base language's rules)
+  · `PUT /design-languages/{id}` · `DELETE /design-languages/{id}`
+- Rows carry their **full** state: `palette_tokens`, `accent_tokens`, `media_policy`,
+  `emoji`/`grayscale`/`accent`, plus provenance (`base`, `source`, `is_active`,
+  `sort_order`) so the Studio marks immutable built-ins from real data rather
+  than matching label strings.
+- `di` (the full design-instruction bundle per language) is **omitted by default**
+  from the list — it is large and the picker only needs the summary. Pass
+  `?include_di=true` when you actually need the rules.
+- `source` is one of `seed` (built-in preset, resolved live from code),
+  `bundled` (a bundled brand system's own language, seeder-owned), or `manual`
+  (Studio-created / edited).
 - The five built-ins (`swiss-editorial`, `bold-modern`, `dark-luxury`,
   `vibrant-pop`, `playful`) are immutable and always resolve to the live preset
   (`styles.STYLE_PRESETS`); custom languages are DB rows and deletable.
 - A language bundles palette + accent tokens, emoji/grayscale/media policy, and
   the design-instruction (style/type_voice/do_dont/archetypes). Applying one
   replaces the system's color tokens (fonts stay user-owned).
+- Custom languages **are** part of the config backup (see System export/import).
 
 ### Templates API
 - `GET /templates?design_system_id=&family=` · `POST /templates` · `GET/PUT/DELETE /templates/{id}`
@@ -997,16 +1062,39 @@ figure instead of shipping empty.
 - `GET /agent-jobs/{id}` — poll template/design-system creation jobs
 - `POST /uploads` — validated image upload → `{mime, size, data(base64)}`
 
-### System export / import (config backup & restore)
+### Runtime settings API
+- `GET /api/settings` → `{defaults: {key: {value, type, min?, max?, step?, description}}, values}`.
+  The `defaults` block *is* the type contract the Studio renders controls from —
+  add a knob and the UI picks up the right input with no frontend change.
+- `PUT /api/settings` — body `{"values": {...}}`. Unknown keys are ignored
+  (forward compatibility). Known keys are validated as a **batch**: any bad value
+  returns **422** naming the key and writes nothing. Booleans must be real
+  booleans (`1` / `"true"` are rejected — that coercion bug is what made bool
+  knobs render as `1`/`0`).
+- `POST /api/settings/reset` — restore every knob to its default (creates a
+  missing row rather than silently no-op'ing).
+- `GET /api/settings/meta` → `{families, font_roles}` — the backend-owned
+  vocabularies, so the Studio never hardcodes them.
+
+### System info / export / import (config backup & restore)
+- `GET /api/system/info` — the environment actually in force: version, Gateway /
+  Redis / render-service / photo-key presence (booleans only — never a key or
+  token), gateway id, decision model order, both rate limits, retention,
+  `IMAGE_MAX_BYTES`, `COPY_QA_ENFORCE`, `SKIP_VERIFY`, backup schema version, and
+  per-table row counts.
 - `GET /api/system/export` — download the whole configuration (design systems,
-  templates, platforms, fonts, agents, runtime settings) as one JSON document.
-  Tasks/audit/chats are excluded (per-machine runtime data).
+  templates, **design languages**, platforms, fonts, agents, runtime settings) as
+  one JSON document. Tasks/audit/chats are excluded (per-machine runtime data).
 - `POST /api/system/import` — body `{"payload": <export document>}`. Upserts
   rows by primary key: existing rows are overwritten, rows missing from the
   payload are left untouched (never deletes). Caches are refreshed so the
-  Studio/pipeline see imported values immediately. Response:
-  `{"applied": {"design_systems": n, "templates": n, ...}}`.
-- Available in the Studio at **Settings → Backup**.
+  Studio/pipeline see imported values immediately. Code-owned built-in design
+  languages (`source: "seed"`) are **skipped** — they resolve live from
+  `STYLE_PRESETS`. Response:
+  `{"applied": {"design_systems": n, "templates": n, "design_languages": n, ...}}`.
+- Backup `schema_version` is **2** (v1 lacked `design_languages`). Both versions
+  validate: a table a payload's version predates is optional for it.
+- Available in the Studio at **Settings → System**.
 
 ### GET /tasks/{id}
 Response:

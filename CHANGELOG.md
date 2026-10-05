@@ -6,6 +6,115 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Settings is now nested routes with a left nav** — `/settings` redirects to
+  `/settings/platforms`, and each section (`platforms`, `fonts`, `runtime`,
+  `system`) is its own route and its own lazily-loaded chunk. Previously the page
+  was one file of tab panels that unmounted and refetched on every switch and
+  had no deep links. `AppShell` needed no change — its `/settings` match already
+  covered sub-routes.
+- **Runtime knobs are typed and validated on the server** — every setting in
+  `DEFAULT_APP_SETTINGS` now carries `type` (`int` / `float` / `bool`) plus
+  `min` / `max` / `step`, and `PUT /api/settings` validates the batch before
+  writing anything. A bad value returns **422** naming the key and leaves the
+  database untouched. Previously arbitrary JSON (`verifier.max_retries: "abc"`)
+  persisted and was handed straight to consumers. Stored values that predate the
+  contract are self-healed back to their default on read rather than crashing a
+  consumer.
+- **The Studio renders knob controls from the server's type contract** —
+  `RuntimeKnob` picks a checkbox or a bounded number input from `spec.type`, so
+  the three boolean knobs (`verifier.clef_first`, `claims.hold_on_mismatch`,
+  `publish.enabled`) are real checkboxes again instead of number inputs
+  coercing `true` to `1`. Per-row dirty dots with revert, a save button that
+  counts pending changes, and a confirmation behind "Reset to defaults".
+- **Config routes use the interactive rate-limit bucket** — `platforms`,
+  `fonts/pool`, `fonts/search`, `settings`, `models`, `agents`,
+  `design-languages` and `system` declare `interactive_rate_limiter` (600/min)
+  instead of sharing the 30/min generation bucket, so browsing the Studio no
+  longer competes with `POST /generate`. The parent `rate_limiter` dependency
+  was removed from those `include_router` calls, otherwise both buckets were
+  consumed per request.
+- **Single source of truth for platform families and font roles** —
+  `services.platforms.VALID_FAMILIES` and `services.fonts.VALID_ROLES` are
+  imported by the API layer (which redeclared them) and published to the Studio
+  via the new `GET /api/settings/meta`, so the frontend derives its dropdowns
+  instead of hardcoding `FAMILIES` / `FONT_ROLES`.
+- **The Agents page no longer shows model names** — the graph nodes, the aux
+  agent cards and the config rail previously rendered the model id; the rail now
+  says model routing is code-owned via the AI Gateway and drops the read-only
+  field. Model routing is unchanged (it was already ignored on write).
+- **`/health` reports the real version** from package metadata / `pyproject.toml`
+  instead of a hardcoded `1.0.1` that had drifted to `1.2.0`.
+- **Design languages expose their full row** — `GET /api/design-languages`
+  returns `base`, `source`, `is_active` and `sort_order` alongside the palette,
+  and `GET /api/design-systems/styles` returns `source` / `is_active` so the
+  Studio marks immutable built-ins from real provenance instead of matching
+  label/name strings.
+
+### Added
+- **`GET /api/settings/meta`** — the platform-family and font-role vocabularies.
+- **`GET /api/system/info`** — a read-only view of the environment actually in
+  force (version, Gateway/Redis/render/photo-key presence as booleans, rate
+  limits, retention, `SKIP_VERIFY`/`COPY_QA_ENFORCE`, and row counts), surfaced
+  in a new **System** settings section. Secret-shaped settings are never echoed.
+- **Search, show-inactive and delete confirmation** for Platforms and Fonts —
+  both tables deleted on click with no confirmation, which was easy to do by
+  accident and (for a platform) silently changed every render size in that
+  family.
+- **Import previews the backup before applying** — the System section parses the
+  file, shows per-table row counts, and requires an explicit confirmation before
+  touching the database.
+
+### Fixed
+- **The render-service client failed open *slowly*** — `RENDER_TIMEOUT` (45s) was
+  applied as the **connect** timeout, so every PNG render and DOM overflow check
+  against an unreachable Playwright service stalled the full 45s before giving
+  up. Connect and render budgets are now split (`httpx.Timeout(45s,
+  connect=3s)`): rendering still gets its generous budget, but a service that is
+  down or unreachable now fails open in milliseconds. This is what made the
+  template test suite appear to hang (250s+ for 16 tests); it now runs in ~24s,
+  and the whole backend suite went from 4m11s to ~2m.
+- **`design_languages` was missing from the config backup** — `GET
+  /api/system/export` / `POST /api/system/import` silently dropped every
+  **custom** design language, so a restore lost them. They are now exported and
+  restored losslessly (including each language's `di` rules bundle). Code-owned
+  built-in presets (`source: "seed"`) are skipped on import because they always
+  resolve live from `styles.STYLE_PRESETS` — restoring a stale copy would only
+  corrupt their bookkeeping columns.
+- **Backup schema is now version 2** (`SCHEMA_VERSION` 1 → 2) since a new table
+  was added. **Version 1 payloads still import** — a table the payload's version
+  predates is simply absent, and because import never deletes, local rows
+  survive.
+- **Template preview and validation use the platforms table** — the canvas was a
+  hardcoded `DIMS` dict in `api/templates.py`, so resizing a platform in
+  Settings had no effect on previews and the two silently drifted. They now come
+  from `platforms.family_dims()` (first active platform per family, falling back
+  to the seed dims).
+- **One base64 upload cap** — `/api/compose` allowed 10 MB and
+  `/api/tasks/{id}/formats/{fmt}/refill` allowed 15 MB for the same payload.
+  Both now use `app/core/limits.MAX_UPLOAD_B64` = 10 MB, matching the default
+  `IMAGE_MAX_BYTES`.
+- **Font weights report invalid input** — a bad comma-separated weight was
+  silently dropped from the list instead of surfacing an error.
+- **`reset_runtime_settings` silently reset nothing** when a knob row was
+  missing, because the repository `update` is a no-op on an absent row. It now
+  creates the row.
+- **Preview platforms refresh the dimension caches** — saving a platform now
+  re-warms the module-level `FORMAT_DIMS` / `FAMILY_DIMS` maps that every render
+  and preview size is read from.
+
+### Migration notes
+- **Base64 image uploads are now capped at 10 MB on the task-refill endpoint**
+  (was 15 MB). Clients sending larger images get a 422. To keep the old limit,
+  raise `app/core/limits.MAX_UPLOAD_B64`.
+- Config backups taken before this release (`schema_version: 1`) remain
+  importable; re-export to capture custom design languages.
+- Old `/settings?tab=…` style links do not exist (tabs were never in the URL),
+  but bookmarked `/settings` still works and redirects to `/settings/platforms`.
+- Tests now point `renderer_url` at a closed local port (`tests/conftest.py`),
+  matching what they already did for Redis. Overflow checks and renders fail
+  open there, so behaviour is unchanged — only the wait is gone.
+
 ## [1.2.0] — 2026-10-04
 
 **Breaking (deployment):** every LLM call now goes through the Cloudflare AI
