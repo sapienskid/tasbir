@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react"
-import { BrowserRouter, Route, Routes } from "react-router-dom"
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 import { AppShell } from "@/components/layout/app-shell"
 import { ApiKeyPrompt } from "@/components/settings/api-key-prompt"
 import { Toaster } from "@/components/ui/sonner"
@@ -20,7 +20,13 @@ const DesignSystemsPage = lazy(() => import("@/pages/design-systems"))
 const AgentsPage = lazy(() =>
   import("@/pages/agents").then((m) => ({ default: m.AgentsPage }))
 )
-const SettingsPage = lazy(() => import("@/pages/settings"))
+// Settings is a nested layout with one route per section, so each panel is
+// deep-linkable and mounts once instead of remounting on every tab switch.
+const SettingsLayout = lazy(() => import("@/pages/settings/layout"))
+const SettingsPlatforms = lazy(() => import("@/pages/settings/platforms"))
+const SettingsFonts = lazy(() => import("@/pages/settings/fonts"))
+const SettingsRuntime = lazy(() => import("@/pages/settings/runtime"))
+const SettingsSystem = lazy(() => import("@/pages/settings/system"))
 
 function FullPageSkeleton() {
   return (
@@ -29,6 +35,10 @@ function FullPageSkeleton() {
       <div className="h-96 animate-pulse rounded-md border bg-muted/30" />
     </div>
   )
+}
+
+function page(node: React.ReactNode) {
+  return <Suspense fallback={<FullPageSkeleton />}>{node}</Suspense>
 }
 
 export default function App() {
@@ -114,14 +124,14 @@ export default function App() {
                 </Suspense>
               }
             />
-            <Route
-              path="settings"
-              element={
-                <Suspense fallback={<FullPageSkeleton />}>
-                  <SettingsPage />
-                </Suspense>
-              }
-            />
+            <Route path="settings" element={<Navigate to="/settings/platforms" replace />}>
+              <Route element={page(<SettingsLayout />)}>
+                <Route path="platforms" element={page(<SettingsPlatforms />)} />
+                <Route path="fonts" element={page(<SettingsFonts />)} />
+                <Route path="runtime" element={page(<SettingsRuntime />)} />
+                <Route path="system" element={page(<SettingsSystem />)} />
+              </Route>
+            </Route>
           </Route>
         </Routes>
         <Toaster richColors position="top-right" />

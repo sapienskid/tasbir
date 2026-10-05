@@ -615,7 +615,9 @@ export interface PlatformInfo {
   name: string
   width: number
   height: number
-  family: "square" | "portrait" | "story" | "landscape"
+  /** Format family. The vocabulary is DB-backed and published by the backend
+   *  (GET /api/settings/meta), so it is not narrowed to a literal union here. */
+  family: string
   is_active: boolean
   sort_order: number
   created_at?: string | null
@@ -678,13 +680,27 @@ export function deletePoolFont(family: string): Promise<void> {
 
 // ─── Runtime settings (DB-backed knobs) ────────────────────────────────────
 
+export type { SettingSpec, SettingType } from "./settings-knobs"
+
+import type { SettingSpec } from "./settings-knobs"
+
 export interface RuntimeSettingsResponse {
-  defaults: Record<string, { value: unknown; description: string }>
+  defaults: Record<string, SettingSpec>
   values: Record<string, unknown>
+}
+
+/** Shared vocabularies (platform families, font roles) — one source of truth. */
+export interface SettingsMeta {
+  families: string[]
+  font_roles: string[]
 }
 
 export function getRuntimeSettings(): Promise<RuntimeSettingsResponse> {
   return apiRequest("/settings")
+}
+
+export function getSettingsMeta(): Promise<SettingsMeta> {
+  return apiRequest("/settings/meta")
 }
 
 export function updateRuntimeSettings(values: Record<string, unknown>): Promise<RuntimeSettingsResponse> {
@@ -702,10 +718,36 @@ export interface SystemSnapshot {
   exported_at?: string
   design_systems: Record<string, unknown>[]
   templates: Record<string, unknown>[]
+  design_languages: Record<string, unknown>[]
   platforms: Record<string, unknown>[]
   fonts: Record<string, unknown>[]
   agents: Record<string, unknown>[]
   app_settings: Record<string, unknown>[]
+}
+
+/** Read-only view of the environment actually in force. Secret-shaped settings
+ *  are reported as booleans only — the API never echoes a key or token. */
+export interface SystemInfo {
+  version: string
+  llm_configured: boolean
+  gateway_id: string
+  decision_provider_order: string
+  redis_configured: boolean
+  renderer_url: string
+  output_ttl_hours: number
+  delete_on_download: boolean
+  rate_limit_per_min: number
+  rate_limit_interactive_per_min: number
+  skip_verify: boolean
+  copy_qa_enforce: boolean
+  image_max_bytes: number
+  photo_keys_configured: boolean
+  counts: Record<string, number>
+  schema_version: number
+}
+
+export function getSystemInfo(): Promise<SystemInfo> {
+  return apiRequest("/system/info")
 }
 
 export function exportSystem(): Promise<SystemSnapshot> {
@@ -783,10 +825,21 @@ export interface DesignLanguage {
   media_policy: string
   accent_tokens: Record<string, string>
   palette_tokens: Record<string, string>
+  /** Full design-instruction bundle. Only present when requested via
+   *  `include_di` — it is large, so list views omit it. */
+  di?: Record<string, unknown>
+  /** Provenance: "seed" (built-in preset, resolved live from code), "bundled"
+   *  (a bundled brand system's own language), or "manual" (Studio-owned). */
+  base: string
+  source: string
+  is_active: boolean
+  sort_order: number
 }
 
-export function listDesignLanguages(): Promise<DesignLanguage[]> {
-  return apiRequest("/design-languages")
+export function listDesignLanguages(includeInactive = false): Promise<DesignLanguage[]> {
+  return apiRequest(
+    `/design-languages${includeInactive ? "?include_inactive=true" : ""}`,
+  )
 }
 
 export function createDesignLanguage(
