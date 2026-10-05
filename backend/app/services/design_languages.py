@@ -29,14 +29,24 @@ class LanguageDefinition:
     accent_tokens: dict = field(default_factory=dict)
     palette_tokens: dict = field(default_factory=dict)
     di: dict = field(default_factory=dict)
+    # Provenance — exposed so the Studio (and the export/import round-trip)
+    # can tell an immutable built-in from a Studio-owned custom language.
+    base: str = ""
+    source: str = "manual"
+    is_active: bool = True
+    sort_order: int = 0
 
 
 def _preset_definition(preset_id: str) -> LanguageDefinition | None:
-    from app.services.styles import STYLE_PRESETS
+    from app.services.styles import STYLE_LANGUAGES, STYLE_PRESETS
 
     p = STYLE_PRESETS.get(preset_id)
     if p is None:
         return None
+    try:
+        order = STYLE_LANGUAGES.index(preset_id)
+    except ValueError:
+        order = 999
     return LanguageDefinition(
         id=preset_id,
         name=p["label"],
@@ -48,6 +58,10 @@ def _preset_definition(preset_id: str) -> LanguageDefinition | None:
         accent_tokens=dict(p.get("accent_tokens") or {}),
         palette_tokens=dict(p.get("palette_tokens") or {}),
         di=p.get("di") or {},
+        base=preset_id,
+        source="seed",
+        is_active=True,
+        sort_order=order,
     )
 
 
@@ -63,6 +77,10 @@ def _row_definition(row) -> LanguageDefinition:
         accent_tokens=dict(row.accent_tokens or {}),
         palette_tokens=dict(row.palette_tokens or {}),
         di=dict(row.di or {}),
+        base=row.base or "",
+        source=row.source or "manual",
+        is_active=bool(row.is_active),
+        sort_order=int(row.sort_order or 0),
     )
 
 

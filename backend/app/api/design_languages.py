@@ -10,11 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_db
 from app.core.errors import NotFoundError
+from app.core.ratelimit import interactive_rate_limiter
 from app.services import design_languages as dl_service
 
 log = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(interactive_rate_limiter)])
 
 
 class DesignLanguageCreate(BaseModel):
@@ -29,8 +30,8 @@ class DesignLanguageUpdate(BaseModel):
     is_active: bool | None = None
 
 
-def _to_dict(d: dl_service.LanguageDefinition) -> dict:
-    return {
+def _to_dict(d: dl_service.LanguageDefinition, include_di: bool = True) -> dict:
+    out = {
         "id": d.id,
         "name": d.name,
         "description": d.description,
@@ -40,15 +41,32 @@ def _to_dict(d: dl_service.LanguageDefinition) -> dict:
         "media_policy": d.media_policy,
         "accent_tokens": d.accent_tokens,
         "palette_tokens": d.palette_tokens,
+        "base": d.base,
+        "source": d.source,
+        "is_active": d.is_active,
+        "sort_order": d.sort_order,
     }
+    # ``di`` is a full design-instruction bundle per language — bulky for a list
+    # view, so callers that only need the summary can opt out of it.
+    if include_di:
+        out["di"] = d.di
+    return out
 
 
 @router.get("")
 async def list_design_languages(
-    include_inactive: bool = False, db: AsyncSession = Depends(get_db)
+    include_inactive: bool = False,
+    include_di: bool = False,
+    db: AsyncSession = Depends(get_db),
 ):
+    """List languages.
+
+    ``di`` (the full design-instruction bundle) is omitted by default — it is
+    large per language and the picker only needs the summary. Pass
+    ``?include_di=true`` when a caller actually needs the rules.
+    """
     langs = await dl_service.list_languages(db, include_inactive=include_inactive)
-    return [_to_dict(d) for d in langs]
+    return [_to_dict(d, include_di=include_di) for d in langs]
 
 
 @router.post("")

@@ -1,9 +1,9 @@
 """System export/import — portable config backup for Tasbir.
 
 Exports the DB-backed *configuration* tables (design systems, templates,
-platforms, fonts, agents, runtime settings) as a single JSON document. Runtime
-data (generation tasks, audit logs, chat threads, agent jobs) is deliberately
-excluded — it is ephemeral, per-machine state.
+design languages, platforms, fonts, agents, runtime settings) as a single JSON
+document. Runtime data (generation tasks, audit logs, chat threads, agent
+jobs) is deliberately excluded — it is ephemeral, per-machine state.
 
 Import uses upsert/merge semantics: rows are inserted or overwritten by primary
 key, and rows already present but missing from the payload are left untouched.
@@ -21,12 +21,14 @@ from sqlalchemy.orm import DeclarativeBase
 
 from app.db.repositories.agents import AgentRepository
 from app.db.repositories.app_settings import AppSettingRepository
+from app.db.repositories.design_languages import DesignLanguageRepository
 from app.db.repositories.design_systems import DesignSystemRepository
 from app.db.repositories.fonts import FontRepository
 from app.db.repositories.platforms import PlatformRepository
 from app.db.repositories.templates import TemplateRepository
 from app.models.agent import Agent
 from app.models.app_setting import AppSetting
+from app.models.design_language import DesignLanguage
 from app.models.design_system import DesignSystem
 from app.models.font import Font
 from app.models.platform import Platform
@@ -34,22 +36,48 @@ from app.models.template import Template
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+# v1 predates design languages. Those payloads still import — the new table is
+# simply absent, and because import never deletes, the local built-ins survive.
+SUPPORTED_SCHEMA_VERSIONS = (1, 2)
+
+# Table → the schema version that introduced it. A table missing from a payload
+# is only an error if the payload's version is at or beyond that introduction;
+# an older payload legitimately predates the table.
+TABLE_SINCE = {
+    "design_systems": 1,
+    "templates": 1,
+    "design_languages": 2,
+    "platforms": 1,
+    "fonts": 1,
+    "agents": 1,
+    "app_settings": 1,
+}
 
 # Ordered so templates (which reference design_system_id) follow design systems.
 TABLES = [
     "design_systems",
     "templates",
+    "design_languages",
     "platforms",
     "fonts",
     "agents",
     "app_settings",
 ]
 
+# Tables whose rows are code-owned and must never be overwritten from a payload:
+# built-in design languages always resolve live from styles.STYLE_PRESETS, so
+# restoring a stale copy would only corrupt their bookkeeping columns. The value
+# names, per table, the row field marking a code-owned (seed) row.
+_CODE_OWNED_SEED_COL = {"design_languages": "source"}
+_CODE_OWNED_SEED_VALUE = {"design_languages": "seed"}
+
 # Table name → primary-key column (used to upsert by identity).
 PK_COLUMNS = {
     "design_systems": "id",
     "templates": "id",
+    "design_languages": "id",
     "platforms": "id",
     "fonts": "family",
     "agents": "name",
@@ -59,6 +87,7 @@ PK_COLUMNS = {
 _MODELS: dict[str, type[DeclarativeBase]] = {
     "design_systems": DesignSystem,
     "templates": Template,
+    "design_languages": DesignLanguage,
     "platforms": Platform,
     "fonts": Font,
     "agents": Agent,
@@ -102,17 +131,23 @@ def validate_payload(payload: Any) -> list[str]:
     issues: list[str] = []
     if not isinstance(payload, dict):
         return ["payload must be a JSON object"]
-    if payload.get("schema_version") != SCHEMA_VERSION:
+    version = payload.get("schema_version")
+    if version not in SUPPORTED_SCHEMA_VERSIONS:
         issues.append(
-            f"unsupported schema_version {payload.get('schema_version')!r} "
-            f"(expected {SCHEMA_VERSION})"
+            f"unsupported schema_version {version!r} "
+            f"(expected one of {list(SUPPORTED_SCHEMA_VERSIONS)})"
         )
+        return issues
     for table in TABLES:
         if table not in payload:
-            issues.append(f"missing table {table!r}")
-        elif not isinstance(payload[table], list):
+            # Only flag a missing table the payload's version should have had.
+            if version >= TABLE_SINCE.get(table, SCHEMA_VERSION):
+                issues.append(f"missing table {table!r}")
+            continue
+        if not isinstance(payload[table], list):
             issues.append(f"table {table!r} must be a list")
-    unknown = sorted(set(payload) - {"schema_version", "exported_at", *TABLES})
+    known = {"schema_version", "exported_at", *TABLES}
+    unknown = sorted(set(payload) - known)
     if unknown:
         issues.append(f"unknown top-level keys: {', '.join(map(repr, unknown))}")
     # Token values are injected raw into <style> — reject unsafe ones up front
@@ -135,7 +170,8 @@ async def import_system(pool, payload: dict) -> dict:
     """Upsert every config table from an export document.
 
     Design systems are imported before templates (templates reference
-    design_system_id). Rows absent from the payload are left untouched.
+    design_system_id). Rows absent from the payload are left untouched, and
+    code-owned seed rows (built-in design languages) are never overwritten.
 
     In-process caches (platforms, fonts, agents, runtime settings) are
     refreshed so the Studio and pipeline see the imported values immediately.
@@ -181,10 +217,19 @@ async def _refresh_caches(pool) -> None:
 async def _upsert_rows(session: AsyncSession, table: str, rows: list[dict]) -> int:
     pk = PK_COLUMNS[table]
     repo = _repo_for(session, table)
+    seed_col = _CODE_OWNED_SEED_COL.get(table)
+    seed_value = _CODE_OWNED_SEED_VALUE.get(table)
     updated = 0
     for row in rows:
         if not isinstance(row, dict) or not row.get(pk):
             log.warning("[system-import] skipping malformed %s row: %r", table, row)
+            continue
+        if seed_col and row.get(seed_col) == seed_value:
+            log.info(
+                "[system-import] skipping code-owned %s row %r (resolved live from code)",
+                table,
+                row.get(pk),
+            )
             continue
         key = str(row[pk])
         if await _get(repo, key) is not None:
@@ -199,6 +244,7 @@ def _repo_for(session: AsyncSession, table: str):
     repos = {
         "design_systems": DesignSystemRepository,
         "templates": TemplateRepository,
+        "design_languages": DesignLanguageRepository,
         "platforms": PlatformRepository,
         "fonts": FontRepository,
         "agents": AgentRepository,

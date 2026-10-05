@@ -116,6 +116,9 @@ async def list_style_languages(db: AsyncSession = Depends(get_db)):
             "media_policy": d.media_policy,
             "accent_tokens": d.accent_tokens,
             "palette_tokens": d.palette_tokens,
+            # Provenance so the picker can mark built-ins as immutable.
+            "source": d.source,
+            "is_active": d.is_active,
         }
         for d in langs
     ]
