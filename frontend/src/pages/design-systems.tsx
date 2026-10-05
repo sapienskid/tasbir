@@ -1005,7 +1005,9 @@ export default function DesignSystemsPage() {
 
           <div className="grid gap-2">
             {langs.map((l) => {
-              const builtIn = styles.some((s) => s.id === l.id && s.label === l.name)
+              // "seed" is a built-in preset: immutable, resolved live from code.
+              // Prefer the server's provenance over matching label/name strings.
+              const builtIn = l.source === "seed" || styles.some((s) => s.id === l.id && s.label === l.name)
               return (
                 <div key={l.id} className="flex items-center justify-between rounded-md border p-2.5">
                   <div className="min-w-0">

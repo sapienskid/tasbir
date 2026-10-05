@@ -56,7 +56,6 @@ type FlowNodeData = {
   label: string
   kind: string
   persona?: string
-  model?: string
   state?: "done" | "running" | "pending"
 }
 type FlowNode = Node<FlowNodeData>
@@ -157,7 +156,7 @@ function buildGraph(spec: AgentGraphSpec): { nodes: FlowNode[]; edges: Edge[] } 
     id: n.id,
     type: n.kind === "agent" ? "agent" : "term",
     position: { x: 0, y: 0 },
-    data: { id: n.id, label: n.label, kind: n.kind, persona: n.persona, model: n.model },
+    data: { id: n.id, label: n.label, kind: n.kind, persona: n.persona },
   }))
   const edges: Edge[] = spec.edges.map((e) => ({
     id: e.id,
@@ -177,7 +176,7 @@ function AgentNodeCard({
   dimmed,
   onClick,
 }: {
-  data: { label: string; persona?: string; model?: string; state?: "done" | "running" | "pending" }
+  data: { label: string; persona?: string; state?: "done" | "running" | "pending" }
   selected: boolean
   dimmed?: boolean
   onClick: () => void
@@ -208,11 +207,6 @@ function AgentNodeCard({
       <span className="block text-sm font-semibold">{data.label}</span>
       {data.persona ? (
         <span className="mt-0.5 block truncate text-xs text-muted-foreground">{data.persona}</span>
-      ) : null}
-      {data.model ? (
-        <span className="mt-1 block truncate text-[10px] text-muted-foreground/70">
-          model · {data.model}
-        </span>
       ) : null}
     </button>
   )
@@ -433,7 +427,7 @@ export function AgentsPage() {
                       {i > 0 ? <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-muted-foreground/50" /> : null}
                       <div className="w-48">
                         <AgentNodeCard
-                          data={{ label: a.name, persona: a.persona, model: a.model }}
+                          data={{ label: a.name, persona: a.persona }}
                           selected={selectedName === a.name}
                           dimmed={!a.is_active}
                           onClick={() => selectAgent(a.name)}
@@ -472,18 +466,15 @@ export function AgentsPage() {
                     <Input id="persona" value={draft.persona} onChange={(e) => setDraft({ ...draft, persona: e.target.value })} />
                   </div>
                   <div className="space-y-1">
-                    <Label>Model (code-owned routing)</Label>
-                    <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm">
-                      <span className="min-w-0 flex-1 truncate">{draft.model || "—"}</span>
-                      {draft.fallback_models?.length ? (
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          +{draft.fallback_models.length} fallback{draft.fallback_models.length > 1 ? "s" : ""}
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Served via the Gateway route; edit MODEL_ROUTES to change.
-                    </p>
+                    <Label htmlFor="maxTokens">Max tokens</Label>
+                    <Input
+                      id="maxTokens"
+                      type="number"
+                      step={64}
+                      min={64}
+                      value={draft.max_tokens}
+                      onChange={(e) => setDraft({ ...draft, max_tokens: Number(e.target.value) })}
+                    />
                   </div>
                 </div>
 
@@ -506,15 +497,13 @@ export function AgentsPage() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="maxTokens">Max tokens</Label>
-                    <Input
-                      id="maxTokens"
-                      type="number"
-                      step={64}
-                      min={64}
-                      value={draft.max_tokens}
-                      onChange={(e) => setDraft({ ...draft, max_tokens: Number(e.target.value) })}
-                    />
+                    <Label htmlFor="modelRouting">Model routing</Label>
+                    <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+                      code-owned via the AI Gateway
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Served by MODEL_ROUTES; per-agent picks are ignored.
+                    </p>
                   </div>
                 </div>
 
@@ -567,7 +556,7 @@ export function AgentsPage() {
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Click an agent node on the graph to edit its prompt, model, and parameters.
+                Click an agent node on the graph to edit its prompt and parameters.
               </p>
             )}
           </CardContent>
