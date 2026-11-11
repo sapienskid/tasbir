@@ -26,6 +26,13 @@ from pydantic import BaseModel, Field, field_validator
 from app.agents.orchestrator.state import FormatTask, GenerationState
 from app.services.agents import get_agent_config
 from app.services.formats import get_format_info, is_carousel
+from app.services.generation_quality import (
+    HookCandidate,
+    NarrativeBeat,
+    choose_hook,
+    content_profile,
+    narrative_outline,
+)
 from app.services.llm import call_llm
 
 log = logging.getLogger(__name__)
@@ -134,6 +141,31 @@ class PlatformCopy(_CopyFields):
     """Per-platform copy. Carousels fill ``slides``; other formats use the top fields."""
 
     slides: list[SlideCopy] = []
+    narrative: list[NarrativeBeat] = Field(default_factory=list)
+    hook_candidates: list[HookCandidate] = Field(default_factory=list, max_length=4)
+    hook_selection: dict = Field(default_factory=dict)
+
+    @field_validator("hook_candidates", mode="before")
+    @classmethod
+    def valid_candidates(cls, value):
+        result = []
+        for item in value[:4] if isinstance(value, list) else []:
+            try:
+                result.append(HookCandidate.model_validate(item))
+            except ValueError:
+                continue
+        return result
+
+    @field_validator("narrative", mode="before")
+    @classmethod
+    def valid_narrative(cls, value):
+        result = []
+        for item in value[:10] if isinstance(value, list) else []:
+            try:
+                result.append(NarrativeBeat.model_validate(item))
+            except ValueError:
+                continue
+        return result
 
 
 def _extract_json(text: str) -> dict:
@@ -250,6 +282,7 @@ async def _rewrite_copy_for_platform(
     qa: dict,
     brand_info: dict | None = None,
     campaign: dict | None = None,
+    overrides: dict | None = None,
 ) -> tuple[str, PlatformCopy] | None:
     """One decision-guided rewrite pass. Returns None to keep the prior copy."""
     brief = _qa_revision_brief(qa)
@@ -288,6 +321,11 @@ async def _rewrite_copy_for_platform(
             revised.headline = _clean_markdown(revised.headline)
             revised.subhead = _clean_markdown(revised.subhead)
             revised.body = _clean_markdown(revised.body)
+            for field, value in (overrides or {}).items():
+                if field in ("headline", "subhead", "body", "tagline", "badge") and value:
+                    setattr(revised, field, value)
+                    if revised.slides:
+                        setattr(revised.slides[0], field, value)
             return platform_id, revised
         except Exception as e:  # noqa: BLE001
             log.warning("[copywriter] decision-guided rewrite failed for %s: %s", platform_id, e)
@@ -307,6 +345,8 @@ async def _write_copy_for_platform(
     verbatim: bool = False,
     allow_emoji: bool = False,
     post_type: str = "default",
+    outline: list[dict] | None = None,
+    approved_examples: list[dict] | None = None,
 ) -> tuple[str, PlatformCopy]:
     """Write copy for a single platform with rate-limit semaphore."""
     fmt = get_format_info(platform_id)
@@ -407,6 +447,35 @@ async def _write_copy_for_platform(
         f"SOURCE TITLE: {title}\n"
         f"SOURCE CONTENT (excerpt):\n{_clean_markdown(content)[:2000]}"
     )
+    budget = content_profile({}, fmt.width, fmt.height, post_type).body_budget
+    user_prompt += (
+        f"\n\nEDITORIAL FIT: body at most {budget} characters per frame; write complete "
+        "sentences. Restructure or tighten the idea instead of requiring smaller type.\n"
+        "Before choosing the headline, return 3 hook_candidates with genuinely different "
+        "angles (claim/question/contrast/finding/practical). Each has headline (max 60 chars), "
+        "angle, source_support (a short exact supporting source passage), and specificity, "
+        "relevance, faithfulness (integers 0-5). Avoid hype, generic promises and invented facts. "
+        "Keep the normal headline/subhead/body fields too."
+    )
+    if is_carousel:
+        beats = narrative_outline(outline or [], slides_count, str(brief.get("angle") or title))
+        user_prompt += (
+            "\nNARRATIVE PLAN: " + json.dumps(beats, ensure_ascii=False)
+            + "\nReturn narrative before slides: one beat per frame with role, focus, "
+            "headline_hint, connects_to_next. Use the required roles and slide count. "
+            "Each frame adds a distinct source-supported point. The example must be from "
+            "the source; never fabricate one. The takeaway must deliver the cover's promise. "
+            "An action is optional in meaning: give a relevant next step, never invent a URL or offer."
+        )
+    if approved_examples:
+        copy_references = [
+            {key: example.get(key, "") for key in ("headline", "subhead", "body", "rationale")}
+            for example in approved_examples[:3]
+        ]
+        user_prompt += (
+            "\nCURATED BRAND REFERENCES (style only; do not reuse their claims or facts):\n"
+            + json.dumps(copy_references, ensure_ascii=False)
+        )
     if allow_emoji:
         user_prompt += (
             "\n\nEMOJI: this design language allows emoji. You may use them "
@@ -447,6 +516,18 @@ async def _write_copy_for_platform(
         copy.headline = _clean_markdown(copy.headline)
         copy.subhead = _clean_markdown(copy.subhead)
         copy.body = _clean_markdown(copy.body)
+        if not has_headline_override and copy.hook_candidates:
+            copy.hook_selection = choose_hook(
+                copy.hook_candidates, _clean_markdown(title + "\n" + content), copy.headline,
+            )
+            copy.headline = copy.hook_selection["headline"]
+            if copy.slides:
+                copy.slides[0].headline = copy.headline
+        if is_carousel:
+            copy.narrative = [NarrativeBeat(**beat) for beat in narrative_outline(
+                [beat.model_dump() for beat in copy.narrative] or outline or [], slides_count,
+                str(brief.get("angle") or title),
+            )]
 
         # Apply partial overrides on top of LLM output
         if overrides:
@@ -477,10 +558,16 @@ async def _write_copy_for_platform(
         elif is_carousel and len(copy.slides) < slides_count:
             copy.slides = _pad_slides(copy.slides, content, slides_count)
         if is_carousel:
+            copy.slides = copy.slides[:slides_count]
             # AI-authored mini-headlines for any slide the LLM left blank, then
             # a sentence-complete deterministic fallback for whatever is left.
             copy.slides = await _repair_slide_headlines(copy.slides, title, content, prompt_cfg)
             copy.slides = _finalize_slides(copy.slides, title)
+            # Cover fields and the actual first rendered slide must agree.
+            if copy.slides:
+                for field in ("headline", "subhead", "body", "badge", "tagline"):
+                    if overrides.get(field):
+                        setattr(copy.slides[0], field, getattr(copy, field))
 
         log.info("[copywriter] Copy ready for %s — headline: %s", platform_id, copy.headline[:40])
         return platform_id, copy
@@ -1075,6 +1162,11 @@ async def copywriter_node(state: GenerationState) -> dict:
     allow_emoji = bool((state.get("design_instruction") or {}).get("style", {}).get("emoji"))
     post_type = str(state.get("post_type") or "default")
     platforms_config = state.get("platforms_config") or {}
+    from app.services.generation_examples import reference_examples
+
+    examples = await reference_examples(
+        state.get("design_system_id") or "default", state.get("category") or "",
+    )
 
     # Process all platforms in parallel
     tasks = [
@@ -1091,6 +1183,8 @@ async def copywriter_node(state: GenerationState) -> dict:
             verbatim=verbatim,
             allow_emoji=allow_emoji,
             post_type=(platforms_config.get(platform_id, {}) or {}).get("post_type") or post_type,
+            outline=(state.get("post_plan") or {}).get("slides_outline") or [],
+            approved_examples=examples,
         )
         for platform_id in platforms
     ]
@@ -1181,7 +1275,7 @@ async def copywriter_node(state: GenerationState) -> dict:
                 _rewrite_copy_for_platform(
                     pid, content, title, prompt_cfg,
                     PlatformCopy(**_json_loads(format_tasks[pid].get("copy") or "{}")),
-                    qa, brand_info, campaign,
+                    qa, brand_info, campaign, overrides,
                 )
                 for pid, qa in weak.items()
             ))
@@ -1190,6 +1284,12 @@ async def copywriter_node(state: GenerationState) -> dict:
                 if not res:
                     continue
                 pid, revised = res
+                prior = _json_loads(format_tasks[pid].get("copy") or "{}")
+                # A QA revision must not change the pinned carousel structure.
+                if is_carousel(pid) and len(revised.slides) != len(prior.get("slides") or []):
+                    continue
+                revised.narrative = [NarrativeBeat(**b) for b in prior.get("narrative") or []]
+                revised.hook_selection = prior.get("hook_selection") or {}
                 format_tasks[pid] = FormatTask(
                     **{
                         **format_tasks[pid],
@@ -1222,7 +1322,7 @@ async def copywriter_node(state: GenerationState) -> dict:
                           **({"copy_qa_block": True} if blocked else {})},
             )
 
-    out: dict = {"format_tasks": format_tasks}
+    out: dict = {"format_tasks": format_tasks, "approved_examples": examples}
     if copy_qa:
         out["copy_qa"] = copy_qa
         if enforce:

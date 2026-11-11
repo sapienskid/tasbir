@@ -120,7 +120,10 @@ async def test_auto_resolves_platforms_via_llm():
     assert plan["post_type"] == "carousel"
     assert plan["ratio"] == "portrait"
     assert plan["slides"] == 5
-    assert len(plan["slides_outline"]) == 1
+    assert len(plan["slides_outline"]) == 5
+    assert [beat["role"] for beat in plan["slides_outline"]] == [
+        "hook", "context", "example", "takeaway", "action",
+    ]
     # The planner respects the LLM's explicit platform choice — ratio alone no
     # longer swaps the carousel base.
     assert out["platforms"] == ["instagram-carousel"]

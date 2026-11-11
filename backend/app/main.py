@@ -234,6 +234,10 @@ app.include_router(
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 app.include_router(
+    chat.examples_router, prefix="/api/generation-examples", tags=["generation-examples"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
     fonts.router, prefix="/api/fonts", tags=["fonts"],
     dependencies=[Depends(verify_api_key)]
 )

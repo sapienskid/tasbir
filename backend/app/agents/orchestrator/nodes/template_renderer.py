@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from app.agents.orchestrator.state import GenerationState, platform_cfg
 from app.services.composer import fill_template
@@ -54,16 +55,16 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
     which slides get an illustration and with what style/theme. This executes
     the plan entry for the current slide, offline, cached per slide id.
 
-    If the plan produced no illustration but the template renders an
-    ``{{ illustration }}`` slot, a deterministic procedural figure (seeded by
-    title+format, no LLM) fills it so a layout never ships an empty art block.
+    Only planned illustrations/charts render. Missing photos and empty slots
+    must not silently acquire decorative procedural art.
     """
+    fmt_id = state.get("_processing_format_id", "")
+    plan = (state.get("media_plan") or {}).get(fmt_id) or {}
+    if plan.get("kind") not in ("illustration", "chart"):
+        return ""
     cached = state.get(_ILLUSTRATION_CACHE_KEY)
     if cached:
         return cached
-
-    fmt_id = state.get("_processing_format_id", "")
-    plan = (state.get("media_plan") or {}).get(fmt_id) or {}
 
     from app.agents.orchestrator.post_cache import post_cached
     from app.services.media_plan import execute_slide_illustration
@@ -81,31 +82,7 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
             from app.services.media_plan import execute_slide_chart
 
             return execute_slide_chart(plan, ground)
-        # If the plan asked for a photo (or no media) but the template still
-        # renders an illustration slot, DON'T inject a procedural figure on top
-        # of a real photo. If the photo failed to materialize (empty search /
-        # no keys), fill the slot with a procedural figure so the layout never
-        # ships an empty art block.
-        if plan.get("kind") == "photo":
-            if state.get(_PHOTO_CACHE_KEY):
-                return ""
-            from app.services.illustration import generate_illustration_svg
-
-            return generate_illustration_svg(
-                f"{seed or ''}|{fmt_id}",
-                ground=ground,
-                theme=state.get("category", "") or None,
-            )
-        # Deterministic fallback — no plan entry at all, but the template has
-        # the slot, so a seeded procedural figure fills it (never an empty art
-        # block).
-        from app.services.illustration import generate_illustration_svg
-
-        return generate_illustration_svg(
-            f"{seed or ''}|{fmt_id}",
-            ground=ground,
-            theme=state.get("category", "") or None,
-        )
+        return ""
 
     svg = await post_cached(state.get("_task_id", ""), f"illustration:{fmt_id}", loader) or ""
     state[_ILLUSTRATION_CACHE_KEY] = svg
@@ -131,12 +108,13 @@ async def _get_post_photo(
     falls back to a plain search for the slide's headline when the plan has no
     photo, so a media layout is never a broken half-image.
     """
+    fmt_id = state.get("_processing_format_id", "")
+    plan = (state.get("media_plan") or {}).get(fmt_id) or {}
+    if plan.get("kind") in ("none", "illustration", "chart"):
+        return None
     cached = state.get(_PHOTO_CACHE_KEY)
     if cached:
         return cached
-
-    fmt_id = state.get("_processing_format_id", "")
-    plan = (state.get("media_plan") or {}).get(fmt_id) or {}
     query = str(plan.get("query") or "") if plan.get("kind") == "photo" else ""
 
     from app.agents.orchestrator.post_cache import post_cached
@@ -268,6 +246,10 @@ async def template_node_single(state: GenerationState) -> dict:
     templates = state.get("ds_templates") or []
     if not templates:
         return {}
+    # Human-approved composition is a soft tie-breaker, below content fit.
+    approved_ids = {example.get("template_id") for example in state.get("approved_examples") or []}
+    templates = [{**entry, "weight": float(entry.get("weight") or 1)
+                  + (10 if entry.get("id") in approved_ids else 0)} for entry in templates]
 
     user_template_id = platform_cfg(state, fmt_id, "template_id").strip()
 
@@ -286,7 +268,10 @@ async def template_node_single(state: GenerationState) -> dict:
     layout_pref: str | None = None
     parsed = parse_carousel_slide(fmt_id)
     if parsed and not state.get("verbatim"):
-        layout_pref = "text" if parsed[1] == 1 else ("media" if parsed[1] % 2 == 0 else "text")
+        from app.services.generation_quality import content_profile
+
+        profile = content_profile(copy, fmt.width, fmt.height)
+        layout_pref = "text" if profile.density == "dense" else None
 
     # When the media plan chose an illustration for this slide, prefer a
     # template that actually renders an {{ illustration }} slot, so the
@@ -295,6 +280,8 @@ async def template_node_single(state: GenerationState) -> dict:
     # lands on the post instead of being dropped for a procedural fallback.
     plan_entry = (state.get("media_plan") or {}).get(fmt_id) or {}
     plan_kind = plan_entry.get("kind") or ""
+    if plan_kind == "none":
+        layout_pref = "text"
     # When the copy carries post-type extras (price/cta/date/location), prefer a
     # template that renders {{ extra.* }} so they appear as styled elements
     # rather than only inside the body copy. ad-card hosts both extras and the
@@ -362,6 +349,10 @@ async def template_node_single(state: GenerationState) -> dict:
             prefer=("background" if prefer_background else layout_pref),
             prefer_slot=prefer_slot,
             style_language=style_language or None,
+            copy_data=copy,
+            post_type=platform_cfg(state, fmt_id, "post_type", "default"),
+            width=fmt.width,
+            height=fmt.height,
         )
 
     if selected is None:
@@ -414,8 +405,9 @@ async def template_node_single(state: GenerationState) -> dict:
     try:
         # Templates that opt in to the illustration slot get an LLM-directed
         # illustration (unified tool); everything else stays static.
-        illustration: str | None = None
-        if "{{ illustration" in html:
+        # An explicit empty value suppresses the composer's decorative default.
+        illustration: str | None = ""
+        if re.search(r"{{\s*illustration\b", html):
             illustration = await _get_post_illustration(state, ground, seed)
 
         # Carousel slide counter (i / N) for slide-style templates.

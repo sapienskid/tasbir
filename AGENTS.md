@@ -689,6 +689,29 @@ payload's version predates is optional for it (`TABLE_SINCE`).
 
 ## Common Tasks For AI Agents
 
+### Generation quality contracts (v1.4)
+- `services/generation_quality.py` defines typed narrative beats, hook
+  candidates, content profiles, verifier corrections and sequence judgments.
+  Preserve user platform/ratio/slide/copy pins and verbatim mode on all paths.
+- Hooks share the existing copywriter response. Source support and figures are
+  checked before selection; the chosen hook must reach the rendered cover.
+- Copy-fit revisions happen before layout. Template selection preserves nonempty
+  editorial fields; failed designer HTML must actually be rebuilt on retry.
+- Media kind `none` suppresses generated photos and illustrations, including
+  decorative defaults in the composer. Only explicit illustration/chart plans
+  produce art; user-supplied media is retained on automatic corrections.
+- Corrections route to copy/layout/media. Publication follows the final sequence
+  check and holds only affected carousel bases. A retry replaces prior sequence
+  judgments. `generation.sequence_review` controls bounded text review; vision
+  sequence review remains opt-in.
+- Curated references require explicit approval, opt-in and a reason. They are
+  private `generation.example.*` app_settings records, scoped by design system
+  and category, retained independently of tasks, and already covered by system
+  export/import. Never automatically learn from edits or model approval.
+  Copywriter sees bounded copy/rationale; designer sees composition/rationale;
+  neither receives example HTML, images or token values. The Studio manages
+  feedback and removal in the Quality inspector.
+
 ### Adding a new runtime setting knob
 1. Add one entry to `DEFAULT_APP_SETTINGS` in `backend/app/services/settings.py`
    with `value`, `type`, `min`/`max`/`step`, and a `description`.

@@ -10,6 +10,7 @@ from app.db.repositories.tasks import TaskRepository
 from app.services.formats import validate_platforms
 
 router = APIRouter()
+examples_router = APIRouter()
 
 
 class ChatSendRequest(BaseModel):
@@ -56,6 +57,7 @@ class FeedbackRequest(BaseModel):
     format: str
     verdict: str = Field(pattern="^(approve|reject)$")
     note: str = Field(default="", max_length=2000)
+    curate: bool = False
 
 
 @router.post("/{task_id}/feedback", status_code=201)
@@ -76,12 +78,46 @@ async def send_feedback(
     if not task:
         raise NotFoundError(f"Task {task_id} not found")
     fmt = validate_platforms([request.format])[0]
+    from app.db.repositories.app_settings import AppSettingRepository
+    from app.services.generation_examples import curate_example, example_id
+
+    curated = None
+    if request.curate:
+        if request.verdict != "approve" or not request.note.strip():
+            raise HTTPException(
+                422, "Curating requires approval and a note explaining why it works",
+            )
+        try:
+            curated = await curate_example(db, task, fmt, request.note[:1000])
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+    elif request.verdict == "reject":
+        await AppSettingRepository(db).delete(example_id(task_id, fmt))
     await record_audit(
         task_id, "human",
         decision={"format": fmt, "verdict": request.verdict,
                   "note": request.note or ""},
     )
-    return {"task_id": task_id, "format": fmt, "verdict": request.verdict}
+    return {"task_id": task_id, "format": fmt, "verdict": request.verdict,
+            "example": curated}
+
+
+@examples_router.get("")
+async def get_examples(design_system_id: str = "", category: str = "",
+                       db: AsyncSession = Depends(get_db)):
+    from app.services.generation_examples import list_examples
+
+    return await list_examples(db, design_system_id, category)
+
+
+@examples_router.delete("/{example_id}", status_code=204)
+async def delete_example(example_id: str, db: AsyncSession = Depends(get_db)):
+    from app.db.repositories.app_settings import AppSettingRepository
+    from app.services.generation_examples import PREFIX
+
+    if not example_id.startswith(PREFIX):
+        raise NotFoundError("Generation example not found")
+    await AppSettingRepository(db).delete(example_id)
 
 
 @router.post("/{task_id}/chat")

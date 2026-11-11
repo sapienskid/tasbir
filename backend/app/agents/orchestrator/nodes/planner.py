@@ -13,7 +13,7 @@ import json
 import logging
 import re
 
-from app.agents.orchestrator.state import GenerationState, PostPlan
+from app.agents.orchestrator.state import GenerationState, PostPlan, SlideOutline
 from app.services.agents import get_agent_config
 from app.services.formats import (
     CAROUSEL_FORMAT,
@@ -148,6 +148,16 @@ async def planner_node(state: GenerationState) -> dict:
     else:
         plan = _synthesize_plan(platforms, slides_in, ratio_in)
 
+    # The planner fills missing decisions; it cannot undo explicit choices.
+    if not auto and platforms:
+        plan.platforms = list(platforms)
+        if any(is_carousel_base(platform) for platform in platforms):
+            plan.post_type = "carousel"
+    if plan.post_type == "carousel" and slides_in > 0:
+        plan.slides = max(2, min(slides_in, 10))
+    if ratio_in in ("square", "portrait"):
+        plan.ratio = ratio_in
+
     # Resolve the concrete platform set. The user's chosen carousel platform id
     # is authoritative for its aspect (instagram-carousel = square,
     # instagram-carousel-portrait = portrait) — `ratio` never overrides it.
@@ -161,6 +171,17 @@ async def planner_node(state: GenerationState) -> dict:
             resolved.insert(0, "instagram-story")
     if not resolved:
         resolved = ["instagram-square"]
+
+    if plan.slides:
+        from app.services.generation_quality import narrative_outline
+
+        plan.slides_outline = [
+            SlideOutline(**beat)
+            for beat in narrative_outline(
+                [beat.model_dump() for beat in plan.slides_outline], plan.slides,
+                str((state.get("strategic_brief") or {}).get("angle") or state.get("title") or ""),
+            )
+        ]
 
     task_id = state.get("_task_id", "")
     if task_id:

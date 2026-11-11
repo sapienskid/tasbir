@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { QCReport } from "@/components/editor/qc-report"
 import { AgentChat } from "@/components/editor/agent-chat"
+import { GenerationFeedback } from "@/components/editor/generation-feedback"
 import { getTaskAudit } from "@/lib/api"
 import { Activity, Eye, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -101,6 +102,9 @@ export function InspectorRail({
               critique={qc?.critique}
               status={qc?.status}
             />
+            {!running && format ? (
+              <GenerationFeedback key={`${taskId}:${format}`} taskId={taskId} format={format} />
+            ) : null}
           </div>
         ) : tab === "trace" ? (
           <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">

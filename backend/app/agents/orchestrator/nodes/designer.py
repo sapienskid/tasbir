@@ -249,6 +249,20 @@ async def designer_node_single(state: GenerationState) -> dict:
     seed = f"{state.get('title', '')}|{fmt_id}|{state.get('category', '')}|{retry_count}"
     archetype_key, archetype_desc = pick_layout_archetype(di_config, seed)
     archetype_block = format_layout_archetype_block(archetype_key, archetype_desc)
+    from app.services.generation_quality import content_profile, correction_brief, layout_guidance
+
+    profile = content_profile(copy_data, fmt.width, fmt.height,
+                              str(state.get("post_type") or "default"), bool(state.get("images")))
+    archetype_block = layout_guidance(profile) + "\nCompatible variation: " + archetype_block
+    corrections = fmt_verification.get("corrections") or []
+    if corrections:
+        archetype_block += "\nTARGETED CORRECTIONS:\n" + correction_brief(corrections, "layout")
+    references = state.get("approved_examples") or []
+    if references:
+        archetype_block += "\nHUMAN-APPROVED EDITORIAL PRINCIPLES (apply to this copy):\n" + "\n".join(
+            (str(reference.get("composition") or "") + ": "
+             + str(reference.get("rationale") or "")[:400]) for reference in references[:3]
+        )
 
     # Build template context: CSS vars + design instruction + format layout
     template_context = f"{css_var_reference}\n\n{di_block}\n\n{layout_block}"
@@ -314,6 +328,12 @@ async def designer_node_single(state: GenerationState) -> dict:
             f"text clip at the canvas edge. Include a small '{i}/{n}' counter in "
             f"metadata style at a bottom corner.\n\n"
         )
+        if slide_ctx.get("narrative"):
+            beat = slide_ctx["narrative"]
+            slide_block += (
+                f"NARRATIVE PURPOSE: {beat.get('role', '')} — {beat.get('focus', '')}\n"
+                "Make this frame visually support that purpose and add a new point.\n"
+            )
 
     category_block = (
         f"CATEGORY LABEL (EXACT — tracked uppercase, category role size): {category}\n"

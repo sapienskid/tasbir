@@ -8,6 +8,8 @@ from typing import Annotated, Any, TypedDict
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.services.generation_quality import NarrativeBeat
+
 
 def _keep_first(a: str, b: str) -> str:
     return a if a else b
@@ -19,6 +21,10 @@ def _keep_first_list(a: list, b: list) -> list:
 
 def _keep_first_dict(a: dict, b: dict) -> dict:
     return a if a else b
+
+
+def _latest_review(a: dict, b: dict) -> dict:
+    return b if b else a
 
 
 def platform_cfg(state: "GenerationState", fmt_id: str, key: str, default: str = "") -> str:
@@ -75,11 +81,9 @@ def merge_format_tasks(
     return merged
 
 
-class SlideOutline(BaseModel):
+class SlideOutline(NarrativeBeat):
     """One frame of a planned carousel — what it should say and hook with."""
 
-    focus: str = ""
-    headline_hint: str = ""
 
 
 class PostPlan(BaseModel):
@@ -174,7 +178,7 @@ class GenerationState(TypedDict):
     # Planner output — structural plan (post_type / ratio / slides / outline)
     post_plan: Annotated[dict[str, Any], _keep_first_dict]
     # Deterministic (always) + opt-in vision (sequence_audit) carousel check
-    sequence_check: Annotated[dict[str, Any], _keep_first_dict]
+    sequence_check: Annotated[dict[str, Any], _latest_review]
 
     format_tasks: Annotated[dict[str, FormatTask], merge_format_tasks]
 
@@ -212,6 +216,7 @@ class GenerationState(TypedDict):
     publish: Annotated[dict[str, dict], _keep_first_dict]
     # Decision-model audit trail: [{pack_id, provider, model, answers...}].
     decision_events: Annotated[list[dict], _keep_first_list]
+    approved_examples: Annotated[list[dict], _keep_first_list]
 
 
 def initial_state(
@@ -302,5 +307,6 @@ def initial_state(
         "_slide_images": {},
         "media_plan": {},
         "resume_mode": False,
+        "approved_examples": kwargs.get("approved_examples") or [],
         "output_paths": {},
     }

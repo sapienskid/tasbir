@@ -6,6 +6,43 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-11-11
+
+### Added
+- Carousel narratives now assign each frame a purpose and develop a distinct
+  progression through the copywriter, while keeping pinned structure intact.
+- Copywriter proposes distinct, scored hooks in its existing response. Selection
+  rejects unsupported source passages, invented figures and generic hype, and
+  applies the chosen hook to the actual cover.
+- Layout selection considers readable copy density and composition. Generated
+  over-budget copy gets a bounded revision before layout; automatic template
+  selection preserves nonempty editorial fields.
+- Verifier corrections name the target (copy/layout/media), element, problem
+  and action. Corrections return to the appropriate existing stage.
+- Human-approved references: Quality → Your review → opt in with a reason.
+  References use edited copy, stay scoped by brand/category, survive task
+  retention, and are included in configuration backups. They can be removed.
+- Whole-carousel text review covers narrative flow, repeated claims, terminology
+  and delivery of the opening promise. The existing optional vision review also
+  judges visual rhythm. Runtime setting: `generation.sequence_review`.
+
+### Fixed
+- Typography-only media plans no longer acquire fallback images or illustrations.
+- Retry loops actually rebuild failed designer HTML instead of re-auditing it.
+- Publish decisions run after sequence checks; a failed sequence holds its own
+  carousel, and base-platform copy QA also applies to individual slides.
+- High visual scores do not excuse high-priority copy/media corrections.
+
+### Operator notes
+- Existing prompts and brand configuration remain Studio-owned. The new
+  generation contracts are added at runtime, so existing installations do not
+  need to reset their agent configurations.
+- Whole-carousel text review is enabled by default and can be changed in
+  Settings → Runtime (`generation.sequence_review`). Hook candidates share the
+  original copywriting call; copy-fit revisions and verifier retries are bounded.
+- Curated references are included in existing configuration backups and survive
+  task retention. No new database schema or backup-format migration is required.
+
 ## [1.3.0] — 2026-11-11
 
 ### Deployment and browser persistence

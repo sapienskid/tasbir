@@ -250,6 +250,11 @@ def generate_task(self, task_id: str, source_data: dict):
                     "template_id": ft.get("template_id"),
                     "error": ft.get("error"),
                     "copy": ft.get("copy", ""),
+                    "content_profile": ft.get("content_profile") or {},
+                    "corrections": (
+                        ((state.get("verification") or {}).get(fmt_id) or {}).get("corrections")
+                        or []
+                    ),
                     "recipe": _recipe_for(fmt_id, ft),
                     **({"copy_qa": (state.get("copy_qa") or {}).get(fmt_id)}
                        if (state.get("copy_qa") or {}).get(fmt_id) else {}),
@@ -282,6 +287,19 @@ def generate_task(self, task_id: str, source_data: dict):
                         "carousel_bases": carousel_bases,
                         "media_credits": state.get("media_credits") or [],
                         "copy_qa": state.get("copy_qa") or {},
+                        "generation_quality": {
+                            "media_plan": state.get("media_plan") or {},
+                            "narrative": {
+                                pid: parse_copy(ft.get("copy") or "").get("narrative")
+                                for pid, ft in format_tasks.items()
+                                if parse_copy(ft.get("copy") or "").get("narrative")
+                            },
+                            "hook_selection": {
+                                pid: parse_copy(ft.get("copy") or "").get("hook_selection", {})
+                                for pid, ft in format_tasks.items()
+                                if parse_copy(ft.get("copy") or "").get("hook_selection")
+                            },
+                        },
                         "copy_qa_blocked": state.get("copy_qa_blocked") or [],
                         "publish": state.get("publish") or {},
                     },

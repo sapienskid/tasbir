@@ -173,6 +173,10 @@ def select_template(
     prefer: str | None = None,
     prefer_slot: str | None = None,
     style_language: str | None = None,
+    copy_data: dict | None = None,
+    post_type: str = "default",
+    width: int = 1080,
+    height: int = 1080,
 ) -> tuple[str, dict] | None:
     """Pick a template deterministically from a loaded template list.
 
@@ -197,6 +201,16 @@ def select_template(
     }
     if not candidates:
         return None
+
+    if copy_data:
+        # A layout must actually render the nonempty editorial fields. Never
+        # silently drop body/subhead merely to fit a visually attractive card.
+        for field in ("headline", "subhead", "body"):
+            if copy_data.get(field):
+                candidates = {tid: entry for tid, entry in candidates.items()
+                              if re.search(r"{{\s*" + field + r"\b", entry.get("html") or "")}
+        if not candidates:
+            return None
 
     if style_language:
         styled = {
@@ -241,6 +255,15 @@ def select_template(
     best_tid, best_score = None, -1e9
     for tid, entry in pool.items():
         score = float(entry.get("weight", 1.0)) * 0.1
+        if copy_data:
+            from app.services.generation_quality import content_profile
+
+            profile = content_profile(copy_data, width, height, post_type=post_type)
+            tags = {str(tag).lower() for tag in entry.get("hint_tags") or []}
+            if profile.density == "dense" and tags & {"text", "slide", "editorial"}:
+                score += 8
+            if profile.composition in tags:
+                score += 6
         if category and category in {str(c).upper() for c in entry.get("categories", [])}:
             score += 4.0
         if _hint_overlap(hint, entry, tid):

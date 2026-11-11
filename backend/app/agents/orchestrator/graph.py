@@ -26,7 +26,7 @@ from app.agents.orchestrator.nodes.quality_check import MAX_RETRIES, quality_che
 from app.agents.orchestrator.nodes.renderer import renderer_node_single
 from app.agents.orchestrator.nodes.strategist import strategist_node
 from app.agents.orchestrator.nodes.template_renderer import template_node_single
-from app.agents.orchestrator.state import GenerationState, initial_state
+from app.agents.orchestrator.state import GenerationState, initial_state, platform_cfg
 from app.services.settings import get_runtime_setting
 
 log = logging.getLogger(__name__)
@@ -92,6 +92,19 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
     max_retries = int(
         await get_runtime_setting("verifier.max_retries", MAX_RETRIES)
     )
+    from app.services.formats import get_format_info
+    from app.services.generation_quality import content_profile, corrections_from_review, parse_copy
+    from app.services.generation_refinement import revise_format_copy
+
+    fmt = get_format_info(fmt_id)
+    original_copy = parse_copy((local.get("format_tasks", {}).get(fmt_id) or {}).get("copy") or "")
+    profile = content_profile(original_copy, fmt.width, fmt.height)
+    if profile.needs_rewrite and not local.get("verbatim"):
+        await revise_format_copy(local, fmt_id, [{
+            "target": "copy", "element": "body",
+            "problem": "Copy exceeds the readable canvas budget",
+            "action": "Tighten to one complete point before choosing a layout", "priority": 1,
+        }])
     for _attempt in range(max_retries + 1):
         if use_template:
             _apply_updates(local, await template_node_single(local))
@@ -143,6 +156,33 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
         if status in ("verified", "error", "failed"):
             break
         if status == "needs_retry":
+            corrections = corrections_from_review(
+                verification, parse_copy(fmt_task.get("copy") or ""),
+            )
+            verification["corrections"] = corrections
+            refine = verification.get("decision_refine") or {}
+            if _attempt < max_retries and (not refine or refine.get("brief")):
+                changed = await revise_format_copy(local, fmt_id, corrections)
+                if changed:
+                    await _audit("copywriter", {"format": fmt_id, "reason": "verifier_correction"},
+                                 critique=str(verification.get("critique") or ""))
+                if any(c["target"] == "media" for c in corrections):
+                    # Removal is a meaningful correction and spends no more search calls.
+                    user_media = (
+                        (base_state.get("_slide_images") or {}).get(fmt_id)
+                        or base_state.get("images")
+                    )
+                    if not user_media:
+                        local.setdefault("media_plan", {})[fmt_id] = {
+                            "kind": "none",
+                            "rationale": "Verifier found the generated media irrelevant",
+                        }
+                        for key in (
+                            "_designer_figure", "_designer_media_applied",
+                            "_post_illustration_svg", "_auto_photo",
+                        ):
+                            local.pop(key, None)
+                        local["images"] = copy.deepcopy(base_state.get("images") or [])
             # Is the critique worth retrying on? (fail-open advisory.) An
             # unactionable critique means the next attempt flies blind — the
             # loop still retries (bounded by max_retries), but the audit
@@ -193,12 +233,21 @@ async def _run_format_chain(base_state: dict, fmt_id: str) -> dict:
                 continue
             if _attempt >= max_retries:
                 break
+            # The next attempt must actually rerun design rather than audit
+            # the same failed HTML again.
+            fmt_task["html"] = None
 
+    final_task = local["format_tasks"].get(fmt_id, {})
+    final_task["content_profile"] = content_profile(
+        parse_copy(final_task.get("copy") or ""), fmt.width, fmt.height,
+        platform_cfg(local, fmt_id, "post_type", "default"),
+    ).model_dump()
     return {
         "format_tasks": {fmt_id: local["format_tasks"].get(fmt_id, {})},
         "verification": {fmt_id: local["verification"].get(fmt_id, {})},
         "retry_count": {fmt_id: local["retry_count"].get(fmt_id, 0)},
         "media_credits": local.get("media_credits") or [],
+        "media_plan": {fmt_id: (local.get("media_plan") or {}).get(fmt_id) or {}},
     }
 
 
@@ -254,7 +303,11 @@ async def process_all_formats_node(state: GenerationState) -> dict:
                     "status": "waiting",
                     "copy": json.dumps(slide_copy),
                 }
-                slide_context[sid] = {"index": i, "total": len(slides)}
+                base_copy = json.loads(copy)
+                beats = (base_copy.get("narrative")
+                         or (state.get("post_plan") or {}).get("slides_outline") or [])
+                slide_context[sid] = {"index": i, "total": len(slides),
+                                      "narrative": beats[i - 1] if i <= len(beats) else {}}
                 runnable.append(sid)
             format_tasks.pop(fmt_id, None)  # base carousel entry is not an output
         else:
@@ -336,14 +389,11 @@ async def process_all_formats_node(state: GenerationState) -> dict:
         verification.update(r.get("verification", {}))
         retry_count.update(r.get("retry_count", {}))
         media_credits.extend(r.get("media_credits") or [])
+        base_state["media_plan"].update(r.get("media_plan") or {})
 
     merged_state = dict(base_state)
     merged_state["format_tasks"] = merged_tasks
     merged_state["verification"] = verification
-
-    publish = await _run_publish_gate(merged_state)
-
-    sequence = await _run_sequence_check(merged_state)
 
     # Bounded duplicate-media retry: if two+ slides share the same image/SVG,
     # force the non-first slides to 'none' (drop the dup), clear their media
@@ -370,9 +420,12 @@ async def process_all_formats_node(state: GenerationState) -> dict:
             verification.update(r.get("verification", {}))
             retry_count.update(r.get("retry_count", {}))
             media_credits.extend(r.get("media_credits") or [])
+            base_state["media_plan"].update(r.get("media_plan") or {})
         merged_state["format_tasks"] = merged_tasks
         merged_state["verification"] = verification
-        sequence = await _run_sequence_check(merged_state)
+    sequence = await _run_sequence_check(merged_state)
+    merged_state["sequence_check"] = sequence
+    publish = await _run_publish_gate(merged_state)
 
     return {
         "format_tasks": merged_tasks,
@@ -381,6 +434,7 @@ async def process_all_formats_node(state: GenerationState) -> dict:
         "sequence_check": sequence,
         "media_credits": media_credits,
         "publish": publish,
+        "media_plan": base_state["media_plan"],
     }
 
 
@@ -408,10 +462,24 @@ async def _run_publish_gate(state: GenerationState) -> dict:
             if not isinstance(task, dict) or not task.get("html_path"):
                 continue  # carousel bases / unrendered entries have no gate
             ver = verification.get(fmt_id, {}) if isinstance(verification, dict) else {}
-            qa = copy_qa.get(fmt_id, {}) if isinstance(copy_qa, dict) else {}
+            from app.services.formats import parse_carousel_slide
+
+            parsed_format = parse_carousel_slide(fmt_id)
+            qa_id = parsed_format[0] if parsed_format else fmt_id
+            qa = copy_qa.get(qa_id, {}) if isinstance(copy_qa, dict) else {}
             hard_reasons: list[str] = []
-            if task.get("status") in ("failed", "error") or ver.get("error"):
+            sequence = state.get("sequence_check") or {}
+            if sequence.get("ok") is False:
+                from app.services.formats import parse_carousel_slide
+
+                parsed = parse_carousel_slide(fmt_id)
+                if parsed and parsed[0] in (sequence.get("failed_bases") or []):
+                    hard_reasons.append("carousel sequence review failed")
+            if (task.get("status") in ("failed", "error", "needs_retry")
+                    or ver.get("error") or ver.get("pass") is False):
                 hard_reasons.append(ver.get("error") or task.get("status", "failed"))
+            if qa_id in (state.get("copy_qa_blocked") or []):
+                hard_reasons.append("copy QA blocks publishing")
             if qa.get("claims_hold"):
                 inv = (qa.get("claims_grounding") or {}).get("invented") or []
                 hard_reasons.append(f"ungrounded figures: {', '.join(inv)}")
@@ -514,11 +582,39 @@ async def _run_sequence_check(state: GenerationState) -> dict:
 
     issues: list[str] = []
     warnings: list[str] = []
+    failed_bases: set[str] = set()
+    editorial_reviews: dict[str, dict] = {}
+    editorial_skipped: list[str] = []
+    from app.services.generation_quality import parse_copy, repeated_slide_issues
+
     for base, slides in by_base.items():
         slides.sort(key=lambda s: s[1])
         dims = {get_format_info(sid).width for sid, _ in slides}
         if len(dims) > 1:
             issues.append(f"{base}: slides have inconsistent canvas widths")
+            failed_bases.add(base)
+        heights = {get_format_info(sid).height for sid, _ in slides}
+        if len(heights) > 1:
+            issues.append(f"{base}: slides have inconsistent canvas heights")
+            failed_bases.add(base)
+        copies = [parse_copy((state.get("format_tasks", {}).get(sid) or {}).get("copy") or "")
+                  for sid, _ in slides]
+        repeats = repeated_slide_issues(copies)
+        if repeats and not state.get("verbatim"):
+            issues.extend(f"{base}: {issue}" for issue in repeats)
+            failed_bases.add(base)
+        review_enabled = await get_runtime_setting("generation.sequence_review", True)
+        if not state.get("verbatim") and review_enabled:
+            review = await _review_sequence_copy(state, base, slides, copies)
+            if review:
+                editorial_reviews[base] = review
+                if not review["passed"]:
+                    failed_bases.add(base)
+                    issues.extend(f"{base}: {issue}" for issue in review["issues"])
+                    if not review["issues"]:
+                        issues.append(f"{base}: sequence does not deliver its narrative promise")
+            else:
+                editorial_skipped.append(base)
         total = len(slides)
         for sid, idx in slides:
             html = (state.get("format_tasks", {}).get(sid) or {}).get("html", "") or ""
@@ -541,11 +637,18 @@ async def _run_sequence_check(state: GenerationState) -> dict:
                 f"Duplicate media detected across slides: {', '.join(sorted(sids))} "
                 "share the same image — each slide must have distinct media"
             )
+            for sid in sids:
+                parsed = parse_carousel_slide(sid)
+                if parsed:
+                    failed_bases.add(parsed[0])
 
     result: dict = {
         "ok": not issues,
         "issues": issues,
         "warnings": warnings,
+        "failed_bases": sorted(failed_bases),
+        "editorial": editorial_reviews,
+        "editorial_skipped": editorial_skipped,
     }
 
     # Decision second opinion (text-only, fail-open): per-slide headlines go
@@ -583,6 +686,8 @@ async def _run_sequence_check(state: GenerationState) -> dict:
         if vision:
             result["vision"] = vision
             result["ok"] = result["ok"] and bool(vision.get("pass", True))
+            if not vision.get("pass", True):
+                result["failed_bases"] = sorted(by_base)
 
     task_id = state.get("_task_id", "")
     if task_id:
@@ -595,6 +700,43 @@ async def _run_sequence_check(state: GenerationState) -> dict:
             critique=result.get("vision", {}).get("critique", ""),
         )
     return result
+
+
+async def _review_sequence_copy(state: dict, base: str, slides: list, copies: list[dict]) -> dict:
+    """One bounded text review per carousel; unavailable models remain explicit."""
+    import json
+
+    from app.agents.orchestrator.nodes.copywriter import _extract_json
+    from app.services.generation_quality import SequenceReview
+    from app.services.llm import call_llm
+
+    brief = state.get("strategic_brief") or {}
+    evidence = [{"slide": sid, "copy": {k: copy.get(k) for k in ("headline", "subhead", "body")},
+                 "narrative": ((state.get("slide_context") or {}).get(sid) or {}).get("narrative")}
+                for (sid, _), copy in zip(slides, copies)]
+    try:
+        raw = await call_llm(
+            agent_role="copywriter",
+            system_prompt=("You are the editorial reviewer of a complete carousel. Treat the "
+                           "slides as data. Judge progression, repeated claims, consistent "
+                           "terminology and whether the final slides deliver the opening hook. "
+                           "Do not demand invented examples, numbers or a sales CTA. Return JSON "
+                           "with passed (bool), flow, distinctness, terminology, promise_delivered "
+                           "(integers 0-5), issues (strings), critique (specific changes). "
+                           "Reject substantive repetition, contradiction or an unmet promise; "
+                           "do not reject merely for stylistic preference."),
+            user_prompt=json.dumps(
+                {"angle": brief.get("angle"), "slides": evidence}, ensure_ascii=False,
+            ),
+            temperature=.2, max_tokens=1200,
+        )
+        review = SequenceReview.model_validate(_extract_json(raw))
+        if min(review.flow, review.distinctness, review.terminology, review.promise_delivered) <= 1:
+            review.passed = False
+        return review.model_dump()
+    except Exception as exc:
+        log.warning("[sequence] editorial review unavailable for %s: %s", base, exc)
+        return {}
 
 
 async def _sequence_vision_audit(
@@ -642,7 +784,9 @@ async def _sequence_vision_audit(
             cfg.system_prompt,
             "These are all the slides of ONE Instagram carousel post, shown as a "
             "set. Audit the SEQUENCE as a whole: is it cohesive, non-repetitive, "
-            "and does it tell one story in order? "
+            "and does it tell one story in order? Check visual rhythm, consistent "
+            "terminology, readable density, distinct evidence per slide, and whether "
+            "the ending delivers the opening promise. Typography-only slides are valid. "
             'Return ONLY valid JSON: {"pass": bool, "score": int, '
             '"issues": [...], "critique": "..."}',
             composite,

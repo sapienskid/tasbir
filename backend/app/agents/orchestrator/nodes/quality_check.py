@@ -551,6 +551,19 @@ def _accent_issues(html: str, di_config: dict, template_id: str | None) -> list[
 
 
 async def quality_check_node_single(state: GenerationState) -> dict:
+    """Attach typed, routable corrections to every verifier failure path."""
+    from app.services.generation_quality import corrections_from_review, parse_copy
+
+    result = await _quality_check_node_single(state)
+    fmt_id = state.get("_processing_format_id", "")
+    review = (result.get("verification") or {}).get(fmt_id)
+    if review:
+        task = (state.get("format_tasks") or {}).get(fmt_id) or {}
+        review["corrections"] = corrections_from_review(review, parse_copy(task.get("copy") or ""))
+    return result
+
+
+async def _quality_check_node_single(state: GenerationState) -> dict:
     """Run multimodal quality check for a single platform."""
     prompt_cfg = await get_agent_config("verifier")
     fmt_id = state.get("_processing_format_id", "")
@@ -905,7 +918,12 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         f"{copy_qa_note}"
         f"{ds_context}\n\n"
         f"Audit this design image. Score it 0-100 and provide actionable critique.\n"
-        f"Return ONLY valid JSON: {{\"pass\": bool, \"score\": int, \"issues\": [...], \"critique\": \"...\"}}"
+        'Return ONLY valid JSON: {"pass": bool, "score": int, "issues": [...], '
+        '"critique": "...", "corrections": [{"target": "copy|layout|media", '
+        '"element": "specific element", "problem": "what fails", '
+        '"action": "concrete change to make", "priority": 1}]}\n'
+        "Route weak/repetitive/wordy copy to copy, hierarchy/geometry to layout, "
+        "and irrelevant media to media. Do not solve excessive text by shrinking type."
     )
 
     # Step 3: Call Vision LLM
@@ -962,7 +980,16 @@ async def quality_check_node_single(state: GenerationState) -> dict:
     # footer, category, overflow, contrast). If the vision model scores it
     # strongly, a strict pass=false caused by minor spec drift (a few px, an
     # exact type-scale value, hairline details) is not a hard fail.
-    if not passed and score >= 75:
+    from app.services.generation_quality import corrections_from_review
+
+    critical_editorial = any(
+        correction["priority"] == 1 and correction["target"] in ("copy", "media")
+        for correction in corrections_from_review(result)
+    )
+    if critical_editorial:
+        passed = False
+        score = min(score, 60)
+    if not passed and score >= 75 and not critical_editorial:
         log.info("[verifier] %s — score %d, pass=false overridden (visual quality strong)", fmt_id, score)
         passed = True
 
@@ -1004,6 +1031,7 @@ async def quality_check_node_single(state: GenerationState) -> dict:
         "score": score,
         "issues": issues,
         "critique": critique,
+        "corrections": result.get("corrections") or [],
         **({"decision_design": decision_design} if decision_design else {}),
         **({"decision_refine": decision_refine} if decision_refine else {}),
         **({"decision_gate": decision_gate} if decision_gate else {}),

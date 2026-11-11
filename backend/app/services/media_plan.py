@@ -57,11 +57,11 @@ def _plan_system_prompt(state: GenerationState) -> str:
         f"STYLE MEDIA GUIDANCE: {guidance}\n\n"
         "Rules:\n"
         "- One media kind per slide. Never the same image/art on two slides.\n"
-        "- If the subject is conceptual/abstract (an idea, essay, process, "
-        "feeling, math, code), SKIP find_photo entirely and use illustrate "
-        "(procedural) — a photo search on an abstract idea usually comes up "
-        "empty. Do not waste turns on it, and never leave a slide bare when an "
-        "abstract illustration fits.\n"
+        "- Media must explain the slide's specific claim, evidence or relationship. "
+        "A decorative image vaguely matching a keyword is insufficient. If the "
+        "subject is conceptual, skip photo search; choose typography-only (none) "
+        "unless an illustration communicates a specific relationship. Empty space "
+        "is intentional. Never add an illustration merely to fill a slot.\n"
         "- If the post is about numbers/comparison/steps (metrics, rankings, "
         "before/after, counts) and you have 2-6 concrete values, you may use "
         "kind=\"chart\" with a \"chart\" object: "
@@ -78,6 +78,7 @@ def _plan_system_prompt(state: GenerationState) -> str:
         "imperfect media is fine.\n\n"
         "Final answer: output ONLY a JSON array of plan entries:\n"
         '[{"target": "<slide_or_format_id>", "kind": "photo|illustration|none", '
+        '"rationale": "what this explains, or why typography alone is clearer", '
         '"query": "1-3 word search (photo only)", '
         '"style": "procedural|open-peeps|lorelei|notionists|bottts|blobs|'
         'initials|shapes|waves|landscape", "theme": "short theme (procedural '
@@ -107,6 +108,9 @@ def _build_user_prompt(state: GenerationState, targets: list[dict]) -> str:
             f"- {tid} | headline: {copy.get('headline', '') or '(none)'} | "
             f"body: {(copy.get('body') or '')[:120]}"
         )
+        beat = ((state.get("slide_context") or {}).get(tid) or {}).get("narrative")
+        if beat:
+            lines.append("  NARRATIVE FUNCTION: " + json.dumps(beat, ensure_ascii=False))
     return "\n".join(lines)
 
 
@@ -359,6 +363,7 @@ def _parse_plan(raw: str) -> list[dict]:
             "query": str(entry.get("query") or "")[:80],
             "style": str(entry.get("style") or "procedural")[:40],
             "theme": str(entry.get("theme") or "")[:60],
+            "rationale": str(entry.get("rationale") or "")[:500],
             "chart": {
                 "values": (chart.get("values") or [])[:8],
                 "labels": (chart.get("labels") or [])[:8],

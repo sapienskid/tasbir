@@ -40,6 +40,12 @@ class SettingError(ValueError):
 # validation and the Studio's control rendering, so the UI needs no hardcoded
 # per-key knowledge.
 DEFAULT_APP_SETTINGS: dict[str, dict] = {
+    "generation.sequence_review": {
+        "value": True, "type": "bool",
+        "description": (
+            "Review carousel narrative flow, distinctness, terminology and cover promise"
+        ),
+    },
     "verifier.max_retries": {
         "value": 3,
         "type": "int",
