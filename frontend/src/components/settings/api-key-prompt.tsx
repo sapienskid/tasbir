@@ -21,6 +21,7 @@ const SKIP_KEY = "tasbir:apikey-prompt-skipped:v1"
 export function ApiKeyPrompt() {
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState("")
+  const [error, setError] = useState("")
 
   useEffect(() => {
     if (getApiKey()) return
@@ -35,8 +36,12 @@ export function ApiKeyPrompt() {
   function save() {
     const trimmed = value.trim()
     if (trimmed) {
-      setApiKey(trimmed)
-      setOpen(false)
+      try {
+        setApiKey(trimmed)
+        setOpen(false)
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Could not save the API key.")
+      }
     }
   }
 
@@ -71,6 +76,7 @@ export function ApiKeyPrompt() {
             autoComplete="off"
             autoFocus
           />
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={skip}>

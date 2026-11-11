@@ -17,17 +17,28 @@ import { getApiKey, setApiKey, clearApiKey } from "@/lib/api"
 export function ApiKeyDialog() {
   const [open, setOpen] = useState(false)
   const [value, setValue] = useState(() => getApiKey())
+  const [error, setError] = useState("")
   const hasKey = Boolean(getApiKey())
 
   function save() {
-    const trimmed = value.trim()
-    if (trimmed) setApiKey(trimmed)
-    else clearApiKey()
-    setOpen(false)
+    try {
+      const trimmed = value.trim()
+      if (trimmed) setApiKey(trimmed)
+      else clearApiKey()
+      setOpen(false)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not save the API key.")
+    }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => {
+      if (next) {
+        setValue(getApiKey())
+        setError("")
+      }
+      setOpen(next)
+    }}>
       <DialogTrigger asChild>
         <Button variant={hasKey ? "outline" : "secondary"} size="sm">
           <KeyRound className="size-4" />
@@ -51,6 +62,7 @@ export function ApiKeyDialog() {
             placeholder="paste your API key"
             autoComplete="off"
           />
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => setOpen(false)}>

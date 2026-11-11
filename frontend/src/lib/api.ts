@@ -2,11 +2,32 @@
 // is cached in a module-level slot so we never read storage per render.
 
 const API_KEY_STORAGE_KEY = "tasbir:apikey:v1"
+const API_KEY_COOKIE = "__Host-tasbir-key-v1"
+const COOKIE_OPTIONS = "; Path=/; Secure; SameSite=Strict"
 // All JSON API routes live under /api so the SPA routes (/, /templates, ...)
 // never collide with them. The vite dev proxy forwards /api → :8000.
 const API_BASE = "/api"
 
 let cachedApiKey: string | null = null
+
+function cookieApiKey(): string {
+  try {
+    const value = document.cookie.split("; ").find((entry) => entry.startsWith(`${API_KEY_COOKIE}=`))
+    return value ? decodeURIComponent(value.slice(API_KEY_COOKIE.length + 1)) : ""
+  } catch {
+    return ""
+  }
+}
+
+function persistCookie(key: string): boolean {
+  try {
+    if (location.protocol !== "https:") return false
+    document.cookie = `${API_KEY_COOKIE}=${encodeURIComponent(key)}; Max-Age=31536000${COOKIE_OPTIONS}`
+    return cookieApiKey() === key
+  } catch {
+    return false
+  }
+}
 
 export function getApiKey(): string {
   if (cachedApiKey === null) {
@@ -15,17 +36,37 @@ export function getApiKey(): string {
     } catch {
       cachedApiKey = ""
     }
+    // Recover when browser storage is full/unavailable. The API still uses
+    // x-api-key; this host-only cookie is only a browser persistence fallback.
+    cachedApiKey ||= cookieApiKey()
+    if (cachedApiKey) persistCookie(cachedApiKey)
   }
   return cachedApiKey
 }
 
 export function setApiKey(key: string): void {
-  cachedApiKey = key
+  key = key.trim()
+  if (!key) return clearApiKey()
+  let stored = false
   try {
     localStorage.setItem(API_KEY_STORAGE_KEY, key)
+    stored = localStorage.getItem(API_KEY_STORAGE_KEY) === key
   } catch {
-    /* storage unavailable — in-memory only */
+    /* Try the HTTPS cookie before reporting a storage failure. */
   }
+  const cookieStored = persistCookie(key)
+  if (!stored && cookieStored) {
+    try {
+      // A failed replacement must not leave an older key shadowing recovery.
+      localStorage.removeItem(API_KEY_STORAGE_KEY)
+    } catch {
+      /* Storage is inaccessible; reads will use the cookie. */
+    }
+  }
+  if (!stored && !cookieStored) {
+    throw new Error("Your browser could not remember the API key. Allow site storage for Tasbir and try again. Private browsing may clear it when you close the tab.")
+  }
+  cachedApiKey = key
 }
 
 export function clearApiKey(): void {
@@ -34,6 +75,11 @@ export function clearApiKey(): void {
     localStorage.removeItem(API_KEY_STORAGE_KEY)
   } catch {
     /* noop */
+  }
+  try {
+    document.cookie = `${API_KEY_COOKIE}=; Max-Age=0${COOKIE_OPTIONS}`
+  } catch {
+    /* Storage is unavailable. */
   }
 }
 

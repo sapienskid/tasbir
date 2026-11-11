@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-11-11
+
+### Deployment and browser persistence
+- **Remember the Studio API key across visits** — existing localStorage keys
+  gain an HTTPS-only, host-only persistent recovery cookie. A failed storage
+  write now stays visible in the key dialog instead of silently keeping the
+  key only until the tab closes. Clearing the key removes both copies. Private
+  browsing or clearing all site data can still require entering the key again.
+- **Header key dialog reads the current saved key when opened** — saving from
+  the first-run prompt no longer leaves an empty header draft that can clear it.
+- **Production Compose passes Gateway credentials and routing settings** to
+  API, worker and beat, and gives beat the documented 256 MB memory limit.
+- **Image provenance and CI** — images carry their exact source revision;
+  main publishing checks out the commit whose CI passed and no longer starts
+  an additional ungated push build. Frontend unit tests now run in CI.
+- **Upgrade from 1.1:** configure `CLOUDFLARE_ACCOUNT_ID` and
+  `CLOUDFLARE_AI_GATEWAY_TOKEN`; all LLM calls require the Gateway. Preserve
+  the existing data volume and take a configuration/data backup before upgrade.
+
 ### Added
 - **Per-format ground and design language on AI-generated posts** — an AI post
   could never change its own ground or design language, because those values were

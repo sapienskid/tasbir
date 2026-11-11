@@ -18,7 +18,6 @@ name: Publish Docker Images to GHCR
 on:
   push:
     tags: ["v*"]
-    branches: [main]
   workflow_dispatch:
   workflow_run:
     # Never publish an image behind a red CI: on main, wait for CI to finish
@@ -56,6 +55,8 @@ jobs:
             dockerfile: ./backend/Dockerfile.playwright
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Compute image tags
         id: tags
@@ -102,6 +103,9 @@ jobs:
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
+          labels: |
+            org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha || github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
           tags: ${{ steps.tags.outputs.tags }}
           cache-from: type=gha,scope=${{ matrix.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}

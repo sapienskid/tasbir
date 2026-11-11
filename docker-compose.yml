@@ -14,6 +14,12 @@ volumes:
   tasbir_data:
 
 x-shared: &shared-env
+  CLOUDFLARE_ACCOUNT_ID: ${CLOUDFLARE_ACCOUNT_ID:-}
+  CLOUDFLARE_AI_GATEWAY_TOKEN: ${CLOUDFLARE_AI_GATEWAY_TOKEN:-}
+  CF_GATEWAY_ID: ${CF_GATEWAY_ID:-tasbir}
+  DECISION_PROVIDER_ORDER: ${DECISION_PROVIDER_ORDER:-clef-flash,clef}
+  DECISION_CALIBRATION_RATE: ${DECISION_CALIBRATION_RATE:-0.05}
+  COPY_QA_ENFORCE: ${COPY_QA_ENFORCE:-false}
   GEMINI_API_KEY: ${GEMINI_API_KEY:-}
   PEXELS_API_KEY: ${PEXELS_API_KEY:-}
   PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
@@ -130,7 +136,7 @@ services:
     command: celery -A app.tasks.celery_app beat --loglevel=info
     volumes:
       - tasbir_data:/app/data
-    mem_limit: 64m
+    mem_limit: 256m
 
   # ── Cloudflare Tunnel (opt-in) ──────────────────────────────────────
   # Exposes the api (Studio + API on :8000) through Cloudflare without
