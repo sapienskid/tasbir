@@ -75,9 +75,9 @@ def _build_illustrate_tool() -> dict:
     from app.services.tools.peep_styles import CURATED_STYLES
 
     style_desc = [
-        "procedural: abstract procedural composition (a single clean organic "
-        "mark — growth, flow, focus). The premium editorial default; use for "
-        "most posts. Theme steers the archetype.",
+        "procedural: editorial linework, abstract symbols, scientific curves, "
+        "hands balancing forms, plants crossing grids, books, and vessels. "
+        "Use one coherent composition. Theme steers the archetype.",
     ]
     for sid in sorted(CURATED_STYLES):
         info = CURATED_STYLES[sid]
@@ -118,8 +118,13 @@ def _build_illustrate_tool() -> dict:
                         "description": (
                             "Short abstract theme steering the composition (only "
                             "used by 'procedural') — e.g. 'growth', 'flow', "
-                            "'focus', 'orbital'. No objects, no text, no colour "
-                            "words."
+                            "'focus', 'orbital', 'hand-balance', 'hand-seed', "
+                            "'botanical-grid', 'asymptote-grid', 'convergence', "
+                            "'contour', 'open-book', 'vessel-growth'. No text or colour words."
+                            " Field motifs: field-flow, field-burst, field-tiles, field-blobs, "
+                            "field-orbits, field-waves, field-hatch, field-stipple, field-mesh, "
+                            "field-contour, field-nodes, field-cubes, field-scribble, "
+                            "field-halftone, field-phyllo."
                         ),
                     },
                     "ground": {

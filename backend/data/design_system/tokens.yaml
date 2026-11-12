@@ -1,6 +1,6 @@
 # Tasbir Design Tokens — Sabin Pokharel brand
-# Swiss / International Typographic Style — STRICTLY GRAYSCALE.
-# Two grounds only: white (default) and black (inverted). No hue, ever.
+# Swiss / International Typographic Style — grayscale with one lime accent.
+# Two grounds only: white (default) and black (inverted).
 
 --color-bg: "#FFFFFF"
 --color-bg-inverted: "#000000"
@@ -10,6 +10,7 @@
 --color-text-tertiary: "#B0B0B0"
 --color-border: "#D9D9D9"
 --color-border-inverted: "#2A2A2A"
+--color-accent: "#C6F432"
 
 --font-sans: "Inter, 'Helvetica Neue', Arial, sans-serif"
 --font-display: "Space Grotesk, Inter, sans-serif"

@@ -11,6 +11,7 @@ from app.api import (
     agents,
     chat,
     compose,
+    covers,
     design_languages,
     design_systems,
     font_pool,
@@ -203,6 +204,10 @@ app.include_router(
 )
 app.include_router(
     compose.router, prefix="/api/compose", tags=["compose"],
+    dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
+)
+app.include_router(
+    covers.router, prefix="/api/covers", tags=["covers"],
     dependencies=[Depends(verify_api_key), Depends(rate_limiter)]
 )
 app.include_router(

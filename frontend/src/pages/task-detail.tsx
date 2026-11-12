@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -179,6 +179,8 @@ export default function TaskDetailPage() {
   }
 
   const dims = formatDims(selectedFormat ?? "")
+
+  if (task.source_data.mode === "cover") return <Navigate to={`/covers/${task.id}`} replace />
 
   return (
     <div className="grid gap-4">

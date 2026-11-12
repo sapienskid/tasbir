@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-11-12
+
+### Added
+- Blog and newsletter Covers workspace with procedural and Cloudflare Workers
+  AI artwork, design-system palettes, previews, 1–4 variations, landscape,
+  Open Graph and square sizes, and PNG/SVG/HTML downloads.
+- All 15 supplied procedural motifs: flow, burst, tiles, blobs, orbits, waves,
+  hatch, stipple, mesh, contour, nodes, cubes, scribble, halftone and phyllotaxis.
+  Added composed hands, plants, books and scientific linework to the shared
+  illustration engine, plus a DB-palette-aware batch CLI.
+- Cover tasks use existing artifact delivery and retention. Rendering retries
+  reuse saved artwork instead of spending image inference quota again.
+
+### Changed
+- The default design system uses lime (`#C6F432`) as its single accent, with
+  matching seed rules. Existing user-owned systems require a targeted default
+  palette update; startup does not overwrite Studio-owned settings.
+- AI covers are generated in grayscale and mapped to the selected brand's
+  token palette during rendering. Image inference uses existing Cloudflare
+  Workers AI credentials and quota; it is not a Clef generation capability.
+
+### Operator notes
+- Restart API, worker and beat with the new image. The Studio is bundled into
+  that image. No database schema migration is required.
+- See [cover usage and CLI instructions](docs/covers.md).
+
 ## [1.4.1] — 2026-11-12
 
 ### Fixed

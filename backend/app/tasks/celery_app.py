@@ -11,6 +11,7 @@ celery_app = Celery(
     include=[
         "app.tasks.generate",
         "app.tasks.compose",
+        "app.tasks.covers",
         "app.tasks.retention",
         "app.tasks.agent_jobs",
     ],

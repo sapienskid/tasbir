@@ -17,6 +17,7 @@ const TaskDetailPage = lazy(() => import("@/pages/task-detail"))
 const JobDetailPage = lazy(() => import("@/pages/job-detail"))
 const NewTaskPage = lazy(() => import("@/pages/new-task"))
 const ComposePage = lazy(() => import("@/pages/compose"))
+const CoversPage = lazy(() => import("@/pages/covers"))
 const TemplatesPage = lazy(() => import("@/pages/templates"))
 const DesignSystemsPage = lazy(() => import("@/pages/design-systems"))
 const AgentsPage = lazy(() =>
@@ -38,6 +39,8 @@ export default function App() {
             <Route path="tasks/:taskId" element={page(<TaskDetailPage />)} />
             <Route path="jobs/:jobId" element={page(<JobDetailPage />)} />
             <Route path="new" element={page(<NewTaskPage />)} />
+            <Route path="covers" element={page(<CoversPage />)} />
+            <Route path="covers/:taskId" element={page(<CoversPage />)} />
             <Route path="compose" element={page(<ComposePage />)} />
             <Route path="compose/:batchId" element={page(<ComposePage />)} />
             <Route path="templates" element={page(<TemplatesPage />)} />

@@ -175,6 +175,7 @@ export type TaskStatus = "pending" | "running" | "completed" | "failed"
 export interface TaskSummary {
   id: string
   title: string
+  mode?: string
   status: TaskStatus
   created_at: string | null
 }

@@ -49,6 +49,7 @@ async def list_tasks(
         {
             "id": t.id,
             "title": (t.source_data or {}).get("title", ""),
+            "mode": (t.source_data or {}).get("mode", ""),
             "status": t.status,
             "created_at": iso_utc(t.created_at),
         }
@@ -222,7 +223,9 @@ async def download_task_file(
     delete_after = (
         consume if consume is not None else get_settings().delete_on_download
     )
-    media_type = "image/png" if path.suffix.lower() == ".png" else "text/html; charset=utf-8"
+    media_type = {
+        ".png": "image/png", ".svg": "image/svg+xml",
+    }.get(path.suffix.lower(), "text/html; charset=utf-8")
     if delete_after:
         return FileResponse(
             path,
@@ -468,6 +471,17 @@ async def retry_task(task_id: str, db: AsyncSession = Depends(get_db)):
         raise NotFoundError(f"Task {task_id} not found")
     if task.status in ("pending", "running"):
         raise HTTPException(status_code=409, detail="Task is still processing")
+
+    if (task.source_data or {}).get("mode") == "cover":
+        from app.tasks.covers import cover_task
+
+        await repo.update_status(task_id, "pending", error="")
+        try:
+            cover_task.delay(task_id)
+        except Exception as exc:
+            await repo.update_status(task_id, "failed", error="Cover queue unavailable")
+            raise HTTPException(status_code=503, detail="Cover queue unavailable") from exc
+        return {"task_id": task_id, "status": "pending"}
 
     if is_manual_task(task):
         from app.tasks.compose import compose_task

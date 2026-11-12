@@ -15,10 +15,10 @@ photo:
 
 style:
   name: "Swiss / International Typographic Style"
-  palette: "monochrome"           # strictly grayscale — no hue of any kind
+  palette: "monochrome + single accent"
   allowed_grounds: ["white", "black"]
   default_ground: "white"
-  accent: "none"
+  accent: "accent"               # var(--color-accent), injected from the DB
   max_weights_per_family: 2       # two weights max per typeface
   shadows: false
   border_radius: "0px"
@@ -184,13 +184,14 @@ do_dont:
     - "Constrain subhead/body copy to the measure (~600px at 1080) — never full-width lines"
     - "Keep hairline rules exactly 1px: hairline on white-ground, hairline-inverted on black-ground"
     - "Use generous whitespace — flexible space is intentional, not empty by accident"
-    - "A single composed illustration (a procedural abstract organic figure OR a curated DiceBear figure — never a scattered collage) may fill the designated illustration slot — it must stay strictly monochrome (brand grays via var(--color-*), resolved through the design system tokens), and photos in the image slot render grayscale with a small credit caption"
+    - "A single composed illustration may fill the designated illustration slot; use brand grays and var(--color-accent) for one focal highlight. Photos remain grayscale with a small credit caption."
+    - "Use var(--color-accent) as a restrained fill, rule, or highlight behind dark ink; never as small text"
   dont:
-    - "No hue of any kind — not even 'just a little' blue, amber, or green"
+    - "No hue outside the design system's single accent token"
     - "No icons or decorative motifs outside the designated illustration slot"
     - "No centering"
     - "No more than 2 weights per family (Space Grotesk 500+700, Source Serif 4 400, Inter 500)"
     - "Never use the display face for body, subhead, category, or metadata text"
     - "Never use the serif for headlines, category labels, or metadata"
     - "No shadows, gradients, borders-with-radius, or any softening effect"
-    - "No third color, ever — if a post needs emphasis, use weight or size"
+    - "No additional accent colors; use weight and size for text hierarchy"

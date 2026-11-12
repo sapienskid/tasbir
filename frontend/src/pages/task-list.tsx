@@ -30,11 +30,12 @@ import { useAgentJobs } from "@/hooks/use-library"
 import { apiRequest, ApiError, deleteAgentJob, type AgentJob } from "@/lib/api"
 
 type Row =
-  | { kind: "post"; id: string; title: string; status: string; created_at: string | null }
+  | { kind: "post" | "cover"; id: string; title: string; status: string; created_at: string | null }
   | { kind: AgentJob["kind"]; id: string; title: string; status: string; created_at: string | null }
 
 const TYPE_LABEL: Record<Row["kind"], string> = {
   post: "Post",
+  cover: "Cover",
   template: "Template",
   design_system: "Design system",
 }
@@ -52,7 +53,7 @@ export function TaskListPage() {
 
   const rows: Row[] = useMemo(() => {
     const t: Row[] = (tasks ?? []).map((task) => ({
-      kind: "post",
+      kind: task.mode === "cover" ? "cover" : "post",
       id: task.id,
       title: task.title || task.id.slice(0, 8),
       status: task.status,
@@ -73,13 +74,14 @@ export function TaskListPage() {
   }, [tasks, jobs])
 
   function rowHref(r: Row): string {
+    if (r.kind === "cover") return `/covers/${r.id}`
     return r.kind === "post" ? `/tasks/${r.id}` : `/jobs/${r.id}`
   }
 
   async function confirmDelete() {
     if (!deleting) return
     try {
-      if (deleting.kind === "post") {
+      if (deleting.kind === "post" || deleting.kind === "cover") {
         await apiRequest(`/tasks/${deleting.id}`, { method: "DELETE" })
         await mutateTasks()
       } else {
@@ -99,8 +101,9 @@ export function TaskListPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Tasks</h1>
         <span className="text-sm text-muted-foreground">
-          Posts, template builders, and brand builder jobs run in the background.
+          Posts, covers, and library jobs run in the background.
         </span>
+        <Button asChild variant="outline" size="sm"><Link to="/covers">New cover</Link></Button>
       </div>
 
       {error || jobsError ? (

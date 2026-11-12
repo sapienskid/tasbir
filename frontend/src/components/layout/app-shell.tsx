@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 const NAV = [
   { to: "/", label: "Tasks", match: /^\/$/ },
   { to: "/compose", label: "Compose", match: /^\/compose/ },
+  { to: "/covers", label: "Covers", match: /^\/covers/ },
   { to: "/templates", label: "Templates", match: /^\/templates/ },
   { to: "/design-systems", label: "Design Systems", match: /^\/design-systems/ },
   { to: "/agents", label: "Agents", match: /^\/agents/ },
@@ -25,11 +26,11 @@ export function AppShell() {
       </a>
       <header className="sticky top-0 z-40 border-b bg-background">
         <div className="mx-auto flex h-14 w-full max-w-screen-2xl items-center justify-between px-6">
-          <div className="flex items-center gap-6">
-            <Link to="/" className="font-display text-sm font-bold tracking-[0.2em] uppercase">
+          <div className="flex min-w-0 flex-1 items-center gap-6">
+            <Link to="/" className="shrink-0 font-display text-sm font-bold tracking-[0.2em] uppercase">
               Tasbir
             </Link>
-            <nav className="hidden items-center gap-1 sm:flex">
+            <nav className="hidden min-w-0 items-center gap-1 overflow-x-auto sm:flex">
               {NAV.map((item) => (
                 <Button
                   key={item.to}
@@ -43,7 +44,7 @@ export function AppShell() {
               ))}
             </nav>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <ApiKeyDialog />
             <ThemeToggle />
             <Button asChild size="sm">

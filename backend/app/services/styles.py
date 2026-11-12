@@ -633,7 +633,7 @@ def build_style_rules_block(di: dict) -> str:
         lines.append(f"  Design language: {preset['label']}")
     else:
         lines.append(f"  Design language: {language or 'custom'}")
-    if preset:
+    if preset and palette == ((preset.get("di") or {}).get("style") or {}).get("palette"):
         lines.append(f"  Palette: {preset['palette_rules']}")
     else:
         lines.append(f"  Palette: {palette} — brand token palette")

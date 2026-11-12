@@ -63,10 +63,14 @@ _CARRIER_BLACK = "var(--color-border-inverted)"
 _MID = "var(--color-text-secondary)"
 
 
-def _palette(ground: str) -> dict:
+def _palette(ground: str, use_accent: bool = False) -> dict:
     if ground == "black":
-        return {"ink": _INK_BLACK, "carrier": _CARRIER_BLACK, "mid": _MID}
-    return {"ink": _INK_WHITE, "carrier": _CARRIER_WHITE, "mid": _MID}
+        return {"ink": _INK_BLACK, "carrier": _CARRIER_BLACK, "mid": _MID,
+                "accent": "var(--color-accent)" if use_accent else _CARRIER_BLACK,
+                "paper": "var(--color-bg-inverted)"}
+    return {"ink": _INK_WHITE, "carrier": _CARRIER_WHITE, "mid": _MID,
+            "accent": "var(--color-accent)" if use_accent else _CARRIER_WHITE,
+            "paper": "var(--color-bg)"}
 
 
 def _fmt(n: float) -> str:
@@ -753,7 +757,24 @@ def _arch_spiral_free(p, rng: random.Random) -> list[_El]:
     return els
 
 
+def _editorial_recipe(name: str):
+    def render(p, rng):
+        from app.services.illustration_editorial import EDITORIAL_ARCHETYPES
+
+        return EDITORIAL_ARCHETYPES[name](p, rng)
+
+    return render
+
+
 ARCHETYPES: dict[str, callable] = {
+    **{name: _editorial_recipe(name) for name in (
+        "hand-balance", "hand-seed", "botanical-grid", "asymptote-grid",
+        "convergence", "contour", "open-book", "vessel-growth",
+    )},
+    **{f"field-{name}": _editorial_recipe(f"field-{name}") for name in (
+        "flow", "burst", "tiles", "blobs", "orbits", "waves", "hatch", "stipple",
+        "mesh", "contour", "nodes", "cubes", "scribble", "halftone", "phyllo",
+    )},
     "carrier-sun": _arch_carrier_sun,
     "sun-left": _arch_sun_left,
     "carrier-spiral": _arch_carrier_spiral,
@@ -793,6 +814,20 @@ ARCHETYPES: dict[str, callable] = {
 
 # Loose theme → archetype steering. Substring-matched (case-insensitive).
 THEME_ARCHETYPES: dict[str, str] = {
+    "hand-seed": "hand-seed",
+    "hand": "hand-balance",
+    "plant": "botanical-grid",
+    "botanic": "botanical-grid",
+    "garden": "vessel-growth",
+    "vessel": "vessel-growth",
+    "book": "open-book",
+    "reading": "open-book",
+    "limit": "asymptote-grid",
+    "boundary": "asymptote-grid",
+    "asymptot": "asymptote-grid",
+    "converg": "convergence",
+    "attention": "convergence",
+    "contour": "contour",
     "sun": "carrier-sun",
     "light": "carrier-sun",
     "rise": "carrier-sun",
@@ -851,6 +886,8 @@ THEME_ARCHETYPES: dict[str, str] = {
 def _archetype_for(seed: str, theme: str | None) -> str:
     if theme:
         low = theme.lower()
+        if low in ARCHETYPES:
+            return low
         for key, arch in THEME_ARCHETYPES.items():
             if key in low:
                 return arch
@@ -883,6 +920,7 @@ def generate_illustration_svg(
     ground: str = "white",
     theme: str | None = None,
     view_box: str = DEFAULT_VIEW_BOX,
+    use_accent: bool = False,
 ) -> str:
     """Generate an Anthropic-style monochrome SVG fragment from a seed.
 
@@ -894,7 +932,7 @@ def generate_illustration_svg(
     composition is auto-fit (uniform scale + center) into the safe box, so it
     can never clip out of its slot or collide with surrounding copy.
     """
-    p = _palette(ground)
+    p = _palette(ground, use_accent)
     _, els = _elements_for(seed, ground, theme)
     _, s, tx, ty = _fitted(els)
     body = "\n    ".join(e.to_svg(p) for e in els)
@@ -954,8 +992,9 @@ _DIRECTOR_SYSTEM = (
     "DiceBear style: people styles (open-peeps, lorelei, notionists, bottts) "
     "for human/human-centred posts, abstract styles (blobs, shapes, waves, "
     "landscape) for data/ideas/editorial art, or 'landscape' for "
-    "journey/horizon posts. Add an abstract theme only (growth, flow, burst, "
-    "orbit, layers, spiral...) — no literal objects, no words/letters, no "
+    "journey/horizon posts. Pick a theme such as growth, flow, orbit, hand-balance, "
+    "hand-seed, botanical-grid, asymptote-grid, convergence, contour, open-book, "
+    "or vessel-growth. Never request words/letters, "
     "emoji, no color terms. Keep the theme under 60 characters. You may pin "
     "parts on people styles (facial_hair, hair, expression, accessory) — "
     "omit for a random match. If no illustration helps, do NOT call any tool."
