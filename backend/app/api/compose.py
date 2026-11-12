@@ -93,6 +93,8 @@ class MediaIllustration(BaseModel):
     kind: Literal["illustration"]
     style: str = Field(default="procedural", max_length=64)
     seed: str = Field(default="", max_length=128)
+    motif: str = Field(default="auto", max_length=64)
+    size: Literal["template", "large"] = "template"
 
 
 MediaSpec = Annotated[
@@ -109,9 +111,7 @@ class SlideSpec(BaseModel):
     template_id: str = Field(min_length=1, max_length=64)
     copy_: ComposeCopy = Field(default_factory=ComposeCopy, alias="copy")
     # Element toggles; null = the template's own default hidden elements.
-    hidden: list[Annotated[str, Field(max_length=64)]] | None = Field(
-        default=None, max_length=32
-    )
+    hidden: list[Annotated[str, Field(max_length=64)]] | None = Field(default=None, max_length=32)
     media_position: Literal["auto", "left", "right", "top", "bottom"] = "auto"
     media: MediaSpec = Field(default_factory=MediaNone)
 
@@ -178,9 +178,7 @@ def _validate_platform(platform: str) -> str:
     """A known platform id — a carousel base or a single-post platform (not a slide id)."""
     platform = validate_platforms([platform])[0]
     if parse_carousel_slide(platform):
-        raise _unprocessable(
-            f"Use the carousel base platform, not a slide id ({platform!r})"
-        )
+        raise _unprocessable(f"Use the carousel base platform, not a slide id ({platform!r})")
     return platform
 
 
@@ -209,10 +207,12 @@ def _validate_media(slide: SlideSpec, where: str) -> None:
         if not media.url.startswith("https://"):
             raise _unprocessable(f"{where}: photo url must be https")
     elif isinstance(media, MediaIllustration):
+        from app.services.covers import COVER_MOTIFS
+
+        if media.motif not in COVER_MOTIFS:
+            raise _unprocessable(f"{where}: unknown illustration composition")
         if media.style not in _illustration_styles():
-            raise _unprocessable(
-                f"{where}: unknown illustration style {media.style!r}"
-            )
+            raise _unprocessable(f"{where}: unknown illustration style {media.style!r}")
 
 
 async def _validate_slide_template(
@@ -376,15 +376,40 @@ async def get_batch(batch_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/illustration")
 @interactive
-async def illustration(style: str = "procedural", seed: str = "", ground: str = "white"):
+async def illustration(
+    style: str = "procedural",
+    seed: str = "",
+    ground: str = "white",
+    design_system_id: str = "default",
+    style_language: str = "",
+    motif: str = "auto",
+    size: Literal["template", "large"] = "template",
+    db: AsyncSession = Depends(get_db),
+):
     """An offline illustration (procedural / DiceBear) for picker thumbnails."""
     from app.services.composer import render_illustration
+    from app.services.covers import COVER_MOTIFS
+    from app.services.ds_context import resolve_ds_context_strict
+    from app.services.tokens import build_css_variable_block, resolve_ground_vars
 
     if style not in _illustration_styles():
         raise _unprocessable(f"Unknown illustration style {style!r}")
     if ground not in ("white", "black"):
         raise _unprocessable("ground must be 'white' or 'black'")
-    return {"svg": render_illustration(style, seed[:128] or "figure", ground)}
+    if motif not in COVER_MOTIFS:
+        raise _unprocessable("Unknown illustration composition")
+    await _validate_system(db, design_system_id, style_language)
+    ctx = await resolve_ds_context_strict(db, design_system_id, style_language)
+    svg = render_illustration(style, seed[:128] or "figure", ground, ctx, motif, size)
+    background = resolve_ground_vars(ground, ctx.tokens, ctx.token_roles)["background"]
+    css = build_css_variable_block(ctx.tokens)
+    html = (
+        f"<!doctype html><html><head><style>{css}"
+        f"html,body{{margin:0;width:100%;height:100%;overflow:hidden;"
+        f"background:var({background})}}</style></head>"
+        f'<body data-ground="{ground}">{svg}</body></html>'
+    )
+    return {"svg": svg, "html": html}
 
 
 def _thumb_url(c: dict) -> str:

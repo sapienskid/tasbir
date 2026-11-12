@@ -22,7 +22,7 @@ PALETTE = {
 
 @pytest.mark.parametrize("motif", MOTIFS)
 def test_all_fifteen_motifs_are_seeded_valid_and_exposed(motif):
-    assert len(MOTIFS) == 15
+    assert len(MOTIFS) == 22
     svg = generate_art_svg(motif, "7", PALETTE, grain=True)
     root = ET.fromstring(svg)
     assert root.attrib["viewBox"] == "0 0 1600 900"

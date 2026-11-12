@@ -836,6 +836,12 @@ def _normalize_media(media: dict, kinds: list[str]) -> dict:
             raise HTTPException(status_code=422, detail="Photo needs an https url")
     else:
         style = str(media.get("style") or "procedural")
+        from app.services.covers import COVER_MOTIFS
+
+        if media.get("motif", "auto") not in COVER_MOTIFS:
+            raise HTTPException(status_code=422, detail="Unknown illustration composition")
+        if media.get("size", "template") not in ("template", "large"):
+            raise HTTPException(status_code=422, detail="Unknown illustration size")
         if style not in _illustration_styles():
             raise HTTPException(
                 status_code=422, detail=f"Unknown illustration style {style!r}"
@@ -1131,8 +1137,11 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
         elif req_media is not None:
             style = str(req_media.get("style") or "procedural")
             fig_seed = str(req_media.get("seed") or f"{seed}|media")
-            illustration = render_illustration(style, fig_seed, ground)
-            media_state = {"kind": "illustration", "style": style, "seed": fig_seed}
+            motif = str(req_media.get("motif") or "auto")
+            size = str(req_media.get("size") or "template")
+            illustration = render_illustration(style, fig_seed, ground, ctx, motif, size)
+            media_state = {"kind": "illustration", "style": style, "seed": fig_seed,
+                           "motif": motif, "size": size}
         else:
             # No media in the request: carry the post's current media over so a
             # text / toggle / template edit never drops the art.
@@ -1167,8 +1176,11 @@ async def _build_refill(task, fmt_id: str, request: RefillRequest, db: AsyncSess
                 style = str(prev_media.get("style") or "procedural")
                 if style in _illustration_styles():
                     fig_seed = str(prev_media.get("seed") or f"{seed}|media")
-                    illustration = render_illustration(style, fig_seed, ground)
-                    media_state = {"kind": "illustration", "style": style, "seed": fig_seed}
+                    motif = str(prev_media.get("motif") or "auto")
+                    size = str(prev_media.get("size") or "template")
+                    illustration = render_illustration(style, fig_seed, ground, ctx, motif, size)
+                    media_state = {"kind": "illustration", "style": style, "seed": fig_seed,
+                                   "motif": motif, "size": size}
         copy = {
             "headline": merged.get("headline", ""),
             "subhead": merged.get("subhead", ""),

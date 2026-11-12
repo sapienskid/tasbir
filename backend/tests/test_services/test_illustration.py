@@ -34,7 +34,7 @@ def test_all_archetypes_reach_and_clean():
         svg = generate_illustration_svg(seed, "white")
         assert svg.lstrip().startswith("<svg")
         assert svg.rstrip().endswith("</svg>")
-        assert "<path" in svg
+        assert "<path" in svg or "<circle" in svg
         assert not HEX_RE.search(svg)  # verifier-safe: no raw hex
         assert "{{" not in svg  # fully rendered, no leftover Jinja
         seen.add(svg)

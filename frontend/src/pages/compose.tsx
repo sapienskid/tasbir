@@ -768,6 +768,8 @@ function ComposePage({ batchId }: { batchId?: string }) {
               templatesLoading={templatesLoading}
               ground={state.ground}
               multiSlide={post.slides.length > 1}
+              designSystemId={state.design_system_id}
+              styleLanguage={state.style_language}
               onChange={patchSlide}
               onApplyTemplate={applyTemplate}
               onApplyMedia={applyMedia}

@@ -16,6 +16,7 @@ from app.services.covers import (
     CoverRequest,
     build_cover_svg,
     cover_html,
+    cover_theme,
 )
 from app.services.decisions import providers_configured
 from app.services.ds_context import DSResolutionError, resolve_ds_context_strict
@@ -45,7 +46,16 @@ async def preview_cover(request: CoverRequest, db: AsyncSession = Depends(get_db
     except DSResolutionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     request.seed = request.seed.strip() or "cover-preview"
-    return {"html": cover_html(build_cover_svg(request, ctx, 0), request.width, request.height)}
+    result = {"html": cover_html(build_cover_svg(request, ctx, 0), request.width, request.height)}
+    if cover_theme(request, 0) == "field-synthesis":
+        from app.services.generative_art import build_composition
+
+        result["composition"] = build_composition(
+            f"{request.seed}:0",
+            request.width,
+            request.height,
+        ).to_dict()
+    return result
 
 
 @router.post("", status_code=202)

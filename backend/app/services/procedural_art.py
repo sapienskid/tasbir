@@ -11,6 +11,8 @@ import hashlib
 import math
 import random
 
+from app.services.mathematical_art import MATHEMATICAL_MOTIFS
+
 
 class Noise:
     """Two-octave value noise, roughly in [0, 1]."""
@@ -552,6 +554,9 @@ def cubes(s, rng, pal, nz):
     ]
     cells = [(i, j) for j in range(count) for i in range(count) if heights[j][i]]
     highlights = set(rng.sample(cells, min(2, len(cells))))
+    if cells:
+        # The frontmost top cannot be hidden by a later block.
+        highlights.add(max(cells, key=lambda cell: (sum(cell), heights[cell[1]][cell[0]])))
     ox, oy = w / 2, h / 2 - count * ch + cz * 1.5
     for t in range(2 * count - 1):
         for i in range(count):
@@ -654,6 +659,12 @@ def phyllo(s, rng, pal, nz):
     )
 
 
+def synthesis(s, rng, pal, nz):
+    from app.services.generative_art import synthesis as compose_systems
+
+    compose_systems(s, rng, pal, nz)
+
+
 MOTIFS = {
     fn.__name__: fn
     for fn in (
@@ -672,8 +683,12 @@ MOTIFS = {
         scribble,
         halftone,
         phyllo,
+        synthesis,
     )
 }
+
+
+MOTIFS.update(MATHEMATICAL_MOTIFS)
 
 
 def generate_art_svg(

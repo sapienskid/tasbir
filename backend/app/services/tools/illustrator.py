@@ -402,7 +402,8 @@ def run_illustrate(args: dict, seed: str = "") -> str:
         ground = "white"
 
     if style == "procedural" or style == "anthropic":
-        return generate_illustration_svg(seed or "figure", ground, theme=theme)
+        return generate_illustration_svg(seed or "figure", ground, theme=theme,
+                                         use_accent=args.get("use_accent") is True)
 
     parts = {
         key: args[key]

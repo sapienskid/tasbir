@@ -1,8 +1,11 @@
 # Blog and newsletter covers
 
 Open **Covers** in Studio, choose a design system, and enter an article title,
-excerpt, or visual direction. Pick a composition or let the article's keywords
-select a family. Preview a procedural drawing, then generate 1–4 variations.
+excerpt, or visual direction. Generative composition is selected by default;
+you can also pick a single motif or let the article's keywords select a family.
+The procedural preview updates automatically after a short
+pause while editing. Shuffle beside the seed explores a new drawing; Generate
+uses that same seed to create 1–4 variations.
 Every variation can be downloaded as PNG, standalone SVG, or HTML; **Download
 all** bundles the artifacts into a ZIP. Covers also appear in Tasks.
 
@@ -12,6 +15,13 @@ Artwork contains no titles, categories, handles, or footer. Add typography in
 your publishing tool if needed.
 
 ## Artwork engines
+
+**Generative composition** builds connected vector forms from seeded geometry:
+curves share anchors, repeated elements follow a common structure, and the accent
+belongs to a face or part of the illustration. It varies proportions, curvature,
+attachments, rhythm, and arrangement. It does not paste complete field patterns
+on top of one another. The same seed and settings reproduce the same drawing;
+there is no guarantee that two different seeds will look distinct.
 
 **Procedural drawing** runs locally with no model calls. The shared illustration
 engine includes scientific curves, hand/plant/object compositions, and all 15
@@ -39,11 +49,25 @@ Field motifs intentionally reach the canvas edge. Isolated illustrations use
 the existing safe-frame fitting. All are also available to the social pipeline
 through the `illustrate` tool's `theme` parameter.
 
-The drawing seed reproduces geometry at the same size and settings. Preview
-freezes a seed so the first generated study matches the preview. Auto mode
+The drawing seed reproduces geometry at the same size and settings. A seed is
+selected when the form opens, so the first generated study matches the automatic
+preview. Auto mode
 uses keyword families, not an LLM understanding of arbitrary visual directions;
 select a specific composition for precise control. New batches can use the same
 settings with a fresh seed.
+
+Auto now shuffles the matching family with the seed, rather than always picking
+the first recipe. Random selects generative composition and ignores article keywords. Six additional
+families draw from equations: Lissajous curves, mathematical roses, superformula
+contours, De Jong attractors, wave interference and exponential function families.
+These are generative artwork, not plots of measured article data. The seed
+changes coefficients, phase, frequency, layering and geometry; it offers a very
+large range of results, without a guarantee that every result looks unique.
+
+Manual Compose's illustration picker uses server-resolved brand tokens, matching
+the post's design system and language. It exposes composition selection, Shuffle,
+and a larger fitted-art option for the corner-art template. Preview and post
+use the same seed and full SVG viewport. Other templates retain their own layout.
 
 **AI artwork** calls Cloudflare Workers AI's
 `@cf/black-forest-labs/flux-1-schnell`. It uses the existing resolved Cloudflare
@@ -70,6 +94,9 @@ never brand token values. An SVG luminance filter maps the returned raster into
 the selected system's colors before PNG rendering. Antialiasing and print grain
 can create blended edge shades. No unrestricted source raster is exported.
 AI SVG files embed a raster; procedural SVG files remain vector drawings.
+When an accent exists, AI covers include a seeded accent carrier behind the
+artwork; white source paper becomes transparent over that carrier. This gives
+the accent a deliberate focal role instead of depending only on midtone pixels.
 
 ## Queue, rendering, and retries
 

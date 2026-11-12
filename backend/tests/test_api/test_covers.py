@@ -50,6 +50,10 @@ async def test_preview_and_full_procedural_lifecycle(authed_client, enqueued, mo
     preview = await authed_client.post("/api/covers/preview", headers=H, json=body)
     assert preview.status_code == 200
     assert "<svg" in preview.json()["html"]
+    composition = preview.json()["composition"]
+    assert composition["seed"] == "stable:0"
+    assert composition["layer_count"] == len(composition["layers"])
+    assert any(layer["motif"] for layer in composition["layers"])
     response = await authed_client.post("/api/covers", headers=H, json=body)
     assert response.status_code == 202
     task_id = response.json()["task_id"]
@@ -64,6 +68,8 @@ async def test_preview_and_full_procedural_lifecycle(authed_client, enqueued, mo
     svg = await authed_client.get(f"/api/tasks/{task_id}/files/cover-1.svg", headers=H)
     assert svg.headers["content-type"].startswith("image/svg+xml")
     assert svg.text.startswith("<svg")
+    html = await authed_client.get(f"/api/tasks/{task_id}/files/cover-1.html", headers=H)
+    assert html.text == preview.json()["html"]
     listing = (await authed_client.get("/api/tasks", headers=H)).json()
     assert next(t for t in listing if t["id"] == task_id)["mode"] == "cover"
     generate.assert_not_awaited()

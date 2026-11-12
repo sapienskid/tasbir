@@ -14,6 +14,10 @@ export default defineConfig({
     },
   },
   server: {
+    watch: {
+      usePolling: process.env.CHOKIDAR_USEPOLLING === "true",
+      interval: 500,
+    },
     port: 5173,
     host: "0.0.0.0",
     proxy: {

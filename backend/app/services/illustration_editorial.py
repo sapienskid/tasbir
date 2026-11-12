@@ -133,7 +133,9 @@ def contour(p, rng):
     els = []
     for i in range(10):
         r = 14 + i * 6
-        els.append(Ring(201 + i * 1.8, 119, r, width=1.2 if i % 3 else 2.5))
+        els.append(Ring(201 + i * 1.8, 119, r,
+                        stroke="accent" if i == 5 else "ink",
+                        width=5 if i == 5 else (1.2 if i % 3 else 2.5)))
     els.append(Circle(205 + rng.uniform(-8, 8), 117, 5))
     return els
 
@@ -226,6 +228,13 @@ EDITORIAL_ARCHETYPES.update(
             "scribble",
             "halftone",
             "phyllo",
+            "lissajous",
+            "rose",
+            "superformula",
+            "attractor",
+            "interference",
+            "function_family",
+            "synthesis",
         )
     }
 )

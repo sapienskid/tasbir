@@ -23,7 +23,9 @@ IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
 
 # Published by /covers/meta, so the Studio doesn't maintain a second catalog.
 COVER_MOTIFS = {
+    "field-synthesis": "Generative composition",
     "auto": "From the article",
+    "random": "Random composition",
     "asymptote-grid": "Limits and boundaries",
     "convergence": "Converging paths",
     "contour": "Organic contours",
@@ -49,6 +51,12 @@ COVER_MOTIFS = {
     "field-scribble": "Continuous looping line",
     "field-halftone": "Halftone field",
     "field-phyllo": "Phyllotaxis spirals",
+    "field-lissajous": "Lissajous curves",
+    "field-rose": "Mathematical rose curves",
+    "field-superformula": "Superformula contours",
+    "field-attractor": "De Jong attractor",
+    "field-interference": "Wave interference",
+    "field-function_family": "Exponential function families",
 }
 
 COVER_SIZES = [
@@ -64,7 +72,7 @@ class CoverRequest(BaseModel):
     content: str = Field(default="", max_length=20_000)
     theme: str = Field(default="", max_length=1000)
     engine: Literal["procedural", "ai"] = "procedural"
-    motif: str = Field(default="auto", max_length=64)
+    motif: str = Field(default="field-synthesis", max_length=64)
     ground: Literal["white", "black"] = "white"
     placement: Literal["center", "left", "right"] = "center"
     texture: Literal["clean", "print"] = "print"
@@ -83,13 +91,23 @@ class CoverRequest(BaseModel):
 
 def cover_theme(request: CoverRequest, index: int) -> str:
     """Specific operator direction wins; auto variants explore related motifs."""
+    if request.motif == "random":
+        return "field-synthesis"
     if request.motif != "auto":
         return request.motif
     text = f"{request.theme} {request.title} {request.content[:3000]}".lower()
     families = [
         (
             ("limit", "boundar", "math", "comput"),
-            ["asymptote-grid", "field-mesh", "field-contour", "field-cubes"],
+            [
+                "asymptote-grid",
+                "field-mesh",
+                "field-contour",
+                "field-cubes",
+                "field-function_family",
+                "field-lissajous",
+                "field-superformula",
+            ],
         ),
         (
             ("grow", "plant", "nature", "learn"),
@@ -103,9 +121,11 @@ def cover_theme(request: CoverRequest, index: int) -> str:
         ),
     ]
     for words, motifs in families:
-        if any(word in text for word in words):
+        if request.motif == "auto" and any(word in text for word in words):
+            motifs = list(motifs)
+            random.Random(f"{request.seed}:composition").shuffle(motifs)
             return motifs[index % len(motifs)]
-    motifs = list(COVER_MOTIFS)[1:]
+    motifs = [key for key in COVER_MOTIFS if key not in ("auto", "random")]
     random.Random(request.seed).shuffle(motifs)
     return motifs[index % len(motifs)]
 
@@ -125,7 +145,9 @@ def image_prompt(request: CoverRequest, motif: str) -> str:
         )
         + f"Keep the entire subject in the central 55% of the image with wide empty "
         f"margins for a landscape crop; visual weight toward the {request.placement}. "
-        "Black ink on a white background, grayscale only. No typography, text, words, "
+        "A bold focal silhouette with substantial mid-gray filled areas and confident "
+        "dark linework on a white background. Avoid hairline-only diagrams. Grayscale only. "
+        "No typography, text, words, "
         "letters, numbers, logos, signatures, photography, glossy 3D, or neon lighting."
     )[:2048]
 
@@ -161,7 +183,7 @@ async def generate_cover_image(prompt: str) -> tuple[str, str]:
         raise ValueError("Cloudflare returned an invalid image") from exc
 
 
-def _palette_filter(variables: list[str]) -> str:
+def _palette_filter(variables: list[str], transparent_paper: bool = False) -> str:
     """Quantize luminance into DS colors using SVG, including arbitrary CSS colors.
 
     Values stay in CSS variables. The image model never receives brand tokens,
@@ -184,7 +206,9 @@ def _palette_filter(variables: list[str]) -> str:
         )
     pieces.append(
         "<feMerge>"
-        + "".join(f'<feMergeNode in="band-{i}"/>' for i in range(len(variables)))
+        + "".join(
+            f'<feMergeNode in="band-{i}"/>' for i in range(len(variables) - int(transparent_paper))
+        )
         + "</feMerge></filter>"
     )
     return "".join(pieces)
@@ -216,10 +240,24 @@ def build_cover_svg(
         # An accent is used only when the selected design system defines one.
         if "--color-accent" in ctx.tokens:
             palette.insert(2, "--color-accent")
-        defs = _palette_filter(palette)
+        has_accent = "--color-accent" in ctx.tokens
+        defs = _palette_filter(palette, transparent_paper=has_accent)
         mime, encoded = image
+        carrier = ""
+        if has_accent:
+            from app.services.procedural_art import blob_pts, smooth
+
+            rng = random.Random(f"accent:{request.seed}:{index}")
+            center = {"left": 0.38, "center": 0.52, "right": 0.65}[request.placement]
+            path = smooth(
+                blob_pts(
+                    rng, width * center, height * 0.50, min(width, height) * 0.24, wob=0.12, n=14
+                )
+            )
+            carrier = f'<path data-cover-accent="focal" d="{path}" fill="var(--color-accent)"/>'
         art = (
-            f'<image width="{width}" height="{height}" preserveAspectRatio="xMidYMid slice" '
+            carrier
+            + f'<image width="{width}" height="{height}" preserveAspectRatio="xMidYMid slice" '
             f'href="data:{escape(mime, quote=True)};base64,{encoded}" '
             'filter="url(#cover-palette)"/>'
         )
@@ -229,20 +267,28 @@ def build_cover_svg(
             accents.insert(0, "var(--color-accent)")
         if "--color-accent-secondary" in ctx.tokens:
             accents.append("var(--color-accent-secondary)")
-        art = generate_art_svg(
-            motif[6:],
-            f"{request.seed}:{index}",
-            {
-                "bg": f"var({background})",
-                "ink": f"var({ink})",
-                "acc": accents,
-                "hi": accents[0],
-            },
-            width=width,
-            height=height,
-            grain=request.texture == "print",
-            placement=request.placement,
-        )
+        palette = {
+            "bg": f"var({background})",
+            "ink": f"var({ink})",
+            "acc": accents,
+            "hi": accents[0],
+        }
+        if motif == "field-synthesis":
+            from app.services.generative_art import render_composition
+
+            art = render_composition(
+                f"{request.seed}:{index}", palette, width, height, request.placement
+            )
+        else:
+            art = generate_art_svg(
+                motif[6:],
+                f"{request.seed}:{index}",
+                palette,
+                width=width,
+                height=height,
+                grain=request.texture == "print",
+                placement=request.placement,
+            )
     else:
         art = generate_illustration_svg(
             f"{request.seed}:{index}",
@@ -257,7 +303,11 @@ def build_cover_svg(
             1,
         )
     grain = ""
-    if request.texture == "print" and not image and not motif.startswith("field-"):
+    if (
+        request.texture == "print"
+        and not image
+        and (not motif.startswith("field-") or motif == "field-synthesis")
+    ):
         rng = random.Random(f"grain:{request.seed}:{index}")
         # Sparse ink specks stay away from the edge and use the same token palette.
         grain = (

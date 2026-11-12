@@ -393,7 +393,10 @@ def build_template_context(
     # ``illustration`` (e.g. an LLM tool result) wins over the deterministic one.
     if illustration is None:
         ill_seed = f"{seed.split('|')[0]}|illustration" if seed else "illustration"
-        illustration = generate_illustration_svg(ill_seed, ground)
+        illustration = generate_illustration_svg(
+            ill_seed, ground, theme="field-synthesis",
+            use_accent=design_language_has_accent(di_config),
+        )
 
     context = {
         "kicker": category,

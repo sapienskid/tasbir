@@ -1,7 +1,7 @@
-import { useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useState, type FormEvent, type ReactNode } from "react"
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
 import useSWR from "swr"
-import { ArrowLeft, Download, Loader2, RotateCcw } from "lucide-react"
+import { ArrowLeft, Download, Loader2, RotateCcw, Shuffle } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/tasks/status-badge"
 import { useDesignSystems } from "@/hooks/use-library"
 import { useTask } from "@/hooks/use-task"
 import { apiRequest, downloadBlob, fetchBlob, fetchText } from "@/lib/api"
-import { createCovers, DEFAULT_COVER, type CoverMeta, type CoverSettings } from "@/lib/covers"
+import { createCovers, DEFAULT_COVER, type CoverComposition, type CoverMeta, type CoverSettings } from "@/lib/covers"
 
 const selectClass = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
@@ -30,26 +30,69 @@ function CoverForm() {
   const location = useLocation()
   const { data: systems, error: systemsError } = useDesignSystems()
   const { data: meta, error: metaError } = useSWR<CoverMeta>("/covers/meta")
-  const [settings, setSettings] = useState<CoverSettings>(() => ({
-    ...DEFAULT_COVER, ...((location.state as { settings?: CoverSettings } | null)?.settings ?? {}),
-  }))
+  const [settings, setSettings] = useState<CoverSettings>(() => {
+    const saved = (location.state as { settings?: CoverSettings } | null)?.settings
+    return { ...DEFAULT_COVER, ...saved, seed: saved?.seed || crypto.randomUUID() }
+  })
   const [busy, setBusy] = useState(false)
   const [previewBusy, setPreviewBusy] = useState(false)
   const [preview, setPreview] = useState("")
+  const [previewKey, setPreviewKey] = useState("")
+  const [composition, setComposition] = useState<CoverComposition | null>(null)
   const [error, setError] = useState("")
   const activeSystems = (systems ?? []).filter((system) => system.is_active)
   const dsId = settings.design_system_id || activeSystems.find((s) => s.id === "default")?.id || activeSystems[0]?.id || ""
   const request = { ...settings, design_system_id: dsId }
   const available = Boolean(meta && dsId && !systemsError && !metaError)
+  const previewBody = JSON.stringify({ ...request, variations: 1 })
+  const previewCurrent = Boolean(preview) && previewKey === previewBody
+  const previewPending = settings.engine === "procedural" && available && (previewBusy || !previewCurrent)
+
+  useEffect(() => {
+    if (!available || settings.engine !== "procedural") {
+      setPreview("")
+      setPreviewKey("")
+      setComposition(null)
+      setPreviewBusy(false)
+      return
+    }
+    const controller = new AbortController()
+    setPreviewBusy(true)
+    setError("")
+    const timer = setTimeout(() => {
+      const payload = JSON.parse(previewBody) as CoverSettings
+      if (!payload.seed.trim()) {
+        setSettings((old) => old.seed.trim() ? old : { ...old, seed: crypto.randomUUID() })
+        return
+      }
+      void apiRequest<{ html: string; composition?: CoverComposition }>("/covers/preview", {
+        method: "POST", body: previewBody, signal: controller.signal,
+      }).then((response) => {
+        if (controller.signal.aborted) return
+        setPreview(response.html)
+        setPreviewKey(previewBody)
+        setComposition(response.composition ?? null)
+      }).catch((err: unknown) => {
+        if (controller.signal.aborted) return
+        setPreview("")
+        setPreviewKey("")
+        setComposition(null)
+        setError(err instanceof Error ? err.message : "Preview failed")
+      }).finally(() => {
+        if (!controller.signal.aborted) setPreviewBusy(false)
+      })
+    }, 350)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [available, settings.engine, previewBody])
 
   function update<K extends keyof CoverSettings>(key: K, value: CoverSettings[K]) {
     setSettings((old) => ({ ...old, [key]: value }))
-    setPreview("")
     setError("")
   }
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (!available || busy || previewPending) return
     setBusy(true)
     setError("")
     try {
@@ -60,20 +103,8 @@ function CoverForm() {
     } finally { setBusy(false) }
   }
 
-  async function previewDrawing() {
-    setPreviewBusy(true)
-    setError("")
-    try {
-      // Freeze the preview seed so Generate reproduces the first study exactly.
-      const seed = settings.seed || crypto.randomUUID()
-      setSettings((old) => ({ ...old, seed }))
-      const response = await apiRequest<{ html: string }>("/covers/preview", {
-        method: "POST", body: JSON.stringify({ ...request, seed }),
-      })
-      setPreview(response.html)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Preview failed")
-    } finally { setPreviewBusy(false) }
+  function randomizeSeed() {
+    update("seed", crypto.randomUUID())
   }
 
   return (
@@ -85,7 +116,7 @@ function CoverForm() {
       </div>
       <div className="grid items-start gap-8 lg:grid-cols-[minmax(300px,440px)_1fr]">
         <form onSubmit={(event) => void submit(event)} className="grid gap-5">
-          <fieldset disabled={busy || previewBusy} className="grid min-w-0 gap-5">
+          <fieldset disabled={busy} className="grid min-w-0 gap-5">
           <Field id="cover-system" label="Design system">
             <select id="cover-system" className={selectClass} value={dsId} onChange={(e) => update("design_system_id", e.target.value)}>
               {!dsId && <option value="">{systems ? "No active design systems" : "Loading…"}</option>}
@@ -149,32 +180,37 @@ function CoverForm() {
               </select>
             </Field>
             {settings.engine === "procedural" && <Field id="cover-seed" label="Drawing seed (optional)">
-              <Input id="cover-seed" value={settings.seed} maxLength={128} placeholder="Random" onChange={(e) => update("seed", e.target.value)} />
+              <div className="flex min-w-0 gap-2">
+                <Input id="cover-seed" className="min-w-0" value={settings.seed} maxLength={128} placeholder="Random" onChange={(e) => update("seed", e.target.value)} />
+                <Button type="button" variant="outline" size="icon" aria-label="Randomize seed" title="Randomize seed" onClick={randomizeSeed}>
+                  <Shuffle className="size-4" aria-hidden="true" />
+                </Button>
+              </div>
             </Field>}
           </div>
           {error || systemsError || metaError ? <p role="alert" className="text-sm text-destructive">{error || "Could not load cover settings. Refresh to try again."}</p> : null}
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={!available || busy || previewBusy || (settings.engine === "ai" && !meta?.ai_available)}>
+            <Button type="submit" disabled={!available || busy || previewPending || (settings.engine === "ai" && !meta?.ai_available)}>
               {busy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}Generate covers
             </Button>
-            {settings.engine === "procedural" && <Button type="button" variant="outline" disabled={!available || busy || previewBusy} onClick={() => void previewDrawing()}>
-              {previewBusy && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}Preview drawing
-            </Button>}
+
           </div>
           </fieldset>
         </form>
         <div className="grid gap-4 lg:sticky lg:top-24">
-          <div style={{ aspectRatio: `${settings.width}/${settings.height}` }} className="overflow-hidden rounded-lg border bg-muted/30">
+          <div style={{ aspectRatio: `${settings.width}/${settings.height}` }} className="relative overflow-hidden rounded-lg border bg-muted/30" aria-busy={previewPending}>
             {preview ? <FitScaledFrame html={preview} width={settings.width} height={settings.height} gap={0} bordered={false} /> : <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
               <svg viewBox="0 0 200 110" className="w-48 text-muted-foreground" fill="none" stroke="currentColor" aria-hidden="true">
                 <path d="M25 86H175M40 95V15" strokeWidth="1" opacity=".35" />
                 <path d="M49 77C85 77 106 69 119 49S134 22 135 13" strokeWidth="2.5" />
                 <path d="M145 14V88" strokeDasharray="3 5" /><circle cx="164" cy="34" r="8" />
               </svg>
-              <p className="text-sm text-muted-foreground">{settings.engine === "procedural" ? "Preview your drawing, then generate a set of variations." : "Generate covers to explore textured artwork for your article."}</p>
+              <p className="text-sm text-muted-foreground">{settings.engine === "procedural" ? "Your drawing preview updates automatically as you adjust the settings." : "Generate covers to explore textured artwork for your article."}</p>
             </div>}
+            {previewPending && <div role="status" className="absolute right-3 bottom-3 flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-xs"><Loader2 className="size-3 animate-spin" aria-hidden="true" />Updating preview…</div>}
           </div>
           <div className="flex justify-between text-xs text-muted-foreground"><span>{settings.width} × {settings.height}</span><span>PNG · SVG · HTML</span></div>
+          {composition && <p className="text-xs text-muted-foreground">Drawing: {[...new Set(composition.layers.flatMap((layer) => layer.motif ? [meta?.motifs.find((m) => m.id === `field-${layer.motif}`)?.label ?? layer.motif.replace(/[_-]/g, " ")] : []))].join(" · ")}</p>}
           <p className="max-w-lg text-sm text-muted-foreground">One visual idea, room to breathe. Titles and typography stay separate so you can use the artwork across your blog, newsletter, and social posts.</p>
         </div>
       </div>

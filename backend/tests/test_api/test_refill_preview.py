@@ -179,6 +179,11 @@ class TestEditorState:
         assert set(before["media_kinds"]) == {"image", "illustration"}
         assert before["family"] == "square" and before["width"] == 1080
 
+        media = {
+            "kind": "illustration", "style": "procedural", "seed": "s1",
+            "motif": "field-lissajous", "size": "large",
+        }
+
         r = await authed_client.post(
             _url(task_id, "refill"),
             headers=H,
@@ -186,14 +191,14 @@ class TestEditorState:
                 "slots": {"headline": "Fig"},
                 "hidden": [],
                 "media_position": "left",
-                "media": {"kind": "illustration", "style": "procedural", "seed": "s1"},
+                "media": media,
             },
         )
         assert r.status_code == 200, r.text
         body = r.json()
         assert body["revision"] == 1 and body["saved_at"] and body["converted"] is False
         assert "Fig" in body["html"] and "<svg" in body["html"]
-        assert body["editor"]["media"] == {"kind": "illustration", "style": "procedural", "seed": "s1"}
+        assert body["editor"]["media"] == media
 
         after = (await authed_client.get(_url(task_id, "editor"), headers=H)).json()
         assert after["hidden"] == [] and after["media_position"] == "left"
@@ -208,6 +213,7 @@ class TestEditorState:
         assert r2.json()["revision"] == 2
         state = (await authed_client.get(_url(task_id, "editor"), headers=H)).json()
         assert state["media_position"] == "left" and state["media"]["kind"] == "illustration"
+        assert state["media"] == media
         # A later toggle refill keeps the same figure (seed persisted).
         r3 = await authed_client.post(
             _url(task_id, "refill"), headers=H, json={"hidden": []}

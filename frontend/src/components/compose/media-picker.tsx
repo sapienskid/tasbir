@@ -1,4 +1,6 @@
 import { useState } from "react"
+import useSWR from "swr"
+import type { CoverMeta } from "@/lib/covers"
 import { Loader2, Search, Shuffle, X } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -38,36 +40,16 @@ function kindAllowed(kind: Kind, mediaKinds: Array<"image" | "illustration">): b
   return mediaKinds.includes("image")
 }
 
-// The illustration SVG only uses ground-adaptive CSS vars — give the sandboxed
-// thumbnail a neutral monochrome palette so it reads like the rendered post.
-function illustrationDoc(svg: string, ground: ComposeGround): string {
-  const dark = ground === "black"
-  const vars = dark
-    ? "--color-text:#fff;--color-text-inverted:#fff;--color-text-secondary:#aaa;--color-text-tertiary:#555;--color-bg:#000;--color-bg-inverted:#000"
-    : "--color-text:#000;--color-text-inverted:#fff;--color-text-secondary:#555;--color-text-tertiary:#bbb;--color-bg:#fff;--color-bg-inverted:#000"
-  return `<!doctype html><html><head><style>:root{${vars}}html,body{margin:0;height:100%;background:var(--color-bg)}
-.figure{--ill-ink:var(--color-text);--ill-mid:var(--color-text-secondary);--ill-light:var(--color-text-tertiary);--ill-paper:var(--color-bg);width:100%;height:100%}
-.figure svg,body>svg{width:100%;height:100%;display:block}</style></head><body data-ground="${ground}">${svg}</body></html>`
-}
-
-function IllustrationThumb({ style, seed, ground }: { style: string; seed: string; ground: ComposeGround }) {
-  const { data, error, isLoading } = useIllustration(style, seed, ground)
+function IllustrationThumb({ style, seed, ground, designSystemId, styleLanguage, motif, size }: {
+  style: string; seed: string; ground: ComposeGround; designSystemId: string;
+  styleLanguage: string; motif: string; size: string;
+}) {
+  const { data, error, isLoading } = useIllustration(style, seed, ground, designSystemId, styleLanguage, motif, size)
   return (
-    <div className="flex size-40 max-w-full items-center justify-center overflow-hidden rounded-md border bg-muted/20">
-      {data ? (
-        <iframe
-          title={`${style} illustration preview`}
-          srcDoc={illustrationDoc(data.svg, ground)}
-          sandbox=""
-          className="size-full border-0"
-        />
-      ) : error ? (
-        <span className="p-2 text-center text-[11px] text-destructive">
-          {error instanceof Error ? error.message : "Preview failed"}
-        </span>
-      ) : isLoading ? (
-        <Loader2 aria-hidden="true" className="size-4 animate-spin text-muted-foreground" />
-      ) : null}
+    <div className="flex aspect-[5/3] w-full items-center justify-center overflow-hidden rounded-md border bg-muted/20">
+      {data ? <iframe title={`${style} illustration preview`} srcDoc={data.html} sandbox="" className="size-full border-0" />
+        : error ? <span className="p-2 text-center text-xs text-destructive">{error instanceof Error ? error.message : "Preview failed"}</span>
+        : isLoading ? <Loader2 aria-hidden="true" className="size-4 animate-spin text-muted-foreground" /> : null}
     </div>
   )
 }
@@ -80,6 +62,8 @@ export function MediaPicker({
   media,
   mediaKinds,
   ground,
+  designSystemId = "default",
+  styleLanguage = "",
   orientation,
   multiSlide,
   onChange,
@@ -87,6 +71,8 @@ export function MediaPicker({
   hideApply = false,
 }: {
   media: ComposeMedia
+  designSystemId?: string
+  styleLanguage?: string
   mediaKinds: Array<"image" | "illustration">
   ground: ComposeGround
   orientation: "square" | "portrait" | "landscape"
@@ -96,6 +82,7 @@ export function MediaPicker({
   /** Hide the bulk-apply buttons (single-format editors apply directly). */
   hideApply?: boolean
 }) {
+  const { data: artMeta } = useSWR<CoverMeta>("/covers/meta")
   const [uploading, setUploading] = useState(false)
   const [query, setQuery] = useState("")
   const [searching, setSearching] = useState(false)
@@ -319,7 +306,23 @@ export function MediaPicker({
               Shuffle
             </Button>
           </div>
-          <IllustrationThumb style={media.style} seed={media.seed} ground={ground} />
+          {media.style === "procedural" && <div className="grid gap-2">
+            <Label htmlFor="ill-motif">Composition</Label>
+            <select id="ill-motif" value={media.motif || "auto"} className="h-9 w-full border bg-background px-2 text-sm"
+              onChange={(e) => onChange({ ...media, motif: e.target.value })}>
+              <option value="auto">Generative mix (random)</option>
+              {(artMeta?.motifs ?? []).filter((m) => m.id !== "auto" && m.id !== "random").map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
+          </div>}
+          <div className="grid gap-2">
+            <Label htmlFor="ill-size">Art size in post</Label>
+            <select id="ill-size" value={media.size || "template"} className="h-9 w-full border bg-background px-2 text-sm"
+              onChange={(e) => onChange({ ...media, size: e.target.value as "template" | "large" })}>
+              <option value="template">Template size</option><option value="large">Larger fitted artwork</option>
+            </select>
+          </div>
+          <IllustrationThumb style={media.style} seed={media.seed} ground={ground} designSystemId={designSystemId}
+            styleLanguage={styleLanguage} motif={media.motif || "auto"} size={media.size || "template"} />
           <p className="text-[11px] text-muted-foreground">Seed {media.seed}</p>
         </div>
       ) : null}

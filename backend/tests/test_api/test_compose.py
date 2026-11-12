@@ -13,6 +13,31 @@ _ILLUSTRATION = {"kind": "illustration", "style": "procedural", "seed": "x"}
 _UPLOAD = {"kind": "upload", "data": _PNG, "mime": "image/png"}
 
 
+async def test_illustration_preview_uses_brand_tokens(authed_client):
+    response = await authed_client.get(
+        "/api/compose/illustration",
+        headers=H,
+        params={
+            "design_system_id": "default",
+            "ground": "black",
+            "motif": "field-lissajous",
+            "seed": "math-7",
+            "size": "large",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "#C6F432" in data["html"]
+    assert "var(--color-accent)" in data["svg"]
+    assert 'data-size="large"' in data["html"]
+    assert 'data-ground="black"' in data["html"]
+    assert "width:100%;height:100%" in data["html"]
+    invalid = await authed_client.get(
+        "/api/compose/illustration", headers=H, params={"motif": "not-a-recipe"}
+    )
+    assert invalid.status_code == 422
+
+
 def _slide(template_id: str = "square-quote-card", **kw) -> dict:
     return {
         "template_id": template_id,
@@ -119,9 +144,7 @@ class TestValidation:
 
 
 class TestBatch:
-    async def test_batch_creates_tasks_sharing_batch_id(
-        self, authed_client: AsyncClient, enqueued
-    ):
+    async def test_batch_creates_tasks_sharing_batch_id(self, authed_client: AsyncClient, enqueued):
         posts = [
             {"platform": "instagram-square", "slides": [_slide(headline="One")]},
             {"platform": "instagram-square", "slides": [_slide(headline="Two")]},
@@ -350,9 +373,7 @@ class TestComposeTask:
                 ],
             }
         ]
-        created = (
-            await authed_client.post("/api/compose", headers=H, json=_batch(posts))
-        ).json()
+        created = (await authed_client.post("/api/compose", headers=H, json=_batch(posts))).json()
         task_id = created["task_ids"][0]
 
         from app.tasks.compose import run_compose

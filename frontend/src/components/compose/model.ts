@@ -158,7 +158,7 @@ export function templateMediaKinds(t: Template | undefined): Array<"image" | "il
 // Mirrors the backend ILLUSTRATE_TOOL style enum (procedural + curated DiceBear
 // styles in app/services/tools/peep_styles.py).
 export const ILLUSTRATION_STYLES: Array<{ id: string; label: string }> = [
-  { id: "procedural", label: "Procedural (abstract)" },
+  { id: "procedural", label: "Procedural (generative)" },
   { id: "open-peeps", label: "Open Peeps" },
   { id: "lorelei", label: "Lorelei" },
   { id: "notionists", label: "Notionists" },
@@ -386,7 +386,8 @@ function normalizeMedia(raw: ComposeMedia | undefined): ComposeMedia {
         license: raw.license ?? "",
       }
     case "illustration":
-      return { kind: "illustration", style: raw.style || "procedural", seed: raw.seed || randomSeed() }
+      return { kind: "illustration", style: raw.style || "procedural", seed: raw.seed || randomSeed(),
+        motif: raw.motif || "auto", size: raw.size || "template" }
     default:
       return { kind: "none" }
   }

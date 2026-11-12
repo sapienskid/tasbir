@@ -65,10 +65,12 @@ _MID = "var(--color-text-secondary)"
 
 def _palette(ground: str, use_accent: bool = False) -> dict:
     if ground == "black":
-        return {"ink": _INK_BLACK, "carrier": _CARRIER_BLACK, "mid": _MID,
+        return {"ink": _INK_BLACK,
+                "carrier": "var(--color-accent)" if use_accent else _CARRIER_BLACK, "mid": _MID,
                 "accent": "var(--color-accent)" if use_accent else _CARRIER_BLACK,
                 "paper": "var(--color-bg-inverted)"}
-    return {"ink": _INK_WHITE, "carrier": _CARRIER_WHITE, "mid": _MID,
+    return {"ink": _INK_WHITE,
+            "carrier": "var(--color-accent)" if use_accent else _CARRIER_WHITE, "mid": _MID,
             "accent": "var(--color-accent)" if use_accent else _CARRIER_WHITE,
             "paper": "var(--color-bg)"}
 
@@ -114,9 +116,10 @@ def _catmull_closed(points: list[tuple[float, float]]) -> str:
     return " ".join(d) + " Z"
 
 
-def _blob_points(cx, cy, rx, ry, rng: random.Random, n: int = 18) -> list[tuple[float, float]]:
+def _blob_points(cx, cy, rx, ry, rng: random.Random, n: int = 18,
+                 strength: float = 1.0) -> list[tuple[float, float]]:
     harmonics = 3
-    amps = [rng.uniform(0.04, 0.12) for _ in range(harmonics)]
+    amps = [rng.uniform(0.04, 0.12) * strength for _ in range(harmonics)]
     freqs = [rng.randint(2, 5) for _ in range(harmonics)]
     phases = [rng.uniform(0, math.tau) for _ in range(harmonics)]
     pts = []
@@ -193,7 +196,7 @@ class Circle(_El):
 
     def _pts(self) -> list[tuple[float, float]]:
         rng = _rng("circle-w", self.noise, round(self.cx, 1), round(self.cy, 1), round(self.r, 1))
-        return _blob_points(self.cx, self.cy, self.r, self.r, rng, 22)
+        return _blob_points(self.cx, self.cy, self.r, self.r, rng, 32, strength=.2)
 
     def to_svg(self, p: dict) -> str:
         color = p.get(self.fill)
@@ -213,7 +216,7 @@ class Ring(_El):
 
     def _pts(self) -> list[tuple[float, float]]:
         rng = _rng("ring", self.noise, round(self.cx, 1), round(self.cy, 1), round(self.r, 1))
-        return _blob_points(self.cx, self.cy, self.r, self.r, rng, 22)
+        return _blob_points(self.cx, self.cy, self.r, self.r, rng, 32, strength=.2)
 
     def box(self) -> Box:
         w = self.width / 2 + 1
@@ -311,7 +314,7 @@ class Wave(_El):
         return rng.uniform(0, math.pi)
 
     def to_svg(self, p: dict) -> str:
-        steps = 12
+        steps = 96
         phase = self._phase()
         d = []
         for i in range(steps + 1):
@@ -707,7 +710,9 @@ def _arch_wave_field(p, rng: random.Random) -> list[_El]:
     els: list[_El] = []
     for i in range(3):
         base = 70 + i * 42
-        els.append(Wave(88, 312, base, rng.uniform(5, 9), cycles=1 + i, width=2.0 + i * 0.3))
+        els.append(Wave(88, 312, base, rng.uniform(5, 9), cycles=1 + i,
+                        stroke="accent" if i == 1 else "ink",
+                        width=5.0 if i == 1 else 2.0 + i * 0.3))
     return els
 
 
@@ -774,6 +779,8 @@ ARCHETYPES: dict[str, callable] = {
     **{f"field-{name}": _editorial_recipe(f"field-{name}") for name in (
         "flow", "burst", "tiles", "blobs", "orbits", "waves", "hatch", "stipple",
         "mesh", "contour", "nodes", "cubes", "scribble", "halftone", "phyllo",
+        "lissajous", "rose", "superformula", "attractor", "interference", "function_family",
+        "synthesis",
     )},
     "carrier-sun": _arch_carrier_sun,
     "sun-left": _arch_sun_left,

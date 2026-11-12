@@ -116,11 +116,12 @@ export function useSlidePreview(
 
 // ─── Illustration thumbnail ────────────────────────────────────────────────
 
-export function useIllustration(style: string, seed: string, ground: ComposeGround) {
+export function useIllustration(style: string, seed: string, ground: ComposeGround,
+  designSystemId = "default", styleLanguage = "", motif = "auto", size = "template") {
   return useSWR(
-    style && seed ? `/compose/illustration?${style}&${seed}&${ground}` : null,
-    () => getComposeIllustration(style, seed, ground),
-    { dedupingInterval: Infinity, revalidateOnFocus: false, shouldRetryOnError: false }
+    style && seed ? ["/compose/illustration", style, seed, ground, designSystemId, styleLanguage, motif, size] : null,
+    () => getComposeIllustration(style, seed, ground, designSystemId, styleLanguage, motif, size),
+    { dedupingInterval: 2000, shouldRetryOnError: false }
   )
 }
 

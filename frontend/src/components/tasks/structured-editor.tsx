@@ -173,6 +173,8 @@ export function StructuredEditor({
               media={shownMedia}
               mediaKinds={mediaKinds}
               ground={doc.ground}
+              designSystemId={info.design_system_id}
+              styleLanguage={doc.styleLanguage}
               orientation={orientation}
               multiSlide={false}
               onChange={handleMedia}

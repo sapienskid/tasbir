@@ -52,6 +52,12 @@ the SPA into the image, so there `:8000` serves everything.
   `data/tasbir.db`, and `data/output/` are host files — no root-owned artifacts.
 - Edit backend code → api reloads instantly; the worker auto-restarts; frontend
   edits hot-reload through vite.
+- Bind-mount polling is enabled for API, worker, beat, renderer and Vite so
+  edits also propagate on mounted/external drives. If port 8000 is occupied,
+  set `TASBIR_DEV_API_PORT=8001` in `.env`; the Studio remains at :5173.
+  `TASBIR_DEV_RENDER_TAG` pins the dev renderer independently of production's
+  image tag. Dependency changes still require `up --build` (Python) or a
+  frontend container restart (pnpm install).
 - The playwright image is pulled from GHCR (rebuilding chromium locally is slow);
   only `api`/`worker`/`beat` build from source.
 

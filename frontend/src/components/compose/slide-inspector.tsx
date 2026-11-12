@@ -19,6 +19,8 @@ export function SlideInspector({
   templates,
   templatesLoading,
   ground,
+  designSystemId,
+  styleLanguage,
   multiSlide,
   onChange,
   onApplyTemplate,
@@ -30,6 +32,8 @@ export function SlideInspector({
   templates: Template[]
   templatesLoading: boolean
   ground: ComposeGround
+  designSystemId: string
+  styleLanguage: string
   multiSlide: boolean
   onChange: (patch: Partial<EditorSlide>) => void
   onApplyTemplate: (scope: "post" | "all") => void
@@ -94,6 +98,8 @@ export function SlideInspector({
             media={slide.media}
             mediaKinds={templateMediaKinds(template)}
             ground={ground}
+            designSystemId={designSystemId}
+            styleLanguage={styleLanguage}
             orientation={orientation}
             multiSlide={multiSlide}
             onChange={(media) => onChange({ media })}

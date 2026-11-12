@@ -1084,7 +1084,7 @@ export type ComposeMedia =
       photographer: string
       license: string
     }
-  | { kind: "illustration"; style: string; seed: string }
+  | { kind: "illustration"; style: string; seed: string; motif?: string; size?: "template" | "large" }
 
 export interface ComposeSlideSpec {
   template_id: string
@@ -1185,9 +1185,14 @@ export function updateTaskComposition(
 export function getComposeIllustration(
   style: string,
   seed: string,
-  ground: ComposeGround = "white"
-): Promise<{ svg: string }> {
-  const params = new URLSearchParams({ style, seed, ground })
+  ground: ComposeGround = "white",
+  designSystemId = "default",
+  styleLanguage = "",
+  motif = "auto",
+  size = "template",
+): Promise<{ svg: string; html: string }> {
+  const params = new URLSearchParams({ style, seed, ground, design_system_id: designSystemId,
+    style_language: styleLanguage, motif, size })
   return apiRequest(`/compose/illustration?${params.toString()}`)
 }
 

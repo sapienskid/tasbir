@@ -89,7 +89,12 @@ async def run_hard_checks(
     display_family = display_value.split(",")[0].strip()
     di = ctx.design_instruction or {}
     issues = quality_check._run_deterministic_checks(
-        html, ctx.footer or {}, category, width, height, display_family,
+        html,
+        ctx.footer or {},
+        category,
+        width,
+        height,
+        display_family,
         allow_emoji=bool((di.get("style") or {}).get("emoji")),
     )
     issues.extend(await dom_extractor.detect_overflow(html, width, height))
@@ -192,12 +197,45 @@ async def fetch_photo(media: dict) -> dict | None:
     return image
 
 
-def render_illustration(style: str, seed: str, ground: str) -> str:
+def render_illustration(
+    style: str,
+    seed: str,
+    ground: str,
+    ctx: DSContext | None = None,
+    motif: str = "auto",
+    size: str = "template",
+) -> str:
     """Procedural or DiceBear illustration markup (offline, deterministic per seed)."""
     from app.services.tools.illustrator import run_illustrate
 
     ground = ground if ground in ("white", "black") else "white"
-    return run_illustrate({"style": style or "procedural", "ground": ground}, seed=seed or "figure")
+    use_accent = ctx is not None and "--color-accent" in ctx.tokens
+    theme = (
+        motif
+        if motif not in ("auto", "random")
+        else ("field-synthesis" if style in ("procedural", "anthropic") else "")
+    )
+    svg = run_illustrate(
+        {
+            "style": style or "procedural",
+            "ground": ground,
+            "theme": theme,
+            "use_accent": use_accent,
+        },
+        seed=seed or "figure",
+    )
+    # Scale only the outer SVG; changing every nested SVG breaks its viewport.
+    css = (
+        ".tasbir-art{width:100%;height:100%;min-width:0;overflow:hidden}"
+        ".tasbir-art>svg,.tasbir-art>.figure{width:100%;height:100%;display:block}"
+        ".art:has(>.tasbir-art){flex-shrink:0;overflow:hidden}"
+    )
+    if size == "large":
+        css += (
+            ".art:has(>.tasbir-art){width:100%;max-width:100%;max-height:32vh;"
+            "aspect-ratio:5/3;margin-right:0;align-self:center}"
+        )
+    return f'<div class="tasbir-art" data-size="{size}"><style>{css}</style>{svg}</div>'
 
 
 def slide_copy(copy: dict | None) -> tuple[str, dict]:
@@ -285,7 +323,12 @@ async def compose_slide(
             illustration = ""  # never a procedural figure on top of a real image
     elif kind == "illustration" and "illustration" in kinds:
         illustration = render_illustration(
-            str(media.get("style") or "procedural"), str(media.get("seed") or seed), ground
+            str(media.get("style") or "procedural"),
+            str(media.get("seed") or seed),
+            ground,
+            ctx,
+            str(media.get("motif") or "auto"),
+            str(media.get("size") or "template"),
         )
     elif kind != "none":
         log.info("[composer] %s cannot host %s media — ignored", entry.get("id"), kind)

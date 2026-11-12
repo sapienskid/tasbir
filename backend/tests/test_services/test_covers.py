@@ -78,12 +78,21 @@ def test_ai_palette_is_applied_after_generation():
     assert "var(--color-text-inverted)" in svg
     assert "flood-color:var(--color-accent)" in svg
     assert '<feFuncA type="discrete"' in svg
+    assert 'data-cover-accent="focal"' in svg
 
 
 def test_auto_direction_is_related_and_operator_choice_wins():
-    request = CoverRequest(title="The limits of computation")
-    assert cover_theme(request, 0) == "asymptote-grid"
-    assert cover_theme(request, 1) == "field-mesh"
+    request = CoverRequest(title="The limits of computation", motif="auto")
+    assert cover_theme(request, 0) in {
+        "asymptote-grid",
+        "field-mesh",
+        "field-contour",
+        "field-cubes",
+        "field-function_family",
+        "field-lissajous",
+        "field-superformula",
+    }
+    assert cover_theme(request, 1) != cover_theme(request, 0)
     request.motif = "hand-seed"
     assert cover_theme(request, 0) == cover_theme(request, 1) == "hand-seed"
     assert len(image_prompt(CoverRequest(content="x" * 20_000), "contour")) <= 2048
