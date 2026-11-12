@@ -8,6 +8,7 @@ from xml.etree import ElementTree as ET
 import httpx
 import pytest
 
+from app.services.art import LEGACY_COMBOS
 from app.services.covers import (
     CoverRequest,
     build_cover_svg,
@@ -15,7 +16,6 @@ from app.services.covers import (
     generate_cover_image,
     image_prompt,
 )
-from app.services.art import LEGACY_COMBOS
 from app.services.ds_context import DSContext
 from app.services.illustration import generate_figure_metrics, generate_illustration_svg
 from app.services.tokens import DEFAULT_TOKEN_VALUES

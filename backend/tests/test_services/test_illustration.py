@@ -7,8 +7,8 @@ import pytest
 
 from app.services.art import (
     ASPECTS,
-    CONCEPTS,
     CONCEPT_NAMES,
+    CONCEPTS,
     FIELDS,
     RELATIONS,
     SUBJECTS,
