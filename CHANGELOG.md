@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-11-12
+
 ### Changed
 - **Illustrations and covers now use one composition engine**
   (`backend/app/services/art/`, ADR-0024). A scene is a concept expanded into a
