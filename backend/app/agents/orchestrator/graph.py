@@ -11,6 +11,7 @@ reducer race conditions that occur when many parallel Send branches write to
 nested dict state through a shared checkpointer.
 """
 
+import asyncio
 import copy
 import logging
 import re
@@ -424,6 +425,22 @@ async def process_all_formats_node(state: GenerationState) -> dict:
         merged_state["format_tasks"] = merged_tasks
         merged_state["verification"] = verification
     sequence = await _run_sequence_check(merged_state)
+    merged_state["media_credits"] = media_credits
+    merged_state["retry_count"] = retry_count
+    revision_limit = int(await get_runtime_setting("generation.sequence_max_revisions", 1))
+    for round_no in range(max(0, min(revision_limit, 1))):
+        if sequence.get("ok", True) or state.get("verbatim"):
+            break
+        previous_issues = list(sequence.get("issues") or [])
+        if not await _revise_failed_sequences(merged_state, sequence):
+            break
+        sequence = await _run_sequence_check(merged_state)
+        sequence["revisions"] = round_no + 1
+        sequence["previous_issues"] = previous_issues
+    merged_tasks = merged_state["format_tasks"]
+    verification = merged_state["verification"]
+    retry_count = merged_state.get("retry_count") or retry_count
+    media_credits = merged_state.get("media_credits") or media_credits
     merged_state["sequence_check"] = sequence
     publish = await _run_publish_gate(merged_state)
 
@@ -434,8 +451,63 @@ async def process_all_formats_node(state: GenerationState) -> dict:
         "sequence_check": sequence,
         "media_credits": media_credits,
         "publish": publish,
-        "media_plan": base_state["media_plan"],
+        "media_plan": merged_state["media_plan"],
+        "revised_carousel_copies": merged_state.get("revised_carousel_copies") or {},
+        "copy_qa": merged_state.get("copy_qa") or {},
+        "copy_qa_blocked": merged_state.get("copy_qa_blocked") or [],
     }
+
+
+async def _revise_failed_sequences(state: dict, sequence: dict) -> bool:
+    """Revise only failed sets, regenerate their media and recheck each frame."""
+    from app.agents.orchestrator.nodes.copywriter import _copy_qa_for_platform
+    from app.agents.orchestrator.post_cache import post_cache_drop
+    from app.services.formats import parse_carousel_slide
+    from app.services.generation_refinement import revise_carousel_copy
+    from app.services.media_plan import build_media_plan
+
+    changed = []
+    for base in sequence.get("failed_bases") or []:
+        review = (sequence.get("editorial") or {}).get(base)
+        if not review or review.get("passed") is not False:
+            continue  # layout/media failures do not justify rewriting the story
+        slide_ids = sorted(
+            (sid for sid in state["format_tasks"]
+             if (parse_carousel_slide(sid) or ("",))[0] == base),
+            key=lambda sid: parse_carousel_slide(sid)[1],
+        )
+        if not slide_ids:
+            continue
+        revised = await revise_carousel_copy(state, base, slide_ids, review)
+        if revised is None:
+            continue
+        state.setdefault("revised_carousel_copies", {})[base] = revised.model_dump_json()
+        for index, (sid, slide) in enumerate(zip(slide_ids, revised.slides)):
+            state["format_tasks"][sid] = {
+                **state["format_tasks"][sid], "copy": slide.model_dump_json(),
+                "html": None, "status": "copy_ready",
+            }
+            if index < len(revised.narrative):
+                state["slide_context"][sid]["narrative"] = revised.narrative[index].model_dump()
+            state.setdefault("verification", {})[sid] = {}
+            state.setdefault("retry_count", {})[sid] = 0
+        source = str(state.get("title") or "") + "\n" + str(state.get("content") or "")
+        qa = await _copy_qa_for_platform(base, revised, state.get("category") or "", source)
+        state.setdefault("copy_qa", {})[base] = qa
+        if qa.get("verdict") != "rewrite":
+            state["copy_qa_blocked"] = [
+                pid for pid in state.get("copy_qa_blocked") or [] if pid != base
+            ]
+        changed.extend(slide_ids)
+    if not changed:
+        return False
+    post_cache_drop(state.get("_task_id") or "")
+    plan_state = {**state, "format_tasks": {sid: state["format_tasks"][sid] for sid in changed}}
+    state.setdefault("media_plan", {}).update(await build_media_plan(plan_state))
+    results = await asyncio.gather(*(_run_format_chain(state, sid) for sid in changed))
+    for result in results:
+        _apply_updates(state, result)
+    return True
 
 
 async def _run_publish_gate(state: GenerationState) -> dict:
@@ -468,6 +540,20 @@ async def _run_publish_gate(state: GenerationState) -> dict:
             qa_id = parsed_format[0] if parsed_format else fmt_id
             qa = copy_qa.get(qa_id, {}) if isinstance(copy_qa, dict) else {}
             hard_reasons: list[str] = []
+            from app.agents.orchestrator.nodes.copywriter import PlatformCopy, _claims_grounding
+            from app.services.generation_quality import parse_copy
+
+            current_copy = parse_copy(task.get("copy") or "")
+            source = str(state.get("title") or "") + "\n" + str(state.get("content") or "")
+            if current_copy:
+                try:
+                    grounding = _claims_grounding(PlatformCopy(**current_copy), source)
+                    if grounding["invented"]:
+                        hard_reasons.append(
+                            "unsupported claims: " + ", ".join(grounding["invented"]),
+                        )
+                except ValueError:
+                    hard_reasons.append("copy could not be validated")
             sequence = state.get("sequence_check") or {}
             if sequence.get("ok") is False:
                 from app.services.formats import parse_carousel_slide

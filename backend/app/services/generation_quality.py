@@ -63,6 +63,13 @@ _GENERIC = re.compile(
 )
 _WORDS = re.compile(r"[\w'-]+", re.UNICODE)
 _NUMBERS = re.compile(r"\d+(?:[.,]\d+)*(?:%|[kKmMbB])?")
+_COMPARISONS = re.compile(r"\b(half|halved|double|doubled|twice|triple|tripled|threefold)\b", re.I)
+
+
+def unsupported_comparisons(text: str, source: str) -> list[str]:
+    """Written quantitative promises need source support just like digits."""
+    supported = {match.casefold() for match in _COMPARISONS.findall(source)}
+    return sorted({match.casefold() for match in _COMPARISONS.findall(text)} - supported)
 
 
 def choose_hook(candidates: list[HookCandidate], source: str, original: str) -> dict:
@@ -79,6 +86,7 @@ def choose_hook(candidates: list[HookCandidate], source: str, original: str) -> 
         tokens = {w.lower() for w in _WORDS.findall(headline) if len(w) > 3}
         overlap = len(tokens & words) / max(1, len(tokens))
         invented = sorted(set(_NUMBERS.findall(headline)) - numbers)
+        invented.extend(unsupported_comparisons(headline, source))
         support = " ".join(candidate.source_support.casefold().split())
         grounded = bool(support) and support in " ".join(source.casefold().split())
         eligible = (

@@ -40,6 +40,12 @@ class SettingError(ValueError):
 # validation and the Studio's control rendering, so the UI needs no hardcoded
 # per-key knowledge.
 DEFAULT_APP_SETTINGS: dict[str, dict] = {
+    "generation.sequence_max_revisions": {
+        "value": 1, "type": "int", "min": 0, "max": 1, "step": 1,
+        "description": (
+            "Collective carousel copy revision after a failed sequence review (0 disables)"
+        ),
+    },
     "generation.sequence_review": {
         "value": True, "type": "bool",
         "description": (

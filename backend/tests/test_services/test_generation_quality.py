@@ -66,6 +66,17 @@ def test_hook_failure_preserves_usable_original():
     assert choose_hook([], "Source", "Original")["headline"] == "Original"
 
 
+def test_written_quantitative_promises_require_source_support():
+    from app.agents.orchestrator.nodes.copywriter import PlatformCopy, SlideCopy, _claims_grounding
+
+    copy = PlatformCopy(headline="Cut your editing time in half", subhead="", body="Clear writing")
+    assert "half" in _claims_grounding(copy, "An editorial workflow improves clarity")["invented"]
+    copy.headline = "An editorial workflow"
+    copy.slides = [SlideCopy(headline="Review", subhead="", body="Double your output")]
+    assert "double" in _claims_grounding(copy, "An editorial workflow improves clarity")["invented"]
+    assert not _claims_grounding(copy, "An editorial workflow can double your output")["invented"]
+
+
 def test_density_and_composition_follow_actual_copy_and_canvas():
     copy = {"headline": "A comparison", "body": "a" * 300}
     assert content_profile(copy, 1200, 627).needs_rewrite

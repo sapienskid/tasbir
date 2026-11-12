@@ -695,6 +695,8 @@ payload's version predates is optional for it (`TABLE_SINCE`).
   Preserve user platform/ratio/slide/copy pins and verbatim mode on all paths.
 - Hooks share the existing copywriter response. Source support and figures are
   checked before selection; the chosen hook must reach the rendered cover.
+  Missing candidates get one repair attempt; QA must preserve the selected
+  hook. Written promises such as half/double need source support too.
 - Copy-fit revisions happen before layout. Template selection preserves nonempty
   editorial fields; failed designer HTML must actually be rebuilt on retry.
 - Media kind `none` suppresses generated photos and illustrations, including
@@ -704,6 +706,10 @@ payload's version predates is optional for it (`TABLE_SINCE`).
   check and holds only affected carousel bases. A retry replaces prior sequence
   judgments. `generation.sequence_review` controls bounded text review; vision
   sequence review remains opt-in.
+- `generation.sequence_max_revisions` permits one collective rewrite after a
+  semantic set failure, followed by fresh media/render/review. Persist the
+  revised carousel base copy for editor/retry; never rewrite a set merely
+  because its geometry or media failed.
 - Curated references require explicit approval, opt-in and a reason. They are
   private `generation.example.*` app_settings records, scoped by design system
   and category, retained independently of tasks, and already covered by system

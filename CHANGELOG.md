@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-11-12
+
+### Fixed
+- QA rewrites preserve the source-grounded hook instead of introducing a new
+  unreviewed promise. Missing/invalid hook candidates get one bounded repair
+  attempt and their final selection is recorded.
+- Written quantitative promises such as “half”, “double” and “twice” require
+  source support. Claims checking covers every carousel slide and runs again
+  at the final publish gate, independent of optional model judgments.
+- A rejected narrative gets one collective revision of its carousel, with
+  refreshed media, re-rendering and a fresh sequence review. Pinned slide counts,
+  copy and user media remain authoritative. If it still fails, it stays held.
+  Runtime setting: `generation.sequence_max_revisions` (0–1, default 1).
+- Revised carousel copy/narrative/hook metadata are saved consistently for the
+  editor and task retry rather than retaining the rejected original base copy.
+
 ## [1.4.0] — 2026-11-11
 
 ### Added

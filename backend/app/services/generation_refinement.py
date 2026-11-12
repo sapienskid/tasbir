@@ -53,6 +53,8 @@ async def revise_format_copy(state: dict, fmt_id: str, corrections: list[dict]) 
         if len(str(data.get("body") or "")) > profile.body_budget:
             return False
         revised = PlatformCopy(**data)
+        if not any("headline" in str(c.get("element") or "").lower() for c in corrections):
+            revised.headline = str(prior.get("headline") or revised.headline)
         for field, value in (state.get("overrides") or {}).items():
             if field in ("headline", "subhead", "body", "tagline", "badge") and value:
                 setattr(revised, field, value)
@@ -79,3 +81,50 @@ async def revise_format_copy(state: dict, fmt_id: str, corrections: list[dict]) 
     except Exception as exc:  # preserve the last usable copy on model failure
         log.warning("[copy-refinement] %s skipped: %s", fmt_id, exc)
         return False
+
+
+async def revise_carousel_copy(state: dict, base: str, slide_ids: list[str], review: dict):
+    """One collective rewrite, keeping the slide count and source facts intact."""
+    if state.get("verbatim"):
+        return None
+    import json
+
+    from app.agents.orchestrator.nodes.copywriter import _claims_grounding, _write_copy_for_platform
+    from app.services.agents import get_agent_config
+
+    copies = [parse_copy(state["format_tasks"][sid].get("copy") or "") for sid in slide_ids]
+    brief = dict(state.get("strategic_brief") or {})
+    notes = dict(brief.get("platform_notes") or {})
+    notes[base] = (
+        "This is a revision of a held carousel. Deliver the cover promise within the "
+        "pinned slide count; narrow the promise if necessary. Each frame must add a new "
+        "point. Do not claim time savings or outcomes absent from the source.\n"
+        "SEQUENCE REVIEW: "
+        + json.dumps(review, ensure_ascii=False)
+        + "\nPREVIOUS SLIDES: "
+        + json.dumps(copies, ensure_ascii=False)
+    )
+    brief["platform_notes"] = notes
+    try:
+        _, revised = await _write_copy_for_platform(
+            base,
+            brief,
+            str(state.get("content") or ""),
+            str(state.get("title") or ""),
+            await get_agent_config("copywriter"),
+            state.get("brand_info"),
+            state.get("campaign"),
+            state.get("overrides"),
+            slides_count=len(slide_ids),
+            post_type=platform_cfg(state, base, "post_type", "default"),
+            approved_examples=state.get("approved_examples") or [],
+        )
+        source = str(state.get("title") or "") + "\n" + str(state.get("content") or "")
+        if len(revised.slides) != len(slide_ids) or _claims_grounding(revised, source).get(
+            "invented"
+        ):
+            return None
+        return revised
+    except Exception as exc:
+        log.warning("[sequence-refinement] %s unavailable: %s", base, exc)
+        return None

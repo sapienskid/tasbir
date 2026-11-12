@@ -227,3 +227,118 @@ async def test_empty_model_output_does_not_count_as_successful_sequence_review()
     with patch("app.services.llm.call_llm", AsyncMock(return_value="{}")):
         result = await _review_sequence_copy({}, "instagram-carousel", [("slide-1", 1)], [{}])
     assert result == {}
+
+
+async def test_missing_hook_candidates_get_one_bounded_repair():
+    from app.agents.orchestrator.nodes.copywriter import (
+        PlatformCopy,
+        SlideCopy,
+        _ensure_grounded_hook,
+    )
+
+    copy = PlatformCopy(
+        headline="Cut your editing time in half",
+        subhead="",
+        body="",
+        slides=[SlideCopy(headline="Old", subhead="", body="Practice improves retention.")],
+    )
+    result = {
+        "hook_candidates": [
+            {
+                "headline": "Practice improves retention",
+                "angle": "finding",
+                "source_support": "Practice improves retention.",
+                "specificity": 5,
+                "relevance": 5,
+                "faithfulness": 5,
+            }
+        ]
+    }
+    model = AsyncMock(return_value=json.dumps(result))
+    with patch("app.agents.orchestrator.nodes.copywriter.call_llm", model):
+        await _ensure_grounded_hook(
+            copy, "Practice improves retention.", "Practice", await get_agent_config("copywriter")
+        )
+    assert model.await_count == 1
+    assert copy.hook_selection["selected"]
+    assert copy.headline == copy.slides[0].headline == "Practice improves retention"
+
+
+async def test_qa_rewrite_cannot_replace_grounded_hook_with_a_new_promise():
+    from app.agents.orchestrator.nodes.copywriter import PlatformCopy, _rewrite_copy_for_platform
+
+    prior = PlatformCopy(
+        headline="A clear editorial workflow", subhead="", body="Review the draft."
+    )
+    response = {"headline": "Cut your time in half", "subhead": "", "body": "Review the draft."}
+    with patch(
+        "app.agents.orchestrator.nodes.copywriter.call_llm",
+        AsyncMock(return_value=json.dumps(response)),
+    ):
+        result = await _rewrite_copy_for_platform(
+            "instagram-square",
+            "Review the draft.",
+            "An editorial workflow",
+            await get_agent_config("copywriter"),
+            prior,
+            {"verdict": "rewrite", "dims": {"clarity": 0.2}, "score": 0.2},
+        )
+    assert result is not None
+    assert result[1].headline == prior.headline
+
+
+async def test_collective_revision_changes_only_the_failed_carousel():
+    from app.agents.orchestrator.graph import _revise_failed_sequences
+    from app.agents.orchestrator.nodes.copywriter import PlatformCopy, SlideCopy
+    from app.services.generation_quality import NarrativeBeat
+
+    base = "instagram-carousel"
+    state = initial_state("Practice", "Practice improves retention.", [base, "twitter-card"])
+    ids = [base + "-1", base + "-2"]
+    state["format_tasks"] = {
+        sid: {"copy": "{}", "html": "old", "status": "verified"} for sid in ids
+    }
+    state["format_tasks"]["twitter-card"] = {"html": "keep single", "copy": "{}"}
+    state["slide_context"] = {sid: {"index": i, "total": 2} for i, sid in enumerate(ids, 1)}
+    state["images"] = [{"data": "pinned-user-image"}]
+    revised = PlatformCopy(
+        headline="Practice",
+        subhead="",
+        body="",
+        slides=[
+            SlideCopy(headline="Practice", subhead="", body="Practice improves retention."),
+            SlideCopy(headline="Review", subhead="", body="Review your draft."),
+        ],
+        narrative=[NarrativeBeat(role="hook"), NarrativeBeat(role="takeaway")],
+    )
+
+    async def render(local, sid):
+        assert local["images"] == [{"data": "pinned-user-image"}]
+        return {
+            "format_tasks": {
+                sid: {**local["format_tasks"][sid], "html": "new", "status": "verified"}
+            }
+        }
+
+    with (
+        patch(
+            "app.services.generation_refinement.revise_carousel_copy",
+            AsyncMock(return_value=revised),
+        ),
+        patch(
+            "app.agents.orchestrator.nodes.copywriter._copy_qa_for_platform",
+            AsyncMock(return_value={}),
+        ),
+        patch("app.services.media_plan.build_media_plan", AsyncMock(return_value={})),
+        patch("app.agents.orchestrator.graph._run_format_chain", render),
+    ):
+        assert await _revise_failed_sequences(
+            state,
+            {
+                "failed_bases": [base],
+                "editorial": {base: {"passed": False, "issues": ["Weak flow"]}},
+            },
+        )
+    assert state["format_tasks"]["twitter-card"]["html"] == "keep single"
+    assert state["format_tasks"][ids[0]]["html"] == "new"
+    assert len(json.loads(state["revised_carousel_copies"][base])["slides"]) == 2

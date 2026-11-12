@@ -207,6 +207,10 @@ def generate_task(self, task_id: str, source_data: dict):
 
             brief = state.get("strategic_brief", {})
             format_tasks = state.get("format_tasks", {})
+            if state.get("revised_carousel_copies"):
+                format_tasks = {**format_tasks}
+                for base, copy_json in state["revised_carousel_copies"].items():
+                    format_tasks[base] = {**format_tasks.get(base, {}), "copy": copy_json}
 
             from app.services.format_recipe import FormatRecipe, parse_copy, recipe_json
             from app.services.formats import is_carousel_base

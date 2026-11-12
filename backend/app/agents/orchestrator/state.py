@@ -27,6 +27,10 @@ def _latest_review(a: dict, b: dict) -> dict:
     return b if b else a
 
 
+def _latest_list(a: list, b: list) -> list:
+    return b
+
+
 def platform_cfg(state: "GenerationState", fmt_id: str, key: str, default: str = "") -> str:
     """Resolve a per-platform config value, falling back to the global field.
 
@@ -210,13 +214,14 @@ class GenerationState(TypedDict):
     copy_qa: Annotated[dict[str, dict], _merge_dicts]
     # Platforms whose copy QA verdict is "rewrite" while COPY_QA_ENFORCE is
     # on — the Studio treats these as do-not-publish.
-    copy_qa_blocked: Annotated[list[str], _keep_first_list]
+    copy_qa_blocked: Annotated[list[str], _latest_list]
     # Final publish/hold gate per format: {fmt_id: {decision, reasons, source}}.
     # Set once per post by process_all_formats (first write wins).
     publish: Annotated[dict[str, dict], _keep_first_dict]
     # Decision-model audit trail: [{pack_id, provider, model, answers...}].
     decision_events: Annotated[list[dict], _keep_first_list]
     approved_examples: Annotated[list[dict], _keep_first_list]
+    revised_carousel_copies: Annotated[dict[str, str], _merge_dicts]
 
 
 def initial_state(
@@ -308,5 +313,6 @@ def initial_state(
         "media_plan": {},
         "resume_mode": False,
         "approved_examples": kwargs.get("approved_examples") or [],
+        "revised_carousel_copies": {},
         "output_paths": {},
     }

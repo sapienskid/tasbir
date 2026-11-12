@@ -1,4 +1,4 @@
-# Tasbir v1.4.0
+# Tasbir v1.4.1
 
 AI-powered social media asset pipeline. Blog content goes in,
 platform-optimized HTML + PNG renders come out. Zero API costs.

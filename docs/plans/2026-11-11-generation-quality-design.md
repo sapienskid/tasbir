@@ -77,3 +77,15 @@ and backup round-trips. Frontend tests cover opt-in behavior and required notes.
 The production frontend build and complete backend suite remain release checks.
 Automated tests verify these contracts; measuring aesthetic gains still needs
 human review of representative live generations.
+
+## Live validation follow-up (2026-11-12)
+
+The initial three-slide validation run rendered correctly, but QA rewrote its
+headline to an unsupported “cut your editing time in half” promise and the set
+did not deliver its advertised workflow. The new sequence reviewer correctly
+held all three frames. The follow-up preserves grounded hooks across QA,
+repairs missing candidate metadata once, and checks written quantitative terms
+throughout copy and at publication. It also allows one collective narrative
+revision with fresh media/render/sequence checks, preserving pins and unrelated
+formats. `generation.sequence_max_revisions` controls that extra pass (0–1).
+Revised carousel base copy and its metadata must persist alongside its frames.
