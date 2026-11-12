@@ -15,6 +15,7 @@ from app.services.covers import (
     generate_cover_image,
     image_prompt,
 )
+from app.services.art import LEGACY_COMBOS
 from app.services.ds_context import DSContext
 from app.services.illustration import generate_figure_metrics, generate_illustration_svg
 from app.services.tokens import DEFAULT_TOKEN_VALUES
@@ -42,7 +43,8 @@ def test_editorial_drawings_are_safe_and_seeded(motif, ground):
     assert "<text" not in svg
     assert "None" not in svg
     metrics = generate_figure_metrics("article-17", ground, motif)
-    assert metrics["archetype"] == motif
+    assert metrics["subject"] == LEGACY_COMBOS[motif][0]
+    assert metrics["relation"] == LEGACY_COMBOS[motif][1]
     assert metrics["within_safe"]
 
 
@@ -78,24 +80,21 @@ def test_ai_palette_is_applied_after_generation():
     assert "var(--color-text-inverted)" in svg
     assert "flood-color:var(--color-accent)" in svg
     assert '<feFuncA type="discrete"' in svg
-    assert 'data-cover-accent="focal"' in svg
 
 
 def test_auto_direction_is_related_and_operator_choice_wins():
     request = CoverRequest(title="The limits of computation", motif="auto")
-    assert cover_theme(request, 0) in {
-        "asymptote-grid",
-        "field-mesh",
-        "field-contour",
-        "field-cubes",
-        "field-function_family",
-        "field-lissajous",
-        "field-superformula",
-    }
-    assert cover_theme(request, 1) != cover_theme(request, 0)
+    assert cover_theme(request, 0) == "limit"
+    assert cover_theme(request, 1) == "limit"
+    # Variations differ by composition, not by falling back to a random motif.
+    assert build_cover_svg(request, _ctx(), 0) != build_cover_svg(request, _ctx(), 1)
     request.motif = "hand-seed"
     assert cover_theme(request, 0) == cover_theme(request, 1) == "hand-seed"
     assert len(image_prompt(CoverRequest(content="x" * 20_000), "contour")) <= 2048
+
+
+def _ctx() -> DSContext:
+    return DSContext(ds_id="default", tokens=dict(DEFAULT_TOKEN_VALUES))
 
 
 @pytest.mark.parametrize(

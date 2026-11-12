@@ -2,8 +2,8 @@
 """Generate seeded covers using a Tasbir design system (no LLM calls).
 
 Run from backend with its virtual environment:
-  .venv/bin/python procgen.py -m burst -s 7 --png --grain
-  .venv/bin/python procgen.py -m contour -t 'The limits' --size 1200x630
+  .venv/bin/python procgen.py -m system -s 7 --png --grain
+  .venv/bin/python procgen.py -m limit -t 'The limits' --size 1200x630
   .venv/bin/python procgen.py -n 12 -d default --ground black
 
 The geometry engine uses only the stdlib. This adapter uses Tasbir's DB for
@@ -28,7 +28,6 @@ from app.services.covers import (
 )
 from app.services.dom_extractor import render_to_png
 from app.services.ds_context import resolve_ds_context_strict
-from app.services.procedural_art import MOTIFS
 
 
 async def run(args) -> None:
@@ -39,7 +38,7 @@ async def run(args) -> None:
     output = args.out
     if args.title and output == "cover":
         output = re.sub(r"[^a-z0-9]+", "-", args.title.lower()).strip("-")[:60] or "cover"
-    motif = f"field-{args.motif}" if args.motif in MOTIFS else args.motif
+    motif = args.motif
     try:
         ctx = await resolve_ds_context_strict(None, args.design_system)
         for index in range(args.count):
@@ -75,7 +74,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("-m", "--motif", default="auto", choices=[*COVER_MOTIFS, *MOTIFS])
+    parser.add_argument("-m", "--motif", default="auto", choices=list(COVER_MOTIFS))
     parser.add_argument("-d", "--design-system", default="default")
     parser.add_argument("--ground", default="white", choices=["white", "black"])
     parser.add_argument("-s", "--seed", type=int)

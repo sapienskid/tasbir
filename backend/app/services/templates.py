@@ -387,15 +387,18 @@ def build_template_context(
     tscale = float(fam_scale) * (width / base)
     tscale = max(0.6, min(tscale, 2.0))
 
-    # Procedural Anthropic-style illustration. Seeded from the post title alone
-    # (not per-format) so every format of a post shares one piece of art. Only
+    # Composition engine. Seeded from the post title (not per-format), so every
+    # format illustrates the same idea while composing for its own aspect. Only
     # templates that reference {{ illustration }} render it. A caller-provided
-    # ``illustration`` (e.g. an LLM tool result) wins over the deterministic one.
+    # ``illustration`` (e.g. the media plan's scene) wins over this default.
     if illustration is None:
+        from app.services.media_plan import aspect_for
+
         ill_seed = f"{seed.split('|')[0]}|illustration" if seed else "illustration"
         illustration = generate_illustration_svg(
-            ill_seed, ground, theme="field-synthesis",
+            ill_seed, ground, theme="",
             use_accent=design_language_has_accent(di_config),
+            aspect=aspect_for(width, height),
         )
 
     context = {

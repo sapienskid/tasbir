@@ -20,18 +20,14 @@ export interface CoverMeta {
   width: number
   height: number
   motifs: { id: string; label: string }[]
+  concepts?: { id: string; label: string }[]
   sizes: { label: string; width: number; height: number }[]
   ai_available: boolean
 }
 
-export interface CoverComposition {
-  layer_count: number
-  layers: { motif: string | null }[]
-}
-
 export const DEFAULT_COVER: CoverSettings = {
   design_system_id: "", title: "", content: "", theme: "",
-  engine: "procedural", motif: "field-synthesis", ground: "white", placement: "center",
+  engine: "procedural", motif: "auto", ground: "white", placement: "center",
   texture: "print", variations: 3, seed: "",
   width: 1600, height: 900,
 }

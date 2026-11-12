@@ -2,7 +2,8 @@
 
 One tool the LLM calls for every post that needs a figure:
 
-  - ``procedural`` → the procedural Anthropic-style SVG generator (default)
+  - ``procedural`` → the composition engine (concept → subject × relation ×
+                     field × framing), the default
   - curated styles → DiceBear avatar generators (people / creatures / faces /
                      abstract shapes / landscape), fully offline + deterministic
 
@@ -64,25 +65,18 @@ def _safe_ids(svg: str) -> str:
 
 
 def _build_illustrate_tool() -> dict:
-    """ILLUSTRATE_TOOL schema built from the curated style registry.
+    """ILLUSTRATE_TOOL schema built from the composition catalog.
 
-    Styles: ``procedural`` (Anthropic-style abstract, the default) plus the
-    curated DiceBear styles (humans, robots, abstract shapes, landscape). The
-    DiceBear list is pruned to the styles that fit the Swiss monochrome system
-    (see peep_styles.py). The old ``compose`` scene composer was removed — all
-    figures come from ``procedural`` or a DiceBear style.
+    The director picks a **concept** (what the post argues) and may pin a
+    subject / relation / field; the composer expands the rest and varies it by
+    seed + the diversity ledger. ``style`` remains for curated avatars: any
+    non-``procedural`` value is a DiceBear portrait.
     """
+    from app.services.art import FIELDS, RELATIONS, SUBJECTS
     from app.services.tools.peep_styles import CURATED_STYLES
 
-    style_desc = [
-        "procedural: editorial linework, abstract symbols, scientific curves, "
-        "hands balancing forms, plants crossing grids, books, and vessels. "
-        "Use one coherent composition. Theme steers the archetype.",
-    ]
-    for sid in sorted(CURATED_STYLES):
-        info = CURATED_STYLES[sid]
-        style_desc.append(f"{sid}: {info.description}")
     style_enum = ["procedural"] + sorted(CURATED_STYLES)
+    from app.services.art.catalog import CONCEPT_NAMES
 
     def part_desc(part: str, sid: str) -> str:
         from app.services.tools.peep_styles import list_style_values
@@ -97,34 +91,56 @@ def _build_illustrate_tool() -> dict:
         "function": {
             "name": "illustrate",
             "description": (
-                "Create a monochrome editorial illustration for the post. Call "
-                "with one of these styles:\n" + "\n".join(style_desc)
+                "Create a monochrome editorial illustration for the post. Pick a "
+                "CONCEPT that matches the post's argument; the engine composes a "
+                "subject against a spatial field in a concrete relation, and the "
+                "result is different from every other slide. Optionally pin "
+                "subject / relation / field. Use a DiceBear style only for "
+                "human/robot-centred posts."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
+                    "concept": {
+                        "type": "string",
+                        "enum": list(CONCEPT_NAMES),
+                        "description": (
+                            "What the post argues: limit (boundaries, asymptotes, "
+                            "complexity), growth (learning, cultivation), system "
+                            "(networks, structure), attention (focus, observation), "
+                            "convergence (many → one), choice (direction), scale "
+                            "(hierarchy), memory (record, reading), flow (movement), "
+                            "craft (making, hand-work)."
+                        ),
+                    },
+                    "emphasis": {
+                        "type": "string",
+                        "description": (
+                            "One short phrase naming the specific thing to show "
+                            "(under 60 characters). No text or colour words."
+                        ),
+                    },
+                    "subject": {
+                        "type": "string",
+                        "enum": sorted(SUBJECTS),
+                        "description": "Optional pin — the figurative subject.",
+                    },
+                    "relation": {
+                        "type": "string",
+                        "enum": list(RELATIONS),
+                        "description": "Optional pin — how subject and field interact.",
+                    },
+                    "field": {
+                        "type": "string",
+                        "enum": list(FIELDS),
+                        "description": "Optional pin — the spatial structure behind it.",
+                    },
                     "style": {
                         "type": "string",
                         "enum": style_enum,
                         "description": (
-                            "Which illustration style to use. Default "
-                            "'procedural' — a clean abstract organic mark, for "
-                            "almost every post. Use a DiceBear style only for "
-                            "human/robot-centred posts."
-                        ),
-                    },
-                    "theme": {
-                        "type": "string",
-                        "description": (
-                            "Short abstract theme steering the composition (only "
-                            "used by 'procedural') — e.g. 'growth', 'flow', "
-                            "'focus', 'orbital', 'hand-balance', 'hand-seed', "
-                            "'botanical-grid', 'asymptote-grid', 'convergence', "
-                            "'contour', 'open-book', 'vessel-growth'. No text or colour words."
-                            " Field motifs: field-flow, field-burst, field-tiles, field-blobs, "
-                            "field-orbits, field-waves, field-hatch, field-stipple, field-mesh, "
-                            "field-contour, field-nodes, field-cubes, field-scribble, "
-                            "field-halftone, field-phyllo."
+                            "Leave 'procedural' for the composition engine. A "
+                            "DiceBear id renders a curated portrait instead."
                         ),
                     },
                     "ground": {
@@ -149,7 +165,7 @@ def _build_illustrate_tool() -> dict:
                         "description": part_desc("accessory", "open-peeps"),
                     },
                 },
-                "required": ["style", "theme"],
+                "required": ["concept"],
             },
         },
     }
@@ -393,28 +409,37 @@ def compose_peep(
 
 def run_illustrate(args: dict, seed: str = "") -> str:
     """Execute an ``illustrate`` tool call → figure/svg HTML fragment."""
-    from app.services.illustration import generate_illustration_svg
+    from app.services.art import render_scene
+    from app.services.art.compose import compose_scene
 
     style = str(args.get("style") or "procedural")
-    theme = str(args.get("theme") or "")[:60]
     ground = str(args.get("ground") or "white")
     if ground not in ("white", "black"):
         ground = "white"
 
-    if style == "procedural" or style == "anthropic":
-        return generate_illustration_svg(seed or "figure", ground, theme=theme,
-                                         use_accent=args.get("use_accent") is True)
+    if style not in ("procedural", "anthropic"):
+        parts = {
+            key: args[key]
+            for key in ("facial_hair", "hair", "expression", "accessory")
+            if args.get(key)
+        }
+        return compose_peep(
+            seed or "figure",
+            ground=ground,
+            style=style,
+            theme=str(args.get("emphasis") or args.get("theme") or ""),
+            parts=parts or None,
+            palette="line",
+        )
 
-    parts = {
-        key: args[key]
-        for key in ("facial_hair", "hair", "expression", "accessory")
-        if args.get(key)
-    }
-    return compose_peep(
+    scene = compose_scene(
         seed or "figure",
-        ground=ground,
-        style=style,
-        theme=theme,
-        parts=parts or None,
-        palette="line",
+        ground,
+        concept=str(args.get("concept") or ""),
+        subject=str(args.get("subject") or ""),
+        relation=str(args.get("relation") or ""),
+        field=str(args.get("field") or ""),
+        theme=str(args.get("theme") or ""),
+        aspect=str(args.get("aspect") or "square"),
     )
+    return render_scene(scene, ground, bool(args.get("use_accent")))

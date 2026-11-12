@@ -46,15 +46,21 @@ def _photo_grayscale(state: GenerationState) -> bool:
 
 
 def _plan_system_prompt(state: GenerationState) -> str:
+    from app.services.art.catalog import CONCEPTS
     from app.services.styles import media_director_guidance
 
     guidance = media_director_guidance(state.get("design_instruction") or {})
+    concepts = "; ".join(
+        f"{key} — {spec['label']}" for key, spec in CONCEPTS.items()
+    )
     return (
         "You are the media director for this post's design system. Decide the "
         "media for EVERY slide of the post in ONE planning session. For each "
         "slide choose exactly one: a photo (find_photo then choose_photo), an "
         "illustration (illustrate), or no media.\n\n"
         f"STYLE MEDIA GUIDANCE: {guidance}\n\n"
+        f"CONCEPTS for illustrations (pick the one that matches the slide's "
+        f"argument): {concepts}.\n\n"
         "Rules:\n"
         "- One media kind per slide. Never the same image/art on two slides.\n"
         "- Media must explain the slide's specific claim, evidence or relationship. "
@@ -70,19 +76,26 @@ def _plan_system_prompt(state: GenerationState) -> str:
         "- Photos: SHORT, BROAD queries (1-3 words) from the slide's concrete "
         "subject — e.g. 'mountain river', 'city street', 'coffee cup'. Never "
         "a sentence.\n"
+        "- Illustrations: pass a concept plus a one-line emphasis naming the "
+        "specific relationship to show. Every call returns the subject/relation/"
+        "field it composed and the list already used in this post — pick a "
+        "DIFFERENT subject and relation for each slide. Two slides must never "
+        "share a subject or a relation.\n"
         "- Cover slide (slide 1) may get the strongest media; interior slides "
         "vary so the sequence breathes.\n"
         "- STOP SEARCHING once you have enough. Call illustrate at most 2-3 "
-        "times total to preview a style, look at the feedback the tool "
-        "returns, then output the plan. Do NOT keep re-calling tools — "
-        "imperfect media is fine.\n\n"
+        "times total to preview a concept, look at the feedback, then output the "
+        "plan. Do NOT keep re-calling tools — imperfect media is fine.\n\n"
         "Final answer: output ONLY a JSON array of plan entries:\n"
         '[{"target": "<slide_or_format_id>", "kind": "photo|illustration|none", '
         '"rationale": "what this explains, or why typography alone is clearer", '
         '"query": "1-3 word search (photo only)", '
-        '"style": "procedural|open-peeps|lorelei|notionists|bottts|blobs|'
-        'initials|shapes|waves|landscape", "theme": "short theme (procedural '
-        'only)"}]'
+        '"concept": "limit|growth|system|attention|convergence|choice|scale|memory|flow|craft", '
+        '"emphasis": "the specific relationship to show", '
+        '"subject": "(optional pin)", "relation": "(optional pin)", '
+        '"field": "(optional pin)", '
+        '"style": "procedural|<curated portrait style>", '
+        '"chart": {"values": [..], "labels": [..], "title": ".."}}]'
     )
 
 
@@ -169,7 +182,7 @@ async def build_media_plan(state: GenerationState) -> dict:
 
     from app.agents.orchestrator.post_cache import post_cached
     from app.services.llm import call_llm_tool_loop
-    from app.services.tools.illustrator import ILLUSTRATE_TOOL, run_illustrate
+    from app.services.tools.illustrator import ILLUSTRATE_TOOL
     from app.services.tools.photo import (
         CHOOSE_PHOTO_TOOL,
         FIND_PHOTO_TOOL,
@@ -248,46 +261,61 @@ async def build_media_plan(state: GenerationState) -> dict:
         idx = args.get("index")
         return f"Photo #{idx} recorded. Include this photo in the plan for the current slide."
 
-    async def _handler_illustrate(args: dict) -> str:
-        """Execute the illustrate call and give the director real feedback.
+    used_subjects: list[str] = []
+    used_relations: list[str] = []
+    used_pairs: list[str] = []
+    used_fingerprints: list[str] = []
 
-        Instead of a no-op acceptance string, we actually render the figure and
-        return structural metrics (arcaype, element count, bounding box,
-        safe-frame compliance). The director sees what it picked and can
-        iterate to a distinct, non-overlapping figure before committing the plan.
-        """
-        from app.services.illustration import generate_figure_metrics
+    async def _handler_illustrate(args: dict) -> str:
+        """Compose the scene and give the director real structural feedback."""
+        from app.services.art import compose_scene
 
         style = str(args.get("style") or "procedural")
-        theme = str(args.get("theme") or "")[:60]
+        concept = str(args.get("concept") or "")
+        emphasis = str(args.get("emphasis") or "")[:60]
+        subject = str(args.get("subject") or "")
+        relation = str(args.get("relation") or "")
+        field = str(args.get("field") or "")
         ground = str(args.get("ground") or state.get("ground") or "white")
         if ground not in ("white", "black"):
             ground = "white"
-        preview_seed = f"{task_id or 'plan'}|preview|{style}|{theme or 'none'}"
+        preview_seed = f"{task_id or 'plan'}|preview|{concept}|{emphasis}"
 
-        fragment = run_illustrate(
-            {"style": style, "theme": theme, "ground": ground}, seed=preview_seed
-        )
-        metrics: dict = {}
-        if style in ("procedural", "anthropic"):
-            metrics = generate_figure_metrics(preview_seed, ground, theme)
-        # DiceBear figures can't be measured the same way, so report what we know.
-        el_count = fragment.count("<path") + fragment.count("<circle") if fragment else 0
+        if style != "procedural":
+            # Curated portrait styles cannot be measured structurally.
+            return (
+                f"Portrait style '{style}' selected. Portraits are rendered by "
+                "the avatar engine; record this style in the plan."
+            )
 
-        box = metrics.get("box")
-        box_str = (
-            f"bbox x0={box['x0']} y0={box['y0']} x1={box['x1']} y1={box['y1']}"
-            if box
-            else "bbox n/a (DiceBear)"
+        scene = compose_scene(
+            preview_seed, ground, concept=concept, subject=subject,
+            relation=relation, field=field,
+            avoid_subjects=tuple(used_subjects),
+            avoid_relations=tuple(used_relations),
+            avoid_fingerprints=tuple(used_fingerprints),
+            avoid_pairs=tuple(used_pairs),
         )
+        m = scene.metrics()
+        if m["fingerprint"] not in used_fingerprints:
+            used_fingerprints.append(m["fingerprint"])
+        if f"{m['subject']}|{m['relation']}" not in used_pairs:
+            used_pairs.append(f"{m['subject']}|{m['relation']}")
+        if m["subject"] not in used_subjects:
+            used_subjects.append(m["subject"])
+        if m["relation"] not in used_relations:
+            used_relations.append(m["relation"])
         return (
-            f"Rendered style='{style}' theme='{theme or ''}' on {ground} ground.\n"
-            f"Archetype: {metrics.get('archetype') or '(DiceBear)'}\n"
-            f"Element count: {metrics.get('element_count') or el_count}\n"
-            f"{box_str}\n"
-            f"Within safe slot: {metrics.get('within_safe', 'n/a')}\n"
-            "Record this style/theme in the plan entry for the current slide if "
-            "it fits the post; otherwise try a different theme or style."
+            f"Composed concept='{m['concept']}' subject='{m['subject']}' "
+            f"relation='{m['relation']}' field='{m['field']}' "
+            f"framing='{m['framing']}'.\n"
+            f"Elements: {m['element_count']}, occupancy: {m['occupancy']:.0%}, "
+            f"within safe slot: {m['within_safe']}.\n"
+            f"Already used in this post — subjects: {used_subjects}; "
+            f"relations: {used_relations}.\n"
+            "Record this concept (and the pinned subject/relation/field if you "
+            "want it) in the plan entry for the current slide. Pick a different "
+            "subject AND relation for the next slide."
         )
 
     async def loader() -> str:
@@ -315,6 +343,7 @@ async def build_media_plan(state: GenerationState) -> dict:
 
     raw = await post_cached(task_id, _PLAN_CACHE_KEY, loader)
     parsed = _parse_plan(raw or "")
+    await _finalize_illustrations(parsed, state)
     for entry in parsed:
         tid = entry.get("target")
         if tid in plan:
@@ -362,6 +391,11 @@ def _parse_plan(raw: str) -> list[dict]:
             "kind": kind,
             "query": str(entry.get("query") or "")[:80],
             "style": str(entry.get("style") or "procedural")[:40],
+            "concept": str(entry.get("concept") or "")[:40],
+            "subject": str(entry.get("subject") or "")[:40],
+            "relation": str(entry.get("relation") or "")[:40],
+            "field": str(entry.get("field") or "")[:40],
+            "emphasis": str(entry.get("emphasis") or entry.get("theme") or "")[:80],
             "theme": str(entry.get("theme") or "")[:60],
             "rationale": str(entry.get("rationale") or "")[:500],
             "chart": {
@@ -371,6 +405,56 @@ def _parse_plan(raw: str) -> list[dict]:
             },
         })
     return out
+
+
+async def _finalize_illustrations(parsed: list[dict], state: GenerationState) -> None:
+    """Resolve every illustration to a concrete composition, without repeats.
+
+    The director chooses a concept per slide; this pass fills the concrete
+    subject/relation/field and enforces the sequence rule: no subject and no
+    relation may appear twice in one post. Recent design-system compositions
+    (Redis) are soft-avoided so consecutive posts also differ.
+    """
+    from app.services.art import resolve_concept, select_combination
+    from app.services.art.ledger import recent_fingerprints
+
+    title = state.get("title", "") or ""
+    recent = await recent_fingerprints(state.get("design_system_id") or "default")
+
+    used_subjects: list[str] = []
+    used_relations: list[str] = []
+    used_pairs: list[str] = []
+    used_fingerprints: list[str] = []
+    for entry in parsed:
+        if entry.get("kind") != "illustration" or entry.get("style") not in ("", "procedural"):
+            continue
+        concept = resolve_concept(
+            f"{entry['target']}|{title}", entry.get("concept", ""),
+            entry.get("emphasis") or entry.get("theme") or "", title,
+        )
+        subject, relation, field = select_combination(
+            f"{entry['target']}|{title}",
+            concept,
+            entry.get("subject", ""),
+            entry.get("relation", ""),
+            entry.get("field", ""),
+            tuple(used_subjects),
+            tuple(used_relations),
+            tuple(used_fingerprints) + tuple(recent),
+            tuple(used_pairs),
+        )
+        entry.update(concept=concept, subject=subject, relation=relation, field=field)
+        used_subjects.append(subject)
+        used_relations.append(relation)
+        used_pairs.append(f"{subject}|{relation}")
+        used_fingerprints.append(f"{subject}|{relation}|{field}")
+
+    if used_fingerprints:
+        from app.services.art.ledger import remember_fingerprints
+
+        await remember_fingerprints(
+            state.get("design_system_id") or "default", used_fingerprints
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -421,19 +505,45 @@ async def execute_slide_photo(
     return {"image": image, "credit": chosen.get("attribution", ""), "candidate": chosen}
 
 
+def aspect_for(width: int, height: int) -> str:
+    if not width or not height:
+        return "square"
+    ratio = width / height
+    if ratio > 1.45:
+        return "wide"
+    if ratio > 1.1:
+        return "landscape"
+    if ratio < 0.62:
+        return "story"
+    if ratio < 0.92:
+        return "portrait"
+    return "square"
+
+
 def execute_slide_illustration(
     plan_entry: dict,
     seed: str,
     ground: str,
     category: str,
     api_style: str = "",
+    aspect: str = "square",
 ) -> str:
     """Execute an illustration plan entry → figure HTML fragment (offline)."""
     from app.services.tools.illustrator import run_illustrate
 
     style = plan_entry.get("style") or api_style or "procedural"
     return run_illustrate(
-        {"style": style, "theme": plan_entry.get("theme") or "", "ground": ground},
+        {
+            "style": style,
+            "concept": plan_entry.get("concept") or "",
+            "subject": plan_entry.get("subject") or "",
+            "relation": plan_entry.get("relation") or "",
+            "field": plan_entry.get("field") or "",
+            "emphasis": plan_entry.get("emphasis") or plan_entry.get("theme") or "",
+            "theme": plan_entry.get("theme") or "",
+            "ground": ground,
+            "aspect": aspect,
+        },
         seed=seed,
     )
 

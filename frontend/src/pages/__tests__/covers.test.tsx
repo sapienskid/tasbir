@@ -9,7 +9,8 @@ const { request, meta } = vi.hoisted(() => ({
   request: vi.fn(),
   meta: {
     width: 1600, height: 900, ai_available: false,
-    motifs: [{ id: "field-synthesis", label: "Generative composition" }, { id: "auto", label: "From the article" }, { id: "field-mesh", label: "Warped grid" }],
+    motifs: [{ id: "field-synthesis", label: "Generative composition" }, { id: "auto", label: "From the article" }],
+    concepts: [{ id: "limit", label: "Limits and boundaries" }, { id: "growth", label: "Growth and cultivation" }],
     sizes: [{ label: "Landscape", width: 1600, height: 900 }, { label: "Square", width: 1080, height: 1080 }],
   },
 }))
@@ -81,7 +82,7 @@ it("automatically previews with a visible seed after a short debounce", async ()
 })
 
 it("debounces changes and queues the latest brand, composition, and canvas", async () => {
-  await select("cover-motif", "field-mesh")
+  await select("cover-motif", "limit")
   await select("cover-size", "1080x1080")
   await select("cover-ground", "black")
   await settlePreview()
@@ -90,7 +91,7 @@ it("debounces changes and queues the latest brand, composition, and canvas", asy
   const [path, init] = request.mock.calls[1]
   expect(path).toBe("/covers")
   expect(JSON.parse(init.body)).toMatchObject({
-    design_system_id: "brand", motif: "field-mesh", width: 1080, height: 1080, ground: "black",
+    design_system_id: "brand", motif: "limit", width: 1080, height: 1080, ground: "black",
   })
   expect(init.body).not.toContain("#")
   expect(host.querySelector("[data-result]")).not.toBeNull()

@@ -50,10 +50,7 @@ async def test_preview_and_full_procedural_lifecycle(authed_client, enqueued, mo
     preview = await authed_client.post("/api/covers/preview", headers=H, json=body)
     assert preview.status_code == 200
     assert "<svg" in preview.json()["html"]
-    composition = preview.json()["composition"]
-    assert composition["seed"] == "stable:0"
-    assert composition["layer_count"] == len(composition["layers"])
-    assert any(layer["motif"] for layer in composition["layers"])
+    assert "composition" not in preview.json()
     response = await authed_client.post("/api/covers", headers=H, json=body)
     assert response.status_code == 202
     task_id = response.json()["task_id"]

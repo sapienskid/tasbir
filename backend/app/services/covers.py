@@ -1,4 +1,4 @@
-"""Artwork-only covers: procedural drawings or palette-mapped Workers AI art."""
+"""Artwork-only covers: the shared composition engine, palette-mapped AI art."""
 
 from __future__ import annotations
 
@@ -12,9 +12,15 @@ import httpx
 from pydantic import BaseModel, Field, field_validator
 
 from app.config import get_settings
+from app.services.art import (
+    CONCEPTS,
+    LEGACY_COMBOS,
+    compose_cover_scene,
+    render_scene,
+    resolve_concept,
+)
+from app.services.art.catalog import label_for
 from app.services.ds_context import DSContext
-from app.services.illustration import generate_illustration_svg
-from app.services.procedural_art import MOTIFS, generate_art_svg
 from app.services.tokens import build_css_variable_block, resolve_ground_vars
 from app.services.uploads import validate_upload
 
@@ -22,42 +28,16 @@ COVER_WIDTH, COVER_HEIGHT = 1600, 900
 IMAGE_MODEL = "@cf/black-forest-labs/flux-1-schnell"
 
 # Published by /covers/meta, so the Studio doesn't maintain a second catalog.
-COVER_MOTIFS = {
-    "field-synthesis": "Generative composition",
+# Concepts are the primary vocabulary; legacy motif ids keep resolving.
+COVER_MOTIFS: dict[str, str] = {
     "auto": "From the article",
     "random": "Random composition",
-    "asymptote-grid": "Limits and boundaries",
-    "convergence": "Converging paths",
-    "contour": "Organic contours",
-    "orbit": "Orbital forms",
-    "wave-field": "Flowing lines",
-    "hand-balance": "Hand balancing forms",
-    "hand-seed": "Hand nurturing a plant",
-    "botanical-grid": "Plant crossing a grid",
-    "open-book": "Open book",
-    "vessel-growth": "Plant in a vessel",
-    "field-flow": "Noise-driven flow field",
-    "field-burst": "Radial burst",
-    "field-tiles": "Bauhaus tiles",
-    "field-blobs": "Organic shapes and offset outlines",
-    "field-orbits": "Wobbly planetary orbits",
-    "field-waves": "Layered landscape waves",
-    "field-hatch": "Hatched organic shapes",
-    "field-stipple": "Stippled sphere",
-    "field-mesh": "Warped grid",
-    "field-contour": "Topographic contours",
-    "field-nodes": "Network and highlighted path",
-    "field-cubes": "Isometric block stacks",
-    "field-scribble": "Continuous looping line",
-    "field-halftone": "Halftone field",
-    "field-phyllo": "Phyllotaxis spirals",
-    "field-lissajous": "Lissajous curves",
-    "field-rose": "Mathematical rose curves",
-    "field-superformula": "Superformula contours",
-    "field-attractor": "De Jong attractor",
-    "field-interference": "Wave interference",
-    "field-function_family": "Exponential function families",
+    "field-synthesis": "Generative composition",
 }
+for _name, _spec in CONCEPTS.items():
+    COVER_MOTIFS.setdefault(_name, _spec["label"])
+for _legacy in LEGACY_COMBOS:
+    COVER_MOTIFS.setdefault(_legacy, label_for(_legacy))
 
 COVER_SIZES = [
     {"label": "Blog / newsletter · 16:9", "width": 1600, "height": 900},
@@ -90,44 +70,20 @@ class CoverRequest(BaseModel):
 
 
 def cover_theme(request: CoverRequest, index: int) -> str:
-    """Specific operator direction wins; auto variants explore related motifs."""
+    """Resolve the motif id for one variation.
+
+    ``auto`` maps the article's language to a concept; ``random`` rotates the
+    concept list; an explicit concept or legacy motif id is used verbatim. The
+    composer then varies subject/relation/field by variation index.
+    """
     if request.motif == "random":
-        return "field-synthesis"
+        names = sorted(CONCEPTS)
+        return names[random.Random(request.seed).randrange(len(names))]
     if request.motif != "auto":
         return request.motif
-    text = f"{request.theme} {request.title} {request.content[:3000]}".lower()
-    families = [
-        (
-            ("limit", "boundar", "math", "comput"),
-            [
-                "asymptote-grid",
-                "field-mesh",
-                "field-contour",
-                "field-cubes",
-                "field-function_family",
-                "field-lissajous",
-                "field-superformula",
-            ],
-        ),
-        (
-            ("grow", "plant", "nature", "learn"),
-            ["botanical-grid", "hand-seed", "field-phyllo", "vessel-growth"],
-        ),
-        (("human", "care", "craft", "build"), ["hand-balance", "hand-seed", "open-book"]),
-        (("read", "writ", "book", "knowledge"), ["open-book", "contour", "hand-balance"]),
-        (
-            ("focus", "attention", "connect", "system"),
-            ["convergence", "field-nodes", "field-flow", "field-orbits"],
-        ),
-    ]
-    for words, motifs in families:
-        if request.motif == "auto" and any(word in text for word in words):
-            motifs = list(motifs)
-            random.Random(f"{request.seed}:composition").shuffle(motifs)
-            return motifs[index % len(motifs)]
-    motifs = [key for key in COVER_MOTIFS if key not in ("auto", "random")]
-    random.Random(request.seed).shuffle(motifs)
-    return motifs[index % len(motifs)]
+    return resolve_concept(
+        f"{request.seed}:{index}", "", request.theme, request.title
+    )
 
 
 def image_prompt(request: CoverRequest, motif: str) -> str:
@@ -243,71 +199,54 @@ def build_cover_svg(
         has_accent = "--color-accent" in ctx.tokens
         defs = _palette_filter(palette, transparent_paper=has_accent)
         mime, encoded = image
-        carrier = ""
-        if has_accent:
-            from app.services.procedural_art import blob_pts, smooth
-
-            rng = random.Random(f"accent:{request.seed}:{index}")
-            center = {"left": 0.38, "center": 0.52, "right": 0.65}[request.placement]
-            path = smooth(
-                blob_pts(
-                    rng, width * center, height * 0.50, min(width, height) * 0.24, wob=0.12, n=14
-                )
-            )
-            carrier = f'<path data-cover-accent="focal" d="{path}" fill="var(--color-accent)"/>'
         art = (
-            carrier
-            + f'<image width="{width}" height="{height}" preserveAspectRatio="xMidYMid slice" '
+            f'<image width="{width}" height="{height}" preserveAspectRatio="xMidYMid slice" '
             f'href="data:{escape(mime, quote=True)};base64,{encoded}" '
             'filter="url(#cover-palette)"/>'
         )
-    elif motif.startswith("field-") and motif[6:] in MOTIFS:
-        accents = [f"var({roles['secondary']})", f"var({border})"]
-        if "--color-accent" in ctx.tokens:
-            accents.insert(0, "var(--color-accent)")
-        if "--color-accent-secondary" in ctx.tokens:
-            accents.append("var(--color-accent-secondary)")
-        palette = {
-            "bg": f"var({background})",
-            "ink": f"var({ink})",
-            "acc": accents,
-            "hi": accents[0],
-        }
-        if motif == "field-synthesis":
-            from app.services.generative_art import render_composition
-
-            art = render_composition(
-                f"{request.seed}:{index}", palette, width, height, request.placement
-            )
-        else:
-            art = generate_art_svg(
-                motif[6:],
-                f"{request.seed}:{index}",
-                palette,
+    elif motif.startswith("field-") or motif in CONCEPTS or motif in LEGACY_COMBOS:
+        has_accent = "--color-accent" in ctx.tokens
+        avoid: list[str] = []
+        avoid_pairs: list[str] = []
+        for prev in range(index):
+            scene = compose_cover_scene(
+                f"{request.seed}:{prev}",
+                theme=cover_theme(request, prev),
+                title=request.title,
                 width=width,
                 height=height,
-                grain=request.texture == "print",
                 placement=request.placement,
+                avoid_fingerprints=tuple(avoid),
+                avoid_pairs=tuple(avoid_pairs),
             )
-    else:
-        art = generate_illustration_svg(
+            avoid.append(scene.fingerprint)
+            avoid_pairs.append(f"{scene.subject}|{scene.relation}")
+        scene = compose_cover_scene(
             f"{request.seed}:{index}",
-            request.ground,
             theme=motif,
-            use_accent="--color-accent" in ctx.tokens,
+            title=request.title,
+            width=width,
+            height=height,
+            placement=request.placement,
+            avoid_fingerprints=tuple(avoid),
+            avoid_pairs=tuple(avoid_pairs),
         )
-        x = {"center": width * 0.1, "left": 0, "right": width * 0.2}[request.placement]
-        art = art.replace("<svg ", f'<svg x="{x}" y="{height * 0.08}" ', 1).replace(
-            'width="800" height="480"',
-            f'width="{width * 0.8}" height="{height * 0.84}"',
-            1,
+        art = render_scene(
+            scene, request.ground, has_accent, width=width, height=height, scale=1.0
+        )
+    else:
+        scene = compose_cover_scene(
+            f"{request.seed}:{index}",
+            width=width,
+            height=height,
+            placement=request.placement,
+        )
+        art = render_scene(
+            scene, request.ground, "--color-accent" in ctx.tokens,
+            width=width, height=height, scale=1.0,
         )
     grain = ""
-    if (
-        request.texture == "print"
-        and not image
-        and (not motif.startswith("field-") or motif == "field-synthesis")
-    ):
+    if request.texture == "print" and not image:
         rng = random.Random(f"grain:{request.seed}:{index}")
         # Sparse ink specks stay away from the edge and use the same token palette.
         grain = (

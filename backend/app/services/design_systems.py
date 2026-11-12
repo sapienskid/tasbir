@@ -321,7 +321,7 @@ def resolve_illustration_style(di: dict, api_override: str = "") -> str:
     ``di`` is the design_instruction dict from a design system row; the DS
     default lives under ``style.illustration_style`` (DB-backed, Studio-
     editable). An explicit API override wins; unknown values fall back to the
-    DS default. Empty everywhere → ``procedural`` (the clean Anthropic-style
+    DS default. Empty everywhere → ``procedural`` (the composition engine
     organic mark, the premium editorial default).
     """
     from app.services.tools.illustrator import ILLUSTRATE_TOOL

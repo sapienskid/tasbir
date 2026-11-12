@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Illustrations and covers now use one composition engine**
+  (`backend/app/services/art/`, ADR-0024). A scene is a concept expanded into a
+  subject × relation × field × framing composition: 17 parameterized figurative
+  subjects, 9 relations (occlude, intersect, cradle, emerge-from, converge-to,
+  frame, split, sequence, scale-asymmetry), 12 safe-frame-bound fields and 5
+  framings. Subjects are no longer frozen paths and the seed changes structure,
+  not just stroke wobble.
+- The media director now picks a **concept** (`limit`, `growth`, `system`,
+  `attention`, `convergence`, `choice`, `scale`, `memory`, `flow`, `craft`) plus
+  an emphasis line. `subject` / `relation` / `field` are optional pins. Legacy
+  archetype and motif ids still resolve; `anthropic` is an alias for
+  `procedural`.
+- Sequence variety is enforced server-side: no `subject|relation` pair repeats
+  within a post, and a Redis ledger soft-avoids recent compositions per design
+  system. Previously a 10-slide carousel had a ~52% chance of repeating a
+  composition.
+- Cover variations compose distinct subjects/relations/fields instead of
+  rotating a motif list, and placement positions the subject rather than
+  shifting the finished SVG. `/covers/meta` publishes concepts, subjects,
+  relations and fields; the Studio pickers read that catalog.
+- Removed `procedural_art.py`, `generative_art.py`, `mathematical_art.py` and
+  `illustration_editorial.py` (and their tests).
+
+### Added
+- `python -m app.tools.art_gallery` renders a labeled contact sheet (SVG +
+  `index.html` + `sheet.png`) so catalog changes can be judged visually.
+- Structural-diversity tests: distinct fingerprints over 200 seeds, full
+  concept/subject/relation/field coverage, zero safe-frame escapes, and zero
+  carousel pair collisions for every concept.
+
+### Operator notes
+- No database migration. Restart API, worker and beat. Existing posts
+  re-render through the same public functions (`generate_illustration_svg`,
+  `run_illustrate`, `build_cover_svg`).
+
 ## [1.5.0] — 2026-11-12
 
 ### Added

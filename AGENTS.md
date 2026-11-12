@@ -524,6 +524,16 @@ tasbir/
 │   │   │   ├── llm.py                   ← Gateway-only client (chat + tools + loop, OpenAI shape)
 │   │   │   ├── vision.py                ← shared Gemini Vision helper (verifier + agents)
 │   │   │   ├── media_plan.py            ← per-slide media plan (one LLM session/post)
+│   │   │   ├── art/                      ← the ONE illustration engine
+│   │   │   │   ├── catalog.py            ← concepts / subjects / relations / fields
+│   │   │   │   ├── compose.py            ← concept → scene (deterministic, avoid-aware)
+│   │   │   │   ├── subjects.py           ← 17 parameterized figurative subjects
+│   │   │   │   ├── fields.py             ← 12 spatial fields (safe-frame bounded)
+│   │   │   │   ├── relations.py          ← 9 subject×field relations
+│   │   │   │   ├── geom.py               ← exact-bounds primitives
+│   │   │   │   ├── render.py             ← token-only SVG writer
+│   │   │   │   └── ledger.py             ← Redis cross-post novelty ledger
+│   │   │   ├── illustration.py           ← facade: generate_illustration_svg/metrics
 │   │   │   ├── tools/                   ← LLM media tools (find_photo, illustrate)
 │   │   │   │   ├── photo.py             ← find_photo tool + providers fallback + embed
 │   │   │   │   ├── illustrator.py       ← unified illustrate tool + DiceBear recolor
@@ -759,6 +769,18 @@ restart needed. `Reset to seed` restores the YAML seed; the YAML files in
 3. Multi-word family names are auto-quoted at injection time (Chromium rejects unquoted names like `Source Serif 4`)
 4. Restart the worker to pick up changes
 
+### Changing the illustration system
+1. Add a subject builder in `backend/app/services/art/subjects.py` (return a
+   `Subject` with `bounds`, `base`, `focus`, `knockout`) and register it in
+   `SUBJECTS` + `BUILDERS`. Add a field in `fields.py` (`FIELD_BUILDERS`) or a
+   relation in `relations.py` + `catalog.py`.
+2. Wire the new name into `CONCEPTS` (a concept needs ≥5 subjects, ≥4 relations
+   and ≥3 fields so a 10-slide carousel can avoid repeat pairs).
+3. Check it visually: `cd backend && python -m app.tools.art_gallery --out
+   /tmp/art --subjects` (and `--concept <name>`), then open `index.html`.
+4. `pytest tests/test_services/test_illustration.py` — safe-frame, no-hex and
+   structural-diversity tests cover every catalog entry automatically.
+
 ### Adding a layout archetype
 1. Add a key + description under `layout_archetypes` in `data/design_system/design-instruction.yaml`
 2. The pipeline picks one deterministically per post (seeded by title + format)
@@ -821,10 +843,10 @@ Grounds stay `white`/`black` for every language.
 
 ### Auto-media (LLM tools)
 Media is decided by a **structured per-slide media plan**: one LLM tool-loop
-session per post (`call_llm_tool_loop`, bounded ~12 turns, cached via
+session per post (`call_llm_tool_loop`, bounded ~16 turns, cached via
 `app/agents/orchestrator/post_cache.py`) produces a JSON plan
-`{target: {kind: photo|illustration|none, query, style, archetype,
-motif_names, highlights, theme}}` for every slide/format. Slides already
+`{target: {kind: photo|illustration|chart|none, query, concept, emphasis,
+subject, relation, field, style, chart}}` for every slide/format. Slides already
 filled by a user image are marked `skip`. The plan is executed in parallel by
 the per-format branches; a declined/failed media call leaves the slot empty.
 Media is always **LLM-decided** (never forced, no deterministic fallback
@@ -836,45 +858,59 @@ pool):
   grayscale with an attribution caption, and credits land on the task result
   as `media_credits`. Add a key via `PEXELS_API_KEY` / `PIXABAY_API_KEY`;
   Wikimedia needs none.
-- **`illustrate(style, theme, ground, facial_hair?, hair?, expression?,
-  accessory?)`** — unified illustration director. Styles:
-  - `procedural` (default) — the Anthropic-style abstract SVG generator
-    (`app/services/illustration.py`): a single clean organic mark from a
-    catalog of **~35 distinct archetypes** (carrier-sun, spiral-free, orbit,
-    diptych, column, cross, horizon, bounded-field, burst, stem, waves,
-    dot-grid, mountains, wedge, rhythm-bars, …). Every composition is a pure
-    function of its seed/theme, and **every figure is auto-fit into a safe
-    inner frame** (uniform scale + center) so it can never clip out of its
-    slot box or paint on top of the copy. Colors resolve through
-    `var(--color-*)` so figures follow the active design system.
-  - a curated **DiceBear** style (see `app/services/tools/peep_styles.py` —
-    9 keep-list styles: open-peeps, lorelei, notionists, bottts, blobs,
-    initials, shapes, waves, landscape), rendered offline via the Python
-    bindings and recolored to `var(--color-*)` (default `line` palette).
-    People/robot styles accept part pins (`facial_hair`, `hair`, `expression`,
-    `accessory`); abstract styles ignore pins.
+- **`illustrate(concept, emphasis, subject?, relation?, field?, style?, ground?)`**
+  — the composition engine (`app/services/art/`). The director picks a
+  **concept**; the engine expands it into a concrete composition:
+  - **subjects** (17, parameterized — never frozen paths): seed, vessel, hand,
+    book, arch, ladder, bridge, orbit, curve-boundary, network, wave-train,
+    prism, loom, compass, magnifier, tunnel, stack.
+  - **relations** (9): occlude, intersect-at-node, cradle, emerge-from,
+    converge-to, frame, split, sequence, scale-asymmetry. The relation changes
+    the subject's scale, anchor and paint order, and the field is built around
+    the subject.
+  - **fields** (12): grid, bands, contour, hatch, stipple, halftone, flow,
+    phyllotaxis, nodes, rays, waves, dot-matrix — always generated **inside**
+    the safe box, so clipping is impossible by construction.
+  - **framings** (5): centred, left/right third, bottom-anchored, bleed.
+  - **concepts** (10): limit, growth, system, attention, convergence, choice,
+    scale, memory, flow, craft. Concepts choose the candidate subjects /
+    relations / fields; the composer varies within them by seed.
+  - a curated **DiceBear** `style` (see `app/services/tools/peep_styles.py` —
+    9 keep-list styles) remains for portraits. People/robot styles accept part
+    pins (`facial_hair`, `hair`, `expression`, `accessory`).
+  Composition is a pure function of `(seed, avoid)` — same post always
+  re-renders identically. Colors resolve through `var(--color-*)`, accent is a
+  single emphasis mark and only when the design language defines one.
+- **No repeated composition in a set.** After parsing, `media_plan` resolves
+  every illustration to a concrete triple and enforces the sequence rule: no
+  `subject|relation` pair twice in one post. A Redis ledger
+  (`art/ledger.py`, 24 entries, 30-day TTL, per design system) soft-avoids the
+  combinations recent posts already used, so consecutive posts differ too.
+- **Rendered-preview feedback**: the tool actually composes the scene and
+  returns concept, subject, relation, field, framing, element count,
+  occupancy, `within_safe`, and the fingerprints already used in the post — so
+  the director can choose a genuinely different composition before committing
+  the plan.
 
-The old `compose` **Scene Composer** (custom hero SVGs + Lucide motifs +
-Highlights hand-drawn kit) was **removed** — its scattered-icon output read as
-amateur clip-art, and three overlapping engines (compose / procedural /
-DiceBear) produced inconsistent figures. Now there are exactly two: procedural
-(abstract, default) and DiceBear (avatars). The vendored Lucide icons and
-Highlights kit were deleted from the repo.
-
-**Rendered-preview tool feedback**: when the media-plan director calls
-`illustrate`, the tool actually renders the figure and returns **structural
-feedback** — archetype, element count, the fitted bounding box, and whether it
-fits the safe frame — so the director can iterate to a distinct,
-non-overlapping composition before committing the plan. No more no-op
-"style accepted" stubs.
+The old procedural archetype catalog, the editorial field-motif engine and the
+generative-scene engine were **deleted** (`procedural_art.py`,
+`generative_art.py`, `mathematical_art.py`, `illustration_editorial.py`).
+There is now exactly one scene engine plus the DiceBear portrait path.
 
 **Style precedence**: `POST /generate` `illustration_style` → media-plan LLM
-pick → the design system's `style.illustration_style` default → `procedural`.
-The `illustration_style` API value is validated against the tool's style enum.
+pick → the design system's `style.illustration_style` default → `procedural`
+(the composition engine). The `illustration_style` API value is validated
+against the tool's style enum; `anthropic` is accepted as a legacy alias for
+`procedural`.
+
+**Artwork gallery**: `cd backend && python -m app.tools.art_gallery --out
+/tmp/art --count 24` writes one SVG per scene, an `index.html` gallery, and a
+`sheet.png` contact sheet (requires `rsvg-convert` + ImageMagick). Pass
+`--concept limit`, `--aspect portrait`, or `--subjects` to inspect a slice.
 
 The Strategist's typed brief now includes a `content_summary` (key themes +
-searchable keywords, ~150 words) that feeds the media plan, so search queries
-and motif choices reflect the actual content. Templates with
+searchable keywords, ~150 words) that feeds the media plan, so concepts and
+search queries reflect the actual content. Templates with
 `{{ illustration | safe }}` or an image slot render the plan's media for that
 slide.
 
@@ -1037,10 +1073,10 @@ Requires `x-api-key` header. Rate-limited per key (default 30 req/min).
 locks a template for matching families (auto-fallback otherwise). Images may
 also be pre-embedded: `{data, mime, alt, description, placement}` (uploaded via
 `POST /uploads`). `illustration_style` (optional) overrides the illustration
-style: `procedural` (abstract organic mark, default), or a curated DiceBear id
-(`open-peeps`, `lorelei`, `notionists`, `bottts`, `blobs`, `initials`,
-`shapes`, `waves`, `landscape`). For carousels, uploaded images are
-auto-distributed image i → slide i (wrapping).
+style: `procedural` (the composition engine, default), or a curated DiceBear
+id (`open-peeps`, `lorelei`, `notionists`, `bottts`, `blobs`, `initials`,
+`shapes`, `waves`, `landscape`) for portraits. For carousels, uploaded images
+are auto-distributed image i → slide i (wrapping).
 
 Other optional fields:
 - `template_mode` — `auto` (default; template first, LLM fallback) | `template`
@@ -1072,11 +1108,13 @@ count; the aspect comes from the chosen carousel platform id. An unpinned
 true` runs an opt-in vision audit of the whole slide set (one call).
 
 **Media**: the media-plan director decides per-slide media. For conceptual/
-abstract subjects it skips photo search and uses an abstract illustration;
-`kind: "chart"` renders a deterministic token-only bar chart for stat-led posts
-(comparison/tutorial). Illustrations render in the `square-slide` illustration
-slot. If a planned photo can't materialize, the slot fills with a procedural
-figure instead of shipping empty.
+abstract subjects it skips photo search and composes a scene (concept →
+subject × relation × field); `kind: "chart"` renders a deterministic token-only
+bar chart for stat-led posts (comparison/tutorial). Illustration entries carry
+`concept`, `emphasis` and optional `subject`/`relation`/`field` pins.
+Illustrations render in the `square-slide` illustration slot. If a planned
+photo can't materialize, the slot fills with a composed figure instead of
+shipping empty.
 
 ### Design systems API
 - `GET /design-systems` · `POST /design-systems` · `GET/PUT/DELETE /design-systems/{id}`

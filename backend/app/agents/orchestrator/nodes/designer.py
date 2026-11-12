@@ -154,12 +154,15 @@ async def _designer_media_director(state: GenerationState, fmt) -> None:
         from app.services.media_plan import execute_slide_illustration
 
         async def ill_loader() -> str:
+            from app.services.media_plan import aspect_for
+
             return execute_slide_illustration(
                 plan,
                 seed=f"{title or ''}|illustration|{fmt_id}",
                 ground=ground,
                 category=category,
                 api_style=state.get("illustration_style") or "",
+                aspect=aspect_for(fmt.width, fmt.height),
             )
 
         fig = await post_cached(state.get("_task_id", ""), f"illustration:{fmt_id}", ill_loader)

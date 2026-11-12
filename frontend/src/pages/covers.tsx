@@ -12,7 +12,7 @@ import { StatusBadge } from "@/components/tasks/status-badge"
 import { useDesignSystems } from "@/hooks/use-library"
 import { useTask } from "@/hooks/use-task"
 import { apiRequest, downloadBlob, fetchBlob, fetchText } from "@/lib/api"
-import { createCovers, DEFAULT_COVER, type CoverComposition, type CoverMeta, type CoverSettings } from "@/lib/covers"
+import { createCovers, DEFAULT_COVER, type CoverMeta, type CoverSettings } from "@/lib/covers"
 
 const selectClass = "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 
@@ -38,7 +38,6 @@ function CoverForm() {
   const [previewBusy, setPreviewBusy] = useState(false)
   const [preview, setPreview] = useState("")
   const [previewKey, setPreviewKey] = useState("")
-  const [composition, setComposition] = useState<CoverComposition | null>(null)
   const [error, setError] = useState("")
   const activeSystems = (systems ?? []).filter((system) => system.is_active)
   const dsId = settings.design_system_id || activeSystems.find((s) => s.id === "default")?.id || activeSystems[0]?.id || ""
@@ -52,7 +51,6 @@ function CoverForm() {
     if (!available || settings.engine !== "procedural") {
       setPreview("")
       setPreviewKey("")
-      setComposition(null)
       setPreviewBusy(false)
       return
     }
@@ -65,19 +63,17 @@ function CoverForm() {
         setSettings((old) => old.seed.trim() ? old : { ...old, seed: crypto.randomUUID() })
         return
       }
-      void apiRequest<{ html: string; composition?: CoverComposition }>("/covers/preview", {
+      void apiRequest<{ html: string }>("/covers/preview", {
         method: "POST", body: previewBody, signal: controller.signal,
       }).then((response) => {
         if (controller.signal.aborted) return
         setPreview(response.html)
         setPreviewKey(previewBody)
-        setComposition(response.composition ?? null)
       }).catch((err: unknown) => {
         if (controller.signal.aborted) return
         setPreview("")
         setPreviewKey("")
-        setComposition(null)
-        setError(err instanceof Error ? err.message : "Preview failed")
+          setError(err instanceof Error ? err.message : "Preview failed")
       }).finally(() => {
         if (!controller.signal.aborted) setPreviewBusy(false)
       })
@@ -149,7 +145,9 @@ function CoverForm() {
           {settings.engine === "ai" && <p className="text-xs text-muted-foreground">Uses your Cloudflare image allowance. Generated artwork is recolored to your design system’s palette.</p>}
           <Field id="cover-motif" label="Composition">
             <select id="cover-motif" className={selectClass} value={settings.motif} onChange={(e) => update("motif", e.target.value)}>
-              {(meta?.motifs ?? [{ id: "auto", label: "From the article" }]).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              <option value="auto">From the article</option>
+              <option value="random">Random composition</option>
+              {(meta?.concepts ?? []).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </Field>
           <Field id="cover-size" label="Canvas">
@@ -210,7 +208,6 @@ function CoverForm() {
             {previewPending && <div role="status" className="absolute right-3 bottom-3 flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-xs"><Loader2 className="size-3 animate-spin" aria-hidden="true" />Updating preview…</div>}
           </div>
           <div className="flex justify-between text-xs text-muted-foreground"><span>{settings.width} × {settings.height}</span><span>PNG · SVG · HTML</span></div>
-          {composition && <p className="text-xs text-muted-foreground">Drawing: {[...new Set(composition.layers.flatMap((layer) => layer.motif ? [meta?.motifs.find((m) => m.id === `field-${layer.motif}`)?.label ?? layer.motif.replace(/[_-]/g, " ")] : []))].join(" · ")}</p>}
           <p className="max-w-lg text-sm text-muted-foreground">One visual idea, room to breathe. Titles and typography stay separate so you can use the artwork across your blog, newsletter, and social posts.</p>
         </div>
       </div>

@@ -210,11 +210,7 @@ def render_illustration(
 
     ground = ground if ground in ("white", "black") else "white"
     use_accent = ctx is not None and "--color-accent" in ctx.tokens
-    theme = (
-        motif
-        if motif not in ("auto", "random")
-        else ("field-synthesis" if style in ("procedural", "anthropic") else "")
-    )
+    theme = motif if motif not in ("auto", "random") else ""
     svg = run_illustrate(
         {
             "style": style or "procedural",

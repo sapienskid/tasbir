@@ -310,8 +310,8 @@ export function MediaPicker({
             <Label htmlFor="ill-motif">Composition</Label>
             <select id="ill-motif" value={media.motif || "auto"} className="h-9 w-full border bg-background px-2 text-sm"
               onChange={(e) => onChange({ ...media, motif: e.target.value })}>
-              <option value="auto">Generative mix (random)</option>
-              {(artMeta?.motifs ?? []).filter((m) => m.id !== "auto" && m.id !== "random").map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+              <option value="auto">From the post</option>
+              {(artMeta?.concepts ?? []).map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
           </div>}
           <div className="grid gap-2">

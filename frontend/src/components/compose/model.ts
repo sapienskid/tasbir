@@ -158,7 +158,7 @@ export function templateMediaKinds(t: Template | undefined): Array<"image" | "il
 // Mirrors the backend ILLUSTRATE_TOOL style enum (procedural + curated DiceBear
 // styles in app/services/tools/peep_styles.py).
 export const ILLUSTRATION_STYLES: Array<{ id: string; label: string }> = [
-  { id: "procedural", label: "Procedural (generative)" },
+  { id: "procedural", label: "Composed scene (editorial)" },
   { id: "open-peeps", label: "Open Peeps" },
   { id: "lorelei", label: "Lorelei" },
   { id: "notionists", label: "Notionists" },

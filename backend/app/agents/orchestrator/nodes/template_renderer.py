@@ -71,12 +71,16 @@ async def _get_post_illustration(state: GenerationState, ground: str, seed: str)
 
     async def loader() -> str:
         if plan.get("kind") == "illustration":
+            from app.services.media_plan import aspect_for
+
+            fmt = get_format_info(fmt_id)
             return execute_slide_illustration(
                 plan,
                 seed=f"{seed or ''}|illustration|{fmt_id}",
                 ground=ground,
                 category=state.get("category", ""),
                 api_style=state.get("illustration_style") or "",
+                aspect=aspect_for(fmt.width, fmt.height),
             )
         if plan.get("kind") == "chart":
             from app.services.media_plan import execute_slide_chart

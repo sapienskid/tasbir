@@ -206,8 +206,7 @@ async def test_illustrate_handler_returns_rendered_feedback(monkeypatch):
     await build_media_plan(state)
 
     fb = captured["feedback"]
-    assert "Rendered style='procedural'" in fb
-    assert "Archetype:" in fb
-    assert "Element count:" in fb
-    assert "bbox x0=" in fb
-    assert "Within safe slot: True" in fb
+    assert "Composed concept=" in fb
+    assert "subject=" in fb and "relation=" in fb and "field=" in fb
+    assert "Elements:" in fb
+    assert "Already used in this post" in fb
